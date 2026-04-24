@@ -1,10 +1,12 @@
 package co.typie.editor
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
+import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.DocumentAttrs
@@ -14,15 +16,14 @@ import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
-import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.platform.PlatformModule
+import io.sentry.kotlin.multiplatform.Sentry
 import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlin.reflect.KClass
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
@@ -30,15 +31,13 @@ import kotlinx.collections.immutable.PersistentSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
-import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -50,136 +49,34 @@ internal constructor(
   val scope: CoroutineScope,
   private val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
 ) {
-  var documentAttrs by mutableStateOf<DocumentAttrs?>(null)
+  var state: EditorState by mutableStateOf(EditorState.Initial)
     private set
 
-  var cursor by mutableStateOf<CursorMetrics?>(null)
-    private set
+  val cursor: CursorMetrics? by derivedStateOf { state.cursor }
+  val selection: Selection? by derivedStateOf { state.selection }
+  val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
+  val documentAttrs: DocumentAttrs? by derivedStateOf { state.documentAttrs }
+  val ime: Ime? by derivedStateOf { state.ime }
 
-  var selection by mutableStateOf<Selection?>(null)
-    private set
-
-  var pageSizes by mutableStateOf<List<Size>>(emptyList())
-    private set
-
-  var ime by mutableStateOf<Ime?>(null)
-    private set
-
-  internal val focusRequester = FocusRequester()
-  internal var focusManager: FocusManager? = null
-
-  private val queued = AtomicBoolean(false)
-  private val syncing = AtomicBoolean(false)
-  private val disposed = AtomicBoolean(false)
-  private val dispatches =
-    AtomicReference<PersistentList<CancellableContinuation<Unit>>>(persistentListOf())
-  private val mutex = Mutex()
+  private val mutex: Mutex = Mutex()
+  private val versionCounter: AtomicLong = AtomicLong(0L)
+  private val disposed: AtomicBoolean = AtomicBoolean(false)
+  private val syncInProgress: AtomicBoolean = AtomicBoolean(false)
+  private val attachedPages: AtomicReference<PersistentSet<Int>> =
+    AtomicReference(persistentSetOf())
+  private val pendingSettles: AtomicReference<PersistentList<PendingSettle>> =
+    AtomicReference(persistentListOf())
+  private val queued: AtomicBoolean = AtomicBoolean(false)
 
   @PublishedApi
-  internal val listeners =
+  internal val listeners:
     AtomicReference<
       PersistentMap<KClass<out EditorEvent>, PersistentSet<(Editor, EditorEvent) -> Unit>>
-    >(
-      persistentMapOf()
-    )
+    > =
+    AtomicReference(persistentMapOf())
 
-  inline fun <reified T : EditorEvent> on(noinline listener: EditorEventListener<T>): () -> Unit {
-    @Suppress("UNCHECKED_CAST") val wrapped = listener as (Editor, EditorEvent) -> Unit
-    val key = T::class
-    listeners.update { map ->
-      val set = map[key] ?: persistentSetOf()
-      map.put(key, set.add(wrapped))
-    }
-    return {
-      listeners.update { map ->
-        val set = map[key] ?: return@update map
-        map.put(key, set.remove(wrapped))
-      }
-    }
-  }
-
-  private fun emit(event: EditorEvent) {
-    val snapshot = listeners.load()[event::class] ?: return
-    snapshot.forEach { it(this, event) }
-  }
-
-  fun enqueue(message: Message) {
-    if (disposed.load() || !scope.isActive) return
-    inner.enqueue(message)
-    if (!syncing.load() && queued.compareAndSet(false, true)) {
-      try {
-        scope.launch(dispatcher) {
-          val events = mutex.withLock { runLockedTick() }
-          for (event in events) emit(event)
-        }
-      } catch (_: CancellationException) {
-        // scope was cancelled between isActive check and launch — race, just ignore
-      }
-    }
-  }
-
-  fun resizeViewport(width: Float, height: Float, scaleFactor: Double) {
-    enqueue(
-      Message.System(SystemEvent.Resize(width = width, height = height, scaleFactor = scaleFactor))
-    )
-  }
-
-  suspend fun dispatch(vararg messages: Message) {
-    if (messages.isEmpty()) {
-      return
-    }
-
-    suspendCancellableCoroutine { cont ->
-      dispatches.update { it.add(cont) }
-      cont.invokeOnCancellation { dispatches.update { it.remove(cont) } }
-      if (disposed.load()) {
-        cont.cancel()
-        return@suspendCancellableCoroutine
-      }
-      messages.forEach(::enqueue)
-    }
-  }
-
-  fun sync(block: Editor.() -> Unit) {
-    syncing.store(true)
-    try {
-      block(this)
-    } finally {
-      syncing.store(false)
-    }
-    val events = runBlocking { mutex.withLock { runLockedTick() } }
-    for (event in events) emit(event)
-  }
-
-  private fun runLockedTick(): List<EditorEvent> {
-    queued.store(false)
-    val waiters = drainDispatches()
-
-    val events =
-      try {
-        inner.tick()
-      } catch (e: Throwable) {
-        waiters.forEach { it.resumeWithException(e) }
-        return emptyList()
-      }
-
-    waiters.forEach { it.resume(Unit) }
-    return events
-  }
-
-  private val stateChangedHandler: EditorEventListener<EditorEvent.StateChanged> = { _, event ->
-    for (field in event.fields) {
-      when (field) {
-        StateField.Doc -> {}
-        StateField.DocAttrs -> documentAttrs = inner.documentAttrs()
-        StateField.Cursor -> cursor = inner.cursor()
-        StateField.Selection -> selection = inner.selection()
-        StateField.PageSizes -> pageSizes = inner.pageSizes()
-        StateField.Ime -> ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE)
-        StateField.Modifiers -> {}
-      }
-    }
-  }
+  internal val focusRequester: FocusRequester = FocusRequester()
+  internal var focusManager: FocusManager? = null
 
   fun focus() = focusRequester.requestFocus()
 
@@ -191,31 +88,118 @@ internal constructor(
     focusManager?.clearFocus()
   }
 
-  fun dispose() {
-    if (!disposed.compareAndSet(false, true)) return
-    EditorRegistry.unregisterAsync(this)
-    val waiters = drainDispatches()
-    waiters.forEach { it.cancel() }
+  suspend fun await(block: EditorScope.() -> Unit) {
+    val messages = mutableListOf<Message>()
+    val collector =
+      object : EditorScope {
+        override fun enqueue(message: Message) {
+          messages += message
+        }
+      }
+    block(collector)
+    if (messages.isEmpty()) return
+
+    val (events, snapshot) =
+      withContext(NonCancellable + dispatcher) {
+        mutex.withLock {
+          if (disposed.load()) throw CancellationException("Editor disposed")
+          for (m in messages) inner.enqueue(m)
+          val e = inner.tick()
+          val version = versionCounter.addAndFetch(1L)
+          val s = readSnapshot(version)
+          e to s
+        }
+      }
+
+    val pending: PendingSettle? =
+      if (events.any { it is EditorEvent.RenderInvalidated }) {
+        val initial = attachedPages.load()
+        if (initial.isEmpty()) null
+        else
+          PendingSettle(initial, requiredVersion = snapshot.version).also {
+            pendingSettles.updatePersistent { list -> list.add(it) }
+          }
+      } else null
+
+    try {
+      emit(events)
+      pending?.await()
+    } finally {
+      if (pending != null) {
+        pendingSettles.updatePersistent { it.remove(pending) }
+      }
+      withContext(NonCancellable) { mutex.withLock { if (!disposed.load()) commit(snapshot) } }
+    }
   }
 
-  fun attachSurface(page: Int, handle: Long, width: Double, height: Double, scaleFactor: Double) =
-    inner.attachSurface(page, handle, width, height, scaleFactor)
+  fun sync(block: EditorScope.() -> Unit) {
+    if (!syncInProgress.compareAndSet(expectedValue = false, newValue = true)) {
+      error("nested sync is not supported")
+    }
+    try {
+      runBlocking {
+        val events: List<EditorEvent>
+        mutex.withLock {
+          if (disposed.load()) error("Editor disposed")
+          val collector =
+            object : EditorScope {
+              override fun enqueue(message: Message) {
+                inner.enqueue(message)
+              }
+            }
+          block(collector)
+          events = inner.tick()
+          val version = versionCounter.addAndFetch(1L)
+          commit(readSnapshot(version))
+        }
+        emit(events)
+      }
+    } finally {
+      syncInProgress.store(false)
+    }
+  }
 
-  fun detachSurface(page: Int) = inner.detachSurface(page)
+  fun enqueue(message: Message) {
+    if (disposed.load()) return
+    inner.enqueue(message)
+    scheduleTick()
+  }
 
-  fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) =
-    inner.resizeSurface(page, width, height, scaleFactor)
+  private fun scheduleTick() {
+    if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
+    scope.launch(dispatcher) {
+      val events =
+        withContext(dispatcher) {
+          mutex.withLock {
+            queued.store(false)
+            if (disposed.load()) return@withLock emptyList()
+            val e = inner.tick()
+            val version = versionCounter.addAndFetch(1L)
+            commit(readSnapshot(version))
+            e
+          }
+        }
+      emit(events)
+    }
+  }
 
-  fun renderSurface(page: Int) = inner.renderSurface(page)
-
-  fun inspectState(options: InspectStateOptions? = null): String = inner.inspectState(options)
-
-  fun inspectStateAsMacro(): String = inner.inspectStateAsMacro()
-
-  fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
+  inline fun <reified T : EditorEvent> on(noinline listener: EditorEventListener<T>): () -> Unit {
+    @Suppress("UNCHECKED_CAST") val wrapped = listener as (Editor, EditorEvent) -> Unit
+    val key = T::class
+    listeners.updatePersistent { map ->
+      val set = map[key] ?: persistentSetOf()
+      map.put(key, set.add(wrapped))
+    }
+    return {
+      listeners.updatePersistent { map ->
+        val set = map[key] ?: return@updatePersistent map
+        map.put(key, set.remove(wrapped))
+      }
+    }
+  }
 
   @PublishedApi
-  internal inline fun <T> AtomicReference<T>.update(transform: (T) -> T): T {
+  internal inline fun <T> AtomicReference<T>.updatePersistent(transform: (T) -> T): T {
     while (true) {
       val current = load()
       val next = transform(current)
@@ -223,12 +207,79 @@ internal constructor(
     }
   }
 
-  private fun drainDispatches(): List<CancellableContinuation<Unit>> {
-    while (true) {
-      val current = dispatches.load()
-      if (current.isEmpty()) return emptyList()
-      if (dispatches.compareAndSet(current, persistentListOf())) return current
+  private fun emit(events: List<EditorEvent>) {
+    if (events.isEmpty()) return
+    val filtered = events.filterNot { it is EditorEvent.StateChanged }
+    if (filtered.isEmpty()) return
+    scope.launch(Dispatchers.Main) {
+      for (event in filtered) {
+        val snapshot = listeners.load()[event::class] ?: continue
+        for (listener in snapshot) {
+          try {
+            listener(this@Editor, event)
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Throwable) {
+            Logger.e(e) { "Editor listener threw for ${event::class.simpleName}" }
+            Sentry.captureException(e)
+          }
+        }
+      }
     }
+  }
+
+  fun attachSurface(page: Int, handle: Long, width: Double, height: Double, scaleFactor: Double) {
+    attachedPages.updatePersistent { it.add(page) }
+    inner.attachSurface(page, handle, width, height, scaleFactor)
+  }
+
+  fun detachSurface(page: Int) {
+    attachedPages.updatePersistent { it.remove(page) }
+    inner.detachSurface(page)
+    pendingSettles.load().forEach { it.markDetached(page) }
+  }
+
+  fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) =
+    inner.resizeSurface(page, width, height, scaleFactor)
+
+  fun renderSurface(page: Int): Long = runBlocking {
+    mutex.withLock {
+      inner.renderSurface(page)
+      versionCounter.load()
+    }
+  }
+
+  fun onPageSettled(page: Int, version: Long) {
+    pendingSettles.load().forEach { it.markCommitted(page, version) }
+  }
+
+  fun inspectState(options: InspectStateOptions? = null): String = inner.inspectState(options)
+
+  fun inspectStateAsMacro(): String = inner.inspectStateAsMacro()
+
+  fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
+
+  fun dispose() {
+    if (!disposed.compareAndSet(expectedValue = false, newValue = true)) return
+    EditorRegistry.unregisterAsync(this)
+    pendingSettles.exchange(persistentListOf()).forEach { it.cancel() }
+    listeners.store(persistentMapOf())
+    attachedPages.store(persistentSetOf())
+  }
+
+  private fun readSnapshot(version: Long): EditorState =
+    EditorState(
+      version = version,
+      cursor = inner.cursor(),
+      selection = runCatching { inner.selection() }.getOrNull(),
+      pageSizes = inner.pageSizes(),
+      documentAttrs = runCatching { inner.documentAttrs() }.getOrNull(),
+      ime = runCatching { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) }.getOrNull(),
+    )
+
+  private fun commit(snapshot: EditorState) {
+    if (snapshot.version <= state.version) return
+    state = snapshot
   }
 
   companion object {
@@ -243,13 +294,16 @@ internal constructor(
         val inner = PlatformModule.editorHost.createEditor(doc, selection, viewport)
         val editor = Editor(inner, scope, dispatcher)
 
-        editor.on<EditorEvent.StateChanged>(editor.stateChangedHandler)
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
 
+        try {
+          editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+        } catch (e: Throwable) {
+          editor.dispose()
+          throw e
+        }
+
         EditorRegistry.register(editor)
-
-        editor.enqueue(Message.System(SystemEvent.Initialize))
-
         editor
       }
   }

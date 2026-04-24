@@ -60,13 +60,13 @@ internal fun EditorPageSurface(
   val editor = LocalEditorRuntime.current.editor ?: return
 
   val trigger = remember {
-    MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    MutableSharedFlow<Long>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
   }
   val render =
     remember(editor, page) {
       {
-        editor.renderSurface(page)
-        trigger.tryEmit(Unit)
+        val version = editor.renderSurface(page)
+        trigger.tryEmit(version)
       }
     }
 
@@ -150,9 +150,10 @@ internal fun EditorPageSurface(
             editor.resizeSurface(page, widthDouble, heightDouble, scaleFactor)
             render()
           },
-          onBitmapCommitted = { size ->
+          onBitmapCommitted = { size, version ->
             committedPixelSize = size
             committedRenderZoom = currentRenderZoom
+            editor.onPageSettled(page, version)
           },
         )
       }

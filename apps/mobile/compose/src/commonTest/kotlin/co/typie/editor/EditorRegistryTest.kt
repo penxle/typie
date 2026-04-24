@@ -1,13 +1,5 @@
 package co.typie.editor
 
-import co.typie.editor.ffi.CursorMetrics
-import co.typie.editor.ffi.DocumentAttrs
-import co.typie.editor.ffi.EditorEvent
-import co.typie.editor.ffi.Ime
-import co.typie.editor.ffi.InspectStateOptions
-import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.Selection
-import co.typie.editor.ffi.Size
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -17,43 +9,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 
-private class StubFfiEditor : co.typie.editor.ffi.Editor {
-  override fun enqueue(message: Message) = Unit
-
-  override fun tick(): List<EditorEvent> = emptyList()
-
-  override fun attachSurface(
-    page: Int,
-    handle: Long,
-    width: Double,
-    height: Double,
-    scaleFactor: Double,
-  ) = error("not used")
-
-  override fun detachSurface(page: Int) = error("not used")
-
-  override fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) =
-    error("not used")
-
-  override fun renderSurface(page: Int) = error("not used")
-
-  override fun cursor(): CursorMetrics? = null
-
-  override fun selection(): Selection = error("not used")
-
-  override fun documentAttrs(): DocumentAttrs = error("not used")
-
-  override fun pageSizes(): List<Size> = emptyList()
-
-  override fun ime(beforeLimit: Int, afterLimit: Int): Ime = error("not used")
-
-  override fun inspectState(options: InspectStateOptions?): String = ""
-
-  override fun inspectStateAsMacro(): String = ""
-}
-
 class EditorRegistryTest {
-  private fun makeEditor(): Editor = Editor(StubFfiEditor(), CoroutineScope(Dispatchers.Unconfined))
+  private fun makeEditor(): Editor = Editor(FakeFfiEditor(), CoroutineScope(Dispatchers.Unconfined))
 
   @Test
   fun registered_editor_appears_in_snapshot() = runTest {

@@ -5,6 +5,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import co.typie.editor.Editor
+import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.VerticalSpan
 import co.typie.editor.runtime.EditorUiState
@@ -93,21 +94,25 @@ internal class EditorAutoScrollController(
     this.headerHeight = headerHeight
   }
 
-  fun request(target: EditorScrollTarget = EditorScrollTarget.CurrentCursorLine) {
+  fun request(
+    target: EditorScrollTarget = EditorScrollTarget.CurrentCursorLine,
+    state: EditorState? = null,
+  ) {
     launchScroll {
       if (viewportState.isTransforming || isDirectScrollInProgress()) {
         return@launchScroll
       }
 
       val editor = editorProvider() ?: return@launchScroll
+      val snapshot = state ?: editor.state
       val editorBounds = uiState.editorBoundsInContainer
       if (!editorBounds.isValid) {
         return@launchScroll
       }
-      val viewportTransform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
+      val viewportTransform = uiState.resolveViewportTransform(pageSizes = snapshot.pageSizes)
       val rect =
         resolveScrollTargetRect(
-          editor = editor,
+          snapshot = snapshot,
           viewportTransform = viewportTransform,
           headerHeight = headerHeight,
           editorTopInContainer = editorBounds.y,
@@ -155,21 +160,21 @@ internal class EditorAutoScrollController(
 }
 
 internal fun resolveDistanceToPagesBottom(
-  editor: Editor,
+  state: EditorState,
   uiState: EditorUiState,
   headerHeight: Float,
   pagesContentHeight: Float,
   bottomOcclusion: Float,
   target: EditorScrollTarget,
 ): Float? {
-  val viewportTransform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
+  val viewportTransform = uiState.resolveViewportTransform(pageSizes = state.pageSizes)
   val editorBounds = uiState.editorBoundsInContainer
   if (!editorBounds.isValid) {
     return null
   }
   val rect =
     resolveScrollTargetRect(
-      editor = editor,
+      snapshot = state,
       viewportTransform = viewportTransform,
       headerHeight = headerHeight,
       editorTopInContainer = editorBounds.y,
@@ -181,7 +186,7 @@ internal fun resolveDistanceToPagesBottom(
 }
 
 private fun resolveScrollTargetRect(
-  editor: Editor,
+  snapshot: EditorState,
   viewportTransform: EditorViewportTransform,
   headerHeight: Float,
   editorTopInContainer: Float,
@@ -190,7 +195,7 @@ private fun resolveScrollTargetRect(
 ): VerticalSpan? {
   return when (target) {
     EditorScrollTarget.CurrentCursorLine -> {
-      val cursor = editor.cursor ?: return null
+      val cursor = snapshot.cursor ?: return null
       val cursorLineOffset =
         viewportTransform.localToGlobal(page = cursor.pageIdx, x = cursor.line.x, y = cursor.line.y)
           ?: return null
@@ -203,7 +208,7 @@ private fun resolveScrollTargetRect(
       // 그 값을 써야 한다. 지금은 CurrentSelectionHead가 CurrentCursorLine으로 fallback 되어
       // non-collapsed selection의 typewriter/keep-visible 기준이 웹/플러터와 다르다.
       resolveScrollTargetRect(
-        editor = editor,
+        snapshot = snapshot,
         viewportTransform = viewportTransform,
         headerHeight = headerHeight,
         editorTopInContainer = editorTopInContainer,

@@ -30,6 +30,7 @@ import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.ffi.DocOp
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.rememberEditorZoomController
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
@@ -101,7 +102,7 @@ fun EditorScreen(entityId: String) {
   }
   fun toggleDebugLayoutMode() {
     val attrs = model.toggleDebugLayoutMode()
-    scope.launch { runtime.editor?.dispatch(Message.Doc(DocOp.SetAttrs(attrs))) }
+    scope.launch { runtime.editor?.await { enqueue(Message.Doc(DocOp.SetAttrs(attrs))) } }
   }
 
   ProvideTopBar(
@@ -174,7 +175,7 @@ fun EditorScreen(entityId: String) {
     val distanceToPagesBottom =
       if (typewriterEnabled && editor != null) {
         resolveDistanceToPagesBottom(
-          editor = editor,
+          state = editor.state,
           uiState = uiState,
           headerHeight = screenState.headerHeight,
           pagesContentHeight = pagesContentHeight,
@@ -289,12 +290,21 @@ fun EditorScreen(entityId: String) {
         viewportContentWidth = bodyTrackWidth,
         onViewportSizeChange = { size ->
           screenState.updateViewport(size)
-          if (size.width > 0f && size.height > 0f) {
-            runtime.editor?.resizeViewport(
-              width = size.width,
-              height = size.height,
-              scaleFactor = density.toDouble(),
-            )
+          val editor = runtime.editor
+          if (editor != null && size.width > 0f && size.height > 0f) {
+            scope.launch {
+              editor.await {
+                enqueue(
+                  Message.System(
+                    SystemEvent.Resize(
+                      width = size.width,
+                      height = size.height,
+                      scaleFactor = density.toDouble(),
+                    )
+                  )
+                )
+              }
+            }
           }
         },
         header = {

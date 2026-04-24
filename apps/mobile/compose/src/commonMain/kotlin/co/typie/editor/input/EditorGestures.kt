@@ -102,12 +102,17 @@ private class EditorGesturesNode(
             .globalToLocal(x = xDp, y = yDp)
         if (point != null) {
           coroutineScope.launch {
-            editor.dispatch(
-              Message.Pointer(
-                EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
+            editor.await {
+              enqueue(
+                Message.Pointer(
+                  EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
+                )
               )
+            }
+            autoScrollController?.request(
+              target = EditorScrollTarget.CurrentCursorLine,
+              state = editor.state,
             )
-            autoScrollController?.request(target = EditorScrollTarget.CurrentCursorLine)
           }
         }
       }

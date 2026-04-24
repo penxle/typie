@@ -24,11 +24,11 @@ internal object InputEditCommandHandler {
       for (command in commands) {
         if (command is CommitTextCommand && command.text == "\n") {
           if (ops.isNotEmpty()) {
-            editor.enqueue(Message.Composition(CompositionOp.Flat(ops.toList())))
+            enqueue(Message.Composition(CompositionOp.Flat(ops.toList())))
             ops.clear()
           }
 
-          editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
+          enqueue(Message.Key(KeyEvent(Key.Enter)))
           continue
         }
 
@@ -37,7 +37,7 @@ internal object InputEditCommandHandler {
       }
 
       if (ops.isNotEmpty()) {
-        editor.enqueue(Message.Composition(CompositionOp.Flat(ops)))
+        enqueue(Message.Composition(CompositionOp.Flat(ops)))
       }
     }
   }

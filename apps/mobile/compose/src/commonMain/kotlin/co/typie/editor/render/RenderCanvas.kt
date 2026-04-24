@@ -9,11 +9,11 @@ import kotlinx.coroutines.flow.SharedFlow
 internal expect fun RenderCanvas(
   modifier: Modifier,
   desiredPixelSize: IntSize,
-  trigger: SharedFlow<Unit>,
+  trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
   onDetach: () -> Unit,
   onResize: () -> Unit,
-  onBitmapCommitted: (pixelSize: IntSize) -> Unit,
+  onBitmapCommitted: (pixelSize: IntSize, version: Long) -> Unit,
 )
 
 internal expect fun copyNativeBytes(srcAddr: Long, dst: ByteArray, length: Int)

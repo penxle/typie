@@ -25,11 +25,11 @@ import org.jetbrains.skia.ImageInfo
 internal actual fun RenderCanvas(
   modifier: Modifier,
   desiredPixelSize: IntSize,
-  trigger: SharedFlow<Unit>,
+  trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
   onDetach: () -> Unit,
   onResize: () -> Unit,
-  onBitmapCommitted: (pixelSize: IntSize) -> Unit,
+  onBitmapCommitted: (pixelSize: IntSize, version: Long) -> Unit,
 ) {
   var bufferHandle by remember { mutableStateOf(0L) }
   var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -72,7 +72,7 @@ internal actual fun RenderCanvas(
     var cachedBytes: ByteArray? = null
     var cachedSkBitmap: Bitmap? = null
 
-    trigger.collect {
+    trigger.collect { version ->
       if (!RenderBuffer.beginRead(handle)) return@collect
 
       val w = RenderBuffer.getPixelWidth(handle)
@@ -101,7 +101,7 @@ internal actual fun RenderCanvas(
             }
       skBitmap.installPixels(skBitmap.imageInfo, bytes, w * 4)
       bitmap = SkImage.makeFromBitmap(skBitmap).toComposeImageBitmap()
-      currentOnBitmapCommitted(IntSize(w, h))
+      currentOnBitmapCommitted(IntSize(w, h), version)
     }
   }
 

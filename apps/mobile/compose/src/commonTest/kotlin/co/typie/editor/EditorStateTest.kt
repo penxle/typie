@@ -1,0 +1,17 @@
+package co.typie.editor
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class EditorStateTest {
+  @Test
+  fun initial_has_version_zero_and_null_fields() {
+    val s = EditorState.Initial
+    assertEquals(0L, s.version)
+    assertEquals(null, s.cursor)
+    assertEquals(null, s.selection)
+    assertEquals(emptyList(), s.pageSizes)
+    assertEquals(null, s.documentAttrs)
+    assertEquals(null, s.ime)
+  }
+}

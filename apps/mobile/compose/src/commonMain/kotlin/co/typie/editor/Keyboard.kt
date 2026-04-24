@@ -157,8 +157,10 @@ internal fun handleKeyDown(
   val messages = binding.action(editor)
   if (messages.isNotEmpty()) {
     coroutineScope.launch {
-      editor.dispatch(*messages.toTypedArray())
-      binding.scrollTarget?.let { autoScrollController?.request(target = it) }
+      editor.await { messages.forEach(::enqueue) }
+      binding.scrollTarget?.let { target ->
+        autoScrollController?.request(target = target, state = editor.state)
+      }
     }
   }
   return true

@@ -86,37 +86,39 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       }
 
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
-      val scope =
-        object : TextEditingScope {
-          override fun commitText(text: CharSequence, newCursorPosition: Int) {
-            if (text.toString() == "\n") {
-              editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
-            } else {
-              editor.enqueue(Message.Composition(CompositionOp.Commit(text.toString())))
+      editor.sync {
+        val editorScope = this
+        val scope =
+          object : TextEditingScope {
+            override fun commitText(text: CharSequence, newCursorPosition: Int) {
+              if (text.toString() == "\n") {
+                editorScope.enqueue(Message.Key(KeyEvent(Key.Enter)))
+              } else {
+                editorScope.enqueue(Message.Composition(CompositionOp.Commit(text.toString())))
+              }
+            }
+
+            override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
+              editorScope.enqueue(Message.Composition(CompositionOp.Update(text.toString(), null)))
+            }
+
+            override fun finishComposingText() {
+              editorScope.enqueue(Message.Composition(CompositionOp.CommitAsIs))
+            }
+
+            override fun deleteSurroundingTextInCodePoints(
+              lengthBeforeCursor: Int,
+              lengthAfterCursor: Int,
+            ) {
+              editorScope.enqueue(
+                Message.Deletion(
+                  DeletionOp.SurroundingCodePoints(lengthBeforeCursor, lengthAfterCursor)
+                )
+              )
             }
           }
-
-          override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
-            editor.enqueue(Message.Composition(CompositionOp.Update(text.toString(), null)))
-          }
-
-          override fun finishComposingText() {
-            editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
-          }
-
-          override fun deleteSurroundingTextInCodePoints(
-            lengthBeforeCursor: Int,
-            lengthAfterCursor: Int,
-          ) {
-            editor.enqueue(
-              Message.Deletion(
-                DeletionOp.SurroundingCodePoints(lengthBeforeCursor, lengthAfterCursor)
-              )
-            )
-          }
-        }
-
-      editor.sync { scope.block() }
+        scope.block()
+      }
     }
   }
 }

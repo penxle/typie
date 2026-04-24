@@ -1,5 +1,6 @@
 package co.typie.editor.input
 
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
@@ -17,12 +18,10 @@ import androidx.compose.ui.platform.establishTextInputSession
 import co.typie.editor.Editor
 import co.typie.editor.createBindings
 import co.typie.editor.ffi.CompositionOp
-import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.StateField
 import co.typie.editor.handleKeyDown
 import co.typie.editor.scroll.EditorAutoScrollController
 import co.typie.editor.scroll.EditorScrollTarget
@@ -32,7 +31,8 @@ import co.typie.ext.notifyTextInputFocusChanged
 import co.typie.ext.registerTextInputClient
 import co.typie.platform.Platform
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 internal fun Modifier.editorInput(
@@ -72,8 +72,11 @@ internal class EditorInputNode(
   private fun dispatchAndScrollToCurrentCursorLine(vararg messages: Message) {
     val autoScrollController = autoScrollController
     coroutineScope.launch {
-      editor.dispatch(*messages)
-      autoScrollController?.request(target = EditorScrollTarget.CurrentCursorLine)
+      editor.await { messages.forEach(::enqueue) }
+      autoScrollController?.request(
+        target = EditorScrollTarget.CurrentCursorLine,
+        state = editor.state,
+      )
     }
   }
 
@@ -159,19 +162,11 @@ internal class EditorInputNode(
           establishTextInputSession {
             val request = createEditorInputRequest(editor)
             launch {
-              val unsubscribe =
-                editor.on<EditorEvent.StateChanged> { _, event ->
-                  if (StateField.Selection in event.fields || StateField.Cursor in event.fields) {
-                    notifyImeSelectionChanged(editor)
-                  }
-                }
-
-              try {
-                notifyImeSelectionChanged(editor)
-                awaitCancellation()
-              } finally {
-                unsubscribe()
-              }
+              notifyImeSelectionChanged(editor)
+              snapshotFlow { editor.selection to editor.cursor }
+                .distinctUntilChanged()
+                .drop(1) // initial emission already handled above
+                .collect { notifyImeSelectionChanged(editor) }
             }
 
             startInputMethod(request)
