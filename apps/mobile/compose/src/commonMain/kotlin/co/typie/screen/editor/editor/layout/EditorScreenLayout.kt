@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -90,15 +92,21 @@ internal fun EditorScreenLayout(
               Column(
                 modifier =
                   Modifier.graphicsLayer {
-                      translationX = -state.viewportState.scrollOffset.x * density.density
                       translationY = -state.viewportState.scrollOffset.y * density.density
                     }
                     .onSizeChanged { size ->
                       state.viewportState.updateContentSize(resolveSize(size.width, size.height))
                     }
               ) {
-                header()
-                body()
+                Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
+                Box(
+                  modifier =
+                    Modifier.fillMaxWidth().graphicsLayer {
+                      translationX = -state.viewportState.scrollOffset.x * density.density
+                    }
+                ) {
+                  body()
+                }
               }
             },
           ) { measurables, viewportConstraints ->

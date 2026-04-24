@@ -48,7 +48,6 @@ import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.route.Route
 import co.typie.screen.editor.editor.header.EditorHeader
-import co.typie.screen.editor.editor.header.resolvePaginatedHeaderTrackWidth
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
@@ -202,15 +201,15 @@ fun EditorScreen(entityId: String) {
         pageSizes = pageSizes,
         displayZoom = displayZoom,
       )
+    val bodyTrackWidth = bodyGeometry.pageColumnWidth.coerceAtLeast(0f)
+    val isPaginatedLayout = layoutSpec is EditorDocumentLayoutSpec.Paginated
     val headerTrackWidth =
-      when (layoutSpec) {
-        is EditorDocumentLayoutSpec.Paginated ->
-          resolvePaginatedHeaderTrackWidth(
-            trackWidth = bodyGeometry.pageColumnWidth,
-            displayZoom = displayZoom,
-          )
-        is EditorDocumentLayoutSpec.Continuous -> bodyGeometry.pageColumnWidth
-      }
+      if (isPaginatedLayout) {
+          visibleArea.visibleBodySize.width
+        } else {
+          bodyTrackWidth
+        }
+        .coerceAtLeast(0f)
     val viewportScrollableState = rememberScrollable2DState { delta ->
       consumeEditorViewportTouchPan(
         viewportState = screenState.viewportState,
@@ -287,7 +286,7 @@ fun EditorScreen(entityId: String) {
       EditorScreenLayout(
         state = screenState,
         viewportScrollableState = viewportScrollableState,
-        viewportContentWidth = headerTrackWidth,
+        viewportContentWidth = bodyTrackWidth,
         onViewportSizeChange = { size ->
           screenState.updateViewport(size)
           if (size.width > 0f && size.height > 0f) {

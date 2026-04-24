@@ -41,15 +41,12 @@ import co.typie.ui.component.Text
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.SkeletonTextBone
 import co.typie.ui.theme.AppTheme
-import kotlin.math.max
 
 private val TitleHorizontalPadding = 20.dp
 private val TitleTopPadding = 12.dp
 private val TitleBlockSpacing = 40.dp
 private val TitleBetweenSpacing = 8.dp
 private val SubtitleDividerWidth = 120.dp
-private const val PaginatedHeaderMinWidth = 320f
-private const val PaginatedHeaderMinScale = 0.75f
 
 @Composable
 internal fun EditorHeader(
@@ -255,16 +252,4 @@ private fun EditorHeaderField(
       }
     },
   )
-}
-
-internal fun resolvePaginatedHeaderTrackWidth(trackWidth: Float, displayZoom: Float): Float {
-  val effectiveZoom =
-    if (displayZoom.isFinite() && displayZoom > 0f) {
-      displayZoom
-    } else {
-      1f
-    }
-  val minimumWidth =
-    max(PaginatedHeaderMinWidth * effectiveZoom, PaginatedHeaderMinWidth * PaginatedHeaderMinScale)
-  return max(trackWidth, minimumWidth)
 }
