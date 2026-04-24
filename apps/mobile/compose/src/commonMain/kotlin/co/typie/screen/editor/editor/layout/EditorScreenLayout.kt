@@ -1,26 +1,36 @@
 package co.typie.screen.editor.editor.layout
 
+import androidx.compose.foundation.gestures.Scrollable2DState
+import androidx.compose.foundation.gestures.scrollable2D
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import co.typie.ext.horizontalScroll
-import co.typie.ext.verticalScroll
+import co.typie.editor.viewport.EditorViewportState
+import co.typie.editor.viewport.consumeEditorViewportWheelPan
 import co.typie.screen.editor.editor.state.EditorScreenState
 import kotlin.math.max
 
 private enum class EditorScreenLayoutSlot {
-  ScrollContent,
+  ViewportContent,
   ViewportOverlay,
   Overlay,
   Toolbar,
@@ -29,8 +39,8 @@ private enum class EditorScreenLayoutSlot {
 @Composable
 internal fun EditorScreenLayout(
   state: EditorScreenState,
-  horizontalScrollEnabled: Boolean,
-  horizontalScrollContentWidth: Float,
+  viewportScrollableState: Scrollable2DState,
+  viewportContentWidth: Float,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
@@ -45,7 +55,12 @@ internal fun EditorScreenLayout(
     }
 
   SubcomposeLayout(modifier = modifier.fillMaxSize()) { constraints ->
-    val sharedTrackWidth = max(state.viewport.width, horizontalScrollContentWidth)
+    val viewportWidth = constraints.maxWidth / density.density
+    val resolvedContentWidth =
+      resolveEditorViewportContentWidth(
+        viewportWidth = viewportWidth,
+        contentTrackWidth = viewportContentWidth,
+      )
     val toolbarPlaceables =
       subcompose(EditorScreenLayoutSlot.Toolbar, toolbar).map {
         it.measure(constraints.copy(minWidth = 0, minHeight = 0))
@@ -59,44 +74,49 @@ internal fun EditorScreenLayout(
         minHeight = viewportHeight,
         maxHeight = viewportHeight,
       )
-    val scrollContentPlaceables =
-      subcompose(EditorScreenLayoutSlot.ScrollContent) {
-          Box(
+    val viewportContentPlaceables =
+      subcompose(EditorScreenLayoutSlot.ViewportContent) {
+          Layout(
             modifier =
-              Modifier.fillMaxSize().onSizeChanged { size ->
-                state.updateViewport(resolveSize(size.width, size.height))
-              }
-          ) {
-            Column(Modifier.fillMaxSize().verticalScroll(state.scrollState)) {
-              if (horizontalScrollEnabled) {
-                Box(
-                  modifier = Modifier.fillMaxWidth().horizontalScroll(state.horizontalScrollState)
-                ) {
-                  Column(
-                    modifier =
-                      Modifier.run {
-                        if (sharedTrackWidth > 0f) {
-                          width(sharedTrackWidth.dp)
-                        } else {
-                          fillMaxWidth()
-                        }
-                      }
-                  ) {
-                    header()
-                    body()
-                  }
-                }
-              } else {
+              Modifier.fillMaxSize()
+                .clipToBounds()
+                .scrollable2D(state = viewportScrollableState)
+                .editorViewportWheelScroll(state.viewportState)
+                .onSizeChanged { size ->
+                  state.updateViewport(resolveSize(size.width, size.height))
+                },
+            content = {
+              Column(
+                modifier =
+                  Modifier.graphicsLayer {
+                      translationX = -state.viewportState.scrollOffset.x * density.density
+                      translationY = -state.viewportState.scrollOffset.y * density.density
+                    }
+                    .onSizeChanged { size ->
+                      state.viewportState.updateContentSize(resolveSize(size.width, size.height))
+                    }
+              ) {
                 header()
                 body()
               }
+            },
+          ) { measurables, viewportConstraints ->
+            val contentConstraints =
+              resolveEditorViewportContentConstraints(
+                viewportWidthPx = viewportConstraints.maxWidth,
+                contentWidthPx = resolvedContentWidth.dp.roundToPx(),
+              )
+            val placeable = measurables.single().measure(contentConstraints)
+
+            layout(width = viewportConstraints.maxWidth, height = viewportConstraints.maxHeight) {
+              placeable.place(x = 0, y = 0)
             }
           }
         }
         .map { it.measure(viewportConstraints) }
     val viewportOverlayPlaceables =
       subcompose(EditorScreenLayoutSlot.ViewportOverlay) {
-          Box(modifier = Modifier.fillMaxSize(), content = viewportOverlay)
+          Box(modifier = Modifier.fillMaxSize().clipToBounds(), content = viewportOverlay)
         }
         .map { it.measure(viewportConstraints) }
     val overlayPlaceables =
@@ -112,10 +132,65 @@ internal fun EditorScreenLayout(
       }
 
     layout(width = constraints.maxWidth, height = constraints.maxHeight) {
-      scrollContentPlaceables.forEach { it.place(x = 0, y = 0) }
+      viewportContentPlaceables.forEach { it.place(x = 0, y = 0) }
       viewportOverlayPlaceables.forEach { it.place(x = 0, y = 0) }
       overlayPlaceables.forEach { it.place(x = 0, y = 0) }
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
     }
   }
 }
+
+internal fun resolveEditorViewportContentWidth(
+  viewportWidth: Float,
+  contentTrackWidth: Float,
+): Float = max(viewportWidth, contentTrackWidth).coerceAtLeast(0f)
+
+internal fun resolveEditorViewportContentConstraints(
+  viewportWidthPx: Int,
+  contentWidthPx: Int,
+): Constraints {
+  val resolvedWidth = max(viewportWidthPx, contentWidthPx).coerceAtLeast(0)
+  return Constraints(
+    minWidth = resolvedWidth,
+    maxWidth = resolvedWidth,
+    minHeight = 0,
+    maxHeight = Constraints.Infinity,
+  )
+}
+
+private fun Modifier.editorViewportWheelScroll(viewportState: EditorViewportState): Modifier =
+  pointerInput(viewportState) {
+    awaitPointerEventScope {
+      while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Main)
+        if (event.type != PointerEventType.Scroll) {
+          continue
+        }
+        if (event.keyboardModifiers.isCtrlPressed || event.keyboardModifiers.isMetaPressed) {
+          continue
+        }
+
+        val scrollDelta =
+          event.changes.fold(Offset.Zero) { delta, change ->
+            if (change.isConsumed) {
+              delta
+            } else {
+              delta + change.scrollDelta
+            }
+          }
+        if (scrollDelta == Offset.Zero) {
+          continue
+        }
+
+        // DesktopScrollTranslation turns mouse drags into synthetic wheel events; handle those here
+        // as the same viewport pan path because scrollable2D currently has no wheel handling.
+        viewportState.updateScrollableInteractionInProgress(true)
+        val consumed =
+          consumeEditorViewportWheelPan(viewportState = viewportState, scrollDelta = scrollDelta)
+        viewportState.updateScrollableInteractionInProgress(false)
+        if (consumed != Offset.Zero) {
+          event.changes.forEach { it.consume() }
+        }
+      }
+    }
+  }

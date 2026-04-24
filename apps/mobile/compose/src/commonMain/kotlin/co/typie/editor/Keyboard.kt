@@ -16,7 +16,7 @@ import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
-import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorAutoScrollController
 import co.typie.editor.scroll.EditorScrollTarget
 import co.typie.platform.Platform
 import kotlinx.coroutines.CoroutineScope
@@ -149,7 +149,7 @@ internal fun handleKeyDown(
   editor: Editor,
   platform: Platform,
   bindings: List<KeyBinding>,
-  scrollController: EditorScrollController?,
+  autoScrollController: EditorAutoScrollController?,
   coroutineScope: CoroutineScope,
   event: KeyEvent,
 ): Boolean {
@@ -158,7 +158,7 @@ internal fun handleKeyDown(
   if (messages.isNotEmpty()) {
     coroutineScope.launch {
       editor.dispatch(*messages.toTypedArray())
-      binding.scrollTarget?.let { scrollController?.request(target = it) }
+      binding.scrollTarget?.let { autoScrollController?.request(target = it) }
     }
   }
   return true

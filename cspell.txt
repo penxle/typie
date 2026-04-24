@@ -180,6 +180,7 @@ tauri
 tini
 tlsv
 tmpl
+tnum
 tsup
 twips
 typie

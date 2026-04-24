@@ -23,9 +23,9 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorAutoScrollController
 import co.typie.editor.scroll.EditorScrollTarget
-import co.typie.editor.scroll.LocalEditorScrollController
+import co.typie.editor.scroll.LocalEditorAutoScrollController
 import kotlinx.coroutines.launch
 
 private val DebugExtensionAreaColor = Color(0x2200D97A)
@@ -40,7 +40,7 @@ internal fun EditorExtensionArea(
   val density = LocalDensity.current
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
-  val scrollController = LocalEditorScrollController.current
+  val autoScrollController = LocalEditorAutoScrollController.current
   val extensionAreaModifier =
     if (forwardingEnabled) {
       Modifier.background(DebugExtensionAreaColor)
@@ -48,7 +48,7 @@ internal fun EditorExtensionArea(
           runtime = runtime,
           uiState = uiState,
           density = density.density,
-          scrollController = scrollController,
+          autoScrollController = autoScrollController,
         )
     } else {
       Modifier
@@ -61,35 +61,35 @@ private fun Modifier.editorExtensionForwarding(
   runtime: EditorRuntime,
   uiState: EditorUiState,
   density: Float,
-  scrollController: EditorScrollController?,
+  autoScrollController: EditorAutoScrollController?,
 ): Modifier =
   this then
     EditorExtensionForwardingElement(
       runtime = runtime,
       uiState = uiState,
       density = density,
-      scrollController = scrollController,
+      autoScrollController = autoScrollController,
     )
 
 private data class EditorExtensionForwardingElement(
   private val runtime: EditorRuntime,
   private val uiState: EditorUiState,
   private val density: Float,
-  private val scrollController: EditorScrollController?,
+  private val autoScrollController: EditorAutoScrollController?,
 ) : ModifierNodeElement<EditorExtensionForwardingNode>() {
   override fun create(): EditorExtensionForwardingNode =
     EditorExtensionForwardingNode(
       runtime = runtime,
       uiState = uiState,
       density = density,
-      scrollController = scrollController,
+      autoScrollController = autoScrollController,
     )
 
   override fun update(node: EditorExtensionForwardingNode) {
     node.runtime = runtime
     node.uiState = uiState
     node.density = density
-    node.scrollController = scrollController
+    node.autoScrollController = autoScrollController
   }
 }
 
@@ -97,7 +97,7 @@ private class EditorExtensionForwardingNode(
   var runtime: EditorRuntime,
   var uiState: EditorUiState,
   var density: Float,
-  var scrollController: EditorScrollController?,
+  var autoScrollController: EditorAutoScrollController?,
 ) : Modifier.Node(), PointerInputModifierNode {
   private var activePointerId: PointerId? = null
   private var downPositionInNode = Offset.Zero
@@ -154,7 +154,7 @@ private class EditorExtensionForwardingNode(
             ),
             Message.Pointer(EditorPointerEvent.Up),
           )
-          scrollController?.request(target = EditorScrollTarget.CurrentCursor)
+          autoScrollController?.request(target = EditorScrollTarget.CurrentCursor)
         }
         // TODO(editor-parity): Compose 상호작용 런타임이 웹/플러터 수준으로 맞춰지면,
         // extension area에서도 down/move/up 전체 제스처 시퀀스를 포워딩해야 한다.
@@ -181,7 +181,7 @@ private class EditorExtensionForwardingNode(
   }
 
   override fun onDetach() {
-    scrollController = null
+    autoScrollController = null
     super.onDetach()
   }
 }

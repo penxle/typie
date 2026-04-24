@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor
 
+import androidx.compose.foundation.gestures.rememberScrollable2DState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -32,10 +33,11 @@ import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorScrollTarget
-import co.typie.editor.scroll.LocalEditorScrollController
-import co.typie.editor.scroll.rememberEditorScrollController
+import co.typie.editor.scroll.LocalEditorAutoScrollController
+import co.typie.editor.scroll.rememberEditorAutoScrollController
 import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorScrollPolicy
+import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
@@ -46,12 +48,12 @@ import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.header.resolvePaginatedHeaderTrackWidth
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
+import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
-import co.typie.screen.editor.editor.zoom.EditorZoomOverlay
-import co.typie.screen.editor.editor.zoom.rememberEditorDebugWheelZoomModifier
-import co.typie.screen.editor.editor.zoom.rememberEditorTouchPinchZoomModifier
+import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
+import co.typie.screen.editor.editor.viewport.rememberEditorTouchPinchZoomModifier
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
@@ -203,46 +205,70 @@ fun EditorScreen(entityId: String) {
           )
         is EditorDocumentLayoutSpec.Continuous -> bodyGeometry.pageColumnWidth
       }
-    val scrollController =
-      rememberEditorScrollController(
+    val viewportScrollableState = rememberScrollable2DState { delta ->
+      consumeEditorViewportTouchPan(
+        viewportState = screenState.viewportState,
+        deltaPx = delta,
+        density = density,
+      )
+    }
+    val autoScrollController =
+      rememberEditorAutoScrollController(
         editorProvider = { runtime.editor },
         uiState = uiState,
-        scrollState = screenState.scrollState,
+        viewportState = screenState.viewportState,
+        isDirectScrollInProgress = { screenState.viewportState.isDirectManipulationInProgress },
         visibleArea = visibleArea,
         scrollPolicy = scrollPolicy,
         headerHeight = screenState.headerHeight,
-        density = density,
       )
+    val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
     val touchPinchZoomModifier =
-      rememberEditorTouchPinchZoomModifier(
-        state = screenState,
-        layoutSpec = layoutSpec,
-        zoomController = zoomController,
-        uiState = uiState,
-        pageSizes = pageSizes,
-        density = density,
-      )
+      if (paginatedLayout != null && density > 0f) {
+        rememberEditorTouchPinchZoomModifier(
+          state = screenState,
+          layoutSpec = paginatedLayout,
+          zoomController = zoomController,
+          uiState = uiState,
+          pageSizes = pageSizes,
+          density = density,
+        )
+      } else {
+        Modifier
+      }
     val debugWheelZoomModifier =
-      rememberEditorDebugWheelZoomModifier(
-        enabled = PlatformModule.platform == co.typie.platform.Platform.Desktop,
-        state = screenState,
-        layoutSpec = layoutSpec,
-        zoomController = zoomController,
-        uiState = uiState,
-        pageSizes = pageSizes,
-      )
+      if (
+        PlatformModule.platform == co.typie.platform.Platform.Desktop &&
+          paginatedLayout != null &&
+          density > 0f
+      ) {
+        rememberEditorDebugWheelZoomModifier(
+          state = screenState,
+          layoutSpec = paginatedLayout,
+          zoomController = zoomController,
+          uiState = uiState,
+          pageSizes = pageSizes,
+          density = density,
+        )
+      } else {
+        Modifier
+      }
 
-    LaunchedEffect(scrollController, screenState.scrollState) {
-      snapshotFlow { screenState.scrollState.isScrollInProgress }
+    LaunchedEffect(screenState.viewportState, viewportScrollableState) {
+      snapshotFlow { viewportScrollableState.isScrollInProgress }
+        .collectLatest(screenState.viewportState::updateScrollableInteractionInProgress)
+    }
+    LaunchedEffect(autoScrollController, screenState.viewportState) {
+      snapshotFlow { screenState.viewportState.isDirectManipulationInProgress }
         .collectLatest { inProgress ->
           if (inProgress) {
-            scrollController.cancel()
+            autoScrollController.cancel()
           }
         }
     }
-    LaunchedEffect(scrollController, uiState.focused, screenState.sceneInForeground, editor) {
+    LaunchedEffect(autoScrollController, uiState.focused, screenState.sceneInForeground, editor) {
       if (!uiState.focused || !screenState.sceneInForeground || editor == null) {
-        scrollController.cancel()
+        autoScrollController.cancel()
       }
     }
 
@@ -250,12 +276,12 @@ fun EditorScreen(entityId: String) {
       LocalEditorRuntime provides runtime,
       LocalEditorUiState provides uiState,
       LocalEditorZoomController provides zoomController,
-      LocalEditorScrollController provides scrollController,
+      LocalEditorAutoScrollController provides autoScrollController,
     ) {
       EditorScreenLayout(
         state = screenState,
-        horizontalScrollEnabled = layoutSpec is EditorDocumentLayoutSpec.Paginated,
-        horizontalScrollContentWidth = headerTrackWidth,
+        viewportScrollableState = viewportScrollableState,
+        viewportContentWidth = headerTrackWidth,
         header = {
           EditorHeader(
             title = model.titleDraft,
@@ -282,8 +308,12 @@ fun EditorScreen(entityId: String) {
         },
         overlay = {
           EditorScreenOverlayHost(
+            viewportState = screenState.viewportState,
             visibleArea = visibleArea,
             scrollPolicy = scrollPolicy,
+            layoutSpec = layoutSpec,
+            pageSizes = pageSizes,
+            displayZoom = displayZoom,
             modifier = Modifier.fillMaxSize(),
           )
         },

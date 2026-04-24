@@ -10,17 +10,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.scroll.EditorScrollMode
 import co.typie.editor.scroll.EditorScrollPolicy
 import co.typie.editor.scroll.EditorVisibleArea
+import co.typie.editor.viewport.EditorViewportState
 
 @Composable
 internal fun EditorScreenOverlayHost(
+  viewportState: EditorViewportState,
   visibleArea: EditorVisibleArea,
   scrollPolicy: EditorScrollPolicy,
+  layoutSpec: EditorDocumentLayoutSpec,
+  pageSizes: List<PageSize>,
+  displayZoom: Float,
   modifier: Modifier = Modifier,
 ) {
   Box(modifier = modifier.fillMaxSize()) {
+    EditorScrollbars(
+      viewportState = viewportState,
+      visibleArea = visibleArea,
+      layoutSpec = layoutSpec,
+      pageSizes = pageSizes,
+      displayZoom = displayZoom,
+      modifier = Modifier.fillMaxSize(),
+    )
+
     DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
     DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))
 
@@ -40,7 +56,7 @@ internal fun EditorScreenOverlayHost(
       }
     }
 
-    // TODO(editor-parity): selection handle, magnifier, scrollbar, extension area 기준
+    // TODO(editor-parity): selection handle, magnifier, extension area 기준
     // affordance 같은 screen/body 오버레이를 채워 넣어야 한다.
   }
 }

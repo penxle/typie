@@ -1,4 +1,4 @@
-package co.typie.screen.editor.editor.zoom
+package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween

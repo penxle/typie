@@ -24,7 +24,7 @@ import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StateField
 import co.typie.editor.handleKeyDown
-import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorAutoScrollController
 import co.typie.editor.scroll.EditorScrollTarget
 import co.typie.ext.TextInputClient
 import co.typie.ext.TextInputKey
@@ -38,8 +38,8 @@ import kotlinx.coroutines.launch
 internal fun Modifier.editorInput(
   editor: Editor,
   platform: Platform,
-  scrollController: EditorScrollController?,
-): Modifier = this then EditorInputElement(editor, platform, scrollController)
+  autoScrollController: EditorAutoScrollController?,
+): Modifier = this then EditorInputElement(editor, platform, autoScrollController)
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal expect suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
@@ -49,14 +49,14 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
 private data class EditorInputElement(
   private val editor: Editor,
   private val platform: Platform,
-  private val scrollController: EditorScrollController?,
+  private val autoScrollController: EditorAutoScrollController?,
 ) : ModifierNodeElement<EditorInputNode>() {
-  override fun create(): EditorInputNode = EditorInputNode(editor, platform, scrollController)
+  override fun create(): EditorInputNode = EditorInputNode(editor, platform, autoScrollController)
 
   override fun update(node: EditorInputNode) {
     node.editor = editor
     node.platform = platform
-    node.scrollController = scrollController
+    node.autoScrollController = autoScrollController
   }
 }
 
@@ -64,7 +64,7 @@ private data class EditorInputElement(
 internal class EditorInputNode(
   var editor: Editor,
   var platform: Platform,
-  var scrollController: EditorScrollController?,
+  var autoScrollController: EditorAutoScrollController?,
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private val bindings by lazy { createBindings(platform) }
@@ -73,10 +73,10 @@ internal class EditorInputNode(
     // TODO(editor-parity): 입력 후 스크롤 요청 대상을 현재 cursor로 고정하지 말고,
     // dispatch 결과의 실제 scroll anchor(selection head 또는 cursor)를 기준으로 정해야
     // 확장 selection/IME 조합에서도 웹·플러터와 같은 동작이 나온다.
-    val controller = scrollController
+    val autoScrollController = autoScrollController
     coroutineScope.launch {
       editor.dispatch(*messages)
-      controller?.request(target = EditorScrollTarget.CurrentCursor)
+      autoScrollController?.request(target = EditorScrollTarget.CurrentCursor)
     }
   }
 
@@ -127,7 +127,7 @@ internal class EditorInputNode(
 
   override fun onKeyEvent(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
-    if (handleKeyDown(editor, platform, bindings, scrollController, coroutineScope, event)) {
+    if (handleKeyDown(editor, platform, bindings, autoScrollController, coroutineScope, event)) {
       return true
     }
 
@@ -186,7 +186,7 @@ internal class EditorInputNode(
   }
 
   override fun onDetach() {
-    scrollController = null
+    autoScrollController = null
     notifyTextInputFocusChanged(this, false)
     registerTextInputClient(this, null)
     focusedJob?.cancel()

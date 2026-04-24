@@ -1,6 +1,5 @@
 package co.typie.screen.editor.editor.state
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -11,12 +10,12 @@ import androidx.compose.ui.geometry.Size
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorVisibleArea
+import co.typie.editor.viewport.EditorViewportState
 
 @Stable
-internal class EditorScreenState
-internal constructor(val scrollState: ScrollState, val horizontalScrollState: ScrollState) {
-  var viewport by mutableStateOf(Size.Zero)
-    private set
+internal class EditorScreenState internal constructor(val viewportState: EditorViewportState) {
+  val viewport: Size
+    get() = viewportState.viewportSize
 
   var sceneInForeground by mutableStateOf(true)
     private set
@@ -25,11 +24,7 @@ internal constructor(val scrollState: ScrollState, val horizontalScrollState: Sc
     private set
 
   fun updateViewport(size: Size) {
-    if (viewport == size) {
-      return
-    }
-
-    viewport = size
+    viewportState.updateViewportSize(size)
   }
 
   fun updateHeaderHeight(height: Float) {

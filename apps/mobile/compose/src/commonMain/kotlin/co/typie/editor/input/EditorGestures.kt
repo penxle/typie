@@ -13,7 +13,7 @@ import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.runtime.EditorUiState
-import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorAutoScrollController
 import co.typie.editor.scroll.EditorScrollTarget
 import kotlinx.coroutines.launch
 
@@ -23,35 +23,35 @@ internal fun Modifier.editorGestures(
   editor: Editor,
   uiState: EditorUiState,
   density: Float,
-  scrollController: EditorScrollController?,
+  autoScrollController: EditorAutoScrollController?,
 ): Modifier =
   this then
     EditorGesturesElement(
       editor = editor,
       uiState = uiState,
       density = density,
-      scrollController = scrollController,
+      autoScrollController = autoScrollController,
     )
 
 private data class EditorGesturesElement(
   private val editor: Editor,
   private val uiState: EditorUiState,
   private val density: Float,
-  private val scrollController: EditorScrollController?,
+  private val autoScrollController: EditorAutoScrollController?,
 ) : ModifierNodeElement<EditorGesturesNode>() {
   override fun create(): EditorGesturesNode =
     EditorGesturesNode(
       editor = editor,
       uiState = uiState,
       density = density,
-      scrollController = scrollController,
+      autoScrollController = autoScrollController,
     )
 
   override fun update(node: EditorGesturesNode) {
     node.editor = editor
     node.uiState = uiState
     node.density = density
-    node.scrollController = scrollController
+    node.autoScrollController = autoScrollController
   }
 }
 
@@ -59,7 +59,7 @@ private class EditorGesturesNode(
   var editor: Editor,
   var uiState: EditorUiState,
   var density: Float,
-  var scrollController: EditorScrollController?,
+  var autoScrollController: EditorAutoScrollController?,
 ) : Modifier.Node(), PointerInputModifierNode {
   private var activePointerId: PointerId? = null
   private var downPositionInNode = Offset.Zero
@@ -107,7 +107,7 @@ private class EditorGesturesNode(
                 EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
               )
             )
-            scrollController?.request(target = EditorScrollTarget.CurrentCursor)
+            autoScrollController?.request(target = EditorScrollTarget.CurrentCursor)
           }
         }
       }
@@ -126,7 +126,7 @@ private class EditorGesturesNode(
   }
 
   override fun onDetach() {
-    scrollController = null
+    autoScrollController = null
     super.onDetach()
   }
 }

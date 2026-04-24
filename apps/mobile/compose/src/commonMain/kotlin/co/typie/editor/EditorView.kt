@@ -30,7 +30,7 @@ import co.typie.editor.input.editorInput
 import co.typie.editor.overlay.EditorOverlayHost
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.LocalEditorScrollController
+import co.typie.editor.scroll.LocalEditorAutoScrollController
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.platform.PlatformModule
@@ -50,7 +50,7 @@ internal fun EditorView(
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
   val zoomController = LocalEditorZoomController.current
-  val scrollController = LocalEditorScrollController.current
+  val autoScrollController = LocalEditorAutoScrollController.current
   var appliedDoc by remember { mutableStateOf<Doc?>(null) }
   var appliedSelection by remember { mutableStateOf<Selection?>(null) }
   val displayZoom = zoomController.displayZoom
@@ -100,13 +100,13 @@ internal fun EditorView(
       Modifier.fillMaxWidth()
         .focusRequester(editor.focusRequester)
         .onFocusChanged { uiState.updateFocus(it.isFocused) }
-        .editorInput(editor, platform, scrollController)
+        .editorInput(editor, platform, autoScrollController)
         .focusable()
         .editorGestures(
           editor = editor,
           uiState = uiState,
           density = density.density,
-          scrollController = scrollController,
+          autoScrollController = autoScrollController,
         )
     ) {
       val pageSpacing =

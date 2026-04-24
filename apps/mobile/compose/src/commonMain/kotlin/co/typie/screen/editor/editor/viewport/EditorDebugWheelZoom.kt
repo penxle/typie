@@ -1,4 +1,4 @@
-package co.typie.screen.editor.editor.zoom
+package co.typie.screen.editor.editor.viewport
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -7,13 +7,14 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import co.typie.editor.EditorZoomController
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.clampDocumentZoom
 import co.typie.editor.computePaginatedZoomBounds
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.viewport.normalizeEditorViewportWheelZoomDelta
+import co.typie.editor.viewport.syncViewportToZoomAnchor
 import co.typie.screen.editor.editor.state.EditorScreenState
 import kotlin.math.abs
 import kotlin.math.exp
@@ -23,33 +24,22 @@ private const val WheelBurstGapMs = 56L
 private const val WheelTailDeltaPx = 0.8f
 private const val WheelTailStreakToReset = 3
 private const val WheelModeSwitchMinDeltaPx = 1.5f
-private const val WheelDeltaNormalizationScale = 10f
 
 @Composable
 internal fun rememberEditorDebugWheelZoomModifier(
-  enabled: Boolean,
   state: EditorScreenState,
-  layoutSpec: EditorDocumentLayoutSpec,
+  layoutSpec: EditorDocumentLayoutSpec.Paginated,
   zoomController: EditorZoomController,
   uiState: EditorUiState,
   pageSizes: List<PageSize>,
+  density: Float,
 ): Modifier {
-  if (!enabled) {
-    return Modifier
-  }
-
-  val density = LocalDensity.current.density
-
   return Modifier.pointerInput(state, layoutSpec, zoomController, uiState, pageSizes, density) {
-    val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated ?: return@pointerInput
-    if (density <= 0f) {
-      return@pointerInput
-    }
-
     var wheelLastEventTs: Long? = null
     var wheelLowDeltaStreak = 0
     var wheelRawZoom: Float? = null
     var wheelZoomSessionActive = false
+
     fun finishWheelZoomSession() {
       if (wheelZoomSessionActive) {
         zoomController.commitRenderZoom()
@@ -83,7 +73,7 @@ internal fun rememberEditorDebugWheelZoomModifier(
         continue
       }
 
-      val normalizedDelta = normalizeWheelDelta(dominantDelta)
+      val normalizedDelta = normalizeEditorViewportWheelZoomDelta(dominantDelta)
       val deltaMagnitude = abs(normalizedDelta)
       val elapsedSinceLastEvent =
         wheelLastEventTs?.let { change.uptimeMillis - it } ?: Long.MAX_VALUE
@@ -116,7 +106,7 @@ internal fun rememberEditorDebugWheelZoomModifier(
       val nextRawZoom =
         clampDocumentZoom(
           zoom = wheelBaseZoom * exp((-normalizedDelta / WheelZoomDivisor).toDouble()).toFloat(),
-          bounds = computePaginatedZoomBounds(paginatedLayout.pageWidth),
+          bounds = computePaginatedZoomBounds(layoutSpec.pageWidth),
         )
       wheelRawZoom = nextRawZoom
 
@@ -124,7 +114,7 @@ internal fun rememberEditorDebugWheelZoomModifier(
       val changed =
         zoomController.setDisplayZoom(
           zoom = nextRawZoom,
-          layoutSpec = paginatedLayout,
+          layoutSpec = layoutSpec,
           viewportWidth = state.viewport.width,
         )
       if (!changed) {
@@ -147,24 +137,14 @@ internal fun rememberEditorDebugWheelZoomModifier(
           .resolveAnchor(focalX = focalInEditor.x, focalY = focalInEditor.y) ?: continue
 
       syncViewportToZoomAnchor(
-        state = state,
+        viewportState = state.viewportState,
         pageSizes = pageSizes,
         anchor = anchor,
         focalX = focalInEditor.x,
         focalY = focalInEditor.y,
         displayZoom = zoomController.displayZoom,
-        density = density,
+        isUserScroll = true,
       )
     }
   }
-}
-
-private fun normalizeWheelDelta(delta: Float): Float {
-  if (!delta.isFinite()) {
-    return 0f
-  }
-
-  // Compose Desktop scrollDelta는 웹의 wheel delta처럼 px가 아니라 플랫폼별 tick 단위다.
-  // 디버그 wheel zoom도 기존 감각을 유지하도록 같은 보정값을 적용한다.
-  return delta * WheelDeltaNormalizationScale
 }

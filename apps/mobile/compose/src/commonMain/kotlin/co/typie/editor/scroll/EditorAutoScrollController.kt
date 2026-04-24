@@ -1,6 +1,5 @@
 package co.typie.editor.scroll
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
@@ -9,25 +8,30 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.VerticalSpan
 import co.typie.editor.runtime.EditorUiState
-import kotlin.math.roundToInt
+import co.typie.editor.viewport.EditorViewportState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun rememberEditorScrollController(
+internal fun rememberEditorAutoScrollController(
   editorProvider: () -> Editor?,
   uiState: EditorUiState,
-  scrollState: ScrollState,
+  viewportState: EditorViewportState,
+  isDirectScrollInProgress: () -> Boolean,
   visibleArea: EditorVisibleArea,
   scrollPolicy: EditorScrollPolicy,
   headerHeight: Float,
-  density: Float,
-): EditorScrollController {
+): EditorAutoScrollController {
   val scope = rememberCoroutineScope()
   val controller =
-    remember(scope, uiState, scrollState) {
-      EditorScrollController(scope = scope, uiState = uiState, scrollState = scrollState)
+    remember(scope, uiState, viewportState, isDirectScrollInProgress) {
+      EditorAutoScrollController(
+        scope = scope,
+        uiState = uiState,
+        viewportState = viewportState,
+        isDirectScrollInProgress = isDirectScrollInProgress,
+      )
     }
 
   controller.update(
@@ -35,7 +39,6 @@ internal fun rememberEditorScrollController(
     visibleArea = visibleArea,
     scrollPolicy = scrollPolicy,
     headerHeight = headerHeight,
-    density = density,
   )
 
   return controller
@@ -55,12 +58,14 @@ internal sealed interface EditorScrollTarget {
   ) : EditorScrollTarget
 }
 
-internal val LocalEditorScrollController = compositionLocalOf<EditorScrollController?> { null }
+internal val LocalEditorAutoScrollController =
+  compositionLocalOf<EditorAutoScrollController?> { null }
 
-internal class EditorScrollController(
+internal class EditorAutoScrollController(
   private val scope: CoroutineScope,
   private val uiState: EditorUiState,
-  private val scrollState: ScrollState,
+  private val viewportState: EditorViewportState,
+  private val isDirectScrollInProgress: () -> Boolean,
 ) {
   private var editorProvider: () -> Editor? = { null }
   private var visibleArea: EditorVisibleArea = EditorVisibleArea()
@@ -74,7 +79,6 @@ internal class EditorScrollController(
       bottomSpacerHeight = 0f,
     )
   private var headerHeight: Float = 0f
-  private var density: Float = 1f
   private var activeJob: Job? = null
 
   fun update(
@@ -82,18 +86,16 @@ internal class EditorScrollController(
     visibleArea: EditorVisibleArea,
     scrollPolicy: EditorScrollPolicy,
     headerHeight: Float,
-    density: Float,
   ) {
     this.editorProvider = editorProvider
     this.visibleArea = visibleArea
     this.scrollPolicy = scrollPolicy
     this.headerHeight = headerHeight
-    this.density = density
   }
 
   fun request(target: EditorScrollTarget = EditorScrollTarget.CurrentCursor) {
     launchScroll {
-      if (scrollState.isScrollInProgress) {
+      if (viewportState.isTransforming || isDirectScrollInProgress()) {
         return@launchScroll
       }
 
@@ -112,12 +114,7 @@ internal class EditorScrollController(
           displayZoom = uiState.displayZoom,
           target = target,
         ) ?: return@launchScroll
-      if (density <= 0f) {
-        return@launchScroll
-      }
-
-      val currentScrollPx = scrollState.value
-      val currentScroll = resolveScrollViewportOffset(scrollPx = currentScrollPx, density = density)
+      val currentScroll = viewportState.scrollOffset.y
       val targetScroll =
         resolveScrollTargetOffset(
           mode = scrollPolicy.mode,
@@ -126,15 +123,11 @@ internal class EditorScrollController(
           visibleArea = visibleArea,
           scrollPolicy = scrollPolicy,
         ) ?: return@launchScroll
-      val targetPx =
-        resolveScrollPx(
-          targetScroll = targetScroll,
-          density = density,
-          maxScrollPx = scrollState.maxValue,
-        ) ?: return@launchScroll
-      val deltaPx = targetPx - currentScrollPx
-      if (deltaPx != 0) {
-        scrollState.dispatchRawDelta(deltaPx.toFloat())
+      val targetViewportY =
+        resolveScrollViewportY(targetScroll = targetScroll, maxScrollY = viewportState.maxScrollY)
+      val deltaY = targetViewportY - currentScroll
+      if (deltaY != 0f) {
+        viewportState.dispatchDeltaY(deltaY = deltaY, isUserScroll = false)
       }
     }
   }
@@ -259,18 +252,5 @@ private fun resolveScrollTargetOffset(
       )
   }
 
-private fun resolveScrollViewportOffset(scrollPx: Int, density: Float): Float {
-  if (density <= 0f) {
-    return 0f
-  }
-
-  return scrollPx / density
-}
-
-private fun resolveScrollPx(targetScroll: Float, density: Float, maxScrollPx: Int): Int? {
-  if (density <= 0f) {
-    return null
-  }
-
-  return (targetScroll * density).roundToInt().coerceIn(0, maxScrollPx)
-}
+private fun resolveScrollViewportY(targetScroll: Float, maxScrollY: Float): Float =
+  targetScroll.coerceIn(0f, maxScrollY)
