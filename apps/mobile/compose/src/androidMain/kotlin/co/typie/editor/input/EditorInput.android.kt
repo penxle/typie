@@ -1,6 +1,7 @@
 package co.typie.editor.input
 
 import android.content.Context
+import android.os.Looper
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -30,17 +31,26 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
   val androidView = view
-  val imm =
-    androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-      ?: return
-  val ctx = editor.ime(0, 0)
-  val composingStart = ctx.composing?.start ?: -1
-  val composingEnd = ctx.composing?.end ?: -1
-  imm.updateSelection(
-    androidView,
-    ctx.selection.start,
-    ctx.selection.end,
-    composingStart,
-    composingEnd,
-  )
+
+  fun update() {
+    val imm =
+      androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        ?: return
+    val ctx = editor.ime(0, 0)
+    val composingStart = ctx.composing?.start ?: -1
+    val composingEnd = ctx.composing?.end ?: -1
+    imm.updateSelection(
+      androidView,
+      ctx.selection.start,
+      ctx.selection.end,
+      composingStart,
+      composingEnd,
+    )
+  }
+
+  if (Looper.myLooper() == Looper.getMainLooper()) {
+    update()
+  } else {
+    androidView.post { update() }
+  }
 }

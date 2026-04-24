@@ -18,7 +18,7 @@ import co.typie.editor.ffi.Message
 
 internal object InputEditCommandHandler {
   fun handle(editor: Editor, commands: List<EditCommand>) {
-    editor.batch {
+    editor.sync {
       val ops = mutableListOf<FlatImeOp>()
 
       for (command in commands) {

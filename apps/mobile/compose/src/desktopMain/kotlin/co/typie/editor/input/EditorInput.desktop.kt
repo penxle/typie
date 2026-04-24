@@ -116,7 +116,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
           }
         }
 
-      editor.batch { scope.block() }
+      editor.sync { scope.block() }
     }
   }
 }

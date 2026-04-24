@@ -18,18 +18,38 @@ import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.platform.PlatformModule
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.reflect.KClass
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.PersistentMap
+import kotlinx.collections.immutable.PersistentSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalAtomicApi::class)
 class Editor
-internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: CoroutineScope) {
+internal constructor(
+  private val inner: co.typie.editor.ffi.Editor,
+  val scope: CoroutineScope,
+  private val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+) {
   var documentAttrs by mutableStateOf<DocumentAttrs?>(null)
     private set
 
@@ -48,30 +68,53 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
   internal val focusRequester = FocusRequester()
   internal var focusManager: FocusManager? = null
 
-  private var queued = false
-  private var batching = false
-  private val dispatches = mutableListOf<CancellableContinuation<Unit>>()
+  private val queued = AtomicBoolean(false)
+  private val syncing = AtomicBoolean(false)
+  private val disposed = AtomicBoolean(false)
+  private val dispatches =
+    AtomicReference<PersistentList<CancellableContinuation<Unit>>>(persistentListOf())
+  private val mutex = Mutex()
 
   @PublishedApi
   internal val listeners =
-    mutableMapOf<KClass<out EditorEvent>, MutableSet<(Editor, EditorEvent) -> Unit>>()
+    AtomicReference<
+      PersistentMap<KClass<out EditorEvent>, PersistentSet<(Editor, EditorEvent) -> Unit>>
+    >(
+      persistentMapOf()
+    )
 
   inline fun <reified T : EditorEvent> on(noinline listener: EditorEventListener<T>): () -> Unit {
     @Suppress("UNCHECKED_CAST") val wrapped = listener as (Editor, EditorEvent) -> Unit
-    val set = listeners.getOrPut(T::class) { mutableSetOf() }
-    set.add(wrapped)
-    return { set.remove(wrapped) }
+    val key = T::class
+    listeners.update { map ->
+      val set = map[key] ?: persistentSetOf()
+      map.put(key, set.add(wrapped))
+    }
+    return {
+      listeners.update { map ->
+        val set = map[key] ?: return@update map
+        map.put(key, set.remove(wrapped))
+      }
+    }
   }
 
   private fun emit(event: EditorEvent) {
-    listeners[event::class]?.forEach { it(this, event) }
+    val snapshot = listeners.load()[event::class] ?: return
+    snapshot.forEach { it(this, event) }
   }
 
   fun enqueue(message: Message) {
+    if (disposed.load() || !scope.isActive) return
     inner.enqueue(message)
-    if (!batching && !queued) {
-      queued = true
-      scope.launch(Dispatchers.Main) { tick() }
+    if (!syncing.load() && queued.compareAndSet(false, true)) {
+      try {
+        scope.launch(dispatcher) {
+          val events = mutex.withLock { runLockedTick() }
+          for (event in events) emit(event)
+        }
+      } catch (_: CancellationException) {
+        // scope was cancelled between isActive check and launch — race, just ignore
+      }
     }
   }
 
@@ -80,40 +123,42 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
       return
     }
 
-    withContext(Dispatchers.Main.immediate) {
-      suspendCancellableCoroutine { cont ->
-        dispatches.add(cont)
-        cont.invokeOnCancellation { scope.launch(Dispatchers.Main) { dispatches.remove(cont) } }
-        messages.forEach(::enqueue)
+    suspendCancellableCoroutine { cont ->
+      dispatches.update { it.add(cont) }
+      cont.invokeOnCancellation { dispatches.update { it.remove(cont) } }
+      if (disposed.load()) {
+        cont.cancel()
+        return@suspendCancellableCoroutine
       }
+      messages.forEach(::enqueue)
     }
   }
 
-  internal inline fun batch(block: () -> Unit) {
-    batching = true
-    block()
-    batching = false
-    tick()
+  fun sync(block: Editor.() -> Unit) {
+    syncing.store(true)
+    try {
+      block(this)
+    } finally {
+      syncing.store(false)
+    }
+    val events = runBlocking { mutex.withLock { runLockedTick() } }
+    for (event in events) emit(event)
   }
 
-  private fun tick() {
-    queued = false
-    val waiters = dispatches.toList()
-    dispatches.clear()
+  private fun runLockedTick(): List<EditorEvent> {
+    queued.store(false)
+    val waiters = drainDispatches()
 
     val events =
       try {
         inner.tick()
       } catch (e: Throwable) {
         waiters.forEach { it.resumeWithException(e) }
-        return
+        return emptyList()
       }
 
-    for (event in events) {
-      emit(event)
-    }
-
     waiters.forEach { it.resume(Unit) }
+    return events
   }
 
   private val stateChangedHandler: EditorEventListener<EditorEvent.StateChanged> = { _, event ->
@@ -141,9 +186,9 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
   }
 
   fun dispose() {
+    if (!disposed.compareAndSet(false, true)) return
     EditorRegistry.unregisterAsync(this)
-    val waiters = dispatches.toList()
-    dispatches.clear()
+    val waiters = drainDispatches()
     waiters.forEach { it.cancel() }
   }
 
@@ -169,16 +214,34 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
 
   fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
 
+  @PublishedApi
+  internal inline fun <T> AtomicReference<T>.update(transform: (T) -> T): T {
+    while (true) {
+      val current = load()
+      val next = transform(current)
+      if (compareAndSet(current, next)) return next
+    }
+  }
+
+  private fun drainDispatches(): List<CancellableContinuation<Unit>> {
+    while (true) {
+      val current = dispatches.load()
+      if (current.isEmpty()) return emptyList()
+      if (dispatches.compareAndSet(current, persistentListOf())) return current
+    }
+  }
+
   companion object {
     suspend fun create(
       doc: Doc,
       selection: Selection,
       viewport: Viewport,
       scope: CoroutineScope,
+      dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
     ): Editor =
       withContext(Dispatchers.Default) {
         val inner = PlatformModule.editorHost.createEditor(doc, selection, viewport)
-        val editor = Editor(inner, scope)
+        val editor = Editor(inner, scope, dispatcher)
 
         editor.on<EditorEvent.StateChanged>(editor.stateChangedHandler)
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)

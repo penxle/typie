@@ -151,6 +151,7 @@ kotlin {
     implementation(libs.compose.uiToolingPreview)
     implementation(libs.kermit)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)
