@@ -104,7 +104,7 @@ internal fun EditorScrollbars(
   val hasVisibleScrollbar = verticalMetrics.isVisible || horizontalMetrics.isVisible
   var overlayVisible by remember { mutableStateOf(false) }
   var indicatorVisible by remember { mutableStateOf(false) }
-  var wasLastScrollUser by remember { mutableStateOf(false) }
+  var lastScrollWasAuto by remember { mutableStateOf(false) }
   var isVerticalThumbDragged by remember { mutableStateOf(false) }
   var isHorizontalThumbDragged by remember { mutableStateOf(false) }
   var hideSequenceRevision by remember { mutableIntStateOf(0) }
@@ -122,22 +122,22 @@ internal fun EditorScrollbars(
     if (!hasVisibleScrollbar) {
       overlayVisible = false
       indicatorVisible = false
-      wasLastScrollUser = false
+      lastScrollWasAuto = false
       isVerticalThumbDragged = false
       isHorizontalThumbDragged = false
       hideSequenceRevision = 0
     }
   }
   LaunchedEffect(viewportState, hasVisibleScrollbar) {
-    snapshotFlow { viewportState.lastScrollRevision to viewportState.wasLastScrollUser }
-      .collect { (revision, isUserScroll) ->
+    snapshotFlow { viewportState.lastScrollRevision to viewportState.lastScrollWasAuto }
+      .collect { (revision, isAutoScroll) ->
         if (revision <= 0 || !hasVisibleScrollbar) {
           return@collect
         }
 
         overlayVisible = true
-        indicatorVisible = isUserScroll
-        wasLastScrollUser = isUserScroll
+        indicatorVisible = !isAutoScroll
+        lastScrollWasAuto = isAutoScroll
         if (!isVerticalThumbDragged && !isHorizontalThumbDragged) {
           hideSequenceRevision += 1
         }
@@ -164,7 +164,7 @@ internal fun EditorScrollbars(
         resolveEditorScrollbarOpacity(
           visible = overlayVisible,
           dragging = isDragging,
-          isUserScroll = wasLastScrollUser,
+          isAutoScroll = lastScrollWasAuto,
         ),
       animationSpec = tween(durationMillis = ScrollbarOpacityAnimationMs, easing = LinearEasing),
       label = "editor-scrollbar-overlay-alpha",
@@ -174,7 +174,7 @@ internal fun EditorScrollbars(
       targetValue =
         if (
           verticalMetrics.isVisible &&
-            wasLastScrollUser &&
+            !lastScrollWasAuto &&
             (indicatorVisible || isVerticalThumbDragged)
         ) {
           1f
@@ -206,7 +206,7 @@ internal fun EditorScrollbars(
           metrics = verticalMetrics,
           viewportState = viewportState,
           visibleArea = visibleArea,
-          isUserScroll = wasLastScrollUser,
+          isAutoScroll = lastScrollWasAuto,
           inputEnabled = inputEnabled,
           isDragging = isVerticalThumbDragged,
           onDragChanged = { dragging ->
@@ -222,7 +222,7 @@ internal fun EditorScrollbars(
             isVerticalThumbDragged = dragging
             overlayVisible = true
             indicatorVisible = true
-            wasLastScrollUser = true
+            lastScrollWasAuto = false
             if (!dragging && !isHorizontalThumbDragged) {
               hideSequenceRevision += 1
             }
@@ -235,7 +235,7 @@ internal fun EditorScrollbars(
           metrics = horizontalMetrics,
           viewportState = viewportState,
           visibleArea = visibleArea,
-          isUserScroll = wasLastScrollUser,
+          isAutoScroll = lastScrollWasAuto,
           inputEnabled = inputEnabled,
           isDragging = isHorizontalThumbDragged,
           onDragChanged = { dragging ->
@@ -251,7 +251,7 @@ internal fun EditorScrollbars(
             isHorizontalThumbDragged = dragging
             overlayVisible = true
             indicatorVisible = true
-            wasLastScrollUser = true
+            lastScrollWasAuto = false
             if (!dragging && !isVerticalThumbDragged) {
               hideSequenceRevision += 1
             }
@@ -276,10 +276,10 @@ internal fun EditorScrollbars(
 internal fun resolveEditorScrollbarOpacity(
   visible: Boolean,
   dragging: Boolean,
-  isUserScroll: Boolean,
+  isAutoScroll: Boolean,
 ): Float =
   if (visible || dragging) {
-    if (isUserScroll) 1f else 0.65f
+    if (isAutoScroll) 0.65f else 1f
   } else {
     0f
   }
@@ -287,11 +287,11 @@ internal fun resolveEditorScrollbarOpacity(
 internal fun resolveEditorScrollbarThumbThickness(dragging: Boolean): Float =
   if (dragging) ScrollbarActiveThumbWidth else ScrollbarThumbWidth
 
-internal fun resolveEditorScrollbarThumbAlpha(dragging: Boolean, isUserScroll: Boolean): Float =
-  if (isUserScroll) {
-    if (dragging) 0.8f else 0.5f
-  } else {
+internal fun resolveEditorScrollbarThumbAlpha(dragging: Boolean, isAutoScroll: Boolean): Float =
+  if (isAutoScroll) {
     if (dragging) 0.45f else 0.22f
+  } else {
+    if (dragging) 0.8f else 0.5f
   }
 
 internal fun resolveEditorScrollbarIndicatorText(
@@ -403,7 +403,7 @@ private fun EditorScrollbarThumb(
   metrics: EditorViewportScrollbarMetrics,
   viewportState: EditorViewportState,
   visibleArea: EditorVisibleArea,
-  isUserScroll: Boolean,
+  isAutoScroll: Boolean,
   inputEnabled: Boolean,
   isDragging: Boolean,
   onDragChanged: (Boolean) -> Unit,
@@ -423,7 +423,7 @@ private fun EditorScrollbarThumb(
   val animatedThumbAlpha by
     animateFloatAsState(
       targetValue =
-        resolveEditorScrollbarThumbAlpha(dragging = isDragging, isUserScroll = isUserScroll),
+        resolveEditorScrollbarThumbAlpha(dragging = isDragging, isAutoScroll = isAutoScroll),
       animationSpec = tween(durationMillis = ScrollbarThumbAnimationMs, easing = EaseInOutBack),
       label = "editor-scrollbar-thumb-alpha",
     )
@@ -513,13 +513,11 @@ private fun EditorScrollbarThumb(
 
                 if (!horizontal) {
                   viewportState.scrollTo(
-                    offset = Offset(x = viewportState.scrollOffset.x, y = nextScrollPosition),
-                    isUserScroll = true,
+                    offset = Offset(x = viewportState.scrollOffset.x, y = nextScrollPosition)
                   )
                 } else {
                   viewportState.scrollTo(
-                    offset = Offset(x = nextScrollPosition, y = viewportState.scrollOffset.y),
-                    isUserScroll = true,
+                    offset = Offset(x = nextScrollPosition, y = viewportState.scrollOffset.y)
                   )
                 }
               }

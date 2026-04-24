@@ -107,7 +107,7 @@ private class EditorGesturesNode(
                 EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
               )
             )
-            autoScrollController?.request(target = EditorScrollTarget.CurrentCursor)
+            autoScrollController?.request(target = EditorScrollTarget.CurrentCursorLine)
           }
         }
       }

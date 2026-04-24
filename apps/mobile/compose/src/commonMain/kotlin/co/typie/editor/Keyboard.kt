@@ -35,7 +35,7 @@ internal data class KeyBinding(
   val predicate: (() -> Boolean)? = null,
   // TODO(editor-parity): movement/selection shortcut은 키별 고정 target보다, dispatch 이후의
   // 실제 scroll anchor(selection head 또는 cursor)를 따라가도록 정리해야 한다.
-  val scrollTarget: EditorScrollTarget? = EditorScrollTarget.CurrentCursor,
+  val scrollTarget: EditorScrollTarget? = EditorScrollTarget.CurrentCursorLine,
   val action: Editor.() -> List<Message>,
 )
 

@@ -67,7 +67,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   var lastScrollRevision by mutableIntStateOf(0)
     private set
 
-  var wasLastScrollUser by mutableStateOf(false)
+  var lastScrollWasAuto by mutableStateOf(false)
     private set
 
   private var isScrollableInteractionInProgress by mutableStateOf(false)
@@ -123,7 +123,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     clampScrollOffset()
   }
 
-  fun consumePan(delta: Offset, isUserScroll: Boolean = false): Offset {
+  fun consumePan(delta: Offset, isAutoScroll: Boolean = false): Offset {
     if (isTransforming) {
       return Offset.Zero
     }
@@ -138,13 +138,13 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
 
     setScrollOffset(
       nextScrollOffset = resolvedScrollOffset,
-      isUserScroll = isUserScroll,
+      isAutoScroll = isAutoScroll,
       emitScrollEvent = true,
     )
     return consumedDelta
   }
 
-  fun scrollToY(targetY: Float, isUserScroll: Boolean = false) {
+  fun scrollToY(targetY: Float, isAutoScroll: Boolean = false) {
     pendingRestoredScrollOffset = null
     val resolvedY = targetY.coerceIn(0f, maxScrollY)
     if (scrollOffset.y == resolvedY) {
@@ -153,12 +153,12 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
 
     setScrollOffset(
       nextScrollOffset = Offset(scrollOffset.x, resolvedY),
-      isUserScroll = isUserScroll,
+      isAutoScroll = isAutoScroll,
       emitScrollEvent = true,
     )
   }
 
-  fun scrollTo(offset: Offset, isUserScroll: Boolean = false) {
+  fun scrollTo(offset: Offset, isAutoScroll: Boolean = false) {
     pendingRestoredScrollOffset = null
     val resolvedScrollOffset = offset.coerceToBounds()
     if (scrollOffset == resolvedScrollOffset) {
@@ -167,14 +167,14 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
 
     setScrollOffset(
       nextScrollOffset = resolvedScrollOffset,
-      isUserScroll = isUserScroll,
+      isAutoScroll = isAutoScroll,
       emitScrollEvent = true,
     )
   }
 
-  fun dispatchDeltaY(deltaY: Float, isUserScroll: Boolean = false): Float {
+  fun dispatchDeltaY(deltaY: Float, isAutoScroll: Boolean = false): Float {
     val beforeY = scrollOffset.y
-    scrollToY(targetY = beforeY + deltaY, isUserScroll = isUserScroll)
+    scrollToY(targetY = beforeY + deltaY, isAutoScroll = isAutoScroll)
     return scrollOffset.y - beforeY
   }
 
@@ -205,7 +205,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   private fun clampScrollOffset() {
     setScrollOffset(
       nextScrollOffset = scrollOffset.coerceToBounds(),
-      isUserScroll = null,
+      isAutoScroll = null,
       emitScrollEvent = false,
     )
   }
@@ -219,7 +219,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     pendingRestoredScrollOffset = null
     setScrollOffset(
       nextScrollOffset = pendingScrollOffset.coerceToBounds(),
-      isUserScroll = null,
+      isAutoScroll = null,
       emitScrollEvent = false,
     )
     return true
@@ -227,7 +227,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
 
   private fun setScrollOffset(
     nextScrollOffset: Offset,
-    isUserScroll: Boolean?,
+    isAutoScroll: Boolean?,
     emitScrollEvent: Boolean,
   ) {
     if (scrollOffset == nextScrollOffset) {
@@ -235,11 +235,11 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     }
 
     scrollOffset = nextScrollOffset
-    if (!emitScrollEvent || isUserScroll == null) {
+    if (!emitScrollEvent || isAutoScroll == null) {
       return
     }
 
-    wasLastScrollUser = isUserScroll
+    lastScrollWasAuto = isAutoScroll
     lastScrollRevision += 1
   }
 
@@ -266,7 +266,10 @@ internal fun consumeEditorViewportTouchPan(
   }
 
   val viewportDelta = Offset(x = -deltaPx.x / density, y = -deltaPx.y / density)
-  val consumed = viewportState.consumePan(delta = viewportDelta, isUserScroll = true)
+  val consumed = viewportState.consumePan(delta = viewportDelta)
+  if (consumed == Offset.Zero) {
+    return Offset.Zero
+  }
   return Offset(x = -consumed.x * density, y = -consumed.y * density)
 }
 
@@ -279,8 +282,7 @@ internal fun consumeEditorViewportWheelPan(
       Offset(
         x = scrollDelta.x * EditorViewportWheelPanScale,
         y = scrollDelta.y * EditorViewportWheelPanScale,
-      ),
-    isUserScroll = true,
+      )
   )
 
 internal fun normalizeEditorViewportWheelZoomDelta(delta: Float): Float =
@@ -335,7 +337,7 @@ internal fun syncViewportToZoomAnchor(
   focalX: Float,
   focalY: Float,
   displayZoom: Float,
-  isUserScroll: Boolean,
+  isAutoScroll: Boolean = false,
 ) {
   val currentHorizontalScroll = viewportState.scrollOffset.x
   val currentVerticalScroll = viewportState.scrollOffset.y
@@ -352,7 +354,7 @@ internal fun syncViewportToZoomAnchor(
 
   viewportState.scrollTo(
     offset = Offset(x = target.horizontalScroll, y = target.verticalScroll),
-    isUserScroll = isUserScroll,
+    isAutoScroll = isAutoScroll,
   )
 }
 

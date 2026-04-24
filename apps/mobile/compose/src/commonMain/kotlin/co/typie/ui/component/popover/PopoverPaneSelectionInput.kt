@@ -7,19 +7,19 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
-import co.typie.ext.AutoScrollController
+import co.typie.ext.EdgeAutoScrollController
 
 @Composable
 internal fun rememberPopoverPaneSelectionInputModifier(
   enabled: Boolean,
   positionInWindow: (Offset) -> Offset?,
   selectionState: PopoverPaneSelectionState,
-  autoScrollController: AutoScrollController?,
+  edgeAutoScrollController: EdgeAutoScrollController?,
   armDelayMillis: Long = PopoverDefaults.ArmDelayMs,
 ): Modifier {
   val positionInWindowState = rememberUpdatedState(positionInWindow)
 
-  return Modifier.pointerInput(enabled, selectionState, autoScrollController, armDelayMillis) {
+  return Modifier.pointerInput(enabled, selectionState, edgeAutoScrollController, armDelayMillis) {
     awaitEachGesture {
       if (!enabled) {
         return@awaitEachGesture
@@ -54,22 +54,22 @@ internal fun rememberPopoverPaneSelectionInputModifier(
             if (change.pressed && dragDistance > touchSlop) {
               panScrollDetected = true
               selectionState.clear()
-              autoScrollController?.pointer = null
+              edgeAutoScrollController?.pointer = null
             }
           }
 
           if (!panScrollDetected && session.isArmed) {
             change?.consume()
-            // Two sinks: selectionState drives the highlight; autoScrollController drives the
-            // scroll loop.
+            // Two sinks: selectionState drives the highlight; edgeAutoScrollController drives the
+            // edge scroll loop.
             // Re-hit-test during scroll is reactive via item onGloballyPositioned; no scrollEpoch
             // observer needed.
             selectionState.updatePointer(currentPositionInWindow)
-            autoScrollController?.pointer = currentPositionInWindow
+            edgeAutoScrollController?.pointer = currentPositionInWindow
           }
 
           if (change != null && !change.pressed) {
-            autoScrollController?.pointer = null
+            edgeAutoScrollController?.pointer = null
             if (!panScrollDetected && session.isArmed) {
               change.consume()
               selectionState.release(currentPositionInWindow)
@@ -77,7 +77,7 @@ internal fun rememberPopoverPaneSelectionInputModifier(
           }
         }
       } finally {
-        autoScrollController?.pointer = null
+        edgeAutoScrollController?.pointer = null
         selectionState.clear()
       }
     }

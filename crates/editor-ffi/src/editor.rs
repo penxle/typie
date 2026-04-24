@@ -37,10 +37,6 @@ impl Editor {
             let state = inner.editor.state();
             let selection = state.selection;
             if selection.is_collapsed() {
-                // TODO(editor-parity): collapsed selection의 head/composition bounds도 FFI로
-                // 노출해야 한다. KMP는 지금 cursor rect만 받아서 실제 selection head 표시
-                // 높이보다 작은 값으로 typewriter 하단 여백과 keep-visible(cursor guard)를
-                // 계산하고 있고, 이 높이 차이는 display zoom이 커질수록 그대로 확대된다.
                 Ok(inner
                     .editor
                     .view()

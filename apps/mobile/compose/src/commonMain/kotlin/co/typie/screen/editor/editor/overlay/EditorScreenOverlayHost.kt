@@ -12,8 +12,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Size as PageSize
-import co.typie.editor.scroll.EditorScrollMode
-import co.typie.editor.scroll.EditorScrollPolicy
+import co.typie.editor.scroll.EditorAutoScrollMode
+import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.viewport.EditorViewportState
 
@@ -21,7 +21,7 @@ import co.typie.editor.viewport.EditorViewportState
 internal fun EditorScreenOverlayHost(
   viewportState: EditorViewportState,
   visibleArea: EditorVisibleArea,
-  scrollPolicy: EditorScrollPolicy,
+  autoScrollPolicy: EditorAutoScrollPolicy,
   layoutSpec: EditorDocumentLayoutSpec,
   pageSizes: List<PageSize>,
   displayZoom: Float,
@@ -40,18 +40,16 @@ internal fun EditorScreenOverlayHost(
     DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
     DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))
 
-    when (scrollPolicy.mode) {
-      EditorScrollMode.KeepCursorVisible -> {
-        DebugViewportLine(y = scrollPolicy.keepVisibleRange.top, color = Color(0xFFFFAB00))
-        DebugViewportLine(y = scrollPolicy.keepVisibleRange.bottom, color = Color(0xFFFFAB00))
+    when (autoScrollPolicy.mode) {
+      EditorAutoScrollMode.KeepCursorVisible -> {
+        DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.top, color = Color(0xFFFFAB00))
+        DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.bottom, color = Color(0xFFFFAB00))
       }
 
-      EditorScrollMode.Typewriter -> {
-        scrollPolicy.typewriterTargetTop?.let {
-          DebugViewportLine(y = it, color = Color(0xFFFFAB00))
-        }
-        scrollPolicy.typewriterTargetBottom
-          ?.takeIf { scrollPolicy.typewriterCursorHeight > 0f }
+      EditorAutoScrollMode.Typewriter -> {
+        autoScrollPolicy.targetTop?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
+        autoScrollPolicy.targetBottom
+          ?.takeIf { autoScrollPolicy.targetLineHeight > 0f }
           ?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
       }
     }

@@ -336,7 +336,7 @@ mod tests {
                     is_constructor: false,
                     params: vec![],
                     return_type: FfiReturnType::Option(FfiScalarReturn::Complex(
-                        "CursorRect".into(),
+                        "CursorMetrics".into(),
                     )),
                 },
             ],

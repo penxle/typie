@@ -1,6 +1,7 @@
 package co.typie.editor
 
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
@@ -39,6 +40,8 @@ private class StubFfiEditor : co.typie.editor.ffi.Editor {
   override fun cursor(): CursorMetrics? = null
 
   override fun selection(): Selection = error("not used")
+
+  override fun documentAttrs(): DocumentAttrs = error("not used")
 
   override fun pageSizes(): List<Size> = emptyList()
 

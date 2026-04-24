@@ -38,9 +38,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import co.typie.ext.AutoScrollController
-import co.typie.ext.autoScroll
-import co.typie.ext.rememberAutoScrollController
+import co.typie.ext.EdgeAutoScrollController
+import co.typie.ext.edgeAutoScroll
+import co.typie.ext.rememberEdgeAutoScrollController
 import kotlinx.coroutines.flow.drop
 
 data class ReorderDrop<K : Any>(
@@ -64,7 +64,7 @@ private data class Settling<K : Any>(val key: K, val initialOffsetY: Float)
 
 @Stable
 class ReorderableColumnState<K : Any>
-internal constructor(internal val autoScrollController: AutoScrollController) {
+internal constructor(internal val edgeAutoScrollController: EdgeAutoScrollController) {
   private val slotBounds = mutableStateMapOf<K, Rect>()
   private var activeDrag by mutableStateOf<ActiveDrag<K>?>(null)
   private var settling by mutableStateOf<Settling<K>?>(null)
@@ -167,7 +167,7 @@ internal constructor(internal val autoScrollController: AutoScrollController) {
   }
 
   fun endDrag(): ReorderDrop<K>? {
-    autoScrollController.pointer = null
+    edgeAutoScrollController.pointer = null
     val drag = activeDrag ?: return null
 
     val releaseOffset = draggedOffsetY(drag.key)
@@ -191,7 +191,7 @@ internal constructor(internal val autoScrollController: AutoScrollController) {
     activeDrag = null
     settling = null
     _keys = inputKeys
-    autoScrollController.pointer = null
+    edgeAutoScrollController.pointer = null
   }
 
   private fun refreshDraggedOrder(drag: ActiveDrag<K>? = activeDrag): Boolean {
@@ -217,8 +217,10 @@ fun <K : Any> rememberReorderableColumnState(
   keys: List<K>,
   verticalScrollableState: ScrollableState? = null,
 ): ReorderableColumnState<K> {
-  val controller = rememberAutoScrollController(verticalScrollableState = verticalScrollableState)
-  val state = remember(controller) { ReorderableColumnState<K>(autoScrollController = controller) }
+  val controller =
+    rememberEdgeAutoScrollController(verticalScrollableState = verticalScrollableState)
+  val state =
+    remember(controller) { ReorderableColumnState<K>(edgeAutoScrollController = controller) }
 
   SideEffect { state.inputKeys = keys }
 
@@ -317,8 +319,8 @@ fun Modifier.reorderableViewport(
   viewportTopInset: Dp = 0.dp,
   viewportBottomInset: Dp = 0.dp,
 ): Modifier =
-  autoScroll(
-    controller = state.autoScrollController,
+  edgeAutoScroll(
+    controller = state.edgeAutoScrollController,
     enabled = state.isDragging,
     viewportTopInset = viewportTopInset,
     viewportBottomInset = viewportBottomInset,
@@ -384,7 +386,7 @@ fun <K : Any> Modifier.reorderableDragHandle(
           if (started) {
             change.consume()
             state.updateDrag(currentWindow)
-            state.autoScrollController.pointer = currentWindow
+            state.edgeAutoScrollController.pointer = currentWindow
           }
         }
 

@@ -197,7 +197,7 @@ mod tests {
                     is_constructor: false,
                     params: vec![],
                     return_type: FfiReturnType::Option(FfiScalarReturn::Complex(
-                        "CursorRect".into(),
+                        "CursorMetrics".into(),
                     )),
                 },
             ],
@@ -205,7 +205,7 @@ mod tests {
         let output = generate_interface(&iface, &empty_ct());
         assert!(output.contains("fun enqueue(message: Message)"));
         assert!(output.contains("fun tick(): List<EditorEvent>"));
-        assert!(output.contains("fun cursor(): CursorRect?"));
+        assert!(output.contains("fun cursor(): CursorMetrics?"));
     }
 
     #[test]

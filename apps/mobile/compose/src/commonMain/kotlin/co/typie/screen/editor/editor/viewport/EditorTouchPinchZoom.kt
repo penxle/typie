@@ -133,7 +133,6 @@ internal fun rememberEditorTouchPinchZoomModifier(
                         focalX = focalInEditor.x,
                         focalY = focalInEditor.y,
                         displayZoom = nextZoom,
-                        isUserScroll = true,
                       )
                     }
                   }

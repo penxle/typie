@@ -20,7 +20,7 @@ internal fun rememberEditorAutoScrollController(
   viewportState: EditorViewportState,
   isDirectScrollInProgress: () -> Boolean,
   visibleArea: EditorVisibleArea,
-  scrollPolicy: EditorScrollPolicy,
+  autoScrollPolicy: EditorAutoScrollPolicy,
   headerHeight: Float,
 ): EditorAutoScrollController {
   val scope = rememberCoroutineScope()
@@ -37,7 +37,7 @@ internal fun rememberEditorAutoScrollController(
   controller.update(
     editorProvider = editorProvider,
     visibleArea = visibleArea,
-    scrollPolicy = scrollPolicy,
+    autoScrollPolicy = autoScrollPolicy,
     headerHeight = headerHeight,
   )
 
@@ -45,7 +45,7 @@ internal fun rememberEditorAutoScrollController(
 }
 
 internal sealed interface EditorScrollTarget {
-  data object CurrentCursor : EditorScrollTarget
+  data object CurrentCursorLine : EditorScrollTarget
 
   data object CurrentSelectionHead : EditorScrollTarget
 
@@ -69,13 +69,13 @@ internal class EditorAutoScrollController(
 ) {
   private var editorProvider: () -> Editor? = { null }
   private var visibleArea: EditorVisibleArea = EditorVisibleArea()
-  private var scrollPolicy: EditorScrollPolicy =
-    EditorScrollPolicy(
-      mode = EditorScrollMode.KeepCursorVisible,
+  private var autoScrollPolicy: EditorAutoScrollPolicy =
+    EditorAutoScrollPolicy(
+      mode = EditorAutoScrollMode.KeepCursorVisible,
       typewriterPosition = 0.5f,
       keepVisibleRange = VerticalSpan(),
-      typewriterTargetTop = null,
-      typewriterCursorHeight = 0f,
+      targetTop = null,
+      targetLineHeight = 0f,
       bottomSpacerHeight = 0f,
     )
   private var headerHeight: Float = 0f
@@ -84,16 +84,16 @@ internal class EditorAutoScrollController(
   fun update(
     editorProvider: () -> Editor?,
     visibleArea: EditorVisibleArea,
-    scrollPolicy: EditorScrollPolicy,
+    autoScrollPolicy: EditorAutoScrollPolicy,
     headerHeight: Float,
   ) {
     this.editorProvider = editorProvider
     this.visibleArea = visibleArea
-    this.scrollPolicy = scrollPolicy
+    this.autoScrollPolicy = autoScrollPolicy
     this.headerHeight = headerHeight
   }
 
-  fun request(target: EditorScrollTarget = EditorScrollTarget.CurrentCursor) {
+  fun request(target: EditorScrollTarget = EditorScrollTarget.CurrentCursorLine) {
     launchScroll {
       if (viewportState.isTransforming || isDirectScrollInProgress()) {
         return@launchScroll
@@ -117,17 +117,17 @@ internal class EditorAutoScrollController(
       val currentScroll = viewportState.scrollOffset.y
       val targetScroll =
         resolveScrollTargetOffset(
-          mode = scrollPolicy.mode,
+          mode = autoScrollPolicy.mode,
           currentScroll = currentScroll,
           rect = rect,
           visibleArea = visibleArea,
-          scrollPolicy = scrollPolicy,
+          autoScrollPolicy = autoScrollPolicy,
         ) ?: return@launchScroll
       val targetViewportY =
         resolveScrollViewportY(targetScroll = targetScroll, maxScrollY = viewportState.maxScrollY)
       val deltaY = targetViewportY - currentScroll
       if (deltaY != 0f) {
-        viewportState.dispatchDeltaY(deltaY = deltaY, isUserScroll = false)
+        viewportState.dispatchDeltaY(deltaY = deltaY, isAutoScroll = true)
       }
     }
   }
@@ -189,30 +189,26 @@ private fun resolveScrollTargetRect(
   target: EditorScrollTarget,
 ): VerticalSpan? {
   return when (target) {
-    EditorScrollTarget.CurrentCursor -> {
+    EditorScrollTarget.CurrentCursorLine -> {
       val cursor = editor.cursor ?: return null
-      val cursorOffset =
-        viewportTransform.localToGlobal(
-          page = cursor.pageIdx,
-          x = cursor.caret.x,
-          y = cursor.caret.y,
-        ) ?: return null
-      val contentTop = headerHeight + editorTopInContainer + cursorOffset.y
-      VerticalSpan(top = contentTop, bottom = contentTop + cursor.caret.height * displayZoom)
+      val cursorLineOffset =
+        viewportTransform.localToGlobal(page = cursor.pageIdx, x = cursor.line.x, y = cursor.line.y)
+          ?: return null
+      val lineContentTop = headerHeight + editorTopInContainer + cursorLineOffset.y
+      VerticalSpan(top = lineContentTop, bottom = lineContentTop + cursor.line.height * displayZoom)
     }
 
     EditorScrollTarget.CurrentSelectionHead -> {
       // TODO(editor-parity): KMP selection 모델/FFI가 실제 selection head bounds를 노출하면
-      // 그 값을 써야 한다. 지금은 CurrentSelectionHead가 CurrentCursor로 fallback 되어
-      // non-collapsed selection의 typewriter/keep-visible 기준이 웹/플러터와 다르고,
-      // collapsed selection에서는 표시 높이 부족분이 displayZoom만큼 확대된다.
+      // 그 값을 써야 한다. 지금은 CurrentSelectionHead가 CurrentCursorLine으로 fallback 되어
+      // non-collapsed selection의 typewriter/keep-visible 기준이 웹/플러터와 다르다.
       resolveScrollTargetRect(
         editor = editor,
         viewportTransform = viewportTransform,
         headerHeight = headerHeight,
         editorTopInContainer = editorTopInContainer,
         displayZoom = displayZoom,
-        target = EditorScrollTarget.CurrentCursor,
+        target = EditorScrollTarget.CurrentCursorLine,
       )
     }
 
@@ -227,28 +223,28 @@ private fun resolveScrollTargetRect(
 }
 
 private fun resolveScrollTargetOffset(
-  mode: EditorScrollMode,
+  mode: EditorAutoScrollMode,
   currentScroll: Float,
   rect: VerticalSpan,
   visibleArea: EditorVisibleArea,
-  scrollPolicy: EditorScrollPolicy,
+  autoScrollPolicy: EditorAutoScrollPolicy,
 ): Float? =
   when (mode) {
-    EditorScrollMode.KeepCursorVisible ->
+    EditorAutoScrollMode.KeepCursorVisible ->
       resolveKeepVisibleScrollTarget(
         currentScroll = currentScroll,
-        cursorTopInContent = rect.top,
-        cursorBottomInContent = rect.bottom,
+        targetTopInContent = rect.top,
+        targetBottomInContent = rect.bottom,
         visibleArea = visibleArea,
       )
 
-    EditorScrollMode.Typewriter ->
+    EditorAutoScrollMode.Typewriter ->
       resolveTypewriterScrollTarget(
         currentScroll = currentScroll,
-        cursorTopInContent = rect.top,
-        cursorBottomInContent = rect.bottom,
+        targetTopInContent = rect.top,
+        targetBottomInContent = rect.bottom,
         visibleArea = visibleArea,
-        position = scrollPolicy.typewriterPosition,
+        position = autoScrollPolicy.typewriterPosition,
       )
   }
 

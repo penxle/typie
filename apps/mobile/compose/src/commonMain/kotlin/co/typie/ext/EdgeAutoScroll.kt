@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 
-internal data class ScrollPlan(
+internal data class EdgeAutoScrollPlan(
   val verticalDirection: Float,
   val verticalSpeedPxPerSec: Float,
   val horizontalDirection: Float,
@@ -34,8 +34,8 @@ internal data class ScrollPlan(
     get() = verticalDirection == 0f && horizontalDirection == 0f
 
   companion object {
-    val NoOp: ScrollPlan =
-      ScrollPlan(
+    val NoOp: EdgeAutoScrollPlan =
+      EdgeAutoScrollPlan(
         verticalDirection = 0f,
         verticalSpeedPxPerSec = 0f,
         horizontalDirection = 0f,
@@ -44,7 +44,7 @@ internal data class ScrollPlan(
   }
 }
 
-internal fun insetViewportRect(
+internal fun insetEdgeAutoScrollViewportRect(
   viewport: Rect,
   topInsetPx: Float = 0f,
   bottomInsetPx: Float = 0f,
@@ -54,14 +54,14 @@ internal fun insetViewportRect(
   return Rect(left = viewport.left, top = insetTop, right = viewport.right, bottom = insetBottom)
 }
 
-internal fun computeScrollPlan(
+internal fun computeEdgeAutoScrollPlan(
   pointer: Offset,
   insetViewport: Rect,
   edgeThresholdPx: Float,
   minSpeedPxPerSec: Float,
   maxSpeedPxPerSec: Float,
-): ScrollPlan {
-  if (insetViewport.width <= 0f || insetViewport.height <= 0f) return ScrollPlan.NoOp
+): EdgeAutoScrollPlan {
+  if (insetViewport.width <= 0f || insetViewport.height <= 0f) return EdgeAutoScrollPlan.NoOp
 
   val (verticalDirection, verticalSpeed) =
     axisPlan(
@@ -79,7 +79,7 @@ internal fun computeScrollPlan(
       minSpeedPxPerSec = minSpeedPxPerSec,
       maxSpeedPxPerSec = maxSpeedPxPerSec,
     )
-  return ScrollPlan(
+  return EdgeAutoScrollPlan(
     verticalDirection = verticalDirection,
     verticalSpeedPxPerSec = verticalSpeed,
     horizontalDirection = horizontalDirection,
@@ -118,12 +118,12 @@ private val MinScrollSpeed = 240.dp
 private val MaxScrollSpeed = 960.dp
 
 @Stable
-class AutoScrollController
+class EdgeAutoScrollController
 internal constructor(
   internal val verticalScrollableState: ScrollableState?,
   internal val horizontalScrollableState: ScrollableState?,
 ) {
-  // Write a window-space Offset to drive auto-scroll; write null to halt it.
+  // Write a window-space Offset to drive edge auto-scroll; write null to halt it.
   var pointer: Offset? by mutableStateOf(null)
 
   var scrollEpoch: Long by mutableLongStateOf(0L)
@@ -138,20 +138,20 @@ internal constructor(
 }
 
 @Composable
-fun rememberAutoScrollController(
+fun rememberEdgeAutoScrollController(
   verticalScrollableState: ScrollableState? = null,
   horizontalScrollableState: ScrollableState? = null,
-): AutoScrollController =
+): EdgeAutoScrollController =
   remember(verticalScrollableState, horizontalScrollableState) {
-    AutoScrollController(
+    EdgeAutoScrollController(
       verticalScrollableState = verticalScrollableState,
       horizontalScrollableState = horizontalScrollableState,
     )
   }
 
 @Composable
-fun Modifier.autoScroll(
-  controller: AutoScrollController,
+fun Modifier.edgeAutoScroll(
+  controller: EdgeAutoScrollController,
   enabled: Boolean = true,
   viewportTopInset: Dp = 0.dp,
   viewportBottomInset: Dp = 0.dp,
@@ -173,9 +173,9 @@ fun Modifier.autoScroll(
         val viewport = controller.viewport
         val pointer = controller.pointer
         if (!controller.enabled || viewport == null || pointer == null) return@snapshotFlow false
-        !computeScrollPlan(
+        !computeEdgeAutoScrollPlan(
             pointer = pointer,
-            insetViewport = insetViewportRect(viewport, topInsetPx, bottomInsetPx),
+            insetViewport = insetEdgeAutoScrollViewportRect(viewport, topInsetPx, bottomInsetPx),
             edgeThresholdPx = edgeThresholdPx,
             minSpeedPxPerSec = minSpeedPx,
             maxSpeedPxPerSec = maxSpeedPx,
@@ -194,9 +194,9 @@ fun Modifier.autoScroll(
           val viewport = controller.viewport ?: break
           val pointer = controller.pointer ?: break
           val plan =
-            computeScrollPlan(
+            computeEdgeAutoScrollPlan(
               pointer = pointer,
-              insetViewport = insetViewportRect(viewport, topInsetPx, bottomInsetPx),
+              insetViewport = insetEdgeAutoScrollViewportRect(viewport, topInsetPx, bottomInsetPx),
               edgeThresholdPx = edgeThresholdPx,
               minSpeedPxPerSec = minSpeedPx,
               maxSpeedPxPerSec = maxSpeedPx,

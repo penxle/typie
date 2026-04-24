@@ -143,7 +143,6 @@ internal fun rememberEditorDebugWheelZoomModifier(
         focalX = focalInEditor.x,
         focalY = focalInEditor.y,
         displayZoom = zoomController.displayZoom,
-        isUserScroll = true,
       )
     }
   }

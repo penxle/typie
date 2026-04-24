@@ -36,7 +36,7 @@ import co.typie.editor.scroll.EditorScrollTarget
 import co.typie.editor.scroll.LocalEditorAutoScrollController
 import co.typie.editor.scroll.rememberEditorAutoScrollController
 import co.typie.editor.scroll.resolveDistanceToPagesBottom
-import co.typie.editor.scroll.resolveEditorScrollPolicy
+import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
@@ -141,12 +141,7 @@ fun EditorScreen(entityId: String) {
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val displayZoom = zoomController.displayZoom
-    // TODO(editor-parity): 현재는 cursor 높이만 scroll policy에 넘기고 있다. collapsed
-    // selection에서는 이 값이 실제 selection head 표시 높이보다 작아서 typewriter 하단
-    // 여백과 일반 cursor guard 둘 다 부족하게 계산된다. 이 높이 차이는 displayZoom과 함께
-    // 같이 커지므로, 확대할수록 문서 끝에서 남는 추가 스크롤도 더 커진다. non-collapsed
-    // selection도 아직 head bounds를 쓰지 못하고 있다.
-    val cursorHeight = (editor?.cursor?.rect?.height ?: 0f) * displayZoom
+    val cursorLineHeight = (editor?.cursor?.line?.height ?: 0f) * displayZoom
     val visibleArea =
       screenState.resolveVisibleArea(
         topInset = topInset.value,
@@ -179,15 +174,15 @@ fun EditorScreen(entityId: String) {
       } else {
         null
       }
-    val scrollPolicy =
-      resolveEditorScrollPolicy(
+    val autoScrollPolicy =
+      resolveEditorAutoScrollPolicy(
         visibleArea = visibleArea,
         baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom),
         distanceToPagesBottom = distanceToPagesBottom,
         pageBottomRevealSpacerHeight = pageBottomRevealSpacerHeight,
         typewriterEnabled = typewriterEnabled,
         typewriterPosition = typewriterPosition,
-        cursorHeight = cursorHeight,
+        cursorLineHeight = cursorLineHeight,
       )
     val bodyGeometry =
       resolveEditorBodyGeometry(
@@ -219,7 +214,7 @@ fun EditorScreen(entityId: String) {
         viewportState = screenState.viewportState,
         isDirectScrollInProgress = { screenState.viewportState.isDirectManipulationInProgress },
         visibleArea = visibleArea,
-        scrollPolicy = scrollPolicy,
+        autoScrollPolicy = autoScrollPolicy,
         headerHeight = screenState.headerHeight,
       )
     val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
@@ -310,7 +305,7 @@ fun EditorScreen(entityId: String) {
           EditorScreenOverlayHost(
             viewportState = screenState.viewportState,
             visibleArea = visibleArea,
-            scrollPolicy = scrollPolicy,
+            autoScrollPolicy = autoScrollPolicy,
             layoutSpec = layoutSpec,
             pageSizes = pageSizes,
             displayZoom = displayZoom,
@@ -323,7 +318,7 @@ fun EditorScreen(entityId: String) {
             selection = model.selection,
             geometry = bodyGeometry,
             layoutSpec = layoutSpec,
-            scrollPolicy = scrollPolicy,
+            autoScrollPolicy = autoScrollPolicy,
             modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
           )
         },

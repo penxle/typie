@@ -671,7 +671,7 @@ mod tests {
             methods: vec![make_method(
                 "cursor",
                 vec![],
-                FfiReturnType::Option(FfiScalarReturn::Complex("CursorRect".into())),
+                FfiReturnType::Option(FfiScalarReturn::Complex("CursorMetrics".into())),
             )],
         };
         let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());

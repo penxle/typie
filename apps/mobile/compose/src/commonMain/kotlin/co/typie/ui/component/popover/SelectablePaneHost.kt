@@ -23,7 +23,7 @@ internal fun SelectablePaneHost(
   pressGestureSession: PressGestureSession?,
   content: @Composable () -> Unit,
 ) {
-  val autoScrollController = LocalPopoverPaneAutoScrollController.current
+  val edgeAutoScrollController = LocalPopoverPaneEdgeAutoScrollController.current
   val hapticFeedback = LocalHapticFeedback.current
   val viewConfiguration = LocalViewConfiguration.current
   val hapticFeedbackState = rememberUpdatedState(hapticFeedback)
@@ -38,7 +38,7 @@ internal fun SelectablePaneHost(
         enabled = true,
         positionInWindow = { localPosition -> paneCoordinates?.localToWindow(localPosition) },
         selectionState = paneSelectionState,
-        autoScrollController = autoScrollController,
+        edgeAutoScrollController = edgeAutoScrollController,
       )
     } else {
       Modifier
@@ -47,7 +47,7 @@ internal fun SelectablePaneHost(
   LaunchedEffect(acceptsInput, pressGestureSession, viewConfiguration.touchSlop) {
     if (!acceptsInput) {
       paneSelectionState.reset()
-      autoScrollController?.pointer = null
+      edgeAutoScrollController?.pointer = null
       return@LaunchedEffect
     }
 
@@ -55,7 +55,7 @@ internal fun SelectablePaneHost(
       pressGestureSession,
       commitDistance = viewConfiguration.touchSlop,
     )
-    autoScrollController?.pointer = paneSelectionState.sharedTrackedPointerInWindow
+    edgeAutoScrollController?.pointer = paneSelectionState.sharedTrackedPointerInWindow
   }
 
   LaunchedEffect(acceptsInput, activeItemKey) {
@@ -74,7 +74,7 @@ internal fun SelectablePaneHost(
   DisposableEffect(Unit) {
     onDispose {
       paneSelectionState.reset()
-      autoScrollController?.pointer = null
+      edgeAutoScrollController?.pointer = null
     }
   }
 

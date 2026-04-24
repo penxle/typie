@@ -72,7 +72,7 @@ class EditorZoomViewportSyncTest {
       EditorViewportState().apply {
         updateViewportSize(ViewportSize(width = 100f, height = 120f))
         updateContentSize(ViewportSize(width = 500f, height = 600f))
-        scrollTo(offset = Offset(x = 20f, y = 100f), isUserScroll = false)
+        scrollTo(offset = Offset(x = 20f, y = 100f))
       }
 
     syncViewportToZoomAnchor(
@@ -82,11 +82,10 @@ class EditorZoomViewportSyncTest {
       focalX = 80f,
       focalY = 150f,
       displayZoom = 1.5f,
-      isUserScroll = true,
     )
 
     assertEquals(Offset(x = 120f, y = 250f), viewportState.scrollOffset)
     assertEquals(2, viewportState.lastScrollRevision)
-    assertEquals(true, viewportState.wasLastScrollUser)
+    assertEquals(false, viewportState.lastScrollWasAuto)
   }
 }

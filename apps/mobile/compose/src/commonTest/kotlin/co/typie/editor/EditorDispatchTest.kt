@@ -1,6 +1,7 @@
 package co.typie.editor
 
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
@@ -58,6 +59,8 @@ private class FakeFfiEditor(var onTick: () -> List<EditorEvent> = { emptyList() 
   override fun cursor(): CursorMetrics? = error("not used")
 
   override fun selection(): Selection = error("not used")
+
+  override fun documentAttrs(): DocumentAttrs = error("not used")
 
   override fun inspectState(options: InspectStateOptions?): String = error("not used")
 

@@ -24,21 +24,21 @@ class EditorViewportStateTest {
     assertEquals(Offset(x = -120f, y = -80f), consumed)
     assertEquals(Offset(x = 60f, y = 40f), state.scrollOffset)
     assertEquals(1, state.lastScrollRevision)
-    assertTrue(state.wasLastScrollUser)
+    assertFalse(state.lastScrollWasAuto)
   }
 
   @Test
-  fun `programmatic scroll updates viewport scroll and records auto intent`() {
+  fun `auto scroll updates viewport scroll and records auto intent`() {
     val state = EditorViewportState()
     state.updateViewportSize(Size(width = 100f, height = 100f))
     state.updateContentSize(Size(width = 100f, height = 280f))
 
-    val consumedDelta = state.dispatchDeltaY(deltaY = 120f, isUserScroll = false)
+    val consumedDelta = state.dispatchDeltaY(deltaY = 120f, isAutoScroll = true)
 
     assertEquals(120f, consumedDelta)
     assertEquals(Offset(x = 0f, y = 120f), state.scrollOffset)
     assertEquals(1, state.lastScrollRevision)
-    assertFalse(state.wasLastScrollUser)
+    assertTrue(state.lastScrollWasAuto)
   }
 
   @Test
@@ -71,7 +71,7 @@ class EditorViewportStateTest {
     assertEquals(Offset(x = -100f, y = -100f), consumed)
     assertEquals(Offset(x = 50f, y = 50f), state.scrollOffset)
     assertEquals(1, state.lastScrollRevision)
-    assertTrue(state.wasLastScrollUser)
+    assertFalse(state.lastScrollWasAuto)
   }
 
   @Test

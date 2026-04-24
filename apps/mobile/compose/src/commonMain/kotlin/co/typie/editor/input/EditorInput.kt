@@ -69,14 +69,11 @@ internal class EditorInputNode(
   private var focusedJob: Job? = null
   private val bindings by lazy { createBindings(platform) }
 
-  private fun dispatchForCurrentCursor(vararg messages: Message) {
-    // TODO(editor-parity): 입력 후 스크롤 요청 대상을 현재 cursor로 고정하지 말고,
-    // dispatch 결과의 실제 scroll anchor(selection head 또는 cursor)를 기준으로 정해야
-    // 확장 selection/IME 조합에서도 웹·플러터와 같은 동작이 나온다.
+  private fun dispatchAndScrollToCurrentCursorLine(vararg messages: Message) {
     val autoScrollController = autoScrollController
     coroutineScope.launch {
       editor.dispatch(*messages)
-      autoScrollController?.request(target = EditorScrollTarget.CurrentCursor)
+      autoScrollController?.request(target = EditorScrollTarget.CurrentCursorLine)
     }
   }
 
@@ -90,24 +87,24 @@ internal class EditorInputNode(
       }
 
       override fun insertText(text: String): Boolean {
-        dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text(text)))
+        dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text(text)))
         return true
       }
 
       override fun commitText(text: String) {
         if (text == "\n") {
-          dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text("\n")))
+          dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text("\n")))
         } else {
-          dispatchForCurrentCursor(Message.Composition(CompositionOp.Commit(text)))
+          dispatchAndScrollToCurrentCursorLine(Message.Composition(CompositionOp.Commit(text)))
         }
       }
 
       override fun setComposingText(text: String) {
-        dispatchForCurrentCursor(Message.Composition(CompositionOp.Update(text, null)))
+        dispatchAndScrollToCurrentCursorLine(Message.Composition(CompositionOp.Update(text, null)))
       }
 
       override fun finishComposition() {
-        dispatchForCurrentCursor(Message.Composition(CompositionOp.CommitAsIs))
+        dispatchAndScrollToCurrentCursorLine(Message.Composition(CompositionOp.CommitAsIs))
       }
 
       override fun pressKey(key: TextInputKey): Boolean {
@@ -116,7 +113,7 @@ internal class EditorInputNode(
             TextInputKey.Enter -> FfiKey.Enter
             TextInputKey.Backspace -> FfiKey.Backspace
           }
-        dispatchForCurrentCursor(Message.Key(FfiKeyEvent(ffiKey)))
+        dispatchAndScrollToCurrentCursorLine(Message.Key(FfiKeyEvent(ffiKey)))
         return true
       }
 
@@ -139,14 +136,14 @@ internal class EditorInputNode(
             (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
           )
           .concatToString()
-      dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text(text)))
+      dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text(text)))
       return true
     }
 
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
-    dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text(ch.toString())))
+    dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text(ch.toString())))
     return true
   }
 

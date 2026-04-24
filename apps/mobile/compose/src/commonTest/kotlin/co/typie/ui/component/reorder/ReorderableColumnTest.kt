@@ -234,18 +234,18 @@ class ReorderableColumnStateTest {
     state.registerSlotBounds("b", Rect(0f, 50f, 100f, 100f))
 
     state.beginDrag("a", Offset(0f, 25f))
-    state.autoScrollController.pointer = Offset(0f, 25f)
+    state.edgeAutoScrollController.pointer = Offset(0f, 25f)
     state.cancelDrag()
 
     assertNull(state.draggingKey)
-    assertNull(state.autoScrollController.pointer)
+    assertNull(state.edgeAutoScrollController.pointer)
   }
 }
 
 private fun <K : Any> createState(): ReorderableColumnState<K> =
   ReorderableColumnState(
-    autoScrollController =
-      co.typie.ext.AutoScrollController(
+    edgeAutoScrollController =
+      co.typie.ext.EdgeAutoScrollController(
         verticalScrollableState = null,
         horizontalScrollableState = null,
       )

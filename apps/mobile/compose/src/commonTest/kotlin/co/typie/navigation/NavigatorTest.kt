@@ -57,7 +57,7 @@ class NavigatorTest {
     navigateAndComplete(nav, Route.Space)
     navigateAndComplete(nav, Route.Folder("1"))
     navigateAndComplete(nav, Route.Folder("2"))
-    nav.popTo(Route.Space)
+    popToAndComplete(nav, Route.Space)
     assertEquals(Route.Space, nav.current)
     assertEquals(2, nav.stack.size)
   }
@@ -125,6 +125,22 @@ class NavigatorTest {
       advanceUntilIdle()
       if (nav.popRequested) {
         nav.performPop()
+        nav.consumePopRequest()
+      }
+      nav.completeTransition()
+      advanceUntilIdle()
+      job.join()
+    }
+  }
+
+  context(testScope: TestScope)
+  private suspend fun popToAndComplete(nav: Navigator, route: Route) {
+    with(testScope) {
+      val job = launch { nav.popTo(route) }
+      advanceUntilIdle()
+      val popTarget = nav.peekPopTarget()
+      if (nav.popRequested && popTarget != null) {
+        nav.performPopTo(popTarget)
         nav.consumePopRequest()
       }
       nav.completeTransition()

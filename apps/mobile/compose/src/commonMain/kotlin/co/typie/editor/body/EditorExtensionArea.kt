@@ -154,7 +154,7 @@ private class EditorExtensionForwardingNode(
             ),
             Message.Pointer(EditorPointerEvent.Up),
           )
-          autoScrollController?.request(target = EditorScrollTarget.CurrentCursor)
+          autoScrollController?.request(target = EditorScrollTarget.CurrentCursorLine)
         }
         // TODO(editor-parity): Compose 상호작용 런타임이 웹/플러터 수준으로 맞춰지면,
         // extension area에서도 down/move/up 전체 제스처 시퀀스를 포워딩해야 한다.

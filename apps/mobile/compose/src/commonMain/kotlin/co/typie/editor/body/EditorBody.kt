@@ -28,7 +28,7 @@ import co.typie.editor.EditorView
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.EditorScrollPolicy
+import co.typie.editor.scroll.EditorAutoScrollPolicy
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
 private val DebugBottomPaddingColor = Color(0x22FF8A00)
@@ -40,7 +40,7 @@ internal fun EditorBody(
   selection: Selection,
   geometry: EditorBodyGeometry,
   layoutSpec: EditorDocumentLayoutSpec,
-  scrollPolicy: EditorScrollPolicy,
+  autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
   overlay: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -113,11 +113,11 @@ internal fun EditorBody(
               )
             }
 
-            if (scrollPolicy.bottomSpacerHeight > 0f) {
+            if (autoScrollPolicy.bottomSpacerHeight > 0f) {
               Spacer(
                 modifier =
                   Modifier.fillMaxWidth()
-                    .height(scrollPolicy.bottomSpacerHeight.dp)
+                    .height(autoScrollPolicy.bottomSpacerHeight.dp)
                     .background(DebugBottomPaddingColor)
               )
             }
