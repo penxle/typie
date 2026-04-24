@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
-import co.typie.editor.ffi.CursorRect
+import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.EditorEvent
@@ -33,7 +33,7 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
   var documentAttrs by mutableStateOf<DocumentAttrs?>(null)
     private set
 
-  var cursor by mutableStateOf<CursorRect?>(null)
+  var cursor by mutableStateOf<CursorMetrics?>(null)
     private set
 
   var selection by mutableStateOf<Selection?>(null)

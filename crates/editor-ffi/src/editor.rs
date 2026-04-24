@@ -32,7 +32,7 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.tick()?.into_ffi()?))
     }
 
-    pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorRect>>> {
+    pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorMetrics>>> {
         self.with_inner(|inner| {
             let state = inner.editor.state();
             let selection = state.selection;
@@ -44,7 +44,7 @@ impl Editor {
                 Ok(inner
                     .editor
                     .view()
-                    .cursor_rect(&state.doc, &selection.head, &state.pending_modifiers)
+                    .cursor_metrics(&state.doc, &selection.head, &state.pending_modifiers)
                     .into_ffi()?)
             } else {
                 Ok(None)

@@ -4,7 +4,7 @@ import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
 import { register, unregister } from './registry';
 import type {
-  CursorRect,
+  CursorMetrics,
   Doc,
   DocumentAttrs,
   Editor as WasmEditor,
@@ -48,7 +48,7 @@ export class Editor {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
 
-  #cursor = $state<CursorRect>();
+  #cursor = $state<CursorMetrics>();
   #selection = $state<Selection>();
   #pageSizes = $state<Size[]>([]);
   #documentAttrs = $state<DocumentAttrs>();

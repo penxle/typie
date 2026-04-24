@@ -1,60 +1,74 @@
 use editor_common::Rect;
 use editor_macros::ffi;
 use editor_state::Position;
+use serde::{Deserialize, Serialize};
 
-use crate::page::{LayoutPage, PageRect};
+use crate::page::LayoutPage;
 use crate::paginate::*;
 
 use super::search;
 
 #[ffi]
-pub type CursorRect = PageRect;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CursorMetrics {
+    pub page_idx: usize,
+    pub caret: Rect,
+    pub line: Rect,
+}
 
-pub fn cursor_rect(
+pub fn cursor_metrics(
     tree: &LayoutTree,
     pages: &[LayoutPage],
     pos: &Position,
     metrics_override: Option<(f32, f32)>,
-) -> Option<CursorRect> {
+) -> Option<CursorMetrics> {
     let line_node = search::find_line_at(tree, pos)?;
-    let line = match &line_node.content {
-        LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) => {
-            let page_idx = pages
-                .iter()
-                .position(|p| line_node.rect.y >= p.y_start && line_node.rect.y < p.y_end)?;
-            return Some(CursorRect::new(
-                page_idx,
-                Rect::from_xywh(
-                    line_node.rect.x,
-                    line_node.rect.y - pages[page_idx].y_start,
-                    1.0,
-                    line_node.rect.height,
-                ),
-            ));
-        }
-        _ => return None,
-    };
-
-    let x = x_at_offset(line, pos);
     let page_idx = pages
         .iter()
         .position(|p| line_node.rect.y >= p.y_start && line_node.rect.y < p.y_end)?;
+    let y_start = pages[page_idx].y_start;
+    let line_rect = Rect::from_xywh(
+        line_node.rect.x,
+        line_node.rect.y - y_start,
+        line_node.rect.width,
+        line_node.rect.height,
+    );
 
-    let (cursor_ascent, cursor_descent) =
-        metrics_override.unwrap_or((line.cursor_ascent, line.cursor_descent));
-    let cursor_height = cursor_ascent + cursor_descent;
-    let leading = (line_node.rect.height - cursor_height).max(0.0);
-
-    Some(CursorRect::new(
-        page_idx,
-        Rect::from_xywh(
-            line_node.rect.x + x,
-            line_node.rect.y + leading / 2.0 - pages[page_idx].y_start,
-            1.0,
-            cursor_height,
-        ),
-    ))
+    match &line_node.content {
+        LayoutContent::Line(l) => {
+            let x = x_at_offset(l, pos);
+            let (cursor_ascent, cursor_descent) =
+                metrics_override.unwrap_or((l.cursor_ascent, l.cursor_descent));
+            let cursor_height = cursor_ascent + cursor_descent;
+            let leading = (line_node.rect.height - cursor_height).max(0.0);
+            let caret = Rect::from_xywh(
+                line_node.rect.x + x,
+                line_node.rect.y + leading / 2.0 - y_start,
+                1.0,
+                cursor_height,
+            );
+            Some(CursorMetrics {
+                page_idx,
+                caret,
+                line: line_rect,
+            })
+        }
+        LayoutContent::Atom(_) => {
+            let caret = Rect::from_xywh(
+                line_node.rect.x,
+                line_node.rect.y - y_start,
+                1.0,
+                line_node.rect.height,
+            );
+            Some(CursorMetrics {
+                page_idx,
+                caret,
+                line: line_rect,
+            })
+        }
+        _ => None,
+    }
 }
 
 pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
@@ -122,13 +136,15 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 0);
-        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics {
+            page_idx, caret, ..
+        } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
         // Cursor is centered in the line box: leading = 20 - (14+4) = 2, leading/2 = 1.
         assert_eq!(page_idx, 0);
-        assert_eq!(rect.x, 0.0);
-        assert_eq!(rect.y, 1.0);
-        assert_eq!(rect.height, 18.0);
+        assert_eq!(caret.x, 0.0);
+        assert_eq!(caret.y, 1.0);
+        assert_eq!(caret.height, 18.0);
     }
 
     #[test]
@@ -141,9 +157,9 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 3);
-        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
-        assert_eq!(rect.x, 30.0);
+        assert_eq!(caret.x, 30.0);
     }
 
     #[test]
@@ -185,10 +201,10 @@ mod tests {
             size: Size::new(240.0, 800.0),
         }];
         let pos = Position::new(id, 2);
-        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
         // x = line.rect.x(20) + run.x(0) + advances[0..2](20) = 40
-        assert_eq!(rect.x, 40.0);
+        assert_eq!(caret.x, 40.0);
     }
 
     #[test]
@@ -238,12 +254,14 @@ mod tests {
             },
         ];
         let pos = Position::new(id, 0);
-        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics {
+            page_idx, caret, ..
+        } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
         assert_eq!(page_idx, 1);
         // y is relative to page start: 500 + leading/2 - 400 = 500 + 1 - 400 = 101
         // where leading = line_height(20) - cursor_height(14+4) = 2.
-        assert_eq!(rect.y, 101.0);
+        assert_eq!(caret.y, 101.0);
     }
 
     #[test]
@@ -285,8 +303,171 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 0);
-        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
-        assert_eq!(rect.x, 32.0);
+        assert_eq!(caret.x, 32.0);
+    }
+
+    #[test]
+    fn cursor_metrics_line_covers_full_line_box() {
+        // line-height=30, cursor_height=18 → leading=12 → caret.y=6
+        let id = NodeId::new();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 30.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: Direction::Vertical,
+                        padding: EdgeInsets::ZERO,
+                        border: EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                    },
+                    children: vec![LayoutNode {
+                        rect: Rect::from_xywh(0.0, 0.0, 200.0, 30.0),
+                        content: LayoutContent::Line(LayoutLine {
+                            node_id: id,
+                            baseline: 22.0,
+                            ascent: 14.0,
+                            descent: 4.0,
+                            cursor_ascent: 14.0,
+                            cursor_descent: 4.0,
+                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
+                            text_indent: 0.0,
+                        }),
+                    }],
+                }),
+            },
+        };
+        let pages = [LayoutPage {
+            y_start: 0.0,
+            y_end: 800.0,
+            size: Size::new(200.0, 800.0),
+        }];
+        let pos = Position::new(id, 0);
+        let CursorMetrics {
+            page_idx,
+            caret,
+            line,
+        } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+
+        assert_eq!(page_idx, 0);
+        // caret: cursor_height(18)를 라인 박스(30) 중앙에 배치 → leading/2 = 6
+        assert_eq!(caret.y, 6.0);
+        assert_eq!(caret.height, 18.0);
+        // line: line_node.rect 전체
+        assert_eq!(line.x, 0.0);
+        assert_eq!(line.y, 0.0);
+        assert_eq!(line.width, 200.0);
+        assert_eq!(line.height, 30.0);
+        // line이 caret을 상하로 감쌈
+        assert!(line.y < caret.y);
+        assert!(line.y + line.height > caret.y + caret.height);
+    }
+
+    #[test]
+    fn cursor_metrics_atom_line_covers_atom_rect() {
+        let para_id = NodeId::new();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: Direction::Vertical,
+                        padding: EdgeInsets::ZERO,
+                        border: EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                    },
+                    children: vec![LayoutNode {
+                        rect: Rect::from_xywh(10.0, 5.0, 150.0, 40.0),
+                        content: LayoutContent::Atom(LayoutAtom {
+                            node_id: NodeId::new(),
+                            parent_id: para_id,
+                            index: 0,
+                        }),
+                    }],
+                }),
+            },
+        };
+        let pages = [LayoutPage {
+            y_start: 0.0,
+            y_end: 800.0,
+            size: Size::new(200.0, 800.0),
+        }];
+        let pos = Position::new(para_id, 0);
+        let CursorMetrics { caret, line, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+
+        // caret: width=1.0 세로 바, height는 line_node.rect.height 그대로
+        assert_eq!(caret.x, 10.0);
+        assert_eq!(caret.y, 5.0);
+        assert_eq!(caret.width, 1.0);
+        assert_eq!(caret.height, 40.0);
+        // line: atom의 rect 전체
+        assert_eq!(line.x, 10.0);
+        assert_eq!(line.y, 5.0);
+        assert_eq!(line.width, 150.0);
+        assert_eq!(line.height, 40.0);
+    }
+
+    #[test]
+    fn cursor_metrics_page_relative_line_on_second_page() {
+        let id = NodeId::new();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 600.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: Direction::Vertical,
+                        padding: EdgeInsets::ZERO,
+                        border: EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                    },
+                    children: vec![LayoutNode {
+                        rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
+                        content: LayoutContent::Line(LayoutLine {
+                            node_id: id,
+                            baseline: 16.0,
+                            ascent: 14.0,
+                            descent: 4.0,
+                            cursor_ascent: 14.0,
+                            cursor_descent: 4.0,
+                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
+                            text_indent: 0.0,
+                        }),
+                    }],
+                }),
+            },
+        };
+        let pages = [
+            LayoutPage {
+                y_start: 0.0,
+                y_end: 400.0,
+                size: Size::new(200.0, 400.0),
+            },
+            LayoutPage {
+                y_start: 400.0,
+                y_end: 800.0,
+                size: Size::new(200.0, 400.0),
+            },
+        ];
+        let pos = Position::new(id, 0);
+        let CursorMetrics { page_idx, line, .. } =
+            cursor_metrics(&tree, &pages, &pos, None).unwrap();
+
+        assert_eq!(page_idx, 1);
+        // line.y = 500 - 400 = 100 (페이지 로컬)
+        assert_eq!(line.y, 100.0);
+        assert_eq!(line.height, 20.0);
     }
 }

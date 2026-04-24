@@ -9,8 +9,8 @@
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
-  import Cursor from './Cursor.svelte';
-  import CursorPositioned from './CursorPositioned.svelte';
+  import Caret from './Caret.svelte';
+  import CaretPositioned from './CaretPositioned.svelte';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
@@ -125,10 +125,10 @@
       <Page {height} page={i} {width} />
     {/each}
 
-    <CursorPositioned>
-      <Cursor />
+    <CaretPositioned>
+      <Caret />
       <Input />
-    </CursorPositioned>
+    </CaretPositioned>
 
     <LineHighlight />
 

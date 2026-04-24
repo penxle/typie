@@ -6,8 +6,6 @@
   const { editor } = getEditorContext();
   const app = getAppContext();
 
-  const PADDING = 4;
-
   const show = $derived(!!editor?.focused && !!editor?.cursor);
 
   const isPaginated = $derived(editor?.documentAttrs?.layout_mode.type === 'paginated');
@@ -19,13 +17,13 @@
   const top = $derived.by(() => {
     if (!editor?.cursor) return 0;
     if (isPaginated) {
-      return editor.cursor.rect.y - PADDING;
+      return editor.cursor.line.y;
     }
-    const offset = editor.localToOffset(editor.cursor.page_idx, 0, editor.cursor.rect.y);
-    return (offset?.y ?? 0) - PADDING;
+    const offset = editor.localToOffset(editor.cursor.page_idx, 0, editor.cursor.line.y);
+    return offset?.y ?? 0;
   });
 
-  const height = $derived(editor?.cursor ? editor.cursor.rect.height + PADDING * 2 : 0);
+  const height = $derived(editor?.cursor ? editor.cursor.line.height : 0);
 
   let element = $state<HTMLDivElement>();
 

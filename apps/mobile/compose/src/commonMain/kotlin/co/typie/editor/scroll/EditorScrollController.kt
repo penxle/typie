@@ -199,10 +199,13 @@ private fun resolveScrollTargetRect(
     EditorScrollTarget.CurrentCursor -> {
       val cursor = editor.cursor ?: return null
       val cursorOffset =
-        viewportTransform.localToGlobal(page = cursor.pageIdx, x = cursor.rect.x, y = cursor.rect.y)
-          ?: return null
+        viewportTransform.localToGlobal(
+          page = cursor.pageIdx,
+          x = cursor.caret.x,
+          y = cursor.caret.y,
+        ) ?: return null
       val contentTop = headerHeight + editorTopInContainer + cursorOffset.y
-      VerticalSpan(top = contentTop, bottom = contentTop + cursor.rect.height * displayZoom)
+      VerticalSpan(top = contentTop, bottom = contentTop + cursor.caret.height * displayZoom)
     }
 
     EditorScrollTarget.CurrentSelectionHead -> {

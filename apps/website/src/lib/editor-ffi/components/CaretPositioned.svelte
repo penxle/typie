@@ -13,7 +13,7 @@
 
   const point = $derived.by(() => {
     if (editor?.cursor) {
-      const local = editor.cursor.rect;
+      const local = editor.cursor.caret;
       return editor.localToOffset(editor.cursor.page_idx, local.x, local.y);
     }
   });

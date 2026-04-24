@@ -18,7 +18,7 @@
     if (editor) {
       $effect(() => {
         if (editor.cursor) {
-          const { width, height } = editor.cursor.rect;
+          const { width, height } = editor.cursor.caret;
           el.style.width = `${width}px`;
           el.style.height = `${height}px`;
           el.style.visibility = 'visible';

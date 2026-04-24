@@ -162,6 +162,12 @@ export interface CalloutNode {
     variant?: CalloutVariant;
 }
 
+export interface CursorMetrics {
+    page_idx: number;
+    caret: Rect;
+    line: Rect;
+}
+
 export interface Doc {
     nodes: Record<NodeId, NodeEntry>;
     attrs: DocumentAttrs;
@@ -305,8 +311,6 @@ export type ClipboardOp = { type: "paste"; html: string | undefined; text: strin
 
 export type CompositionOp = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" } | { type: "flat"; ops: FlatImeOp[] };
 
-export type CursorRect = PageRect;
-
 export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
 
 export type Direction = "forward" | "backward";
@@ -367,7 +371,7 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
-    cursor(): PageRect | undefined;
+    cursor(): CursorMetrics | undefined;
     detach_surface(page: number): void;
     document_attrs(): DocumentAttrs;
     enqueue(message: Message): void;

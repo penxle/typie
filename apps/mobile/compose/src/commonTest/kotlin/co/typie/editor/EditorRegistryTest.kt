@@ -1,6 +1,6 @@
 package co.typie.editor
 
-import co.typie.editor.ffi.CursorRect
+import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
@@ -36,7 +36,7 @@ private class StubFfiEditor : co.typie.editor.ffi.Editor {
 
   override fun renderSurface(page: Int) = error("not used")
 
-  override fun cursor(): CursorRect? = null
+  override fun cursor(): CursorMetrics? = null
 
   override fun selection(): Selection = error("not used")
 

@@ -13,7 +13,7 @@ use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
-use crate::query::{CursorRect, SelectionRect};
+use crate::query::{CursorMetrics, SelectionRect};
 use crate::view_state::ViewState;
 use crate::viewport::Viewport;
 
@@ -193,15 +193,15 @@ impl View {
         selection
     }
 
-    pub fn cursor_rect(
+    pub fn cursor_metrics(
         &self,
         doc: &Doc,
         pos: &Position,
         pending: &PendingModifiers,
-    ) -> Option<CursorRect> {
+    ) -> Option<CursorMetrics> {
         let result = self.layout.as_ref()?;
         let metrics_override = self.cursor_metrics_at(doc, pos, pending);
-        query::cursor_rect(&result.tree, &result.pages, pos, metrics_override)
+        query::cursor_metrics(&result.tree, &result.pages, pos, metrics_override)
     }
 
     fn cursor_metrics_at(
@@ -341,10 +341,10 @@ mod tests {
         let pos = Position::new(p1, 0);
         let empty_pending = PendingModifiers::new();
 
-        let default_rect = view.cursor_rect(&doc, &pos, &empty_pending).unwrap();
+        let default_rect = view.cursor_metrics(&doc, &pos, &empty_pending).unwrap();
 
         // With no pending modifiers, cursor uses stored strut metrics.
-        assert!(default_rect.rect.height > 0.0);
+        assert!(default_rect.caret.height > 0.0);
     }
 
     #[test]
@@ -365,18 +365,18 @@ mod tests {
 
         let empty_pending = PendingModifiers::new();
         let r1 = view
-            .cursor_rect(&doc, &Position::new(t1, 0), &empty_pending)
+            .cursor_metrics(&doc, &Position::new(t1, 0), &empty_pending)
             .unwrap();
         let r2 = view
-            .cursor_rect(&doc, &Position::new(t2, 0), &empty_pending)
+            .cursor_metrics(&doc, &Position::new(t2, 0), &empty_pending)
             .unwrap();
 
         assert!(
-            r2.rect.height > r1.rect.height,
+            r2.caret.height > r1.caret.height,
             "cursor inside bigger-sized text should match the text's size \
              (r1.height={}, r2.height={})",
-            r1.rect.height,
-            r2.rect.height
+            r1.caret.height,
+            r2.caret.height
         );
     }
 
@@ -388,15 +388,15 @@ mod tests {
 
         let pos = Position::new(p1, 0);
         let empty_pending = PendingModifiers::new();
-        let default_rect = view.cursor_rect(&doc, &pos, &empty_pending).unwrap();
+        let default_rect = view.cursor_metrics(&doc, &pos, &empty_pending).unwrap();
 
         // Pending FontSize 24pt (2400 centipoints) → taller cursor than default (16px ≈ 12pt).
         let mut pending = PendingModifiers::new();
         pending.push(PendingModifier::Set(Modifier::FontSize { value: 2400 }));
-        let pending_rect = view.cursor_rect(&doc, &pos, &pending).unwrap();
+        let pending_rect = view.cursor_metrics(&doc, &pos, &pending).unwrap();
 
         assert!(
-            pending_rect.rect.height > default_rect.rect.height,
+            pending_rect.caret.height > default_rect.caret.height,
             "cursor should grow when pending FontSize is larger than base style"
         );
     }
