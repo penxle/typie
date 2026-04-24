@@ -303,7 +303,7 @@ fun EditorScreen(entityId: String) {
           EditorZoomOverlay(
             modifier =
               Modifier.align(Alignment.BottomStart)
-                .padding(start = 20.dp, bottom = 20.dp + imeBottom)
+                .padding(start = 20.dp, bottom = 20.dp + visibleArea.bottomOcclusion.dp)
           )
         },
         overlay = {
