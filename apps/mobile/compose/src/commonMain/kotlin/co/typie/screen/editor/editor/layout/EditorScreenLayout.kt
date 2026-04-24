@@ -41,6 +41,7 @@ internal fun EditorScreenLayout(
   state: EditorScreenState,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
+  onViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
@@ -83,7 +84,7 @@ internal fun EditorScreenLayout(
                 .scrollable2D(state = viewportScrollableState)
                 .editorViewportWheelScroll(state.viewportState)
                 .onSizeChanged { size ->
-                  state.updateViewport(resolveSize(size.width, size.height))
+                  onViewportSizeChange(resolveSize(size.width, size.height))
                 },
             content = {
               Column(

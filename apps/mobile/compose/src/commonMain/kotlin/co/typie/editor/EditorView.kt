@@ -8,11 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
@@ -54,44 +51,26 @@ internal fun EditorView(
   val uiState = LocalEditorUiState.current
   val zoomController = LocalEditorZoomController.current
   val autoScrollController = LocalEditorAutoScrollController.current
-  var appliedDoc by remember { mutableStateOf<Doc?>(null) }
-  var appliedSelection by remember { mutableStateOf<Selection?>(null) }
   val displayZoom = zoomController.displayZoom
 
-  LaunchedEffect(doc, selection, viewportWidth, viewportHeight, density.density) {
+  LaunchedEffect(runtime.editor, viewportWidth, viewportHeight, density.density) {
     if (viewportWidth <= 0f || viewportHeight <= 0f) {
       return@LaunchedEffect
     }
 
     val scaleFactor = density.density.toDouble()
-    val currentEditor = runtime.editor
-    val shouldRecreate = currentEditor == null || appliedDoc != doc || appliedSelection != selection
-    if (shouldRecreate) {
+    val viewport =
+      Viewport(width = viewportWidth, height = viewportHeight, scaleFactor = scaleFactor)
+    if (runtime.editor == null) {
       uiState.clear()
-      runtime.attach(
-        Editor.create(
-          doc,
-          selection,
-          Viewport(width = viewportWidth, height = viewportHeight, scaleFactor = scaleFactor),
-          scope,
-        )
-      )
-      appliedDoc = doc
-      appliedSelection = selection
-    } else {
-      currentEditor.resizeViewport(
-        width = viewportWidth,
-        height = viewportHeight,
-        scaleFactor = scaleFactor,
-      )
-      // TODO(editor-parity): 엔진이 incremental sync 훅을 노출하면, doc/selection 변경 시
-      // 세션 재생성 대신 delta만 기존 에디터 세션에 적용해야 한다.
+      runtime.attach(Editor.create(doc, selection, viewport, scope))
     }
   }
 
   Box(modifier) {
     val editor = runtime.editor ?: return@Box
-    editor.focusManager = LocalFocusManager.current
+    val focusManager = LocalFocusManager.current
+    SideEffect { editor.focusManager = focusManager }
     DisposableEffect(editor, uiState) {
       onDispose {
         uiState.clear()

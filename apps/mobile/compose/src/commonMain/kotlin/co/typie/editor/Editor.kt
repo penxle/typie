@@ -118,6 +118,12 @@ internal constructor(
     }
   }
 
+  fun resizeViewport(width: Float, height: Float, scaleFactor: Double) {
+    enqueue(
+      Message.System(SystemEvent.Resize(width = width, height = height, scaleFactor = scaleFactor))
+    )
+  }
+
   suspend fun dispatch(vararg messages: Message) {
     if (messages.isEmpty()) {
       return
@@ -201,12 +207,6 @@ internal constructor(
     inner.resizeSurface(page, width, height, scaleFactor)
 
   fun renderSurface(page: Int) = inner.renderSurface(page)
-
-  fun resizeViewport(width: Float, height: Float, scaleFactor: Double) {
-    enqueue(
-      Message.System(SystemEvent.Resize(width = width, height = height, scaleFactor = scaleFactor))
-    )
-  }
 
   fun inspectState(options: InspectStateOptions? = null): String = inner.inspectState(options)
 

@@ -15,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +28,8 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePagesContentHeight
+import co.typie.editor.ffi.DocOp
+import co.typie.editor.ffi.Message
 import co.typie.editor.rememberEditorZoomController
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
@@ -62,12 +65,14 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
   val model = viewModel { EditorViewModel(entityId) }
   val runtime = remember(entityId) { EditorRuntime() }
+  val scope = rememberCoroutineScope()
   val uiState = remember(entityId) { EditorUiState() }
   val zoomController = rememberEditorZoomController(key = entityId)
   val screenState = rememberEditorScreenState(key = entityId)
@@ -95,6 +100,10 @@ fun EditorScreen(entityId: String) {
       loading = loading,
     )
   }
+  fun toggleDebugLayoutMode() {
+    val attrs = model.toggleDebugLayoutMode()
+    scope.launch { runtime.editor?.dispatch(Message.Doc(DocOp.SetAttrs(attrs))) }
+  }
 
   ProvideTopBar(
     center = {
@@ -118,7 +127,9 @@ fun EditorScreen(entityId: String) {
         }
       }
     },
-    trailing = { EditorTopBarMenu(model = model) },
+    trailing = {
+      EditorTopBarMenu(model = model, onDebugLayoutModeToggle = ::toggleDebugLayoutMode)
+    },
     scrollOffset = null,
   )
 
@@ -277,6 +288,16 @@ fun EditorScreen(entityId: String) {
         state = screenState,
         viewportScrollableState = viewportScrollableState,
         viewportContentWidth = headerTrackWidth,
+        onViewportSizeChange = { size ->
+          screenState.updateViewport(size)
+          if (size.width > 0f && size.height > 0f) {
+            runtime.editor?.resizeViewport(
+              width = size.width,
+              height = size.height,
+              scaleFactor = density.toDouble(),
+            )
+          }
+        },
         header = {
           EditorHeader(
             title = model.titleDraft,
@@ -338,7 +359,7 @@ fun EditorScreen(entityId: String) {
 }
 
 @Composable
-private fun EditorTopBarMenu(model: EditorViewModel) {
+private fun EditorTopBarMenu(model: EditorViewModel, onDebugLayoutModeToggle: () -> Unit) {
   val noop = {}
 
   PopoverMenu(anchor = { TopBarButton(icon = Lucide.PanelBottom) }) {
@@ -355,7 +376,7 @@ private fun EditorTopBarMenu(model: EditorViewModel) {
       item(
         icon = if (model.isPaginatedDebugLayout) Lucide.ScrollText else Lucide.LayoutTemplate,
         label = "[디버그] 레이아웃 토글",
-        onClick = { model.toggleDebugLayoutMode() },
+        onClick = onDebugLayoutModeToggle,
       )
       item(
         icon = Lucide.PanelTop,

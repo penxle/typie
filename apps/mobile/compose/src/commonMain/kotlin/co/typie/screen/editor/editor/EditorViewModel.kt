@@ -159,12 +159,13 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     scheduleSubtitleSave()
   }
 
-  fun toggleDebugLayoutMode() {
+  fun toggleDebugLayoutMode(): DocumentAttrs {
     debugDocumentLayoutMode =
       when (debugDocumentLayoutMode) {
         DebugDocumentLayoutMode.Continuous -> DebugDocumentLayoutMode.Paginated
         DebugDocumentLayoutMode.Paginated -> DebugDocumentLayoutMode.Continuous
       }
+    return doc.attrs
   }
 
   fun toggleDebugViewportOverlay() {
