@@ -7,11 +7,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,35 +24,41 @@ import org.jetbrains.skia.ImageInfo
 @Composable
 internal actual fun RenderCanvas(
   modifier: Modifier,
+  desiredPixelSize: IntSize,
   trigger: SharedFlow<Unit>,
   onAttach: (handle: Long) -> Unit,
   onDetach: () -> Unit,
   onResize: () -> Unit,
+  onBitmapCommitted: (pixelSize: IntSize) -> Unit,
 ) {
   var bufferHandle by remember { mutableStateOf(0L) }
   var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
-  Canvas(
-    modifier =
-      modifier.onSizeChanged { size ->
-        if (bufferHandle == 0L && size.width > 0 && size.height > 0) {
-          bufferHandle = RenderBuffer.allocate(size.width, size.height)
-          if (bufferHandle != 0L) {
-            onAttach(bufferHandle)
-            onResize()
-          }
-        } else if (bufferHandle != 0L) {
-          onResize()
-        }
-      }
-  ) {
+  val currentOnAttach by rememberUpdatedState(onAttach)
+  val currentOnResize by rememberUpdatedState(onResize)
+  val currentOnBitmapCommitted by rememberUpdatedState(onBitmapCommitted)
+
+  LaunchedEffect(desiredPixelSize) {
+    if (desiredPixelSize.width <= 0 || desiredPixelSize.height <= 0) return@LaunchedEffect
+    if (bufferHandle == 0L) {
+      val handle = RenderBuffer.allocate(desiredPixelSize.width, desiredPixelSize.height)
+      if (handle == 0L) return@LaunchedEffect
+      bufferHandle = handle
+      currentOnAttach(handle)
+      currentOnResize()
+    } else {
+      currentOnResize()
+    }
+  }
+
+  Canvas(modifier = modifier) {
     bitmap?.let {
       drawImage(
         image = it,
         srcOffset = IntOffset.Zero,
         srcSize = IntSize(it.width, it.height),
         dstOffset = IntOffset.Zero,
-        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+        dstSize = IntSize(it.width, it.height),
       )
     }
   }
@@ -95,6 +101,7 @@ internal actual fun RenderCanvas(
             }
       skBitmap.installPixels(skBitmap.imageInfo, bytes, w * 4)
       bitmap = SkImage.makeFromBitmap(skBitmap).toComposeImageBitmap()
+      currentOnBitmapCommitted(IntSize(w, h))
     }
   }
 

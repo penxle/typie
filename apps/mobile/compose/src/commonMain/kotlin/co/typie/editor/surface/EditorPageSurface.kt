@@ -7,7 +7,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -20,6 +25,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.ffi.EditorEvent
@@ -66,26 +72,28 @@ internal fun EditorPageSurface(
 
   val widthDouble = width.toDouble()
   val heightDouble = height.toDouble()
-  val displayWidthPx = round(widthDouble * density.density.toDouble() * displayZoom.toDouble())
-  val displayHeightPx = round(heightDouble * density.density.toDouble() * displayZoom.toDouble())
   val renderWidthPx = round(widthDouble * density.density.toDouble() * renderZoom.toDouble())
   val renderHeightPx = round(heightDouble * density.density.toDouble() * renderZoom.toDouble())
-  val displayWidthPxInt = displayWidthPx.toInt().coerceAtLeast(1)
-  val displayHeightPxInt = displayHeightPx.toInt().coerceAtLeast(1)
   val renderWidthPxInt = renderWidthPx.toInt().coerceAtLeast(1)
   val renderHeightPxInt = renderHeightPx.toInt().coerceAtLeast(1)
+  val desiredPixelSize = IntSize(renderWidthPxInt, renderHeightPxInt)
+  var committedPixelSize by remember { mutableStateOf(desiredPixelSize) }
+  var committedRenderZoom by remember { mutableFloatStateOf(renderZoom) }
+  val currentRenderZoom by rememberUpdatedState(renderZoom)
+
+  val safeCommittedRenderZoom = if (committedRenderZoom > 0f) committedRenderZoom else 1f
+  val displayedWidthPx = committedPixelSize.width.toFloat() / safeCommittedRenderZoom * displayZoom
+  val displayedHeightPx =
+    committedPixelSize.height.toFloat() / safeCommittedRenderZoom * displayZoom
+  val displayedWidthPxInt = displayedWidthPx.toInt().coerceAtLeast(1)
+  val displayedHeightPxInt = displayedHeightPx.toInt().coerceAtLeast(1)
+  val displayedWidthDp = Dp(displayedWidthPx / density.density)
+  val displayedHeightDp = Dp(displayedHeightPx / density.density)
   val displayBottomMarginPx =
     round(debugBottomMarginHeight.toDouble() * density.density.toDouble() * displayZoom.toDouble())
       .toInt()
-      .coerceIn(0, displayHeightPxInt)
-  val displayWidthDp = Dp((displayWidthPx / density.density.toDouble()).toFloat())
-  val displayHeightDp = Dp((displayHeightPx / density.density.toDouble()).toFloat())
-  val renderScale =
-    if (renderZoom > 0f) {
-      displayZoom / renderZoom
-    } else {
-      1f
-    }
+      .coerceIn(0, displayedHeightPxInt)
+  val committedRenderScale = displayZoom / safeCommittedRenderZoom
   val chromeModifier =
     if (showChrome) {
       Modifier.shadow(AppTheme.shadows.md, RectangleShape)
@@ -115,8 +123,8 @@ internal fun EditorPageSurface(
   Box(
     modifier =
       modifier
-        .width(displayWidthDp)
-        .height(displayHeightDp)
+        .width(displayedWidthDp)
+        .height(displayedHeightDp)
         .then(chromeModifier)
         .then(debugOverlayModifier)
   ) {
@@ -127,10 +135,11 @@ internal fun EditorPageSurface(
         RenderCanvas(
           modifier =
             Modifier.graphicsLayer(
-              scaleX = renderScale,
-              scaleY = renderScale,
+              scaleX = committedRenderScale,
+              scaleY = committedRenderScale,
               transformOrigin = TransformOrigin(0f, 0f),
             ),
+          desiredPixelSize = desiredPixelSize,
           trigger = trigger,
           onAttach = { handle ->
             editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
@@ -141,6 +150,10 @@ internal fun EditorPageSurface(
             editor.resizeSurface(page, widthDouble, heightDouble, scaleFactor)
             render()
           },
+          onBitmapCommitted = { size ->
+            committedPixelSize = size
+            committedRenderZoom = currentRenderZoom
+          },
         )
       }
     ) { measurables, _ ->
@@ -149,12 +162,12 @@ internal fun EditorPageSurface(
           .single()
           .measure(
             androidx.compose.ui.unit.Constraints.fixed(
-              width = renderWidthPxInt,
-              height = renderHeightPxInt,
+              width = committedPixelSize.width,
+              height = committedPixelSize.height,
             )
           )
 
-      layout(width = displayWidthPxInt, height = displayHeightPxInt) {
+      layout(width = displayedWidthPxInt, height = displayedHeightPxInt) {
         placeable.place(x = 0, y = 0)
       }
     }
