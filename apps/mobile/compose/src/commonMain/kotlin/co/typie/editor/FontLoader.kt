@@ -47,13 +47,14 @@ object FontLoader {
 
   private fun fontKey(family: String, weight: Int): String = "$family:$weight"
 
-  suspend fun loadFonts(document: FontLoader_Document) {
-    updateFontPaths(document.fontFamilies)
-    PlatformModule.editorHost.setFonts(document.fontFamilies.map { it.toFfi() })
-    for (editor in EditorRegistry.snapshot()) {
-      editor.enqueue(Message.System(SystemEvent.FontsChanged))
+  suspend fun loadFonts(document: FontLoader_Document) =
+    withContext(Dispatchers.Default) {
+      updateFontPaths(document.fontFamilies)
+      PlatformModule.editorHost.setFonts(document.fontFamilies.map { it.toFfi() })
+      for (editor in EditorRegistry.snapshot()) {
+        editor.enqueue(Message.System(SystemEvent.FontsChanged))
+      }
     }
-  }
 
   private fun updateFontPaths(families: List<FontLoader_Document.FontFamily>) {
     for (family in families) {
