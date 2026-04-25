@@ -57,7 +57,7 @@ fun Popover(
   minWidth: Dp = 0.dp,
   expandToMaxWidth: Boolean = false,
   screenPadding: PaddingValues = PaddingValues(all = PopoverDefaults.ScreenPadding),
-  collapsedCornerRadius: Dp = 0.dp,
+  collapsedCornerRadius: Dp? = null,
 ) {
   val density = LocalDensity.current
   val layoutDirection = LocalLayoutDirection.current

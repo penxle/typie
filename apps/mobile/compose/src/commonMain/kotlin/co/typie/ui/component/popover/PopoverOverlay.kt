@@ -123,7 +123,7 @@ private fun PopoverPaneContent(
   placement: PopoverPlacement,
   progress: Float,
   interactive: Boolean,
-  collapsedCornerRadius: Dp,
+  collapsedCornerRadius: Dp?,
   screenPadding: PopoverScreenPadding,
   maxWidth: Dp?,
   minWidth: Dp,
@@ -310,7 +310,7 @@ private fun PopoverPaneSurface(
   anchorContentRect: IntRect,
   progress: Float,
   interactive: Boolean,
-  collapsedCornerRadius: Dp,
+  collapsedCornerRadius: Dp?,
 ) {
   val density = LocalDensity.current
   val anchorSize = anchorContentRect.size
@@ -323,7 +323,7 @@ private fun PopoverPaneSurface(
   val anchorOffset = IntOffset(x = anchorContentRect.left, y = anchorContentRect.top)
   val cornerRadius =
     lerp(
-      collapsedCornerRadius.toPx(density),
+      collapsedCornerRadius?.toPx(density) ?: min(anchorSize.width, anchorSize.height) / 2f,
       PopoverDefaults.ExpandedRadius.toPx(density),
       progress,
     )

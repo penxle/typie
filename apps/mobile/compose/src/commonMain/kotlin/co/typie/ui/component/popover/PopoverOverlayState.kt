@@ -172,7 +172,7 @@ internal class PopoverOverlayEntry(
   val owner: Any,
   val placement: PopoverPlacement,
   val screenPadding: PopoverScreenPadding,
-  val collapsedCornerRadius: Dp,
+  val collapsedCornerRadius: Dp?,
   val maxWidth: Dp?,
   val minWidth: Dp,
   val expandToMaxWidth: Boolean,

@@ -80,7 +80,7 @@ fun PopoverMenu(
   maxWidth: Dp? = null,
   minWidth: Dp = 0.dp,
   screenPadding: PaddingValues = PaddingValues(all = PopoverDefaults.ScreenPadding),
-  collapsedCornerRadius: Dp = 0.dp,
+  collapsedCornerRadius: Dp? = null,
   content: PopoverMenuScope.() -> Unit,
 ) {
   Popover(
