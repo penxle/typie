@@ -23,8 +23,9 @@ import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.handleKeyDown
-import co.typie.editor.scroll.EditorAutoScrollController
-import co.typie.editor.scroll.EditorScrollTarget
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.ext.TextInputClient
 import co.typie.ext.TextInputKey
 import co.typie.ext.notifyTextInputFocusChanged
@@ -38,8 +39,8 @@ import kotlinx.coroutines.launch
 internal fun Modifier.editorInput(
   editor: Editor,
   platform: Platform,
-  autoScrollController: EditorAutoScrollController?,
-): Modifier = this then EditorInputElement(editor, platform, autoScrollController)
+  bringIntoViewRequests: EditorBringIntoViewRequests,
+): Modifier = this then EditorInputElement(editor, platform, bringIntoViewRequests)
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal expect suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
@@ -49,14 +50,14 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
 private data class EditorInputElement(
   private val editor: Editor,
   private val platform: Platform,
-  private val autoScrollController: EditorAutoScrollController?,
+  private val bringIntoViewRequests: EditorBringIntoViewRequests,
 ) : ModifierNodeElement<EditorInputNode>() {
-  override fun create(): EditorInputNode = EditorInputNode(editor, platform, autoScrollController)
+  override fun create(): EditorInputNode = EditorInputNode(editor, platform, bringIntoViewRequests)
 
   override fun update(node: EditorInputNode) {
     node.editor = editor
     node.platform = platform
-    node.autoScrollController = autoScrollController
+    node.bringIntoViewRequests = bringIntoViewRequests
   }
 }
 
@@ -64,19 +65,17 @@ private data class EditorInputElement(
 internal class EditorInputNode(
   var editor: Editor,
   var platform: Platform,
-  var autoScrollController: EditorAutoScrollController?,
+  var bringIntoViewRequests: EditorBringIntoViewRequests,
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private val bindings by lazy { createBindings(platform) }
 
   private fun dispatchAndScrollToCurrentCursorLine(vararg messages: Message) {
-    val autoScrollController = autoScrollController
     coroutineScope.launch {
-      editor.await { messages.forEach(::enqueue) }
-      autoScrollController?.request(
-        target = EditorScrollTarget.CurrentCursorLine,
-        state = editor.state,
-      )
+      editor.awaitWithBringIntoView(bringIntoViewRequests) {
+        messages.forEach(::enqueue)
+        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+      }
     }
   }
 
@@ -127,7 +126,7 @@ internal class EditorInputNode(
 
   override fun onKeyEvent(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
-    if (handleKeyDown(editor, platform, bindings, autoScrollController, coroutineScope, event)) {
+    if (handleKeyDown(editor, platform, bindings, bringIntoViewRequests, coroutineScope, event)) {
       return true
     }
 

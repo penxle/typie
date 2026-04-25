@@ -13,53 +13,54 @@ import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.runtime.EditorUiState
-import co.typie.editor.scroll.EditorAutoScrollController
-import co.typie.editor.scroll.EditorScrollTarget
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.awaitWithBringIntoView
 import kotlinx.coroutines.launch
 
 private const val EditorTapSlopDp = 8f
 
 internal fun Modifier.editorGestures(
   editor: Editor,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
   uiState: EditorUiState,
   density: Float,
-  autoScrollController: EditorAutoScrollController?,
 ): Modifier =
   this then
     EditorGesturesElement(
       editor = editor,
+      bringIntoViewRequests = bringIntoViewRequests,
       uiState = uiState,
       density = density,
-      autoScrollController = autoScrollController,
     )
 
 private data class EditorGesturesElement(
   private val editor: Editor,
+  private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val uiState: EditorUiState,
   private val density: Float,
-  private val autoScrollController: EditorAutoScrollController?,
 ) : ModifierNodeElement<EditorGesturesNode>() {
   override fun create(): EditorGesturesNode =
     EditorGesturesNode(
       editor = editor,
+      bringIntoViewRequests = bringIntoViewRequests,
       uiState = uiState,
       density = density,
-      autoScrollController = autoScrollController,
     )
 
   override fun update(node: EditorGesturesNode) {
     node.editor = editor
+    node.bringIntoViewRequests = bringIntoViewRequests
     node.uiState = uiState
     node.density = density
-    node.autoScrollController = autoScrollController
   }
 }
 
 private class EditorGesturesNode(
   var editor: Editor,
+  var bringIntoViewRequests: EditorBringIntoViewRequests,
   var uiState: EditorUiState,
   var density: Float,
-  var autoScrollController: EditorAutoScrollController?,
 ) : Modifier.Node(), PointerInputModifierNode {
   private var activePointerId: PointerId? = null
   private var downPositionInNode = Offset.Zero
@@ -102,17 +103,14 @@ private class EditorGesturesNode(
             .globalToLocal(x = xDp, y = yDp)
         if (point != null) {
           coroutineScope.launch {
-            editor.await {
+            editor.awaitWithBringIntoView(bringIntoViewRequests) {
               enqueue(
                 Message.Pointer(
                   EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
                 )
               )
+              beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
             }
-            autoScrollController?.request(
-              target = EditorScrollTarget.CurrentCursorLine,
-              state = editor.state,
-            )
           }
         }
       }

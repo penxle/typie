@@ -22,14 +22,18 @@ import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import co.typie.editor.scroll.EditorScrollFrame
+import co.typie.editor.scroll.EditorScrollIntentResult
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportWheelPan
 import co.typie.screen.editor.editor.state.EditorScreenState
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 private enum class EditorScreenLayoutSlot {
   ViewportContent,
@@ -41,9 +45,10 @@ private enum class EditorScreenLayoutSlot {
 @Composable
 internal fun EditorScreenLayout(
   state: EditorScreenState,
+  scrollFrame: EditorScrollFrame,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
-  onViewportSizeChange: (Size) -> Unit,
+  onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
@@ -52,6 +57,7 @@ internal fun EditorScreenLayout(
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val resolveSize: (Int, Int) -> Size =
     remember(density) {
       { width, height -> Size(width = width / density.density, height = height / density.density) }
@@ -84,20 +90,9 @@ internal fun EditorScreenLayout(
               Modifier.fillMaxSize()
                 .clipToBounds()
                 .scrollable2D(state = viewportScrollableState)
-                .editorViewportWheelScroll(state.viewportState)
-                .onSizeChanged { size ->
-                  onViewportSizeChange(resolveSize(size.width, size.height))
-                },
+                .editorViewportWheelScroll(state.viewportState),
             content = {
-              Column(
-                modifier =
-                  Modifier.graphicsLayer {
-                      translationY = -state.viewportState.scrollOffset.y * density.density
-                    }
-                    .onSizeChanged { size ->
-                      state.viewportState.updateContentSize(resolveSize(size.width, size.height))
-                    }
-              ) {
+              Column {
                 Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
                 Box(
                   modifier =
@@ -116,9 +111,61 @@ internal fun EditorScreenLayout(
                 contentWidthPx = resolvedContentWidth.dp.roundToPx(),
               )
             val placeable = measurables.single().measure(contentConstraints)
+            val measuredViewportSize =
+              resolveSize(viewportConstraints.maxWidth, viewportConstraints.maxHeight)
+            val viewportSizeChanged =
+              state.viewportState.updateMeasuredBounds(
+                viewportSize = measuredViewportSize,
+                contentSize = resolveSize(placeable.width, placeable.height),
+              )
+            if (viewportSizeChanged) {
+              onMeasuredViewportSizeChange(measuredViewportSize)
+            }
+            val scrollFrameVersion = scrollFrame.state.version
+            val bringIntoViewTarget =
+              bringIntoViewRequests.activateForVersion(version = scrollFrameVersion)
+            if (bringIntoViewTarget != null) {
+              if (
+                state.viewportState.isTransforming ||
+                  state.viewportState.isDirectManipulationInProgress
+              ) {
+                bringIntoViewRequests.cancel()
+              } else {
+                when (
+                  val scrollIntentResult =
+                    resolveEditorScrollIntent(
+                      frame = scrollFrame,
+                      target = bringIntoViewTarget,
+                      currentScroll = state.viewportState.scrollOffset.y,
+                    )
+                ) {
+                  EditorScrollIntentResult.Unresolved -> Unit
+                  EditorScrollIntentResult.ConsumedWithoutScroll -> {
+                    bringIntoViewRequests.markApplied(
+                      version = scrollFrameVersion,
+                      target = bringIntoViewTarget,
+                    )
+                  }
+                  is EditorScrollIntentResult.ScrollTo -> {
+                    if (
+                      bringIntoViewRequests.markApplied(
+                        version = scrollFrameVersion,
+                        target = bringIntoViewTarget,
+                      )
+                    ) {
+                      state.viewportState.scrollToY(
+                        targetY = scrollIntentResult.y,
+                        isAutoScroll = true,
+                      )
+                    }
+                  }
+                }
+              }
+            }
 
             layout(width = viewportConstraints.maxWidth, height = viewportConstraints.maxHeight) {
-              placeable.place(x = 0, y = 0)
+              val scrollY = (state.viewportState.scrollOffset.y * density.density).roundToInt()
+              placeable.place(x = 0, y = -scrollY)
             }
           }
         }

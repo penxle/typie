@@ -88,7 +88,7 @@ internal constructor(
     focusManager?.clearFocus()
   }
 
-  suspend fun await(block: EditorScope.() -> Unit) {
+  suspend fun await(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
     val messages = mutableListOf<Message>()
     val collector =
       object : EditorScope {
@@ -128,7 +128,14 @@ internal constructor(
       if (pending != null) {
         pendingSettles.updatePersistent { it.remove(pending) }
       }
-      withContext(NonCancellable) { mutex.withLock { if (!disposed.load()) commit(snapshot) } }
+      withContext(NonCancellable) {
+        mutex.withLock {
+          if (!disposed.load()) {
+            beforeCommit?.invoke(snapshot)
+            commit(snapshot)
+          }
+        }
+      }
     }
   }
 

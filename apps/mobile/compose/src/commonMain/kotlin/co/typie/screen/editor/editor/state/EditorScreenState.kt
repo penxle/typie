@@ -23,10 +23,6 @@ internal class EditorScreenState internal constructor(val viewportState: EditorV
   var headerHeight by mutableFloatStateOf(0f)
     private set
 
-  fun updateViewport(size: Size) {
-    viewportState.updateViewportSize(size)
-  }
-
   fun updateHeaderHeight(height: Float) {
     if (headerHeight == height) {
       return

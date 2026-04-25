@@ -73,7 +73,7 @@ internal fun resolveEditorAutoScrollPolicy(
   )
 }
 
-internal fun resolveEditorScrollTarget(
+internal fun resolveEditorScrollOffset(
   currentScroll: Float,
   targetTopInContent: Float,
   targetBottomInContent: Float,
@@ -93,13 +93,13 @@ internal fun resolveEditorScrollTarget(
   }
 }
 
-internal fun resolveKeepVisibleScrollTarget(
+internal fun resolveKeepVisibleScrollOffset(
   currentScroll: Float,
   targetTopInContent: Float,
   targetBottomInContent: Float,
   visibleArea: EditorVisibleArea,
 ): Float? {
-  return resolveEditorScrollTarget(
+  return resolveEditorScrollOffset(
     currentScroll = currentScroll,
     targetTopInContent = targetTopInContent,
     targetBottomInContent = targetBottomInContent,
@@ -107,7 +107,7 @@ internal fun resolveKeepVisibleScrollTarget(
   )
 }
 
-internal fun resolveTypewriterScrollTarget(
+internal fun resolveTypewriterScrollOffset(
   currentScroll: Float,
   targetTopInContent: Float,
   targetBottomInContent: Float,

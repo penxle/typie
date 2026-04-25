@@ -128,11 +128,13 @@ internal fun rememberEditorTouchPinchZoomModifier(
                       )
                       syncViewportToZoomAnchor(
                         viewportState = state.viewportState,
+                        layoutSpec = layoutSpec,
                         pageSizes = pageSizes,
                         anchor = currentAnchor,
                         focalX = focalInEditor.x,
                         focalY = focalInEditor.y,
                         displayZoom = nextZoom,
+                        density = density,
                       )
                     }
                   }

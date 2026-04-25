@@ -10,41 +10,41 @@ private const val FloatTolerance = 0.01f
 class EditorAutoScrollPolicyTest {
   @Test
   fun `keep-visible policy scrolls down when cursor enters the lower scroll margin`() {
-    val target =
-      resolveKeepVisibleScrollTarget(
+    val offset =
+      resolveKeepVisibleScrollOffset(
         currentScroll = 400f,
         targetTopInContent = 1112f,
         targetBottomInContent = 1144f,
         visibleArea = testVisibleArea(),
       )
 
-    assertEquals(404f, target)
+    assertEquals(404f, offset)
   }
 
   @Test
   fun `keep-visible policy does not scroll up before the cursor enters the visible editor margin`() {
-    val target =
-      resolveKeepVisibleScrollTarget(
+    val offset =
+      resolveKeepVisibleScrollOffset(
         currentScroll = 240f,
         targetTopInContent = 420f,
         targetBottomInContent = 448f,
         visibleArea = testVisibleArea(),
       )
 
-    assertEquals(null, target)
+    assertEquals(null, offset)
   }
 
   @Test
   fun `keep-visible policy scrolls up only after the cursor enters the visible viewport guard`() {
-    val target =
-      resolveKeepVisibleScrollTarget(
+    val offset =
+      resolveKeepVisibleScrollOffset(
         currentScroll = 240f,
         targetTopInContent = 379f,
         targetBottomInContent = 407f,
         visibleArea = testVisibleArea(),
       )
 
-    assertEquals(239f, target)
+    assertEquals(239f, offset)
   }
 
   @Test
@@ -73,8 +73,8 @@ class EditorAutoScrollPolicyTest {
 
   @Test
   fun `typewriter policy scrolls target top to the configured viewport position`() {
-    val target =
-      resolveTypewriterScrollTarget(
+    val offset =
+      resolveTypewriterScrollOffset(
         currentScroll = 400f,
         targetTopInContent = 1068f,
         targetBottomInContent = 1100f,
@@ -82,7 +82,7 @@ class EditorAutoScrollPolicyTest {
         position = 0.5f,
       )
 
-    assertEquals(644f, requireNotNull(target), FloatTolerance)
+    assertEquals(644f, requireNotNull(offset), FloatTolerance)
   }
 
   @Test

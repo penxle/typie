@@ -21,9 +21,10 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.EditorAutoScrollController
-import co.typie.editor.scroll.EditorScrollTarget
-import co.typie.editor.scroll.LocalEditorAutoScrollController
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.awaitWithBringIntoView
 import kotlinx.coroutines.launch
 
 private const val ExtensionTapSlopDp = 8f
@@ -37,14 +38,14 @@ internal fun EditorExtensionArea(
   val density = LocalDensity.current
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
-  val autoScrollController = LocalEditorAutoScrollController.current
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val extensionAreaModifier =
     if (forwardingEnabled) {
       Modifier.editorExtensionForwarding(
         runtime = runtime,
+        bringIntoViewRequests = bringIntoViewRequests,
         uiState = uiState,
         density = density.density,
-        autoScrollController = autoScrollController,
       )
     } else {
       Modifier
@@ -55,45 +56,45 @@ internal fun EditorExtensionArea(
 
 private fun Modifier.editorExtensionForwarding(
   runtime: EditorRuntime,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
   uiState: EditorUiState,
   density: Float,
-  autoScrollController: EditorAutoScrollController?,
 ): Modifier =
   this then
     EditorExtensionForwardingElement(
       runtime = runtime,
+      bringIntoViewRequests = bringIntoViewRequests,
       uiState = uiState,
       density = density,
-      autoScrollController = autoScrollController,
     )
 
 private data class EditorExtensionForwardingElement(
   private val runtime: EditorRuntime,
+  private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val uiState: EditorUiState,
   private val density: Float,
-  private val autoScrollController: EditorAutoScrollController?,
 ) : ModifierNodeElement<EditorExtensionForwardingNode>() {
   override fun create(): EditorExtensionForwardingNode =
     EditorExtensionForwardingNode(
       runtime = runtime,
+      bringIntoViewRequests = bringIntoViewRequests,
       uiState = uiState,
       density = density,
-      autoScrollController = autoScrollController,
     )
 
   override fun update(node: EditorExtensionForwardingNode) {
     node.runtime = runtime
+    node.bringIntoViewRequests = bringIntoViewRequests
     node.uiState = uiState
     node.density = density
-    node.autoScrollController = autoScrollController
   }
 }
 
 private class EditorExtensionForwardingNode(
   var runtime: EditorRuntime,
+  var bringIntoViewRequests: EditorBringIntoViewRequests,
   var uiState: EditorUiState,
   var density: Float,
-  var autoScrollController: EditorAutoScrollController?,
 ) : Modifier.Node(), PointerInputModifierNode {
   private var activePointerId: PointerId? = null
   private var downPositionInNode = Offset.Zero
@@ -144,18 +145,15 @@ private class EditorExtensionForwardingNode(
             .resolveViewportTransform(pageSizes = editor.pageSizes)
             .globalToLocal(x = globalX, y = globalY) ?: return resetPointerState()
         coroutineScope.launch {
-          editor.await {
+          editor.awaitWithBringIntoView(bringIntoViewRequests) {
             enqueue(
               Message.Pointer(
                 EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
               )
             )
             enqueue(Message.Pointer(EditorPointerEvent.Up))
+            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
           }
-          autoScrollController?.request(
-            target = EditorScrollTarget.CurrentCursorLine,
-            state = editor.state,
-          )
         }
         // TODO(editor-parity): Compose 상호작용 런타임이 웹/플러터 수준으로 맞춰지면,
         // extension area에서도 down/move/up 전체 제스처 시퀀스를 포워딩해야 한다.

@@ -37,7 +37,7 @@ private val DebugExtensionFillColor = Color(0x2200B8D4)
 @Composable
 internal fun EditorBody(
   doc: Doc,
-  selection: Selection,
+  initialSelection: Selection,
   geometry: EditorBodyGeometry,
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
@@ -107,7 +107,7 @@ internal fun EditorBody(
             ) {
               EditorView(
                 doc = doc,
-                selection = selection,
+                initialSelection = initialSelection,
                 layoutSpec = layoutSpec,
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,

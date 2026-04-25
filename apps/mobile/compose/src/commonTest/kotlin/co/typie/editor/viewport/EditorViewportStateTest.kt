@@ -11,8 +11,10 @@ class EditorViewportStateTest {
   @Test
   fun `touch pan updates viewport scroll and records user intent`() {
     val state = EditorViewportState()
-    state.updateViewportSize(Size(width = 100f, height = 100f))
-    state.updateContentSize(Size(width = 300f, height = 300f))
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 300f, height = 300f),
+    )
 
     val consumed =
       consumeEditorViewportTouchPan(
@@ -30,8 +32,10 @@ class EditorViewportStateTest {
   @Test
   fun `auto scroll updates viewport scroll and records auto intent`() {
     val state = EditorViewportState()
-    state.updateViewportSize(Size(width = 100f, height = 100f))
-    state.updateContentSize(Size(width = 100f, height = 280f))
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 100f, height = 280f),
+    )
 
     val consumedDelta = state.dispatchDeltaY(deltaY = 120f, isAutoScroll = true)
 
@@ -44,8 +48,10 @@ class EditorViewportStateTest {
   @Test
   fun `transform session blocks user pan until pinch ends`() {
     val state = EditorViewportState()
-    state.updateViewportSize(Size(width = 100f, height = 100f))
-    state.updateContentSize(Size(width = 300f, height = 300f))
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 300f, height = 300f),
+    )
     state.beginTransform()
 
     val blocked =
@@ -78,8 +84,10 @@ class EditorViewportStateTest {
   fun `restored scroll offset reclamps when viewport and content resolve`() {
     val state = EditorViewportState(initialScrollOffset = Offset(180f, 120f))
 
-    state.updateViewportSize(Size(width = 100f, height = 100f))
-    state.updateContentSize(Size(width = 210f, height = 160f))
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 210f, height = 160f),
+    )
 
     assertEquals(Offset(110f, 60f), state.scrollOffset)
     assertEquals(0, state.lastScrollRevision)

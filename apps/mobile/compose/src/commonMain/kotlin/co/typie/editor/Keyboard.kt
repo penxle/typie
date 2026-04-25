@@ -16,8 +16,9 @@ import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
-import co.typie.editor.scroll.EditorAutoScrollController
-import co.typie.editor.scroll.EditorScrollTarget
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.platform.Platform
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -35,7 +36,7 @@ internal data class KeyBinding(
   val predicate: (() -> Boolean)? = null,
   // TODO(editor-parity): movement/selection shortcut은 키별 고정 target보다, dispatch 이후의
   // 실제 scroll anchor(selection head 또는 cursor)를 따라가도록 정리해야 한다.
-  val scrollTarget: EditorScrollTarget? = EditorScrollTarget.CurrentCursorLine,
+  val bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
   val action: Editor.() -> List<Message>,
 )
 
@@ -92,32 +93,42 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.B,
       setOf(KeyModifier.Mod),
-      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Bold)) },
     ),
     KeyBinding(
       ComposeKey.I,
       setOf(KeyModifier.Mod),
-      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Italic)) },
     ),
     KeyBinding(
       ComposeKey.S,
       setOf(KeyModifier.Mod, KeyModifier.Shift),
-      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Strikethrough)) },
     ),
     KeyBinding(
       ComposeKey.U,
       setOf(KeyModifier.Mod, KeyModifier.Shift),
-      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Underline)) },
     ),
-    KeyBinding(ComposeKey.Q, setOf(KeyModifier.Ctrl), predicate = { isMac }, scrollTarget = null) {
+    KeyBinding(
+      ComposeKey.Q,
+      setOf(KeyModifier.Ctrl),
+      predicate = { isMac },
+      bringIntoViewTarget = null,
+    ) {
       inspectState()
       emptyList()
     },
-    KeyBinding(ComposeKey.W, setOf(KeyModifier.Ctrl), predicate = { isMac }, scrollTarget = null) {
+    KeyBinding(
+      ComposeKey.W,
+      setOf(KeyModifier.Ctrl),
+      predicate = { isMac },
+      bringIntoViewTarget = null,
+    ) {
       inspectStateAsMacro()
       emptyList()
     },
@@ -149,7 +160,7 @@ internal fun handleKeyDown(
   editor: Editor,
   platform: Platform,
   bindings: List<KeyBinding>,
-  autoScrollController: EditorAutoScrollController?,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
   coroutineScope: CoroutineScope,
   event: KeyEvent,
 ): Boolean {
@@ -157,9 +168,9 @@ internal fun handleKeyDown(
   val messages = binding.action(editor)
   if (messages.isNotEmpty()) {
     coroutineScope.launch {
-      editor.await { messages.forEach(::enqueue) }
-      binding.scrollTarget?.let { target ->
-        autoScrollController?.request(target = target, state = editor.state)
+      editor.awaitWithBringIntoView(bringIntoViewRequests) {
+        messages.forEach(::enqueue)
+        beforeCommit { binding.bringIntoViewTarget?.let { target -> bringIntoView(target) } }
       }
     }
   }

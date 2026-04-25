@@ -28,7 +28,7 @@ import co.typie.editor.overlay.EditorCursorOverlay
 import co.typie.editor.overlay.EditorLineHighlightOverlay
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.LocalEditorAutoScrollController
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.platform.PlatformModule
@@ -37,7 +37,7 @@ import co.typie.storage.Preference
 @Composable
 internal fun EditorView(
   doc: Doc,
-  selection: Selection,
+  initialSelection: Selection,
   layoutSpec: EditorDocumentLayoutSpec,
   viewportWidth: Float,
   viewportHeight: Float,
@@ -49,8 +49,8 @@ internal fun EditorView(
   val scope = rememberCoroutineScope()
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val zoomController = LocalEditorZoomController.current
-  val autoScrollController = LocalEditorAutoScrollController.current
   val displayZoom = zoomController.displayZoom
 
   LaunchedEffect(runtime.editor, viewportWidth, viewportHeight, density.density) {
@@ -63,7 +63,7 @@ internal fun EditorView(
       Viewport(width = viewportWidth, height = viewportHeight, scaleFactor = scaleFactor)
     if (runtime.editor == null) {
       uiState.clear()
-      runtime.attach(Editor.create(doc, selection, viewport, scope))
+      runtime.attach(Editor.create(doc, initialSelection, viewport, scope))
     }
   }
 
@@ -82,13 +82,13 @@ internal fun EditorView(
       Modifier.fillMaxWidth()
         .focusRequester(editor.focusRequester)
         .onFocusChanged { uiState.updateFocus(it.isFocused) }
-        .editorInput(editor, platform, autoScrollController)
+        .editorInput(editor, platform, bringIntoViewRequests)
         .focusable()
         .editorGestures(
           editor = editor,
+          bringIntoViewRequests = bringIntoViewRequests,
           uiState = uiState,
           density = density.density,
-          autoScrollController = autoScrollController,
         )
     ) {
       val pageSpacing =

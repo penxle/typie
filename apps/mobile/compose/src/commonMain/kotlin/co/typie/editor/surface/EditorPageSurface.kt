@@ -82,13 +82,16 @@ internal fun EditorPageSurface(
   val currentRenderZoom by rememberUpdatedState(renderZoom)
 
   val safeCommittedRenderZoom = if (committedRenderZoom > 0f) committedRenderZoom else 1f
-  val displayedWidthPx = committedPixelSize.width.toFloat() / safeCommittedRenderZoom * displayZoom
-  val displayedHeightPx =
-    committedPixelSize.height.toFloat() / safeCommittedRenderZoom * displayZoom
-  val displayedWidthPxInt = displayedWidthPx.toInt().coerceAtLeast(1)
-  val displayedHeightPxInt = displayedHeightPx.toInt().coerceAtLeast(1)
-  val displayedWidthDp = Dp(displayedWidthPx / density.density)
-  val displayedHeightDp = Dp(displayedHeightPx / density.density)
+  val displayedWidthPxInt =
+    round(widthDouble * density.density.toDouble() * displayZoom.toDouble())
+      .toInt()
+      .coerceAtLeast(1)
+  val displayedHeightPxInt =
+    round(heightDouble * density.density.toDouble() * displayZoom.toDouble())
+      .toInt()
+      .coerceAtLeast(1)
+  val displayedWidthDp = Dp(displayedWidthPxInt.toFloat() / density.density)
+  val displayedHeightDp = Dp(displayedHeightPxInt.toFloat() / density.density)
   val displayBottomMarginPx =
     round(debugBottomMarginHeight.toDouble() * density.density.toDouble() * displayZoom.toDouble())
       .toInt()

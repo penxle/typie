@@ -138,11 +138,13 @@ internal fun rememberEditorDebugWheelZoomModifier(
 
       syncViewportToZoomAnchor(
         viewportState = state.viewportState,
+        layoutSpec = layoutSpec,
         pageSizes = pageSizes,
         anchor = anchor,
         focalX = focalInEditor.x,
         focalY = focalInEditor.y,
         displayZoom = zoomController.displayZoom,
+        density = density,
       )
     }
   }

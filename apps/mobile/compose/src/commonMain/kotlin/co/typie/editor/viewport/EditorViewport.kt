@@ -10,13 +10,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.toString
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.EditorViewportAnchor
-import co.typie.editor.body.resolvePaginatedPageGap
+import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ffi.Size as PageSize
 import kotlin.math.max
 
@@ -85,42 +87,30 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   val maxScrollY: Float
     get() = (contentSize.height - viewportSize.height).coerceAtLeast(0f)
 
-  fun updateViewportSize(size: Size) {
-    val resolvedSize = size.coerceAtLeastZero()
-    if (viewportSize == resolvedSize) {
-      return
-    }
-
-    viewportSize = resolvedSize
-    if (pendingRestoredScrollOffset != null) {
-      if (applyPendingRestoredScrollOffset()) {
-        return
+  fun updateMeasuredBounds(viewportSize: Size, contentSize: Size): Boolean {
+    val resolvedViewportSize = viewportSize.coerceAtLeastZero()
+    val resolvedContentSize = contentSize.coerceAtLeastZero()
+    var viewportSizeChanged = false
+    Snapshot.withoutReadObservation {
+      viewportSizeChanged = this.viewportSize != resolvedViewportSize
+      if (this.viewportSize == resolvedViewportSize && this.contentSize == resolvedContentSize) {
+        return@withoutReadObservation
       }
-      return
-    }
-    if (applyPendingRestoredScrollOffset()) {
-      return
-    }
-    clampScrollOffset()
-  }
 
-  fun updateContentSize(size: Size) {
-    val resolvedSize = size.coerceAtLeastZero()
-    if (contentSize == resolvedSize) {
-      return
-    }
-
-    contentSize = resolvedSize
-    if (pendingRestoredScrollOffset != null) {
-      if (applyPendingRestoredScrollOffset()) {
-        return
+      this.viewportSize = resolvedViewportSize
+      this.contentSize = resolvedContentSize
+      if (pendingRestoredScrollOffset != null) {
+        if (applyPendingRestoredScrollOffset()) {
+          return@withoutReadObservation
+        }
+        return@withoutReadObservation
       }
-      return
+      if (applyPendingRestoredScrollOffset()) {
+        return@withoutReadObservation
+      }
+      clampScrollOffset()
     }
-    if (applyPendingRestoredScrollOffset()) {
-      return
-    }
-    clampScrollOffset()
+    return viewportSizeChanged
   }
 
   fun consumePan(delta: Offset, isAutoScroll: Boolean = false): Offset {
@@ -146,13 +136,17 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
 
   fun scrollToY(targetY: Float, isAutoScroll: Boolean = false) {
     pendingRestoredScrollOffset = null
-    val resolvedY = targetY.coerceIn(0f, maxScrollY)
+    val resolvedY =
+      when {
+        !targetY.isFinite() -> scrollOffset.y
+        else -> targetY.coerceIn(0f, maxScrollY)
+      }
     if (scrollOffset.y == resolvedY) {
       return
     }
 
     setScrollOffset(
-      nextScrollOffset = Offset(scrollOffset.x, resolvedY),
+      nextScrollOffset = Offset(scrollOffset.x.coerceIn(0f, maxScrollX), resolvedY),
       isAutoScroll = isAutoScroll,
       emitScrollEvent = true,
     )
@@ -292,12 +286,13 @@ internal fun normalizeEditorViewportWheelZoomDelta(delta: Float): Float =
     0f
   }
 
-internal data class EditorZoomViewportScrollTarget(
+internal data class EditorZoomViewportScrollOffset(
   val horizontalScroll: Float,
   val verticalScroll: Float,
 )
 
-internal fun resolveZoomViewportScrollTarget(
+internal fun resolveZoomViewportScrollOffset(
+  layoutSpec: EditorDocumentLayoutSpec,
   anchor: EditorViewportAnchor,
   focalX: Float,
   focalY: Float,
@@ -305,7 +300,8 @@ internal fun resolveZoomViewportScrollTarget(
   currentHorizontalScroll: Float,
   currentVerticalScroll: Float,
   pageSizes: List<PageSize>,
-): EditorZoomViewportScrollTarget? {
+  density: Float = 0f,
+): EditorZoomViewportScrollOffset? {
   if (anchor.page !in pageSizes.indices) {
     return null
   }
@@ -317,14 +313,16 @@ internal fun resolveZoomViewportScrollTarget(
       1f
     }
   val anchorX = anchor.x * effectiveDisplayZoom
-  val anchorY =
-    resolveZoomedPageTop(
+  val anchorPageTop =
+    layoutSpec.resolvePageContentTop(
       page = anchor.page,
       pageSizes = pageSizes,
       displayZoom = effectiveDisplayZoom,
-    ) + anchor.y * effectiveDisplayZoom
+      density = density,
+    ) ?: return null
+  val anchorY = anchorPageTop + anchor.y * effectiveDisplayZoom
 
-  return EditorZoomViewportScrollTarget(
+  return EditorZoomViewportScrollOffset(
     horizontalScroll = currentHorizontalScroll + anchorX - focalX,
     verticalScroll = currentVerticalScroll + anchorY - focalY,
   )
@@ -332,17 +330,20 @@ internal fun resolveZoomViewportScrollTarget(
 
 internal fun syncViewportToZoomAnchor(
   viewportState: EditorViewportState,
+  layoutSpec: EditorDocumentLayoutSpec,
   pageSizes: List<PageSize>,
   anchor: EditorViewportAnchor,
   focalX: Float,
   focalY: Float,
   displayZoom: Float,
+  density: Float = 0f,
   isAutoScroll: Boolean = false,
 ) {
   val currentHorizontalScroll = viewportState.scrollOffset.x
   val currentVerticalScroll = viewportState.scrollOffset.y
-  val target =
-    resolveZoomViewportScrollTarget(
+  val scrollOffset =
+    resolveZoomViewportScrollOffset(
+      layoutSpec = layoutSpec,
       anchor = anchor,
       focalX = focalX,
       focalY = focalY,
@@ -350,22 +351,11 @@ internal fun syncViewportToZoomAnchor(
       currentHorizontalScroll = currentHorizontalScroll,
       currentVerticalScroll = currentVerticalScroll,
       pageSizes = pageSizes,
+      density = density,
     ) ?: return
 
   viewportState.scrollTo(
-    offset = Offset(x = target.horizontalScroll, y = target.verticalScroll),
+    offset = Offset(x = scrollOffset.horizontalScroll, y = scrollOffset.verticalScroll),
     isAutoScroll = isAutoScroll,
   )
-}
-
-private fun resolveZoomedPageTop(page: Int, pageSizes: List<PageSize>, displayZoom: Float): Float {
-  var top = 0f
-  val pageGap = resolvePaginatedPageGap(displayZoom)
-  repeat(page) { index ->
-    top += pageSizes[index].height * displayZoom
-    if (index < pageSizes.lastIndex) {
-      top += pageGap
-    }
-  }
-  return top
 }

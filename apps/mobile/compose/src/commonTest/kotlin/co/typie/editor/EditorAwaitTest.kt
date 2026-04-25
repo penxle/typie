@@ -93,6 +93,36 @@ class EditorAwaitTest {
     }
 
   @Test
+  fun await_beforeCommit_receives_snapshot_before_state_is_committed() =
+    runTest(dispatcher) {
+      val fakeCursor =
+        CursorMetrics(pageIdx = 0, caret = Rect(1f, 2f, 3f, 4f), line = Rect(0f, 0f, 0f, 0f))
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
+          cursorProvider = { fakeCursor },
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      var beforeCommitSnapshot: EditorState? = null
+      var stateVersionSeenBeforeCommit: Long? = null
+
+      editor.await(
+        beforeCommit = { snapshot ->
+          beforeCommitSnapshot = snapshot
+          stateVersionSeenBeforeCommit = editor.state.version
+        }
+      ) {
+        enqueue(sampleMessage)
+      }
+
+      assertEquals(1L, beforeCommitSnapshot?.version)
+      assertEquals(fakeCursor, beforeCommitSnapshot?.cursor)
+      assertEquals(0L, stateVersionSeenBeforeCommit)
+      assertEquals(1L, editor.state.version)
+    }
+
+  @Test
   fun await_propagates_tick_exception() =
     runTest(dispatcher) {
       val boom = RuntimeException("boom")

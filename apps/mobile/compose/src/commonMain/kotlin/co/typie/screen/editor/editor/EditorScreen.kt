@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.editor.EditorState
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
@@ -36,9 +37,10 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.EditorScrollTarget
-import co.typie.editor.scroll.LocalEditorAutoScrollController
-import co.typie.editor.scroll.rememberEditorAutoScrollController
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.EditorScrollFrame
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
@@ -143,7 +145,8 @@ fun EditorScreen(entityId: String) {
   Screen(loadable = model.query, background = background, contentPadding = PaddingValues()) {
     contentPadding ->
     val editor = runtime.editor
-    val pageSizes = editor?.pageSizes.orEmpty()
+    val editorState = editor?.state ?: EditorState.Initial
+    val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
     val topInset = contentPadding.calculateTopPadding()
     val bottomSafeInset = contentPadding.calculateBottomPadding()
@@ -152,7 +155,7 @@ fun EditorScreen(entityId: String) {
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val devMode = Preference.devMode
     val displayZoom = zoomController.displayZoom
-    val cursorLineHeight = (editor?.cursor?.line?.height ?: 0f) * displayZoom
+    val cursorLineHeight = (editorState.cursor?.line?.height ?: 0f) * displayZoom
     val visibleArea =
       screenState.resolveVisibleArea(
         topInset = topInset.value,
@@ -171,16 +174,26 @@ fun EditorScreen(entityId: String) {
         is EditorDocumentLayoutSpec.Paginated -> visibleArea.bottomOcclusion
         is EditorDocumentLayoutSpec.Continuous -> 0f
       }
-    val pagesContentHeight = layoutSpec.resolvePagesContentHeight(pageSizes, displayZoom)
+    val pagesContentHeight =
+      layoutSpec.resolvePagesContentHeight(pageSizes, displayZoom, density = density)
+    val bodyGeometry =
+      resolveEditorBodyGeometry(
+        visibleArea = visibleArea,
+        layoutSpec = layoutSpec,
+        pageSizes = pageSizes,
+        displayZoom = displayZoom,
+      )
     val distanceToPagesBottom =
       if (typewriterEnabled && editor != null) {
         resolveDistanceToPagesBottom(
-          state = editor.state,
+          state = editorState,
+          layoutSpec = layoutSpec,
           uiState = uiState,
           headerHeight = screenState.headerHeight,
           pagesContentHeight = pagesContentHeight,
           bottomOcclusion = visibleArea.bottomOcclusion,
-          target = EditorScrollTarget.CurrentSelectionHead,
+          target = EditorBringIntoViewTarget.CurrentSelectionHead,
+          density = density,
         )
       } else {
         null
@@ -194,13 +207,6 @@ fun EditorScreen(entityId: String) {
         typewriterEnabled = typewriterEnabled,
         typewriterPosition = typewriterPosition,
         cursorLineHeight = cursorLineHeight,
-      )
-    val bodyGeometry =
-      resolveEditorBodyGeometry(
-        visibleArea = visibleArea,
-        layoutSpec = layoutSpec,
-        pageSizes = pageSizes,
-        displayZoom = displayZoom,
       )
     val bodyTrackWidth = bodyGeometry.pageColumnWidth.coerceAtLeast(0f)
     val isPaginatedLayout = layoutSpec is EditorDocumentLayoutSpec.Paginated
@@ -218,16 +224,18 @@ fun EditorScreen(entityId: String) {
         density = density,
       )
     }
-    val autoScrollController =
-      rememberEditorAutoScrollController(
-        editorProvider = { runtime.editor },
-        uiState = uiState,
-        viewportState = screenState.viewportState,
-        isDirectScrollInProgress = { screenState.viewportState.isDirectManipulationInProgress },
+    val scrollFrame =
+      EditorScrollFrame(
+        state = editorState,
+        layoutSpec = layoutSpec,
+        displayZoom = displayZoom,
         visibleArea = visibleArea,
         autoScrollPolicy = autoScrollPolicy,
         headerHeight = screenState.headerHeight,
+        density = density,
+        editorBounds = uiState.editorBoundsInContainer,
       )
+    val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
     val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
     val touchPinchZoomModifier =
       if (paginatedLayout != null && density > 0f) {
@@ -264,17 +272,17 @@ fun EditorScreen(entityId: String) {
       snapshotFlow { viewportScrollableState.isScrollInProgress }
         .collectLatest(screenState.viewportState::updateScrollableInteractionInProgress)
     }
-    LaunchedEffect(autoScrollController, screenState.viewportState) {
+    LaunchedEffect(screenState.viewportState) {
       snapshotFlow { screenState.viewportState.isDirectManipulationInProgress }
         .collectLatest { inProgress ->
           if (inProgress) {
-            autoScrollController.cancel()
+            bringIntoViewRequests.cancel()
           }
         }
     }
-    LaunchedEffect(autoScrollController, uiState.focused, screenState.sceneInForeground, editor) {
+    LaunchedEffect(uiState.focused, screenState.sceneInForeground, editor) {
       if (!uiState.focused || !screenState.sceneInForeground || editor == null) {
-        autoScrollController.cancel()
+        bringIntoViewRequests.cancel()
       }
     }
 
@@ -282,23 +290,23 @@ fun EditorScreen(entityId: String) {
       LocalEditorRuntime provides runtime,
       LocalEditorUiState provides uiState,
       LocalEditorZoomController provides zoomController,
-      LocalEditorAutoScrollController provides autoScrollController,
+      LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
     ) {
       EditorScreenLayout(
         state = screenState,
+        scrollFrame = scrollFrame,
         viewportScrollableState = viewportScrollableState,
         viewportContentWidth = bodyTrackWidth,
-        onViewportSizeChange = { size ->
-          screenState.updateViewport(size)
-          val editor = runtime.editor
-          if (editor != null && size.width > 0f && size.height > 0f) {
+        onMeasuredViewportSizeChange = { viewport ->
+          val currentEditor = runtime.editor
+          if (currentEditor != null && viewport.width > 0f && viewport.height > 0f) {
             scope.launch {
-              editor.await {
+              currentEditor.await {
                 enqueue(
                   Message.System(
                     SystemEvent.Resize(
-                      width = size.width,
-                      height = size.height,
+                      width = viewport.width,
+                      height = viewport.height,
                       scaleFactor = density.toDouble(),
                     )
                   )
@@ -346,7 +354,7 @@ fun EditorScreen(entityId: String) {
         body = {
           EditorBody(
             doc = model.doc,
-            selection = model.selection,
+            initialSelection = model.selection,
             geometry = bodyGeometry,
             layoutSpec = layoutSpec,
             autoScrollPolicy = autoScrollPolicy,

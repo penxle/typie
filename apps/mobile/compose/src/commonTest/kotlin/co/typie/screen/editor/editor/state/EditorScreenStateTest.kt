@@ -1,7 +1,6 @@
 package co.typie.screen.editor.editor.state
 
 import androidx.compose.runtime.BroadcastFrameClock
-import androidx.compose.ui.geometry.Size
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
@@ -16,18 +15,6 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorScreenStateTest {
-  @Test
-  fun `updateViewport syncs the canonical viewport state`() {
-    val viewportState = EditorViewportState()
-    val state = EditorScreenState(viewportState = viewportState)
-    val viewport = Size(width = 120f, height = 80f)
-
-    state.updateViewport(viewport)
-
-    assertEquals(viewport, state.viewport)
-    assertEquals(viewport, viewportState.viewportSize)
-  }
-
   @Test
   fun `prepareToLeaveEditorScene waits for header flush before returning`() = runTest {
     val state = EditorScreenState(viewportState = EditorViewportState())
