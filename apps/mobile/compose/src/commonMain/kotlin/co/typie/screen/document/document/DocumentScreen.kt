@@ -163,7 +163,7 @@ fun DocumentScreen(entityId: String) {
   }
 
   ProvideTopBar(
-    leading = { TopBarBackButton() },
+    leading = { TopBarBackButton(icon = Lucide.X) },
     center = {
       document?.let { document ->
         val subtitle = document.subtitle?.takeIf(String::isNotBlank)

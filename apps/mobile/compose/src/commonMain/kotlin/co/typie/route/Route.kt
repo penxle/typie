@@ -70,6 +70,7 @@ sealed interface Route {
 
 enum class RouteTransitionStyle {
   Slide,
+  VerticalSlide,
   Fade,
 }
 
@@ -77,6 +78,11 @@ fun Route.transitionStyleTo(route: Route): RouteTransitionStyle =
   when {
     (this is Route.Home && route is Route.Search) ||
       (this is Route.Search && route is Route.Home) -> RouteTransitionStyle.Fade
+
+    this is Route.Document ||
+      route is Route.Document ||
+      this is Route.FolderDetails ||
+      route is Route.FolderDetails -> RouteTransitionStyle.VerticalSlide
 
     else -> RouteTransitionStyle.Slide
   }

@@ -129,7 +129,7 @@ fun FolderDetailsScreen(entityId: String) {
   }
 
   ProvideTopBar(
-    leading = { TopBarBackButton() },
+    leading = { TopBarBackButton(icon = Lucide.X) },
     center = {
       if (row.isRowEntity()) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

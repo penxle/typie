@@ -113,6 +113,7 @@ fun NavigationStack(
 
   val scope = rememberCoroutineScope()
   var containerWidth by remember { mutableStateOf(0f) }
+  var containerHeight by remember { mutableStateOf(0f) }
   var animState by remember { mutableStateOf(AnimState.Idle) }
 
   // visibleRoute: Idle 상태에서 보이는 화면. 애니메이션 완료 후 업데이트.
@@ -256,21 +257,28 @@ fun NavigationStack(
     }
   CompositionLocalProvider(*animationProviders.toTypedArray()) {
     PlatformBackHandler(enabled = navigator.canPop) { scope.launch { navigator.pop() } }
-    Box(modifier.fillMaxSize().onSizeChanged { containerWidth = it.width.toFloat() }) {
+    Box(
+      modifier.fillMaxSize().onSizeChanged {
+        containerWidth = it.width.toFloat()
+        containerHeight = it.height.toFloat()
+      }
+    ) {
       val useFadeTransition = transitionStyle == RouteTransitionStyle.Fade
+      val useVerticalTransition = transitionStyle == RouteTransitionStyle.VerticalSlide
+      val useSwitchTopBarTransition = useFadeTransition || useVerticalTransition
 
       when (animState) {
         AnimState.Idle -> topBarState.navDirection = NavDirection.Switch
         AnimState.Push ->
           topBarState.navDirection =
-            if (useFadeTransition) NavDirection.Switch else NavDirection.Push
+            if (useSwitchTopBarTransition) NavDirection.Switch else NavDirection.Push
         AnimState.Pop ->
           topBarState.navDirection =
-            if (useFadeTransition) NavDirection.Switch else NavDirection.Pop
+            if (useSwitchTopBarTransition) NavDirection.Switch else NavDirection.Pop
         AnimState.Dragging ->
           if (navigator.popRequested) {
             topBarState.navDirection =
-              if (useFadeTransition) NavDirection.Switch else NavDirection.Pop
+              if (useSwitchTopBarTransition) NavDirection.Switch else NavDirection.Pop
           }
       }
 
@@ -340,6 +348,25 @@ fun NavigationStack(
           }
           // 전환 중 behind 화면 터치 차단 (fade는 dim overlay가 없으므로 별도 pointerIgnore)
           Box(Modifier.fillMaxSize().pointerIgnore())
+        } else if (useVerticalTransition) {
+          Box(Modifier.fillMaxSize()) {
+            routeContentFor(behindRoute!!).invoke(behindTopBar, behindBottomBar)
+          }
+          // Dim overlay — 전환 중 behind 화면 터치 차단
+          Box(
+            Modifier.fillMaxSize()
+              .graphicsLayer {
+                alpha =
+                  when (animState) {
+                    AnimState.Push -> progress.value
+                    AnimState.Pop -> 1f - progress.value
+                    AnimState.Dragging -> 1f - progress.value
+                    AnimState.Idle -> 0f
+                  }
+              }
+              .background(AppTheme.colors.scrim.copy(alpha = 0.5f))
+              .pointerIgnore()
+          )
         } else {
           Box(
             Modifier.fillMaxSize().graphicsLayer {
@@ -458,6 +485,24 @@ fun NavigationStack(
                     AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
                     AnimState.Idle -> 1f
                   }
+              } else if (useVerticalTransition) {
+                translationY =
+                  when (animState) {
+                    AnimState.Push -> containerHeight * (1f - p)
+                    AnimState.Pop -> containerHeight * p
+                    AnimState.Dragging -> containerHeight * p
+                    AnimState.Idle -> 0f
+                  }
+                shape =
+                  AppShapes.rounded(
+                    cornerRadius(
+                      when (animState) {
+                        AnimState.Push -> p
+                        else -> 1f - p
+                      }
+                    )
+                  )
+                clip = true
               } else {
                 translationX =
                   when (animState) {
