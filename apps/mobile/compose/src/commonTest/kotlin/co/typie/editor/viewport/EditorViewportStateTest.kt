@@ -94,6 +94,25 @@ class EditorViewportStateTest {
   }
 
   @Test
+  fun `bounds reclamp emits auto scroll event when content shrinks past current offset`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 100f, height = 300f),
+    )
+    state.scrollToY(200f)
+
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 100f, height = 180f),
+    )
+
+    assertEquals(Offset(x = 0f, y = 80f), state.scrollOffset)
+    assertEquals(2, state.lastScrollRevision)
+    assertTrue(state.lastScrollWasAuto)
+  }
+
+  @Test
   fun `direct manipulation stays active while scrollbar drag is in progress`() {
     val state = EditorViewportState()
 

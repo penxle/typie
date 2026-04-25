@@ -199,8 +199,8 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   private fun clampScrollOffset() {
     setScrollOffset(
       nextScrollOffset = scrollOffset.coerceToBounds(),
-      isAutoScroll = null,
-      emitScrollEvent = false,
+      isAutoScroll = true,
+      emitScrollEvent = true,
     )
   }
 
