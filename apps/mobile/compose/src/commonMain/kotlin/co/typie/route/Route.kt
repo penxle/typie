@@ -59,6 +59,8 @@ sealed interface Route {
 
   data class Folder(val entityId: String) : Route
 
+  data class FolderDetails(val entityId: String) : Route
+
   data class Editor(val entityId: String) : Route
 
   data class Document(val entityId: String) : Route

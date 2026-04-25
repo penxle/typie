@@ -1,11 +1,18 @@
 package co.typie.screen.space.folder
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,7 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.entity.DocumentEntityShareSheet
 import co.typie.domain.entity.DocumentItemActionsSheet
@@ -29,6 +38,7 @@ import co.typie.domain.entity.EntityContainerListContent
 import co.typie.domain.entity.EntityContainerSelectionBar
 import co.typie.domain.entity.EntityContainerTopBarTrailing
 import co.typie.domain.entity.EntityContainerTopBarTrailingKey
+import co.typie.domain.entity.EntityIcon
 import co.typie.domain.entity.EntityIconPickerSheet
 import co.typie.domain.entity.EntityIconPickerStopPolicy
 import co.typie.domain.entity.EntityIconPickerStops
@@ -54,9 +64,13 @@ import co.typie.domain.entitytransfer.EntityPasteBar
 import co.typie.domain.entitytransfer.EntityPasteTarget
 import co.typie.domain.entitytransfer.toMessage
 import co.typie.domain.entitytransfer.toTransferSource
+import co.typie.ext.InteractionScope
+import co.typie.ext.clickable
+import co.typie.ext.pressScale
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
+import co.typie.graphql.fragment.EntityIcon_entity
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
@@ -72,6 +86,7 @@ import co.typie.shell.MainBottomBarPillKey
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
+import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
@@ -85,7 +100,10 @@ import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
+import co.typie.ui.icon.Icon
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
 
@@ -108,7 +126,6 @@ fun FolderScreen(entityId: String) {
   val displayRoot = model.query.data.entity
   val entityDetails = root?.entityDetails_entity
   val displayEntityDetails = displayRoot.entityDetails_entity
-  val topBarEntity = displayRoot.folderTopBar_entity
   val loading = root == null
   val entity = entityDetails?.entityRow_entity
   val displayEntity = displayEntityDetails.entityRow_entity
@@ -283,133 +300,20 @@ fun FolderScreen(entityId: String) {
     }
   }
 
-  fun onCenterAction(action: EntityAction) {
-    when (action) {
-      EntityAction.Rename -> {
-        val resolvedFolder = folder ?: return
-        presenterScope.launch {
-          sheet.present {
-            FolderRenameSheet(
-              model = model,
-              folderId = resolvedFolder.id,
-              initialName = resolvedFolder.name,
-            )
-          }
-        }
-      }
-
-      EntityAction.ChangeIcon -> {
-        val resolvedEntity = entity
-        val resolvedFolder = folder
-        if (resolvedEntity == null || resolvedFolder == null) {
-          return
-        }
-        presenterScope.launch {
-          sheet.present(stops = EntityIconPickerStops, stopPolicy = EntityIconPickerStopPolicy) {
-            EntityIconPickerSheet(
-              model = model,
-              entityId = resolvedEntity.id,
-              initialIcon = resolvedEntity.entityIcon_entity.icon,
-              initialColor = resolvedEntity.entityIcon_entity.iconColor,
-              defaultIconName = "folder",
-            )
-          }
-        }
-      }
-
-      EntityAction.Share -> {
-        val resolvedEntity = entity
-        val resolvedFolder = folder
-        if (resolvedEntity == null || resolvedFolder == null) {
-          return
-        }
-        presentFolderShare(listOf(resolvedEntity.id))
-      }
-
-      EntityAction.Move -> {
-        val resolvedEntity = entityDetails
-        val resolvedFolder = folder
-        if (resolvedEntity == null || resolvedFolder == null) {
-          return
-        }
-        presenterScope.launch {
-          sheet.present(stops = EntityMoveStops) {
-            EntityMoveSheet(
-              source = resolvedEntity.toTransferSource(),
-              initialDestinationId = resolvedEntity.ancestors.lastOrNull()?.id,
-            )
-          }
-        }
-      }
-
-      EntityAction.OpenExternal -> {
-        entity?.url?.let(uriHandler::openUri)
-      }
-
-      EntityAction.StartReorder -> {
-        selection.reset()
-        isReordering = true
-      }
-
-      EntityAction.SelectMultiple -> {
-        startSelection()
-      }
-
-      EntityAction.Copy -> {
-        val resolvedEntity = entityDetails
-        val sourceSiteId = root?.site?.id
-        val resolvedFolder = folder
-        if (resolvedEntity == null || resolvedFolder == null || sourceSiteId == null) {
-          return
-        }
-        clipboard.setCopy(
-          sourceSiteId = sourceSiteId,
-          items = listOf(resolvedEntity.toTransferSource()),
-        )
-      }
-
-      EntityAction.Cut -> {
-        val resolvedEntity = entityDetails
-        val sourceSiteId = root?.site?.id
-        val resolvedFolder = folder
-        if (resolvedEntity == null || resolvedFolder == null || sourceSiteId == null) {
-          return
-        }
-        clipboard.setCut(
-          sourceSiteId = sourceSiteId,
-          items = listOf(resolvedEntity.toTransferSource()),
-        )
-      }
-
-      EntityAction.Delete -> {
-        val resolvedFolder = folder ?: return
-        presenterScope.launch {
-          val result =
-            dialog.confirm(
-              title = "폴더 삭제",
-              message = "\"${resolvedFolder.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-              confirmText = "삭제하기",
-              confirmIsDestructive = true,
-            )
-          if (result is DialogResult.Resolved) {
-            model.deleteFolderEntity(entityId).withDefaultExceptionHandler(toast).onOk { nav.pop() }
-          }
-        }
-      }
-    }
-  }
-
   val editActions =
     listOf(
       EntityContainerEditAction(
         icon = Lucide.SquareCheck,
         label = "여러 항목 선택하기",
-        onClick = { onCenterAction(EntityAction.SelectMultiple) },
+        onClick = { startSelection() },
       ),
       EntityContainerEditAction(
         icon = Lucide.ChevronsUpDown,
         label = "순서 변경하기",
-        onClick = { onCenterAction(EntityAction.StartReorder) },
+        onClick = {
+          selection.reset()
+          isReordering = true
+        },
       ),
     )
 
@@ -417,12 +321,12 @@ fun FolderScreen(entityId: String) {
     leading = { TopBarBackButton() },
     center = {
       Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
-        FolderTopBarCenterMenu(
+        FolderTopBarButton(
+          entityIcon = displayEntity.entityIcon_entity,
           title = folderTitle,
           subtitle = folderMetadataSummary,
-          entity = topBarEntity,
           loading = loading,
-          onAction = ::onCenterAction,
+          onClick = { nav.navigate(Route.FolderDetails(entityId)) },
           modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
         )
       }
@@ -762,6 +666,66 @@ fun FolderScreen(entityId: String) {
             }
           },
       )
+    }
+  }
+}
+
+@Composable
+private fun FolderTopBarButton(
+  entityIcon: EntityIcon_entity,
+  title: String,
+  subtitle: String,
+  loading: Boolean,
+  onClick: suspend () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  InteractionScope {
+    Skeleton.Passive(enabled = loading) {
+      Box(
+        modifier =
+          modifier
+            .fillMaxWidth()
+            .height(TopBarDefaults.TitleHeight)
+            .clickable(enabled = !loading, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth().pressScale(),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          EntityIcon(entity = entityIcon, modifier = Modifier.size(21.dp))
+
+          Spacer(Modifier.width(12.dp))
+
+          Column(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+          ) {
+            Text(
+              text = title,
+              style = AppTheme.typography.title.copy(fontSize = 16.sp),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+              text = subtitle,
+              style = AppTheme.typography.caption.copy(fontSize = 13.sp),
+              color = AppTheme.colors.textMuted,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+
+          Spacer(Modifier.width(6.dp))
+
+          Icon(
+            icon = Lucide.ChevronRight,
+            modifier = Modifier.size(17.dp),
+            tint = AppTheme.colors.textMuted,
+          )
+        }
+      }
     }
   }
 }

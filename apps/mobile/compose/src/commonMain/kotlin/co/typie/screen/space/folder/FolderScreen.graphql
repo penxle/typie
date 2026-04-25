@@ -1,14 +1,6 @@
-fragment FolderTopBar_entity on Entity {
-  availability
-  visibility
-  ...EntityIcon_entity
-  ...EntityBreadcrumb_entity
-}
-
 query FolderScreen_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
     ...EntityDetails_entity
-    ...FolderTopBar_entity
 
     site {
       id

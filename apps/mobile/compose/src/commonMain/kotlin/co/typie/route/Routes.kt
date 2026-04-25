@@ -24,6 +24,7 @@ import co.typie.screen.settings.updateemail.UpdateEmailScreen
 import co.typie.screen.settings.updatepassword.UpdatePasswordScreen
 import co.typie.screen.settings.updateprofile.UpdateProfileScreen
 import co.typie.screen.settings.widgetsettings.WidgetSettingsScreen
+import co.typie.screen.space.folder.FolderDetailsScreen
 import co.typie.screen.space.folder.FolderScreen
 import co.typie.screen.space.notes.NotesScreen
 import co.typie.screen.space.space.SpaceScreen
@@ -66,6 +67,7 @@ fun MainRoutes(route: Route) {
     is Route.SpaceSettings -> SpaceSettingsScreen()
     is Route.Trash -> TrashScreen(entityId = route.entityId)
     is Route.Folder -> FolderScreen(entityId = route.entityId)
+    is Route.FolderDetails -> FolderDetailsScreen(entityId = route.entityId)
     is Route.Editor -> EditorScreen(entityId = route.entityId)
     is Route.Document -> DocumentScreen(entityId = route.entityId)
     else -> {}
