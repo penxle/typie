@@ -373,6 +373,11 @@ impl Paginator {
                     size: Size::new(self.page_width(), self.margins.top + self.margins.bottom),
                 });
             }
+        } else if !self.paginated {
+            if let Some(page) = self.pages.last_mut() {
+                page.y_end += self.margins.bottom;
+                page.size.height += self.margins.bottom;
+            }
         }
         self.pages
     }
@@ -574,6 +579,17 @@ mod tests {
         assert_eq!(pages[0].y_start, 0.0);
         // y_end = margin_top(20) + content(40) + margin_bottom(20) = 80
         assert_eq!(pages[0].y_end, 80.0);
+    }
+
+    #[test]
+    fn continuous_final_overflow_page_keeps_bottom_margin() {
+        let root = make_box(vec![make_line(1020.0), make_line(25.0)]);
+        let (_, pages) = paginate_c(root, 440.0, 1024.0, 20.0);
+
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].y_start, 0.0);
+        assert_eq!(pages[0].y_end, 1085.0);
+        assert_eq!(pages[0].size.height, 1085.0);
     }
 
     #[test]
