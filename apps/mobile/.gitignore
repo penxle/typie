@@ -26,3 +26,4 @@ ios/Frameworks/
 **/fastlane/report.xml
 *.jks
 !android/keystore-debug.jks
+.swiftpm-locks/
