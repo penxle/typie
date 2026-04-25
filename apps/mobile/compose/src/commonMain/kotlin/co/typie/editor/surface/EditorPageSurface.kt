@@ -143,7 +143,6 @@ internal fun EditorPageSurface(
           trigger = trigger,
           onAttach = { handle ->
             editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
-            render()
           },
           onDetach = { editor.detachSurface(page) },
           onResize = {

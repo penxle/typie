@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.conflate
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
@@ -72,7 +73,7 @@ internal actual fun RenderCanvas(
     var cachedBytes: ByteArray? = null
     var cachedSkBitmap: Bitmap? = null
 
-    trigger.collect { version ->
+    trigger.conflate().collect { version ->
       if (!RenderBuffer.beginRead(handle)) return@collect
 
       val w = RenderBuffer.getPixelWidth(handle)

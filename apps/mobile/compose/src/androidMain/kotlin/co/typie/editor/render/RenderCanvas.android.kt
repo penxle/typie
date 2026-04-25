@@ -20,6 +20,7 @@ import androidx.core.graphics.createBitmap
 import com.sun.jna.Pointer
 import java.nio.ByteBuffer
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.conflate
 
 @Composable
 internal actual fun RenderCanvas(
@@ -72,7 +73,7 @@ internal actual fun RenderCanvas(
     var cachedBytes: ByteArray? = null
     var cachedAndroidBitmap: Bitmap? = null
 
-    trigger.collect { version ->
+    trigger.conflate().collect { version ->
       if (!RenderBuffer.beginRead(handle)) return@collect
 
       val w = RenderBuffer.getPixelWidth(handle)
