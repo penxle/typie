@@ -22,19 +22,10 @@ import kotlinx.cinterop.ExperimentalForeignApi
 
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor
-): PlatformTextInputMethodRequest =
-  object : PlatformTextInputMethodRequest {
-    override val value: () -> TextFieldValue = value@{
-      val ctx = editor.ime ?: return@value TextFieldValue()
-      val selectionStart = ctx.selection.start - ctx.windowStart
-      val selectionEnd = ctx.selection.end - ctx.windowStart
-
-      TextFieldValue(
-        text = ctx.text,
-        selection = TextRange(selectionStart, selectionEnd),
-        composition =
-          ctx.composing?.let { TextRange(it.start - ctx.windowStart, it.end - ctx.windowStart) },
-      )
+): PlatformTextInputMethodRequest {
+  return object : PlatformTextInputMethodRequest {
+    override val value: () -> TextFieldValue = {
+      editor.ime?.toTextFieldValue() ?: TextFieldValue()
     }
 
     override val imeOptions: ImeOptions =
@@ -80,6 +71,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { _ -> }
   }
+}
 
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
   // iOS: pull-based via request.value — no explicit notification needed

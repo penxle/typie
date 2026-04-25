@@ -28,15 +28,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {
-      val ctx = editor.ime(Int.MAX_VALUE, Int.MAX_VALUE)
-      val selectionStart = ctx.selection.start - ctx.windowStart
-      val selectionEnd = ctx.selection.end - ctx.windowStart
-      TextFieldValue(
-        text = ctx.text,
-        selection = TextRange(selectionStart, selectionEnd),
-        composition =
-          ctx.composing?.let { TextRange(it.start - ctx.windowStart, it.end - ctx.windowStart) },
-      )
+      editor.ime?.toTextFieldValue() ?: TextFieldValue()
     }
 
     override val imeOptions: ImeOptions =
