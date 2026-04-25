@@ -32,7 +32,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
@@ -293,7 +292,7 @@ fun <K : Any> Modifier.reorderableItem(state: ReorderableColumnState<K>, key: K)
     state.clearSettling(key)
   }
 
-  return this.onPlaced { coords ->
+  return this.onGloballyPositioned { coords ->
       with(lookaheadScope) {
         val lookaheadCoords = coords.toLookaheadCoordinates()
         val origin = lookaheadCoords.positionInWindow()
