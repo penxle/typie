@@ -178,7 +178,6 @@ internal class EditorInputNode(
   }
 
   override fun onDetach() {
-    autoScrollController = null
     notifyTextInputFocusChanged(this, false)
     registerTextInputClient(this, null)
     focusedJob?.cancel()

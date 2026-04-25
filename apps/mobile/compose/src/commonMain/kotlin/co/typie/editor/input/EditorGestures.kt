@@ -131,7 +131,7 @@ private class EditorGesturesNode(
   }
 
   override fun onDetach() {
-    autoScrollController = null
+    resetPointerState()
     super.onDetach()
   }
 }

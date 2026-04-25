@@ -182,7 +182,7 @@ private class EditorExtensionForwardingNode(
   }
 
   override fun onDetach() {
-    autoScrollController = null
+    resetPointerState()
     super.onDetach()
   }
 }
