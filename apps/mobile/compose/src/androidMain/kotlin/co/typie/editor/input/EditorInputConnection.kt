@@ -18,17 +18,22 @@ import android.view.inputmethod.TextSnapshot
 import androidx.annotation.RequiresApi
 import co.typie.editor.Editor
 import co.typie.editor.ffi.CompositionOp
-import co.typie.editor.ffi.DeletionOp
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.SelectionOp
 import java.util.concurrent.Executor
 import java.util.function.IntConsumer
 
 internal class EditorInputConnection(private val editor: Editor, private val view: View) :
   InputConnection {
-  private var batchLevel = 0
+  private val batch = ImeEditBatch { messages ->
+    editor.sync {
+      for (message in messages) {
+        enqueue(message)
+      }
+    }
+  }
 
   override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
     if (n < 0) return null
@@ -70,41 +75,41 @@ internal class EditorInputConnection(private val editor: Editor, private val vie
   override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
     if (value == "\n") {
-      editor.enqueue(Message.Key(FfiKeyEvent(Key.Enter)))
+      batch.enqueue(Message.Key(FfiKeyEvent(Key.Enter)))
     } else {
-      editor.enqueue(Message.Composition(CompositionOp.Commit(value)))
+      batch.enqueue(FlatImeOp.ReplaceSelection(value))
     }
     return true
   }
 
   override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
-    editor.enqueue(Message.Composition(CompositionOp.Update(value, null)))
+    batch.enqueue(FlatImeOp.Compose(value))
     return true
   }
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
-    editor.enqueue(Message.Composition(CompositionOp.SetRegion(start, end)))
+    batch.enqueue(FlatImeOp.SetComposition(start, end))
     return true
   }
 
   override fun finishComposingText(): Boolean {
-    editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
+    batch.enqueue(FlatImeOp.ClearComposition)
     return true
   }
 
   override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-    editor.enqueue(Message.Deletion(DeletionOp.Surrounding(beforeLength, afterLength)))
+    batch.enqueue(FlatImeOp.DeleteSurroundingUtf16(beforeLength, afterLength))
     return true
   }
 
   override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
-    editor.enqueue(Message.Deletion(DeletionOp.SurroundingCodePoints(beforeLength, afterLength)))
+    batch.enqueue(FlatImeOp.DeleteSurrounding(beforeLength, afterLength))
     return true
   }
 
   override fun setSelection(start: Int, end: Int): Boolean {
-    editor.enqueue(Message.Selection(SelectionOp.SetFlat(start, end)))
+    batch.enqueue(FlatImeOp.SetSelection(start, end))
     return true
   }
 
@@ -119,7 +124,7 @@ internal class EditorInputConnection(private val editor: Editor, private val vie
         KeyEvent.KEYCODE_ESCAPE -> Key.Escape
         else -> return false
       }
-    editor.enqueue(Message.Key(FfiKeyEvent(key)))
+    batch.enqueue(Message.Key(FfiKeyEvent(key)))
     return true
   }
 
@@ -127,15 +132,9 @@ internal class EditorInputConnection(private val editor: Editor, private val vie
 
   override fun performContextMenuAction(id: Int): Boolean = false
 
-  override fun beginBatchEdit(): Boolean {
-    batchLevel++
-    return true
-  }
+  override fun beginBatchEdit(): Boolean = batch.beginBatchEdit()
 
-  override fun endBatchEdit(): Boolean {
-    if (batchLevel > 0) batchLevel--
-    return batchLevel > 0
-  }
+  override fun endBatchEdit(): Boolean = batch.endBatchEdit()
 
   override fun clearMetaKeyStates(states: Int): Boolean = false
 
@@ -148,8 +147,7 @@ internal class EditorInputConnection(private val editor: Editor, private val vie
   override fun getHandler() = null
 
   override fun closeConnection() {
-    editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
-    batchLevel = 0
+    batch.closeConnection()
   }
 
   override fun commitContent(
@@ -186,4 +184,56 @@ internal class EditorInputConnection(private val editor: Editor, private val vie
   override fun takeSnapshot(): TextSnapshot? = null
 
   override fun setImeConsumesInput(imeConsumesInput: Boolean): Boolean = false
+}
+
+private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
+  private var batchLevel = 0
+  private val pendingOps = mutableListOf<FlatImeOp>()
+  private val pendingMessages = mutableListOf<Message>()
+
+  fun beginBatchEdit(): Boolean {
+    batchLevel++
+    return true
+  }
+
+  fun endBatchEdit(): Boolean {
+    if (batchLevel > 0) batchLevel--
+    flushIfReady()
+    return batchLevel > 0
+  }
+
+  fun closeConnection() {
+    batchLevel = 0
+    enqueue(FlatImeOp.ClearComposition)
+  }
+
+  fun enqueue(op: FlatImeOp) {
+    pendingOps.add(op)
+    flushIfReady()
+  }
+
+  fun enqueue(message: Message) {
+    flushOpsToPendingMessages()
+    pendingMessages.add(message)
+    flushIfReady()
+  }
+
+  private fun flushIfReady() {
+    if (batchLevel == 0) flush()
+  }
+
+  private fun flush() {
+    flushOpsToPendingMessages()
+    if (pendingMessages.isEmpty()) return
+
+    val messages = pendingMessages.toList()
+    pendingMessages.clear()
+    dispatch(messages)
+  }
+
+  private fun flushOpsToPendingMessages() {
+    if (pendingOps.isEmpty()) return
+    pendingMessages.add(Message.Composition(CompositionOp.Flat(pendingOps.toList())))
+    pendingOps.clear()
+  }
 }
