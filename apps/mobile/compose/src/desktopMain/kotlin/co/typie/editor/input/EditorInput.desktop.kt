@@ -21,10 +21,14 @@ import co.typie.editor.ffi.DeletionOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.syncWithBringIntoView
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
-  editor: Editor
+  editor: Editor,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {
@@ -41,7 +45,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       )
 
     override val onEditCommand: (List<EditCommand>) -> Unit = { commands ->
-      InputEditCommandHandler.handle(editor, commands)
+      InputEditCommandHandler.handle(editor, bringIntoViewRequests, commands)
     }
 
     override val onImeAction: ((ImeAction) -> Unit)? = null
@@ -78,7 +82,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       }
 
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
-      editor.sync {
+      editor.syncWithBringIntoView(bringIntoViewRequests) {
         val editorScope = this
         val scope =
           object : TextEditingScope {
@@ -110,6 +114,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
             }
           }
         scope.block()
+        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
       }
     }
   }

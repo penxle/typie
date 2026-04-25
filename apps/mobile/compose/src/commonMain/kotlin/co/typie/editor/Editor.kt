@@ -139,7 +139,7 @@ internal constructor(
     }
   }
 
-  fun sync(block: EditorScope.() -> Unit) {
+  fun sync(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
     if (!syncInProgress.compareAndSet(expectedValue = false, newValue = true)) {
       error("nested sync is not supported")
     }
@@ -157,7 +157,9 @@ internal constructor(
           block(collector)
           events = inner.tick()
           val version = versionCounter.addAndFetch(1L)
-          commit(readSnapshot(version))
+          val snapshot = readSnapshot(version)
+          beforeCommit?.invoke(snapshot)
+          commit(snapshot)
         }
         emit(events)
       }

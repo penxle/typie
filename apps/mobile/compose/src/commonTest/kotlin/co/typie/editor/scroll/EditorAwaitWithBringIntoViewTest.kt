@@ -32,4 +32,22 @@ class EditorAwaitWithBringIntoViewTest {
         requests.activateForVersion(version = 1L),
       )
     }
+
+  @Test
+  fun `sync bringIntoView attaches to committed editor version`() =
+    runTest(dispatcher) {
+      val requests = EditorBringIntoViewRequests()
+      val editor = Editor(FakeFfiEditor(), this, dispatcher)
+
+      editor.syncWithBringIntoView(requests) {
+        enqueue(Message.System(SystemEvent.Initialize))
+        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+      }
+
+      assertNull(requests.activateForVersion(version = 0L))
+      assertEquals(
+        EditorBringIntoViewTarget.CurrentCursorLine,
+        requests.activateForVersion(version = 1L),
+      )
+    }
 }

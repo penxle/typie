@@ -22,16 +22,23 @@ import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.syncWithBringIntoView
 import java.util.concurrent.Executor
 import java.util.function.IntConsumer
 
-internal class EditorInputConnection(private val editor: Editor, private val view: View) :
-  InputConnection {
+internal class EditorInputConnection(
+  private val editor: Editor,
+  private val view: View,
+  private val bringIntoViewRequests: EditorBringIntoViewRequests,
+) : InputConnection {
   private val batch = ImeEditBatch { messages ->
-    editor.sync {
+    editor.syncWithBringIntoView(bringIntoViewRequests) {
       for (message in messages) {
         enqueue(message)
       }
+      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
     }
   }
 

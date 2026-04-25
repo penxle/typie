@@ -44,7 +44,8 @@ internal fun Modifier.editorInput(
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal expect suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
-  editor: Editor
+  editor: Editor,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
 ): PlatformTextInputMethodRequest
 
 private data class EditorInputElement(
@@ -159,7 +160,7 @@ internal class EditorInputNode(
       if (focusState.isFocused) {
         coroutineScope.launch {
           establishTextInputSession {
-            val request = createEditorInputRequest(editor)
+            val request = createEditorInputRequest(editor, bringIntoViewRequests)
             launch {
               notifyImeSelectionChanged(editor)
               snapshotFlow { editor.selection to editor.cursor }

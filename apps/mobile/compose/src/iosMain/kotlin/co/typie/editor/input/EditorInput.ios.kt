@@ -18,10 +18,12 @@ import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
 import co.typie.editor.InputEditCommandHandler
+import co.typie.editor.scroll.EditorBringIntoViewRequests
 import kotlinx.cinterop.ExperimentalForeignApi
 
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
-  editor: Editor
+  editor: Editor,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {
@@ -38,7 +40,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       )
 
     override val onEditCommand: (List<EditCommand>) -> Unit = { commands ->
-      InputEditCommandHandler.handle(editor, commands)
+      InputEditCommandHandler.handle(editor, bringIntoViewRequests, commands)
     }
 
     override val onImeAction: ((ImeAction) -> Unit)? = null

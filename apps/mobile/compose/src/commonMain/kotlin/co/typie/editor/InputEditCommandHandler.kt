@@ -15,10 +15,17 @@ import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.syncWithBringIntoView
 
 internal object InputEditCommandHandler {
-  fun handle(editor: Editor, commands: List<EditCommand>) {
-    editor.sync {
+  fun handle(
+    editor: Editor,
+    bringIntoViewRequests: EditorBringIntoViewRequests,
+    commands: List<EditCommand>,
+  ) {
+    editor.syncWithBringIntoView(bringIntoViewRequests) {
       val ops = mutableListOf<FlatImeOp>()
 
       for (command in commands) {
@@ -39,6 +46,8 @@ internal object InputEditCommandHandler {
       if (ops.isNotEmpty()) {
         enqueue(Message.Composition(CompositionOp.Flat(ops)))
       }
+
+      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
     }
   }
 

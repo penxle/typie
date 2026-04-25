@@ -9,10 +9,12 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import co.typie.editor.Editor
+import co.typie.editor.scroll.EditorBringIntoViewRequests
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
-  editor: Editor
+  editor: Editor,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
 ): PlatformTextInputMethodRequest {
   val androidView = view
   return PlatformTextInputMethodRequest { outAttrs ->
@@ -24,7 +26,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     val ctx = editor.ime(0, 0)
     outAttrs.initialSelStart = ctx.selection.start
     outAttrs.initialSelEnd = ctx.selection.end
-    EditorInputConnection(editor, androidView)
+    EditorInputConnection(editor, androidView, bringIntoViewRequests)
   }
 }
 
