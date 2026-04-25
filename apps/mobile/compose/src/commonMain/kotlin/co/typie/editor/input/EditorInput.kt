@@ -48,6 +48,9 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
   bringIntoViewRequests: EditorBringIntoViewRequests,
 ): PlatformTextInputMethodRequest
 
+internal fun requiresRawKeyTextFallback(platform: Platform): Boolean =
+  platform == Platform.Android || platform == Platform.Desktop
+
 private data class EditorInputElement(
   private val editor: Editor,
   private val platform: Platform,
@@ -129,6 +132,9 @@ internal class EditorInputNode(
     if (event.type != KeyEventType.KeyDown) return false
     if (handleKeyDown(editor, platform, bindings, bringIntoViewRequests, coroutineScope, event)) {
       return true
+    }
+    if (!requiresRawKeyTextFallback(platform)) {
+      return false
     }
 
     val cp = event.utf16CodePoint
