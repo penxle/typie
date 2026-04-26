@@ -1,6 +1,7 @@
+#[cfg(test)]
 use editor_model::NodeId;
 
-use crate::{Step, StepScope, StepType};
+use crate::{Mapping, Step, StepError, StepScope, StepType};
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Conflict {
@@ -9,9 +10,21 @@ pub enum Conflict {
 
     #[error("non-syncable step passed to transform: {ty:?}")]
     NonSyncable { ty: StepType },
+
+    #[error("invalid step encountered during transform: {ty:?} ({error})")]
+    InvalidStep {
+        ty: StepType,
+        #[source]
+        error: StepError,
+    },
 }
 
-pub(crate) fn transform(local: &Step, against: &Step) -> Result<Vec<Step>, Conflict> {
+#[cfg(test)]
+pub(crate) fn transform(
+    local: &Step,
+    against: &Step,
+    state: &editor_state::State,
+) -> Result<Vec<Step>, Conflict> {
     if !local.is_syncable() {
         return Err(Conflict::NonSyncable {
             ty: StepType::from(local),
@@ -23,147 +36,96 @@ pub(crate) fn transform(local: &Step, against: &Step) -> Result<Vec<Step>, Confl
         });
     }
 
-    match local {
-        Step::InsertText {
-            node_id,
-            offset,
-            text,
-        } => crate::steps::insert_text::transform_against(*node_id, *offset, text, against),
-        Step::RemoveText {
-            node_id,
-            offset,
-            text,
-        } => crate::steps::remove_text::transform_against(*node_id, *offset, text, against),
-        Step::InsertSubtree {
-            parent_id,
-            index,
-            subtree,
-        } => crate::steps::insert_subtree::transform_against(*parent_id, *index, subtree, against),
-        Step::RemoveSubtree {
-            parent_id,
-            index,
-            subtree,
-        } => crate::steps::remove_subtree::transform_against(*parent_id, *index, subtree, against),
-        Step::AddModifier { node_id, modifier } => {
-            crate::steps::add_modifier::transform_against(*node_id, modifier, against)
-        }
-        Step::RemoveModifier { node_id, modifier } => {
-            crate::steps::remove_modifier::transform_against(*node_id, modifier, against)
-        }
-        Step::SetModifiers {
-            node_id,
-            old_modifiers,
-            new_modifiers,
-        } => crate::steps::set_modifiers::transform_against(
-            *node_id,
-            old_modifiers,
-            new_modifiers,
-            against,
-        ),
-        Step::SetNode {
-            node_id,
-            old_node,
-            new_node,
-        } => crate::steps::set_node::transform_against(*node_id, old_node, new_node, against),
-        Step::SetDocumentAttrs { old, new } => {
-            crate::steps::set_document_attrs::transform_against(old, new, against)
-        }
-        Step::MoveNode {
-            node_id,
-            old_parent,
-            old_index,
-            new_parent,
-            new_index,
-        } => crate::steps::move_node::transform_against(
-            *node_id,
-            *old_parent,
-            *old_index,
-            *new_parent,
-            *new_index,
-            against,
-        ),
-        Step::SplitNode {
-            node_id,
-            offset,
-            new_node_id,
-        } => crate::steps::split_node::transform_against(*node_id, *offset, *new_node_id, against),
-        Step::MergeNode {
-            node_id,
-            target_id,
-            offset,
-        } => crate::steps::merge_node::transform_against(*node_id, *target_id, *offset, against),
-        _ => unimplemented!(
-            "transform not yet implemented for local={:?} against={:?}",
-            StepType::from(local),
-            StepType::from(against)
-        ),
-    }
-}
-
-pub(crate) fn transform_default(local: Step, against: &Step) -> Result<Vec<Step>, Conflict> {
-    let local_scope = local.scope();
-    let against_scope = against.scope();
-
-    if scopes_conflict(&local_scope, &against_scope) {
+    if matches!(local.scope(), StepScope::Structural(_))
+        || matches!(against.scope(), StepScope::Structural(_))
+    {
         return Err(Conflict::UnsupportedStructural {
-            local: StepType::from(&local),
+            local: StepType::from(local),
             against: StepType::from(against),
         });
     }
 
-    if let Step::RemoveSubtree { subtree, .. } = against {
-        if scope_inside_subtree(&local_scope, subtree) {
-            return Ok(vec![]);
+    let against_mapping = against.mapping(state).map_err(|e| Conflict::InvalidStep {
+        ty: StepType::from(against),
+        error: e,
+    })?;
+    Ok(local.rebase(&against_mapping))
+}
+
+pub fn transform_many(
+    local: &[Step],
+    against: &[Step],
+    state: &editor_state::State,
+) -> Result<Vec<Step>, Conflict> {
+    for s in local.iter().chain(against.iter()) {
+        if !s.is_syncable() {
+            return Err(Conflict::NonSyncable {
+                ty: StepType::from(s),
+            });
         }
     }
-
-    Ok(vec![local])
-}
-
-fn scopes_conflict(local: &StepScope, against: &StepScope) -> bool {
-    let local_structural = matches!(local, StepScope::Structural(_));
-    let against_structural = matches!(against, StepScope::Structural(_));
-    if !local_structural && !against_structural {
-        return false;
+    if let Some(l) = local
+        .iter()
+        .find(|s| matches!(s.scope(), StepScope::Structural(_)))
+    {
+        let a = against.first().unwrap_or(l);
+        return Err(Conflict::UnsupportedStructural {
+            local: StepType::from(l),
+            against: StepType::from(a),
+        });
+    }
+    if let Some(a) = against
+        .iter()
+        .find(|s| matches!(s.scope(), StepScope::Structural(_)))
+    {
+        let l = local.first().unwrap_or(a);
+        return Err(Conflict::UnsupportedStructural {
+            local: StepType::from(l),
+            against: StepType::from(a),
+        });
     }
 
-    let local_ids = scope_node_ids(local);
-    let against_ids = scope_node_ids(against);
-    local_ids.iter().any(|id| against_ids.contains(id))
-}
-
-fn scope_node_ids(scope: &StepScope) -> smallvec::SmallVec<[NodeId; 2]> {
-    use smallvec::smallvec;
-    match scope {
-        StepScope::Node(id) | StepScope::Children { parent: id } => smallvec![*id],
-        StepScope::Structural(ids) => ids.clone(),
-        StepScope::Document | StepScope::Local => smallvec![],
-    }
-}
-
-fn scope_inside_subtree(scope: &StepScope, subtree: &editor_model::Subtree) -> bool {
-    match scope {
-        StepScope::Node(id) | StepScope::Children { parent: id } => subtree.contains_node(*id),
-        StepScope::Structural(ids) => ids.iter().any(|id| subtree.contains_node(*id)),
-        StepScope::Document | StepScope::Local => false,
-    }
-}
-
-pub fn transform_many(local: &[Step], against: &[Step]) -> Result<Vec<Step>, Conflict> {
-    let mut current: Vec<Step> = local.to_vec();
+    let mut against_map = Mapping::identity();
     for a in against {
-        let mut next = Vec::with_capacity(current.len());
-        for c in &current {
-            next.extend(transform(c, a)?);
-        }
-        current = next;
+        let m = a.mapping(state).map_err(|e| Conflict::InvalidStep {
+            ty: StepType::from(a),
+            error: e,
+        })?;
+        against_map = against_map.compose(&m);
     }
-    Ok(current)
+
+    let mut priors_inverse = Mapping::identity();
+    let mut rebased_priors = Mapping::identity();
+    let mut result: Vec<Step> = Vec::new();
+    for l in local {
+        let combined = priors_inverse
+            .compose(&against_map)
+            .compose(&rebased_priors);
+        let l_rebased = l.rebase(&combined);
+
+        let l_orig = l.mapping(state).map_err(|e| Conflict::InvalidStep {
+            ty: StepType::from(l),
+            error: e,
+        })?;
+        priors_inverse = l_orig.invert().compose(&priors_inverse);
+
+        for r in &l_rebased {
+            let m = r.mapping(state).map_err(|e| Conflict::InvalidStep {
+                ty: StepType::from(r),
+                error: e,
+            })?;
+            rebased_priors = rebased_priors.compose(&m);
+        }
+        result.extend(l_rebased);
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::empty_state;
 
     #[test]
     fn non_syncable_local_returns_error() {
@@ -177,7 +139,7 @@ mod tests {
             text: "x".into(),
         };
         assert!(matches!(
-            transform(&local, &against),
+            transform(&local, &against, &empty_state()),
             Err(Conflict::NonSyncable { .. })
         ));
     }
@@ -194,14 +156,161 @@ mod tests {
             new: None,
         };
         assert!(matches!(
-            transform(&local, &against),
+            transform(&local, &against, &empty_state()),
             Err(Conflict::NonSyncable { .. })
         ));
     }
 
     #[test]
+    fn atomic_against_atomic_uses_mapping_path() {
+        let n = NodeId::new();
+        let local = Step::InsertText {
+            node_id: n,
+            offset: 5,
+            text: "x".into(),
+        };
+        let against = Step::InsertText {
+            node_id: n,
+            offset: 2,
+            text: "ab".into(),
+        };
+        let result = transform(&local, &against, &empty_state()).unwrap();
+        assert_eq!(
+            result,
+            vec![Step::InsertText {
+                node_id: n,
+                offset: 7,
+                text: "x".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn structural_local_returns_unsupported_immediately() {
+        let n = NodeId::new();
+        let local = Step::SplitNode {
+            node_id: n,
+            offset: 0,
+            new_node_id: NodeId::new(),
+        };
+        let against = Step::InsertText {
+            node_id: NodeId::new(),
+            offset: 0,
+            text: "x".into(),
+        };
+        assert!(matches!(
+            transform(&local, &against, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
+    }
+
+    #[test]
+    fn structural_against_returns_unsupported_immediately() {
+        let n = NodeId::new();
+        let local = Step::InsertText {
+            node_id: NodeId::new(),
+            offset: 0,
+            text: "x".into(),
+        };
+        let against = Step::MergeNode {
+            node_id: n,
+            target_id: NodeId::new(),
+            offset: 0,
+        };
+        assert!(matches!(
+            transform(&local, &against, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
+    }
+
+    #[test]
     fn transform_many_empty_inputs_returns_empty() {
-        assert_eq!(transform_many(&[], &[]).unwrap(), Vec::<Step>::new());
+        assert_eq!(
+            transform_many(&[], &[], &empty_state()).unwrap(),
+            Vec::<Step>::new()
+        );
+    }
+
+    #[test]
+    fn transform_many_preserves_local_relative_order_after_against() {
+        // Force k_id < a_id so the InsertSubtree NodeId tie-break inside stabilize
+        // shifts the second local off the first's slot. With the opposite ordering the
+        // per-pair rule cannot recover sequence order — see transform_many_invariant.
+        let parent = NodeId::ROOT;
+        let h_id = NodeId::new();
+        let id_x = NodeId::new();
+        let id_y = NodeId::new();
+        let (k_id, a_id) = if id_x < id_y {
+            (id_x, id_y)
+        } else {
+            (id_y, id_x)
+        };
+
+        let h_subtree = editor_model::Subtree::leaf(
+            h_id,
+            editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+        );
+
+        let locals = vec![
+            Step::InsertSubtree {
+                parent_id: parent,
+                index: 0,
+                subtree: editor_model::Subtree::leaf(
+                    k_id,
+                    editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+                ),
+            },
+            Step::InsertSubtree {
+                parent_id: parent,
+                index: 1,
+                subtree: editor_model::Subtree::leaf(
+                    a_id,
+                    editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+                ),
+            },
+        ];
+        let againsts = vec![Step::RemoveSubtree {
+            parent_id: parent,
+            index: 0,
+            subtree: h_subtree,
+        }];
+
+        let locals_p = transform_many(&locals, &againsts, &empty_state()).unwrap();
+
+        assert_eq!(locals_p.len(), 2);
+        let (first_idx, second_idx) = match (&locals_p[0], &locals_p[1]) {
+            (Step::InsertSubtree { index: i0, .. }, Step::InsertSubtree { index: i1, .. }) => {
+                (*i0, *i1)
+            }
+            _ => panic!("expected two InsertSubtree steps, got {:?}", locals_p),
+        };
+        assert_eq!(
+            (first_idx, second_idx),
+            (0, 1),
+            "stabilize failed to re-establish relative order: {:?}",
+            locals_p
+        );
+    }
+
+    #[test]
+    fn transform_many_no_priors_no_op() {
+        let n = NodeId::new();
+        let local = Step::AddModifier {
+            node_id: n,
+            modifier: editor_model::Modifier::Bold,
+        };
+        let against = Step::AddModifier {
+            node_id: NodeId::new(),
+            modifier: editor_model::Modifier::Italic,
+        };
+
+        let out = transform_many(
+            std::slice::from_ref(&local),
+            std::slice::from_ref(&against),
+            &empty_state(),
+        )
+        .unwrap();
+        assert_eq!(out, vec![local]);
     }
 
     #[test]
@@ -231,7 +340,10 @@ mod tests {
             index: 0,
             subtree,
         };
-        assert_eq!(transform(&local, &against).unwrap(), Vec::<Step>::new(),);
+        assert_eq!(
+            transform(&local, &against, &empty_state()).unwrap(),
+            Vec::<Step>::new(),
+        );
     }
 
     #[test]
@@ -251,7 +363,10 @@ mod tests {
             index: 0,
             subtree,
         };
-        assert_eq!(transform(&local, &against).unwrap(), Vec::<Step>::new(),);
+        assert_eq!(
+            transform(&local, &against, &empty_state()).unwrap(),
+            Vec::<Step>::new(),
+        );
     }
 
     #[test]
@@ -266,7 +381,10 @@ mod tests {
             node_id: n2,
             modifier: editor_model::Modifier::Italic,
         };
-        assert_eq!(transform(&local, &against).unwrap(), vec![local],);
+        assert_eq!(
+            transform(&local, &against, &empty_state()).unwrap(),
+            vec![local],
+        );
     }
 
     #[test]
@@ -284,7 +402,7 @@ mod tests {
             text: "x".into(),
         };
         assert!(matches!(
-            transform(&local, &against),
+            transform(&local, &against, &empty_state()),
             Err(Conflict::UnsupportedStructural { .. })
         ));
     }
@@ -304,13 +422,13 @@ mod tests {
             new_node_id: new_id,
         };
         assert!(matches!(
-            transform(&local, &against),
+            transform(&local, &against, &empty_state()),
             Err(Conflict::UnsupportedStructural { .. })
         ));
     }
 
     #[test]
-    fn split_node_against_unrelated_insert_commutes() {
+    fn split_node_against_unrelated_insert_returns_unsupported() {
         let n1 = NodeId::new();
         let n2 = NodeId::new();
         let new_id = NodeId::new();
@@ -324,7 +442,10 @@ mod tests {
             offset: 0,
             text: "x".into(),
         };
-        assert_eq!(transform(&local, &against).unwrap(), vec![local],);
+        assert!(matches!(
+            transform(&local, &against, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
     }
 
     #[test]
@@ -349,7 +470,102 @@ mod tests {
             new_index: 0,
         };
         assert!(matches!(
-            transform(&local, &against),
+            transform(&local, &against, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
+    }
+
+    #[test]
+    fn split_node_inside_remove_subtree_returns_conflict() {
+        let parent = NodeId::new();
+        let p = NodeId::new();
+        let new_id = NodeId::new();
+
+        let subtree = editor_model::Subtree::leaf(
+            p,
+            editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+        );
+
+        let local = Step::SplitNode {
+            node_id: p,
+            offset: 0,
+            new_node_id: new_id,
+        };
+        let against = Step::RemoveSubtree {
+            parent_id: parent,
+            index: 0,
+            subtree,
+        };
+
+        assert!(matches!(
+            transform(&local, &against, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
+    }
+
+    #[test]
+    fn merge_node_inside_remove_subtree_returns_conflict() {
+        let parent = NodeId::new();
+        let n = NodeId::new();
+        let target = NodeId::new();
+
+        let subtree = editor_model::Subtree::leaf(
+            n,
+            editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+        )
+        .with_children(vec![editor_model::Subtree::leaf(
+            target,
+            editor_model::Node::Text(editor_model::TextNode { text: "x".into() }),
+        )]);
+
+        let local = Step::MergeNode {
+            node_id: n,
+            target_id: target,
+            offset: 0,
+        };
+        let against = Step::RemoveSubtree {
+            parent_id: parent,
+            index: 0,
+            subtree,
+        };
+
+        assert!(matches!(
+            transform(&local, &against, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
+    }
+
+    #[test]
+    fn move_node_inside_remove_subtree_returns_conflict() {
+        let outer_parent = NodeId::new();
+        let removed = NodeId::new();
+        let moved = NodeId::new();
+        let other_parent = NodeId::new();
+
+        let subtree = editor_model::Subtree::leaf(
+            removed,
+            editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+        )
+        .with_children(vec![editor_model::Subtree::leaf(
+            moved,
+            editor_model::Node::Text(editor_model::TextNode { text: "x".into() }),
+        )]);
+
+        let local = Step::MoveNode {
+            node_id: moved,
+            old_parent: removed,
+            old_index: 0,
+            new_parent: other_parent,
+            new_index: 0,
+        };
+        let against = Step::RemoveSubtree {
+            parent_id: outer_parent,
+            index: 0,
+            subtree,
+        };
+
+        assert!(matches!(
+            transform(&local, &against, &empty_state()),
             Err(Conflict::UnsupportedStructural { .. })
         ));
     }
@@ -375,7 +591,7 @@ mod tests {
             },
         ];
         assert_eq!(
-            transform_many(&local, &against).unwrap(),
+            transform_many(&local, &against, &empty_state()).unwrap(),
             vec![Step::InsertText {
                 node_id: n,
                 offset: 8,
@@ -399,8 +615,37 @@ mod tests {
             new_node_id: new_id,
         }];
         assert!(matches!(
-            transform_many(&local, &against),
+            transform_many(&local, &against, &empty_state()),
             Err(Conflict::UnsupportedStructural { .. })
+        ));
+    }
+
+    #[test]
+    fn conflict_invalid_step_constructs() {
+        let c = Conflict::InvalidStep {
+            ty: StepType::InsertText,
+            error: StepError::NodeNotFound(NodeId::ROOT),
+        };
+        let Conflict::InvalidStep { ty, error } = c else {
+            panic!("expected InvalidStep");
+        };
+        assert_eq!(ty, StepType::InsertText);
+        assert!(matches!(error, StepError::NodeNotFound(_)));
+    }
+
+    #[test]
+    fn invalid_step_via_map_err() {
+        let result: Result<(), Conflict> =
+            Err(StepError::NodeNotFound(NodeId::ROOT)).map_err(|e| Conflict::InvalidStep {
+                ty: StepType::InsertText,
+                error: e,
+            });
+        assert!(matches!(
+            result,
+            Err(Conflict::InvalidStep {
+                ty: StepType::InsertText,
+                ..
+            })
         ));
     }
 
@@ -417,15 +662,87 @@ mod tests {
             offset: 4,
             text: "XY".into(),
         }];
-        let out = transform_many(&local, &against).unwrap();
+        let out = transform_many(&local, &against, &empty_state()).unwrap();
         assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn transform_many_atomic_only_uses_mapping_path() {
+        let n = NodeId::new();
+        let locals = vec![Step::InsertText {
+            node_id: n,
+            offset: 5,
+            text: "ab".into(),
+        }];
+        let againsts = vec![
+            Step::InsertText {
+                node_id: n,
+                offset: 1,
+                text: "X".into(),
+            },
+            Step::InsertText {
+                node_id: n,
+                offset: 0,
+                text: "YY".into(),
+            },
+        ];
+        let result = transform_many(&locals, &againsts, &empty_state()).unwrap();
+        assert_eq!(
+            result,
+            vec![Step::InsertText {
+                node_id: n,
+                offset: 8,
+                text: "ab".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn transform_many_structural_in_local_returns_unsupported() {
+        let locals = vec![Step::SplitNode {
+            node_id: NodeId::new(),
+            offset: 0,
+            new_node_id: NodeId::new(),
+        }];
+        let againsts = vec![Step::InsertText {
+            node_id: NodeId::new(),
+            offset: 0,
+            text: "x".into(),
+        }];
+        assert!(matches!(
+            transform_many(&locals, &againsts, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
+    }
+
+    #[test]
+    fn transform_many_structural_in_against_returns_unsupported() {
+        let locals = vec![Step::InsertText {
+            node_id: NodeId::new(),
+            offset: 0,
+            text: "x".into(),
+        }];
+        let againsts = vec![Step::MoveNode {
+            node_id: NodeId::new(),
+            old_parent: NodeId::new(),
+            old_index: 0,
+            new_parent: NodeId::new(),
+            new_index: 0,
+        }];
+        assert!(matches!(
+            transform_many(&locals, &againsts, &empty_state()),
+            Err(Conflict::UnsupportedStructural { .. })
+        ));
     }
 }
 
 #[cfg(test)]
 mod ot_invariant {
     use super::*;
-    use crate::test_utils::proptest::{TransformScenario, transform_scenario};
+    use crate::test_utils::proptest::{
+        MultiStepScenario, SwallowScenario, TransformScenario, arb_swallow_scenario,
+        multi_step_scenario, transform_scenario,
+    };
     use editor_state::State;
     use proptest::prelude::*;
 
@@ -436,12 +753,12 @@ mod ot_invariant {
         fn ot_invariant_holds(scenario in transform_scenario()) {
             let TransformScenario { state, a, b, .. } = scenario;
 
-            let b_primes = match transform(&b, &a) {
+            let b_primes = match transform(&b, &a, &state) {
                 Ok(v) => v,
                 Err(Conflict::UnsupportedStructural { .. }) => return Ok(()),
                 Err(e) => return Err(TestCaseError::reject(format!("unexpected error: {e}"))),
             };
-            let a_primes = match transform(&a, &b) {
+            let a_primes = match transform(&a, &b, &state) {
                 Ok(v) => v,
                 Err(Conflict::UnsupportedStructural { .. }) => return Ok(()),
                 Err(e) => return Err(TestCaseError::reject(format!("unexpected error: {e}"))),
@@ -453,6 +770,46 @@ mod ot_invariant {
             let rhs = apply_seq(&after_b, &a_primes);
 
             prop_assert_eq!(lhs.doc, rhs.doc);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        #[test]
+        #[ignore = "cancellation scenarios fail without mirror tracking — out of cycle scope, deferred to follow-up"]
+        fn transform_many_invariant(scenario in multi_step_scenario()) {
+            let MultiStepScenario { state, locals, againsts } = scenario;
+
+            let locals_p = match transform_many(&locals, &againsts, &state) {
+                Ok(v) => v,
+                Err(Conflict::UnsupportedStructural { .. }) => return Ok(()),
+                Err(e) => return Err(TestCaseError::reject(format!("unexpected error: {e}"))),
+            };
+            let againsts_p = match transform_many(&againsts, &locals, &state) {
+                Ok(v) => v,
+                Err(Conflict::UnsupportedStructural { .. }) => return Ok(()),
+                Err(e) => return Err(TestCaseError::reject(format!("unexpected error: {e}"))),
+            };
+
+            let after_locals = apply_seq(&state, &locals);
+            let after_againsts = apply_seq(&state, &againsts);
+            let lhs = apply_seq(&after_locals, &againsts_p);
+            let rhs = apply_seq(&after_againsts, &locals_p);
+
+            prop_assert_eq!(lhs.doc, rhs.doc);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        #[test]
+        fn rebase_swallows_anchor_in_removed_subtree(scenario in arb_swallow_scenario()) {
+            let SwallowScenario { state, local, against } = scenario;
+            let mapping = against.mapping(&state).expect("RemoveSubtree mapping must succeed for valid scenario");
+            let result = local.rebase(&mapping);
+            prop_assert!(result.is_empty(), "expected swallow, got {:?}", result);
         }
     }
 

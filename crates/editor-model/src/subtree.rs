@@ -76,6 +76,18 @@ impl Subtree {
         }
         self.children.iter().any(|c| c.contains_node(id))
     }
+
+    pub fn node_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
+        fn walk(tree: &Subtree, out: &mut Vec<NodeId>) {
+            out.push(tree.id);
+            for c in &tree.children {
+                walk(c, out);
+            }
+        }
+        let mut ids = Vec::new();
+        walk(self, &mut ids);
+        ids.into_iter()
+    }
 }
 
 #[cfg(test)]
@@ -180,5 +192,31 @@ mod tests {
         let other = NodeId::new();
         let tree = Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()));
         assert!(!tree.contains_node(other));
+    }
+
+    #[test]
+    fn node_ids_iterates_self_then_descendants() {
+        let parent_id = NodeId::new();
+        let child_a = NodeId::new();
+        let child_b = NodeId::new();
+        let grandchild = NodeId::new();
+        let tree =
+            Subtree::leaf(parent_id, Node::BulletList(BulletListNode {})).with_children(vec![
+                Subtree::leaf(child_a, Node::ListItem(ListItemNode {})).with_children(vec![
+                    Subtree::leaf(grandchild, Node::Paragraph(ParagraphNode::default())),
+                ]),
+                Subtree::leaf(child_b, Node::ListItem(ListItemNode {})),
+            ]);
+
+        let ids: Vec<NodeId> = tree.node_ids().collect();
+        assert_eq!(ids, vec![parent_id, child_a, grandchild, child_b]);
+    }
+
+    #[test]
+    fn node_ids_leaf_yields_single() {
+        let id = NodeId::new();
+        let tree = Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()));
+        let ids: Vec<NodeId> = tree.node_ids().collect();
+        assert_eq!(ids, vec![id]);
     }
 }

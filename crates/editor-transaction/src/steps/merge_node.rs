@@ -1,8 +1,7 @@
 use editor_model::{Node, NodeId, TextNode};
 use editor_state::State;
 
-use crate::transform::Conflict;
-use crate::{Step, StepError, StepOutput, Validation};
+use crate::{Mapping, Step, StepError, StepOutput, Validation};
 
 pub(crate) fn apply(
     state: &State,
@@ -43,6 +42,7 @@ pub(crate) fn apply(
 
             Ok(StepOutput {
                 state: new_state,
+                mapping: Mapping::identity(),
                 validations: vec![Validation::Node(parent_id)],
             })
         }
@@ -80,6 +80,7 @@ pub(crate) fn apply(
 
             Ok(StepOutput {
                 state: new_state,
+                mapping: Mapping::identity(),
                 validations: vec![Validation::Node(target_id), Validation::Node(parent_id)],
             })
         }
@@ -92,22 +93,6 @@ pub(crate) fn inverse(node_id: NodeId, target_id: NodeId, offset: usize) -> Step
         offset,
         new_node_id: node_id,
     }
-}
-
-pub(crate) fn transform_against(
-    local_node_id: NodeId,
-    local_target_id: NodeId,
-    local_offset: usize,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    crate::transform::transform_default(
-        Step::MergeNode {
-            node_id: local_node_id,
-            target_id: local_target_id,
-            offset: local_offset,
-        },
-        against,
-    )
 }
 
 #[cfg(test)]

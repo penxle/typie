@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc fbf6237d4851a522cd851ecfca25a654458a9747181cd48384a24578410b0e2d # shrinks to ((state, _index), step) = ((State { doc: Doc { nodes: {1mBpUjbct0Q: NodeEntry { node: Paragraph(ParagraphNode), parent: Some(0), children: [], modifiers: [] }, 0: NodeEntry { node: Root(RootNode), parent: None, children: [1mBpUjbct0Q], modifiers: [FontFamily { value: "Pretendard" }, FontSize { value: 1200 }, FontWeight { value: 400 }, TextColor { value: "black" }, BackgroundColor { value: "none" }, LetterSpacing { value: 0 }, LineHeight { value: 160 }, ParagraphIndent { value: 100 }, BlockGap { value: 100 }] }}, attrs: DocumentAttrs { layout_mode: Continuous { max_width: 600.0 } } }, selection: Selection { anchor: Position { node_id: 1mBpUjbct0Q, offset: 0, affinity: Downstream }, head: Position { node_id: 1mBpUjbct0Q, offset: 0, affinity: Downstream } }, pending_modifiers: [], composition: None }, DocIndex { by_type: {Root: [0], Paragraph: [1mBpUjbct0Q]} }), InsertText { node_id: 0, offset: 0, text: "" })

@@ -2,7 +2,7 @@ use editor_common::StrExt;
 use editor_model::{Doc, DocumentAttrs, Modifier, Node, NodeId, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
 
-use crate::{Effect, Step, StepError, TransactionMeta, Validation, validate};
+use crate::{Effect, Mapping, Step, StepError, TransactionMeta, Validation, validate};
 
 struct Batch {
     validations: Vec<Validation>,
@@ -11,6 +11,7 @@ struct Batch {
 pub struct Transaction {
     state: State,
     steps: Vec<Step>,
+    mapping: Mapping,
     effects: Vec<Effect>,
     meta: TransactionMeta,
     batch: Option<Batch>,
@@ -20,6 +21,7 @@ pub struct Transaction {
 pub struct Savepoint {
     state: State,
     steps_len: usize,
+    mapping_actions_len: usize,
     effects_len: usize,
     batch_validations_len: Option<usize>,
 }
@@ -29,6 +31,7 @@ impl Transaction {
         Self {
             state: state.clone(),
             steps: Vec::new(),
+            mapping: Mapping::identity(),
             effects: Vec::new(),
             meta: TransactionMeta::default(),
             batch: None,
@@ -70,6 +73,7 @@ impl Transaction {
     fn apply_step(&mut self, step: Step) -> Result<(), StepError> {
         let output = step.apply(&self.state)?;
         self.state = output.state;
+        self.mapping = self.mapping.compose(&output.mapping);
         self.steps.push(step);
         if let Some(batch) = &mut self.batch {
             batch.validations.extend(output.validations);
@@ -83,6 +87,7 @@ impl Transaction {
         Savepoint {
             state: self.state.clone(),
             steps_len: self.steps.len(),
+            mapping_actions_len: self.mapping.actions().len(),
             effects_len: self.effects.len(),
             batch_validations_len: self.batch.as_ref().map(|b| b.validations.len()),
         }
@@ -91,6 +96,7 @@ impl Transaction {
     pub fn rollback(&mut self, sp: Savepoint) {
         self.state = sp.state;
         self.steps.truncate(sp.steps_len);
+        self.mapping.truncate_to(sp.mapping_actions_len);
         self.effects.truncate(sp.effects_len);
         if let (Some(batch), Some(len)) = (&mut self.batch, sp.batch_validations_len) {
             batch.validations.truncate(len);

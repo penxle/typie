@@ -1,5 +1,12 @@
 use editor_model::{Doc, Node, NodeId, NodeRef, TextNode};
-use editor_state::State;
+use editor_state::{Position, Selection, State};
+
+pub fn empty_state() -> State {
+    State::new(
+        Doc::default(),
+        Selection::collapsed(Position::new(NodeId::ROOT, 0)),
+    )
+}
 
 pub trait DocTestExt {
     fn doc_ref(&self) -> &Doc;

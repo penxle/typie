@@ -1,8 +1,11 @@
 use editor_model::{Node, NodeId};
 use editor_state::State;
 
-use crate::transform::Conflict;
-use crate::{Step, StepError, StepOutput, Validation};
+use crate::{MapAction, Mapping, Step, StepError, StepOutput, Validation};
+
+pub(crate) fn build_mapping() -> Mapping {
+    Mapping::identity()
+}
 
 pub(crate) fn apply(
     state: &State,
@@ -38,6 +41,7 @@ pub(crate) fn apply(
 
     Ok(StepOutput {
         state: new_state,
+        mapping: build_mapping(),
         validations,
     })
 }
@@ -50,20 +54,24 @@ pub(crate) fn inverse(node_id: NodeId, old_node: Node, new_node: Node) -> Step {
     }
 }
 
-pub(crate) fn transform_against(
-    local_node_id: NodeId,
-    local_old: &Node,
-    local_new: &Node,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    crate::transform::transform_default(
-        Step::SetNode {
-            node_id: local_node_id,
-            old_node: local_old.clone(),
-            new_node: local_new.clone(),
-        },
-        against,
-    )
+pub(crate) fn rebase_against(
+    node_id: NodeId,
+    old_node: &Node,
+    new_node: &Node,
+    mapping: &Mapping,
+) -> Vec<Step> {
+    for action in mapping.actions() {
+        if let MapAction::NodeDeleted { node } = *action {
+            if node == node_id {
+                return vec![];
+            }
+        }
+    }
+    vec![Step::SetNode {
+        node_id,
+        old_node: old_node.clone(),
+        new_node: new_node.clone(),
+    }]
 }
 
 #[cfg(test)]
@@ -71,9 +79,14 @@ mod tests {
     use editor_macros::state;
     use editor_model::*;
 
+    use super::*;
     use crate::Transaction;
     use crate::test_utils::DocTestExt;
-    use crate::*;
+
+    #[test]
+    fn build_mapping_returns_identity() {
+        assert_eq!(build_mapping(), Mapping::identity());
+    }
 
     #[test]
     fn set_node_apply() {
@@ -106,23 +119,35 @@ mod tests {
     }
 
     #[test]
-    fn transform_set_node_against_set_node_same_node_commutes() {
+    fn rebase_swallowed_by_node_deleted() {
         let n = NodeId::new();
-        let old = editor_model::Node::Paragraph(editor_model::ParagraphNode::default());
-        let new = editor_model::Node::Paragraph(editor_model::ParagraphNode::default());
-        let local = Step::SetNode {
-            node_id: n,
-            old_node: old.clone(),
-            new_node: new.clone(),
-        };
-        let against = Step::SetNode {
-            node_id: n,
-            old_node: old,
-            new_node: new,
-        };
+        let mapping = Mapping::single(MapAction::NodeDeleted { node: n });
+        let old = Node::Paragraph(ParagraphNode::default());
+        let new = Node::Paragraph(ParagraphNode::default());
+        let result = rebase_against(n, &old, &new, &mapping);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn rebase_unrelated_pass_through() {
+        let n = NodeId::new();
+        let other = NodeId::new();
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: other,
+            offset: 0,
+            len: 1,
+            text: "x".into(),
+        });
+        let old = Node::Paragraph(ParagraphNode::default());
+        let new = Node::Paragraph(ParagraphNode::default());
+        let result = rebase_against(n, &old, &new, &mapping);
         assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local.clone()],
+            result,
+            vec![Step::SetNode {
+                node_id: n,
+                old_node: old.clone(),
+                new_node: new.clone(),
+            }]
         );
     }
 

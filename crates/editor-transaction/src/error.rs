@@ -1,6 +1,6 @@
 use editor_model::{ModifierType, NodeId};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum StepError {
     #[error("node not found: {0}")]
     NodeNotFound(NodeId),

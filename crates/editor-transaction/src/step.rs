@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
 use strum::{EnumDiscriminants, IntoStaticStr};
 
+use crate::Mapping;
 use crate::StepError;
 use crate::steps;
 
@@ -19,6 +20,7 @@ pub enum Validation {
 
 pub struct StepOutput {
     pub state: State,
+    pub mapping: Mapping,
     pub validations: Vec<Validation>,
 }
 
@@ -106,7 +108,7 @@ pub enum Step {
 pub enum StepScope {
     Node(NodeId),
     Children { parent: NodeId },
-    Structural(SmallVec<[NodeId; 2]>),
+    Structural(SmallVec<[NodeId; 3]>),
     Document,
     Local,
 }
@@ -160,10 +162,11 @@ impl Step {
                 node_id, target_id, ..
             } => StepScope::Structural(smallvec![*node_id, *target_id]),
             Step::MoveNode {
+                node_id,
                 old_parent,
                 new_parent,
                 ..
-            } => StepScope::Structural(smallvec![*old_parent, *new_parent]),
+            } => StepScope::Structural(smallvec![*node_id, *old_parent, *new_parent]),
 
             Step::SetDocumentAttrs { .. } => StepScope::Document,
 
@@ -268,6 +271,117 @@ impl Step {
             } => steps::set_modifiers::apply(state, *node_id, new_modifiers),
             Step::SetComposition { old: _, new } => steps::set_composition::apply(state, new),
             Step::SetDocumentAttrs { old: _, new } => steps::set_document_attrs::apply(state, new),
+        }
+    }
+
+    pub fn mapping(&self, state: &State) -> Result<Mapping, StepError> {
+        let _ = state;
+        match self {
+            Step::InsertText {
+                node_id,
+                offset,
+                text,
+            } => Ok(steps::insert_text::build_mapping(*node_id, *offset, text)),
+            Step::RemoveText {
+                node_id,
+                offset,
+                text,
+            } => Ok(steps::remove_text::build_mapping(*node_id, *offset, text)),
+            Step::InsertSubtree {
+                parent_id,
+                index,
+                subtree,
+            } => Ok(steps::insert_subtree::build_mapping(
+                *parent_id, *index, subtree.id,
+            )),
+            Step::RemoveSubtree {
+                parent_id,
+                index,
+                subtree,
+            } => Ok(steps::remove_subtree::build_mapping(
+                *parent_id, *index, subtree,
+            )),
+            Step::AddModifier { .. } => Ok(steps::add_modifier::build_mapping()),
+            Step::RemoveModifier { .. } => Ok(steps::remove_modifier::build_mapping()),
+            Step::SetModifiers { .. } => Ok(steps::set_modifiers::build_mapping()),
+            Step::SetNode { .. } => Ok(steps::set_node::build_mapping()),
+            Step::SetDocumentAttrs { .. } => Ok(steps::set_document_attrs::build_mapping()),
+
+            Step::SplitNode { .. } | Step::MergeNode { .. } | Step::MoveNode { .. } => {
+                unreachable!(
+                    "structural step.mapping() called — caller must dispatch via scope: {:?}",
+                    StepType::from(self)
+                );
+            }
+
+            Step::SetSelection { .. }
+            | Step::SetPendingModifiers { .. }
+            | Step::SetComposition { .. } => Ok(Mapping::identity()),
+        }
+    }
+
+    pub fn rebase(&self, mapping: &Mapping) -> Vec<Step> {
+        match self {
+            Step::InsertText {
+                node_id,
+                offset,
+                text,
+            } => steps::insert_text::rebase_against(*node_id, *offset, text, mapping),
+            Step::RemoveText {
+                node_id,
+                offset,
+                text,
+            } => steps::remove_text::rebase_against(*node_id, *offset, text, mapping),
+            Step::InsertSubtree {
+                parent_id,
+                index,
+                subtree,
+            } => steps::insert_subtree::rebase_against(*parent_id, *index, subtree, mapping),
+            Step::RemoveSubtree {
+                parent_id,
+                index,
+                subtree,
+            } => steps::remove_subtree::rebase_against(*parent_id, *index, subtree, mapping),
+            Step::AddModifier { node_id, modifier } => {
+                steps::add_modifier::rebase_against(*node_id, modifier, mapping)
+            }
+            Step::RemoveModifier { node_id, modifier } => {
+                steps::remove_modifier::rebase_against(*node_id, modifier, mapping)
+            }
+            Step::SetModifiers {
+                node_id,
+                old_modifiers,
+                new_modifiers,
+            } => steps::set_modifiers::rebase_against(
+                *node_id,
+                old_modifiers,
+                new_modifiers,
+                mapping,
+            ),
+            Step::SetNode {
+                node_id,
+                old_node,
+                new_node,
+            } => steps::set_node::rebase_against(*node_id, old_node, new_node, mapping),
+            Step::SetDocumentAttrs { old, new } => {
+                steps::set_document_attrs::rebase_against(old, new, mapping)
+            }
+
+            Step::SplitNode { .. } | Step::MergeNode { .. } | Step::MoveNode { .. } => {
+                unreachable!(
+                    "structural step.rebase() called — caller must dispatch via scope: {:?}",
+                    StepType::from(self)
+                );
+            }
+
+            Step::SetSelection { .. }
+            | Step::SetPendingModifiers { .. }
+            | Step::SetComposition { .. } => {
+                unreachable!(
+                    "non-syncable step.rebase() called: {:?}",
+                    StepType::from(self)
+                );
+            }
         }
     }
 
@@ -516,7 +630,7 @@ mod scope_tests {
         };
         match step.scope() {
             StepScope::Structural(ids) => {
-                assert_eq!(ids.as_slice(), &[old_p, new_p]);
+                assert_eq!(ids.as_slice(), &[n, old_p, new_p]);
             }
             other => panic!("expected Structural, got {other:?}"),
         }
@@ -539,5 +653,116 @@ mod scope_tests {
             new: attrs,
         };
         assert!(matches!(step.scope(), StepScope::Document));
+    }
+}
+
+#[cfg(test)]
+mod mapping_method_tests {
+    use super::*;
+    use crate::MapAction;
+    use crate::test_utils::empty_state;
+    use editor_state::{Position, Selection};
+
+    #[test]
+    fn insert_text_step_yields_text_insert_mapping() {
+        let n = NodeId::new();
+        let step = Step::InsertText {
+            node_id: n,
+            offset: 0,
+            text: "ab".into(),
+        };
+        let m = step.mapping(&empty_state()).unwrap();
+        assert_eq!(
+            m.actions(),
+            &[MapAction::TextInsert {
+                node: n,
+                offset: 0,
+                len: 2,
+                text: "ab".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn add_modifier_step_yields_identity_mapping() {
+        let step = Step::AddModifier {
+            node_id: NodeId::new(),
+            modifier: editor_model::Modifier::Bold,
+        };
+        let m = step.mapping(&empty_state()).unwrap();
+        assert_eq!(m, Mapping::identity());
+    }
+
+    #[test]
+    fn set_selection_step_yields_identity_mapping() {
+        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
+        let step = Step::SetSelection { old: sel, new: sel };
+        let m = step.mapping(&empty_state()).unwrap();
+        assert_eq!(m, Mapping::identity());
+    }
+
+    #[test]
+    #[should_panic(expected = "structural step.mapping() called")]
+    fn split_node_step_panics() {
+        let step = Step::SplitNode {
+            node_id: NodeId::new(),
+            offset: 0,
+            new_node_id: NodeId::new(),
+        };
+        let _ = step.mapping(&empty_state());
+    }
+}
+
+#[cfg(test)]
+mod rebase_method_tests {
+    use super::*;
+    use crate::MapAction;
+
+    #[test]
+    fn insert_text_dispatches_to_step_module() {
+        let n = NodeId::new();
+        let step = Step::InsertText {
+            node_id: n,
+            offset: 5,
+            text: "x".into(),
+        };
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: n,
+            offset: 2,
+            len: 3,
+            text: "abc".into(),
+        });
+        let result = step.rebase(&mapping);
+        assert_eq!(
+            result,
+            vec![Step::InsertText {
+                node_id: n,
+                offset: 8,
+                text: "x".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn add_modifier_dispatches_to_step_module() {
+        let n = NodeId::new();
+        let step = Step::AddModifier {
+            node_id: n,
+            modifier: Modifier::Bold,
+        };
+        let mapping = Mapping::single(MapAction::NodeDeleted { node: n });
+        let result = step.rebase(&mapping);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "structural step.rebase() called")]
+    fn split_node_step_panics() {
+        let step = Step::SplitNode {
+            node_id: NodeId::new(),
+            offset: 0,
+            new_node_id: NodeId::new(),
+        };
+        let _ = step.rebase(&Mapping::identity());
     }
 }

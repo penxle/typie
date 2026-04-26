@@ -2,8 +2,16 @@ use editor_common::StrExt;
 use editor_model::{Node, NodeId, TextNode};
 use editor_state::State;
 
-use crate::transform::Conflict;
-use crate::{Step, StepError, StepOutput};
+use crate::{MapAction, Mapping, Step, StepError, StepOutput};
+
+pub(crate) fn build_mapping(node_id: NodeId, offset: usize, text: &str) -> Mapping {
+    Mapping::single(MapAction::TextInsert {
+        node: node_id,
+        offset,
+        len: text.char_count(),
+        text: text.to_string(),
+    })
+}
 
 pub(crate) fn apply(
     state: &State,
@@ -42,6 +50,7 @@ pub(crate) fn apply(
 
     Ok(StepOutput {
         state: new_state,
+        mapping: build_mapping(node_id, offset, text),
         validations: vec![],
     })
 }
@@ -54,70 +63,69 @@ pub(crate) fn inverse(node_id: NodeId, offset: usize, text: String) -> Step {
     }
 }
 
-pub(crate) fn transform_against(
-    local_node_id: NodeId,
-    local_offset: usize,
-    local_text: &str,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    match against {
-        Step::InsertText {
-            node_id,
-            offset: q,
-            text: u,
-        } if *node_id == local_node_id => {
-            let p = local_offset;
-            let new_offset = if *q < p {
-                p + u.char_count()
-            } else if *q == p && local_text > u.as_str() {
-                p + u.char_count()
-            } else {
-                p
-            };
-            Ok(vec![Step::InsertText {
-                node_id: local_node_id,
-                offset: new_offset,
-                text: local_text.to_string(),
-            }])
+pub(crate) fn rebase_against(
+    node_id: NodeId,
+    mut offset: usize,
+    text: &str,
+    mapping: &Mapping,
+) -> Vec<Step> {
+    for action in mapping.actions() {
+        match action {
+            MapAction::NodeDeleted { node } if *node == node_id => return vec![],
+            MapAction::TextInsert {
+                node,
+                offset: q,
+                len,
+                text: against_text,
+            } if *node == node_id => {
+                if *q < offset {
+                    offset += *len;
+                } else if *q == offset && against_text.as_str() < text {
+                    offset += *len;
+                }
+            }
+            MapAction::TextRemove {
+                node,
+                offset: q,
+                len,
+            } if *node == node_id => {
+                if *q + *len <= offset {
+                    offset -= *len;
+                } else if *q < offset {
+                    offset = *q;
+                }
+            }
+            _ => {}
         }
-        Step::RemoveText {
-            node_id,
-            offset: q,
-            text: u,
-        } if *node_id == local_node_id => {
-            let p = local_offset;
-            let ul = u.char_count();
-            let new_offset = if q + ul <= p {
-                p - ul
-            } else if *q >= p {
-                p
-            } else {
-                *q
-            };
-            Ok(vec![Step::InsertText {
-                node_id: local_node_id,
-                offset: new_offset,
-                text: local_text.to_string(),
-            }])
-        }
-        _ => crate::transform::transform_default(
-            Step::InsertText {
-                node_id: local_node_id,
-                offset: local_offset,
-                text: local_text.to_string(),
-            },
-            against,
-        ),
     }
+    vec![Step::InsertText {
+        node_id,
+        offset,
+        text: text.into(),
+    }]
 }
 
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::NodeId;
 
+    use super::*;
     use crate::test_utils::DocTestExt;
-    use crate::*;
+
+    #[test]
+    fn build_mapping_yields_text_insert_with_char_count() {
+        let n = NodeId::new();
+        let m = build_mapping(n, 3, "한글ab");
+        assert_eq!(
+            m.actions(),
+            &[MapAction::TextInsert {
+                node: n,
+                offset: 3,
+                len: 4,
+                text: "한글ab".into(),
+            }]
+        );
+    }
 
     #[test]
     fn insert_text_apply() {
@@ -191,129 +199,149 @@ mod tests {
     }
 
     #[test]
-    fn transform_insert_against_insert_before_shifts_offset() {
+    fn rebase_swallowed_by_node_deleted() {
         let n = NodeId::new();
-        let local = Step::InsertText {
-            node_id: n,
-            offset: 5,
-            text: "ab".into(),
-        };
-        let against = Step::InsertText {
-            node_id: n,
-            offset: 3,
-            text: "X".into(),
-        };
+        let mapping = Mapping::single(MapAction::NodeDeleted { node: n });
+        let result = rebase_against(n, 0, "x", &mapping);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn rebase_unrelated_node_passthrough() {
+        let n1 = NodeId::new();
+        let n2 = NodeId::new();
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: n2,
+            offset: 0,
+            len: 3,
+            text: "abc".into(),
+        });
+        let result = rebase_against(n1, 5, "x", &mapping);
         assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
+            result,
+            vec![Step::InsertText {
+                node_id: n1,
+                offset: 5,
+                text: "x".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rebase_text_insert_before_shifts_offset() {
+        let n = NodeId::new();
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: n,
+            offset: 2,
+            len: 3,
+            text: "abc".into(),
+        });
+        let result = rebase_against(n, 5, "x", &mapping);
+        assert_eq!(
+            result,
+            vec![Step::InsertText {
+                node_id: n,
+                offset: 8,
+                text: "x".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rebase_text_insert_after_no_shift() {
+        let n = NodeId::new();
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: n,
+            offset: 8,
+            len: 3,
+            text: "yyy".into(),
+        });
+        let result = rebase_against(n, 5, "x", &mapping);
+        assert_eq!(
+            result,
+            vec![Step::InsertText {
+                node_id: n,
+                offset: 5,
+                text: "x".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rebase_text_insert_same_offset_lex_greater_against_no_shift() {
+        let n = NodeId::new();
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: n,
+            offset: 5,
+            len: 1,
+            text: "y".into(),
+        });
+        let result = rebase_against(n, 5, "x", &mapping);
+        assert_eq!(
+            result,
+            vec![Step::InsertText {
+                node_id: n,
+                offset: 5,
+                text: "x".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rebase_text_insert_same_offset_lex_smaller_against_shifts() {
+        let n = NodeId::new();
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: n,
+            offset: 5,
+            len: 1,
+            text: "a".into(),
+        });
+        let result = rebase_against(n, 5, "x", &mapping);
+        assert_eq!(
+            result,
             vec![Step::InsertText {
                 node_id: n,
                 offset: 6,
-                text: "ab".into()
-            }],
+                text: "x".into(),
+            }]
         );
     }
 
     #[test]
-    fn transform_insert_against_insert_after_unchanged() {
+    fn rebase_text_remove_before_shifts_back() {
         let n = NodeId::new();
-        let local = Step::InsertText {
-            node_id: n,
-            offset: 3,
-            text: "ab".into(),
-        };
-        let against = Step::InsertText {
-            node_id: n,
-            offset: 5,
-            text: "X".into(),
-        };
+        let mapping = Mapping::single(MapAction::TextRemove {
+            node: n,
+            offset: 1,
+            len: 2,
+        });
+        let result = rebase_against(n, 5, "x", &mapping);
         assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local.clone()],
-        );
-    }
-
-    #[test]
-    fn transform_insert_against_insert_different_node_unchanged() {
-        let n1 = NodeId::new();
-        let n2 = NodeId::new();
-        let local = Step::InsertText {
-            node_id: n1,
-            offset: 3,
-            text: "ab".into(),
-        };
-        let against = Step::InsertText {
-            node_id: n2,
-            offset: 0,
-            text: "X".into(),
-        };
-        assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local.clone()],
-        );
-    }
-
-    #[test]
-    fn transform_insert_against_remove_before_shifts_back() {
-        let n = NodeId::new();
-        let local = Step::InsertText {
-            node_id: n,
-            offset: 7,
-            text: "ab".into(),
-        };
-        let against = Step::RemoveText {
-            node_id: n,
-            offset: 2,
-            text: "abc".into(),
-        };
-        assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![Step::InsertText {
-                node_id: n,
-                offset: 4,
-                text: "ab".into()
-            }],
-        );
-    }
-
-    #[test]
-    fn transform_insert_against_remove_inside_clamps_to_start() {
-        let n = NodeId::new();
-        let local = Step::InsertText {
-            node_id: n,
-            offset: 5,
-            text: "ab".into(),
-        };
-        let against = Step::RemoveText {
-            node_id: n,
-            offset: 3,
-            text: "abcde".into(),
-        };
-        assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
+            result,
             vec![Step::InsertText {
                 node_id: n,
                 offset: 3,
-                text: "ab".into()
-            }],
+                text: "x".into(),
+            }]
         );
     }
 
     #[test]
-    fn transform_insert_against_remove_after_unchanged() {
+    fn rebase_text_remove_overlapping_clamps_to_start() {
         let n = NodeId::new();
-        let local = Step::InsertText {
-            node_id: n,
-            offset: 3,
-            text: "ab".into(),
-        };
-        let against = Step::RemoveText {
-            node_id: n,
-            offset: 5,
-            text: "x".into(),
-        };
+        let mapping = Mapping::single(MapAction::TextRemove {
+            node: n,
+            offset: 2,
+            len: 3,
+        });
+        let result = rebase_against(n, 4, "x", &mapping);
         assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local.clone()],
+            result,
+            vec![Step::InsertText {
+                node_id: n,
+                offset: 2,
+                text: "x".into(),
+            }]
         );
     }
 }

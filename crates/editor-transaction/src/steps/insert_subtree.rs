@@ -1,8 +1,16 @@
 use editor_model::{NodeId, Subtree};
 use editor_state::State;
 
-use crate::transform::Conflict;
-use crate::{Step, StepError, StepOutput, Validation};
+use crate::{MapAction, Mapping, Step, StepError, StepOutput, Validation};
+
+pub(crate) fn build_mapping(parent_id: NodeId, index: usize, subtree_id: NodeId) -> Mapping {
+    Mapping::single(MapAction::Insert {
+        parent: parent_id,
+        start: index,
+        count: 1,
+        subtree_id,
+    })
+}
 
 pub(crate) fn apply(
     state: &State,
@@ -40,6 +48,7 @@ pub(crate) fn apply(
 
     Ok(StepOutput {
         state: new_state,
+        mapping: build_mapping(parent_id, index, subtree.id),
         validations: vec![Validation::Node(parent_id), Validation::Subtree(subtree.id)],
     })
 }
@@ -52,54 +61,47 @@ pub(crate) fn inverse(parent_id: NodeId, index: usize, subtree: Subtree) -> Step
     }
 }
 
-pub(crate) fn transform_against(
-    local_parent_id: NodeId,
-    local_index: usize,
-    local_subtree: &Subtree,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    match against {
-        Step::InsertSubtree {
-            parent_id,
-            index: j,
-            ..
-        } if *parent_id == local_parent_id => {
-            let new_index = if *j <= local_index {
-                local_index + 1
-            } else {
-                local_index
-            };
-            Ok(vec![Step::InsertSubtree {
-                parent_id: local_parent_id,
-                index: new_index,
-                subtree: local_subtree.clone(),
-            }])
+pub(crate) fn rebase_against(
+    parent_id: NodeId,
+    mut index: usize,
+    subtree: &Subtree,
+    mapping: &Mapping,
+) -> Vec<Step> {
+    let local_id = subtree.id;
+    for action in mapping.actions() {
+        match *action {
+            MapAction::NodeDeleted { node } if node == parent_id || node == local_id => {
+                return vec![];
+            }
+            MapAction::Insert {
+                parent,
+                start,
+                count,
+                subtree_id: against_id,
+            } if parent == parent_id => {
+                if start < index {
+                    index += count;
+                } else if start == index && against_id < local_id {
+                    index += count;
+                }
+            }
+            MapAction::Remove {
+                parent,
+                start,
+                count,
+            } if parent == parent_id => {
+                if start + count <= index {
+                    index -= count;
+                }
+            }
+            _ => {}
         }
-        Step::RemoveSubtree {
-            parent_id,
-            index: j,
-            ..
-        } if *parent_id == local_parent_id => {
-            let new_index = if *j < local_index {
-                local_index - 1
-            } else {
-                local_index
-            };
-            Ok(vec![Step::InsertSubtree {
-                parent_id: local_parent_id,
-                index: new_index,
-                subtree: local_subtree.clone(),
-            }])
-        }
-        _ => crate::transform::transform_default(
-            Step::InsertSubtree {
-                parent_id: local_parent_id,
-                index: local_index,
-                subtree: local_subtree.clone(),
-            },
-            against,
-        ),
     }
+    vec![Step::InsertSubtree {
+        parent_id,
+        index,
+        subtree: subtree.clone(),
+    }]
 }
 
 #[cfg(test)]
@@ -107,9 +109,25 @@ mod tests {
     use editor_macros::state;
     use editor_model::*;
 
+    use super::*;
     use crate::Transaction;
     use crate::test_utils::DocTestExt;
-    use crate::*;
+
+    #[test]
+    fn build_mapping_yields_insert_action_with_subtree_id() {
+        let parent = NodeId::new();
+        let id = NodeId::new();
+        let m = build_mapping(parent, 2, id);
+        assert_eq!(
+            m.actions(),
+            &[MapAction::Insert {
+                parent,
+                start: 2,
+                count: 1,
+                subtree_id: id,
+            }]
+        );
+    }
 
     #[test]
     fn insert_subtree_apply() {
@@ -268,88 +286,92 @@ mod tests {
         Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()))
     }
 
+    fn ordered_ids() -> (NodeId, NodeId) {
+        let a = NodeId::new();
+        let b = NodeId::new();
+        if a < b { (a, b) } else { (b, a) }
+    }
+
     #[test]
-    fn transform_insert_against_insert_before_shifts_index() {
+    fn rebase_swallowed_by_node_deleted_on_parent() {
         let parent = NodeId::new();
-        let local = Step::InsertSubtree {
-            parent_id: parent,
-            index: 3,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        let against = Step::InsertSubtree {
-            parent_id: parent,
-            index: 1,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        let out = crate::transform::transform(&local, &against).unwrap();
-        assert_eq!(out.len(), 1);
-        if let Step::InsertSubtree { index, .. } = &out[0] {
-            assert_eq!(*index, 4);
+        let mapping = Mapping::single(MapAction::NodeDeleted { node: parent });
+        let subtree = paragraph_subtree(NodeId::new());
+        let result = rebase_against(parent, 0, &subtree, &mapping);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn rebase_insert_at_lower_index_shifts() {
+        let p = NodeId::new();
+        let mapping = Mapping::single(MapAction::Insert {
+            parent: p,
+            start: 0,
+            count: 1,
+            subtree_id: NodeId::new(),
+        });
+        let subtree = paragraph_subtree(NodeId::new());
+        let result = rebase_against(p, 2, &subtree, &mapping);
+        if let [Step::InsertSubtree { index, .. }] = result.as_slice() {
+            assert_eq!(*index, 3);
         } else {
-            panic!("expected InsertSubtree, got {:?}", out[0]);
+            panic!("expected single InsertSubtree, got {:?}", result);
         }
     }
 
     #[test]
-    fn transform_insert_against_remove_before_shifts_back() {
-        let parent = NodeId::new();
-        let local = Step::InsertSubtree {
-            parent_id: parent,
-            index: 5,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        let against = Step::RemoveSubtree {
-            parent_id: parent,
-            index: 2,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        let out = crate::transform::transform(&local, &against).unwrap();
-        if let Step::InsertSubtree { index, .. } = &out[0] {
-            assert_eq!(*index, 4);
+    fn rebase_insert_at_same_index_smaller_against_id_shifts_local() {
+        let p = NodeId::new();
+        let (small_id, large_id) = ordered_ids();
+        let mapping = Mapping::single(MapAction::Insert {
+            parent: p,
+            start: 2,
+            count: 1,
+            subtree_id: small_id,
+        });
+        let subtree = paragraph_subtree(large_id);
+        let result = rebase_against(p, 2, &subtree, &mapping);
+        if let [Step::InsertSubtree { index, .. }] = result.as_slice() {
+            assert_eq!(*index, 3);
         } else {
-            panic!("expected InsertSubtree, got {:?}", out[0]);
+            panic!("expected single InsertSubtree, got {:?}", result);
         }
     }
 
     #[test]
-    fn transform_insert_against_remove_after_unchanged() {
-        let parent = NodeId::new();
-        let local = Step::InsertSubtree {
-            parent_id: parent,
-            index: 1,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        let against = Step::RemoveSubtree {
-            parent_id: parent,
-            index: 5,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        let out = crate::transform::transform(&local, &against).unwrap();
-        if let Step::InsertSubtree { index, .. } = &out[0] {
+    fn rebase_insert_at_same_index_larger_against_id_keeps_local() {
+        let p = NodeId::new();
+        let (small_id, large_id) = ordered_ids();
+        let mapping = Mapping::single(MapAction::Insert {
+            parent: p,
+            start: 2,
+            count: 1,
+            subtree_id: large_id,
+        });
+        let subtree = paragraph_subtree(small_id);
+        let result = rebase_against(p, 2, &subtree, &mapping);
+        if let [Step::InsertSubtree { index, .. }] = result.as_slice() {
+            assert_eq!(*index, 2);
+        } else {
+            panic!("expected single InsertSubtree, got {:?}", result);
+        }
+    }
+
+    #[test]
+    fn rebase_remove_at_lower_index_shifts_back() {
+        let p = NodeId::new();
+        let mapping = Mapping::single(MapAction::Remove {
+            parent: p,
+            start: 0,
+            count: 1,
+        });
+        let subtree = paragraph_subtree(NodeId::new());
+        let result = rebase_against(p, 2, &subtree, &mapping);
+        if let [Step::InsertSubtree { index, .. }] = result.as_slice() {
             assert_eq!(*index, 1);
         } else {
-            panic!("expected InsertSubtree, got {:?}", out[0]);
+            panic!("expected single InsertSubtree, got {:?}", result);
         }
-    }
-
-    #[test]
-    fn transform_insert_different_parent_unchanged() {
-        let parent_a = NodeId::new();
-        let parent_b = NodeId::new();
-        let local = Step::InsertSubtree {
-            parent_id: parent_a,
-            index: 3,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        let against = Step::InsertSubtree {
-            parent_id: parent_b,
-            index: 0,
-            subtree: paragraph_subtree(NodeId::new()),
-        };
-        assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local.clone()],
-        );
     }
 
     #[test]

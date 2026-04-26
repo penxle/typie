@@ -1,6 +1,6 @@
 use editor_state::{PendingModifiers, State};
 
-use crate::{Step, StepError, StepOutput};
+use crate::{Mapping, Step, StepError, StepOutput};
 
 pub(crate) fn apply(state: &State, new: &PendingModifiers) -> Result<StepOutput, StepError> {
     let mut new_state = state.clone();
@@ -8,6 +8,7 @@ pub(crate) fn apply(state: &State, new: &PendingModifiers) -> Result<StepOutput,
 
     Ok(StepOutput {
         state: new_state,
+        mapping: Mapping::identity(),
         validations: vec![],
     })
 }

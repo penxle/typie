@@ -1,8 +1,11 @@
 use editor_model::{Modifier, NodeId};
 use editor_state::State;
 
-use crate::transform::Conflict;
-use crate::{Step, StepError, StepOutput};
+use crate::{MapAction, Mapping, Step, StepError, StepOutput};
+
+pub(crate) fn build_mapping() -> Mapping {
+    Mapping::identity()
+}
 
 pub(crate) fn apply(
     state: &State,
@@ -24,6 +27,7 @@ pub(crate) fn apply(
 
     Ok(StepOutput {
         state: new_state,
+        mapping: build_mapping(),
         validations: vec![],
     })
 }
@@ -32,18 +36,18 @@ pub(crate) fn inverse(node_id: NodeId, modifier: Modifier) -> Step {
     Step::AddModifier { node_id, modifier }
 }
 
-pub(crate) fn transform_against(
-    local_node_id: NodeId,
-    local_modifier: &Modifier,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    crate::transform::transform_default(
-        Step::RemoveModifier {
-            node_id: local_node_id,
-            modifier: local_modifier.clone(),
-        },
-        against,
-    )
+pub(crate) fn rebase_against(node_id: NodeId, modifier: &Modifier, mapping: &Mapping) -> Vec<Step> {
+    for action in mapping.actions() {
+        if let MapAction::NodeDeleted { node } = *action {
+            if node == node_id {
+                return vec![];
+            }
+        }
+    }
+    vec![Step::RemoveModifier {
+        node_id,
+        modifier: modifier.clone(),
+    }]
 }
 
 #[cfg(test)]
@@ -51,19 +55,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn transform_remove_modifier_against_remove_modifier_same_node_commutes() {
+    fn build_mapping_returns_identity() {
+        assert_eq!(build_mapping(), Mapping::identity());
+    }
+
+    #[test]
+    fn rebase_swallowed_by_node_deleted() {
         let n = NodeId::new();
-        let local = Step::RemoveModifier {
-            node_id: n,
-            modifier: editor_model::Modifier::Bold,
-        };
-        let against = Step::RemoveModifier {
-            node_id: n,
-            modifier: editor_model::Modifier::Italic,
-        };
+        let mapping = Mapping::single(MapAction::NodeDeleted { node: n });
+        let result = rebase_against(n, &Modifier::Bold, &mapping);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn rebase_unrelated_pass_through() {
+        let n = NodeId::new();
+        let other = NodeId::new();
+        let mapping = Mapping::single(MapAction::TextInsert {
+            node: other,
+            offset: 0,
+            len: 1,
+            text: "x".into(),
+        });
+        let result = rebase_against(n, &Modifier::Bold, &mapping);
         assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local.clone()],
+            result,
+            vec![Step::RemoveModifier {
+                node_id: n,
+                modifier: Modifier::Bold,
+            }]
         );
     }
 }

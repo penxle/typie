@@ -1,8 +1,11 @@
 use editor_model::DocumentAttrs;
 use editor_state::State;
 
-use crate::transform::Conflict;
-use crate::{Step, StepError, StepOutput};
+use crate::{Mapping, Step, StepError, StepOutput};
+
+pub(crate) fn build_mapping() -> Mapping {
+    Mapping::identity()
+}
 
 pub(crate) fn apply(state: &State, new_attrs: &DocumentAttrs) -> Result<StepOutput, StepError> {
     let mut new_state = state.clone();
@@ -10,6 +13,7 @@ pub(crate) fn apply(state: &State, new_attrs: &DocumentAttrs) -> Result<StepOutp
 
     Ok(StepOutput {
         state: new_state,
+        mapping: build_mapping(),
         validations: vec![],
     })
 }
@@ -21,18 +25,15 @@ pub(crate) fn inverse(old_attrs: DocumentAttrs, new_attrs: DocumentAttrs) -> Ste
     }
 }
 
-pub(crate) fn transform_against(
-    local_old: &DocumentAttrs,
-    local_new: &DocumentAttrs,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    crate::transform::transform_default(
-        Step::SetDocumentAttrs {
-            old: local_old.clone(),
-            new: local_new.clone(),
-        },
-        against,
-    )
+pub(crate) fn rebase_against(
+    old: &DocumentAttrs,
+    new: &DocumentAttrs,
+    _mapping: &Mapping,
+) -> Vec<Step> {
+    vec![Step::SetDocumentAttrs {
+        old: old.clone(),
+        new: new.clone(),
+    }]
 }
 
 #[cfg(test)]
@@ -40,7 +41,13 @@ mod tests {
     use editor_macros::state;
     use editor_model::*;
 
-    use crate::*;
+    use super::*;
+    use crate::MapAction;
+
+    #[test]
+    fn build_mapping_returns_identity() {
+        assert_eq!(build_mapping(), Mapping::identity());
+    }
 
     #[test]
     fn set_document_attrs_apply() {
@@ -71,17 +78,18 @@ mod tests {
     }
 
     #[test]
-    fn transform_set_document_attrs_commutes() {
-        let attrs1 = editor_model::DocumentAttrs::default();
-        let attrs2 = editor_model::DocumentAttrs::default();
-        let local = Step::SetDocumentAttrs {
-            old: attrs1.clone(),
-            new: attrs2.clone(),
-        };
-        let against = local.clone();
+    fn rebase_passes_through_regardless_of_mapping() {
+        let n = NodeId::new();
+        let mapping = Mapping::single(MapAction::NodeDeleted { node: n });
+        let old = DocumentAttrs::default();
+        let new = DocumentAttrs::default();
+        let result = rebase_against(&old, &new, &mapping);
         assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local],
+            result,
+            vec![Step::SetDocumentAttrs {
+                old: old.clone(),
+                new: new.clone(),
+            }]
         );
     }
 
