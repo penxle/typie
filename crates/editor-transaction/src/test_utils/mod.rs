@@ -37,3 +37,6 @@ impl DocTestExt for Doc {
         self
     }
 }
+
+#[cfg(test)]
+pub(crate) mod proptest;

@@ -46,7 +46,8 @@
     "*.md",
     "legacy/editor/assets/**",
     "legacy/editor/benches/fixtures/**",
-    "assets/**"
+    "assets/**",
+    "**/proptest-regressions/**"
   ],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [

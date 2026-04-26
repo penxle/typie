@@ -1,6 +1,7 @@
 use editor_model::{Modifier, NodeId};
 use editor_state::State;
 
+use crate::transform::Conflict;
 use crate::{Step, StepError, StepOutput, Validation};
 
 pub(crate) fn apply(
@@ -37,6 +38,22 @@ pub(crate) fn inverse(
         old_modifiers: new_modifiers,
         new_modifiers: old_modifiers,
     }
+}
+
+pub(crate) fn transform_against(
+    local_node_id: NodeId,
+    local_old: &[Modifier],
+    local_new: &[Modifier],
+    against: &Step,
+) -> Result<Vec<Step>, Conflict> {
+    crate::transform::transform_default(
+        Step::SetModifiers {
+            node_id: local_node_id,
+            old_modifiers: local_old.to_vec(),
+            new_modifiers: local_new.to_vec(),
+        },
+        against,
+    )
 }
 
 #[cfg(test)]
@@ -77,6 +94,25 @@ mod tests {
         let result = tr.set_modifiers(t1, vec![Modifier::LineHeight { value: 160 }]);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn transform_set_modifiers_against_set_modifiers_same_node_commutes() {
+        let n = NodeId::new();
+        let local = Step::SetModifiers {
+            node_id: n,
+            old_modifiers: vec![],
+            new_modifiers: vec![editor_model::Modifier::Bold],
+        };
+        let against = Step::SetModifiers {
+            node_id: n,
+            old_modifiers: vec![],
+            new_modifiers: vec![editor_model::Modifier::Italic],
+        };
+        assert_eq!(
+            crate::transform::transform(&local, &against).unwrap(),
+            vec![local.clone()],
+        );
     }
 
     #[test]

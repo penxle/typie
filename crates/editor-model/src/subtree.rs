@@ -1,10 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 use crate::doc::Doc;
 use crate::entry::NodeEntry;
 use crate::id::NodeId;
 use crate::modifier::Modifier;
 use crate::nodes::Node;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Subtree {
     pub id: NodeId,
     pub node: Node,
@@ -66,6 +68,13 @@ impl Subtree {
             modifiers: entry.modifiers.clone(),
             children,
         })
+    }
+
+    pub fn contains_node(&self, id: NodeId) -> bool {
+        if self.id == id {
+            return true;
+        }
+        self.children.iter().any(|c| c.contains_node(id))
     }
 }
 
@@ -135,5 +144,41 @@ mod tests {
         assert_eq!(tree.id, p1);
         assert_eq!(tree.children.len(), 1);
         assert_eq!(tree.children[0].id, t1);
+    }
+
+    #[test]
+    fn subtree_serde_roundtrip() {
+        let id = NodeId::new();
+        let tree = Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()));
+        let json = serde_json::to_string(&tree).unwrap();
+        let back: Subtree = serde_json::from_str(&json).unwrap();
+        assert_eq!(tree, back);
+    }
+
+    #[test]
+    fn contains_node_finds_self() {
+        let id = NodeId::new();
+        let tree = Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()));
+        assert!(tree.contains_node(id));
+    }
+
+    #[test]
+    fn contains_node_finds_descendant() {
+        let parent_id = NodeId::new();
+        let child_id = NodeId::new();
+        let tree =
+            Subtree::leaf(parent_id, Node::BulletList(BulletListNode {})).with_children(vec![
+                Subtree::leaf(child_id, Node::ListItem(ListItemNode {})),
+            ]);
+        assert!(tree.contains_node(parent_id));
+        assert!(tree.contains_node(child_id));
+    }
+
+    #[test]
+    fn contains_node_misses_unrelated() {
+        let id = NodeId::new();
+        let other = NodeId::new();
+        let tree = Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()));
+        assert!(!tree.contains_node(other));
     }
 }

@@ -10,6 +10,7 @@ mod prune;
 mod step;
 mod steps;
 mod transaction;
+mod transform;
 mod validate;
 
 #[doc(hidden)]
@@ -24,3 +25,4 @@ pub use meta::*;
 pub use prune::prune;
 pub use step::*;
 pub use transaction::*;
+pub use transform::{Conflict, transform_many};

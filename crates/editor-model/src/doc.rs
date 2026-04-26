@@ -8,7 +8,7 @@ use crate::node_ref::NodeRef;
 use crate::nodes::{Node, RootNode};
 
 #[ffi]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Doc {
     pub nodes: imbl::HashMap<NodeId, NodeEntry>,
     pub attrs: DocumentAttrs,

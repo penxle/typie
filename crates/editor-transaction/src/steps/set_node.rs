@@ -1,6 +1,7 @@
 use editor_model::{Node, NodeId};
 use editor_state::State;
 
+use crate::transform::Conflict;
 use crate::{Step, StepError, StepOutput, Validation};
 
 pub(crate) fn apply(
@@ -49,6 +50,22 @@ pub(crate) fn inverse(node_id: NodeId, old_node: Node, new_node: Node) -> Step {
     }
 }
 
+pub(crate) fn transform_against(
+    local_node_id: NodeId,
+    local_old: &Node,
+    local_new: &Node,
+    against: &Step,
+) -> Result<Vec<Step>, Conflict> {
+    crate::transform::transform_default(
+        Step::SetNode {
+            node_id: local_node_id,
+            old_node: local_old.clone(),
+            new_node: local_new.clone(),
+        },
+        against,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
@@ -86,6 +103,27 @@ mod tests {
         let new_state = output.state;
 
         assert_eq!(*new_state.node(c1).node(), new_node);
+    }
+
+    #[test]
+    fn transform_set_node_against_set_node_same_node_commutes() {
+        let n = NodeId::new();
+        let old = editor_model::Node::Paragraph(editor_model::ParagraphNode::default());
+        let new = editor_model::Node::Paragraph(editor_model::ParagraphNode::default());
+        let local = Step::SetNode {
+            node_id: n,
+            old_node: old.clone(),
+            new_node: new.clone(),
+        };
+        let against = Step::SetNode {
+            node_id: n,
+            old_node: old,
+            new_node: new,
+        };
+        assert_eq!(
+            crate::transform::transform(&local, &against).unwrap(),
+            vec![local.clone()],
+        );
     }
 
     #[test]

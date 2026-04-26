@@ -1,5 +1,8 @@
 use editor_model::{DocumentAttrs, Modifier, ModifierType, Node, NodeId, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
+use serde::{Deserialize, Serialize};
+use smallvec::{SmallVec, smallvec};
+use strum::{EnumDiscriminants, IntoStaticStr};
 
 use crate::StepError;
 use crate::steps;
@@ -19,7 +22,12 @@ pub struct StepOutput {
     pub validations: Vec<Validation>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, EnumDiscriminants)]
+#[strum_discriminants(name(StepType))]
+#[strum_discriminants(derive(Hash, Serialize, Deserialize, IntoStaticStr))]
+#[strum_discriminants(serde(rename_all = "snake_case"))]
+#[strum_discriminants(strum(serialize_all = "snake_case"))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Step {
     InsertText {
         node_id: NodeId,
@@ -94,6 +102,15 @@ pub enum Step {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepScope {
+    Node(NodeId),
+    Children { parent: NodeId },
+    Structural(SmallVec<[NodeId; 2]>),
+    Document,
+    Local,
+}
+
 impl Step {
     pub fn is_doc_step(&self) -> bool {
         !matches!(
@@ -110,6 +127,46 @@ impl Step {
 
     pub fn is_selection_step(&self) -> bool {
         matches!(self, Step::SetSelection { .. })
+    }
+
+    pub fn is_syncable(&self) -> bool {
+        !matches!(
+            self,
+            Step::SetSelection { .. }
+                | Step::SetPendingModifiers { .. }
+                | Step::SetComposition { .. }
+        )
+    }
+
+    pub fn scope(&self) -> StepScope {
+        match self {
+            Step::InsertText { node_id, .. }
+            | Step::RemoveText { node_id, .. }
+            | Step::SetNode { node_id, .. }
+            | Step::AddModifier { node_id, .. }
+            | Step::RemoveModifier { node_id, .. }
+            | Step::SetModifiers { node_id, .. } => StepScope::Node(*node_id),
+
+            Step::InsertSubtree { parent_id, .. } | Step::RemoveSubtree { parent_id, .. } => {
+                StepScope::Children { parent: *parent_id }
+            }
+
+            Step::SplitNode { node_id, .. } => StepScope::Structural(smallvec![*node_id]),
+            Step::MergeNode {
+                node_id, target_id, ..
+            } => StepScope::Structural(smallvec![*node_id, *target_id]),
+            Step::MoveNode {
+                old_parent,
+                new_parent,
+                ..
+            } => StepScope::Structural(smallvec![*old_parent, *new_parent]),
+
+            Step::SetDocumentAttrs { .. } => StepScope::Document,
+
+            Step::SetSelection { .. }
+            | Step::SetPendingModifiers { .. }
+            | Step::SetComposition { .. } => StepScope::Local,
+        }
     }
 
     pub fn affected_node_ids(&self) -> Vec<NodeId> {
@@ -284,5 +341,199 @@ impl Step {
                 steps::set_document_attrs::inverse(old.clone(), new.clone())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod serde_tests {
+    use super::*;
+
+    #[test]
+    fn step_serde_roundtrip_insert_text() {
+        let step = Step::InsertText {
+            node_id: NodeId::new(),
+            offset: 3,
+            text: "hello".into(),
+        };
+        let json = serde_json::to_string(&step).unwrap();
+        let back: Step = serde_json::from_str(&json).unwrap();
+        assert_eq!(step, back);
+    }
+
+    #[test]
+    fn step_serde_internally_tagged() {
+        let step = Step::InsertText {
+            node_id: NodeId::ROOT,
+            offset: 0,
+            text: "x".into(),
+        };
+        let json = serde_json::to_string(&step).unwrap();
+        assert!(json.contains("\"type\":\"insert_text\""));
+    }
+
+    #[test]
+    fn step_type_from_step() {
+        let step = Step::InsertText {
+            node_id: NodeId::ROOT,
+            offset: 0,
+            text: String::new(),
+        };
+        assert_eq!(StepType::from(&step), StepType::InsertText);
+    }
+}
+
+#[cfg(test)]
+mod predicate_tests {
+    use super::*;
+    use editor_state::Position;
+
+    #[test]
+    fn is_syncable_true_for_insert_text() {
+        let step = Step::InsertText {
+            node_id: NodeId::ROOT,
+            offset: 0,
+            text: "x".into(),
+        };
+        assert!(step.is_syncable());
+    }
+
+    #[test]
+    fn is_syncable_false_for_set_selection() {
+        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
+        let step = Step::SetSelection { old: sel, new: sel };
+        assert!(!step.is_syncable());
+    }
+
+    #[test]
+    fn is_syncable_false_for_set_composition() {
+        let step = Step::SetComposition {
+            old: None,
+            new: None,
+        };
+        assert!(!step.is_syncable());
+    }
+
+    #[test]
+    fn is_syncable_false_for_set_pending_modifiers() {
+        let step = Step::SetPendingModifiers {
+            old: PendingModifiers::new(),
+            new: PendingModifiers::new(),
+        };
+        assert!(!step.is_syncable());
+    }
+
+    #[test]
+    fn is_syncable_true_for_set_document_attrs() {
+        let attrs = editor_model::DocumentAttrs::default();
+        let step = Step::SetDocumentAttrs {
+            old: attrs.clone(),
+            new: attrs,
+        };
+        assert!(step.is_syncable());
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    #[test]
+    fn scope_node_for_text_steps() {
+        let n = NodeId::new();
+        let step = Step::InsertText {
+            node_id: n,
+            offset: 0,
+            text: "x".into(),
+        };
+        assert!(matches!(step.scope(), StepScope::Node(id) if id == n));
+    }
+
+    #[test]
+    fn scope_children_for_subtree_steps() {
+        let parent = NodeId::new();
+        let id = NodeId::new();
+        let subtree = editor_model::Subtree::leaf(
+            id,
+            editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+        );
+        let step = Step::InsertSubtree {
+            parent_id: parent,
+            index: 0,
+            subtree,
+        };
+        assert!(matches!(step.scope(), StepScope::Children { parent: p } if p == parent));
+    }
+
+    #[test]
+    fn scope_structural_for_split_node() {
+        let n = NodeId::new();
+        let new_n = NodeId::new();
+        let step = Step::SplitNode {
+            node_id: n,
+            offset: 0,
+            new_node_id: new_n,
+        };
+        match step.scope() {
+            StepScope::Structural(ids) => {
+                assert_eq!(ids.as_slice(), &[n]);
+            }
+            other => panic!("expected Structural, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn scope_structural_for_merge_node() {
+        let n = NodeId::new();
+        let target = NodeId::new();
+        let step = Step::MergeNode {
+            node_id: n,
+            target_id: target,
+            offset: 0,
+        };
+        match step.scope() {
+            StepScope::Structural(ids) => {
+                assert_eq!(ids.as_slice(), &[n, target]);
+            }
+            other => panic!("expected Structural, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn scope_structural_for_move_node() {
+        let n = NodeId::new();
+        let old_p = NodeId::new();
+        let new_p = NodeId::new();
+        let step = Step::MoveNode {
+            node_id: n,
+            old_parent: old_p,
+            old_index: 0,
+            new_parent: new_p,
+            new_index: 0,
+        };
+        match step.scope() {
+            StepScope::Structural(ids) => {
+                assert_eq!(ids.as_slice(), &[old_p, new_p]);
+            }
+            other => panic!("expected Structural, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn scope_local_for_set_composition() {
+        let step = Step::SetComposition {
+            old: None,
+            new: None,
+        };
+        assert!(matches!(step.scope(), StepScope::Local));
+    }
+
+    #[test]
+    fn scope_document_for_set_document_attrs() {
+        let attrs = editor_model::DocumentAttrs::default();
+        let step = Step::SetDocumentAttrs {
+            old: attrs.clone(),
+            new: attrs,
+        };
+        assert!(matches!(step.scope(), StepScope::Document));
     }
 }

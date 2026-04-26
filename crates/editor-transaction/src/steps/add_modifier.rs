@@ -1,6 +1,7 @@
 use editor_model::{Modifier, NodeId};
 use editor_state::State;
 
+use crate::transform::Conflict;
 use crate::{Step, StepError, StepOutput, Validation};
 
 pub(crate) fn apply(
@@ -16,6 +17,7 @@ pub(crate) fn apply(
     let doc = state.doc.with_node_updated(node_id, |mut entry| {
         if !entry.modifiers.contains(modifier) {
             entry.modifiers.push(modifier.clone());
+            entry.modifiers.sort_by_key(|m| m.as_type());
         }
         entry
     });
@@ -31,6 +33,20 @@ pub(crate) fn apply(
 
 pub(crate) fn inverse(node_id: NodeId, modifier: Modifier) -> Step {
     Step::RemoveModifier { node_id, modifier }
+}
+
+pub(crate) fn transform_against(
+    local_node_id: NodeId,
+    local_modifier: &Modifier,
+    against: &Step,
+) -> Result<Vec<Step>, Conflict> {
+    crate::transform::transform_default(
+        Step::AddModifier {
+            node_id: local_node_id,
+            modifier: local_modifier.clone(),
+        },
+        against,
+    )
 }
 
 #[cfg(test)]
@@ -113,6 +129,23 @@ mod tests {
         let result = tr.add_modifier(t1, Modifier::Bold);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn transform_add_modifier_against_add_modifier_same_node_commutes() {
+        let n = NodeId::new();
+        let local = Step::AddModifier {
+            node_id: n,
+            modifier: editor_model::Modifier::Bold,
+        };
+        let against = Step::AddModifier {
+            node_id: n,
+            modifier: editor_model::Modifier::Italic,
+        };
+        assert_eq!(
+            crate::transform::transform(&local, &against).unwrap(),
+            vec![local.clone()],
+        );
     }
 
     #[test]

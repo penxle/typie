@@ -1,6 +1,7 @@
 use editor_model::{NodeId, Subtree};
 use editor_state::State;
 
+use crate::transform::Conflict;
 use crate::{Step, StepError, StepOutput, Validation};
 
 pub(crate) fn apply(
@@ -48,6 +49,56 @@ pub(crate) fn inverse(parent_id: NodeId, index: usize, subtree: Subtree) -> Step
         parent_id,
         index,
         subtree,
+    }
+}
+
+pub(crate) fn transform_against(
+    local_parent_id: NodeId,
+    local_index: usize,
+    local_subtree: &Subtree,
+    against: &Step,
+) -> Result<Vec<Step>, Conflict> {
+    match against {
+        Step::InsertSubtree {
+            parent_id,
+            index: j,
+            ..
+        } if *parent_id == local_parent_id => {
+            let new_index = if *j <= local_index {
+                local_index + 1
+            } else {
+                local_index
+            };
+            Ok(vec![Step::InsertSubtree {
+                parent_id: local_parent_id,
+                index: new_index,
+                subtree: local_subtree.clone(),
+            }])
+        }
+        Step::RemoveSubtree {
+            parent_id,
+            index: j,
+            ..
+        } if *parent_id == local_parent_id => {
+            let new_index = if *j < local_index {
+                local_index - 1
+            } else {
+                local_index
+            };
+            Ok(vec![Step::InsertSubtree {
+                parent_id: local_parent_id,
+                index: new_index,
+                subtree: local_subtree.clone(),
+            }])
+        }
+        _ => crate::transform::transform_default(
+            Step::InsertSubtree {
+                parent_id: local_parent_id,
+                index: local_index,
+                subtree: local_subtree.clone(),
+            },
+            against,
+        ),
     }
 }
 
@@ -211,6 +262,94 @@ mod tests {
         let result = tr.insert_subtree(NodeId::ROOT, 1, subtree);
 
         assert!(result.is_err());
+    }
+
+    fn paragraph_subtree(id: NodeId) -> Subtree {
+        Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()))
+    }
+
+    #[test]
+    fn transform_insert_against_insert_before_shifts_index() {
+        let parent = NodeId::new();
+        let local = Step::InsertSubtree {
+            parent_id: parent,
+            index: 3,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        let against = Step::InsertSubtree {
+            parent_id: parent,
+            index: 1,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        let out = crate::transform::transform(&local, &against).unwrap();
+        assert_eq!(out.len(), 1);
+        if let Step::InsertSubtree { index, .. } = &out[0] {
+            assert_eq!(*index, 4);
+        } else {
+            panic!("expected InsertSubtree, got {:?}", out[0]);
+        }
+    }
+
+    #[test]
+    fn transform_insert_against_remove_before_shifts_back() {
+        let parent = NodeId::new();
+        let local = Step::InsertSubtree {
+            parent_id: parent,
+            index: 5,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        let against = Step::RemoveSubtree {
+            parent_id: parent,
+            index: 2,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        let out = crate::transform::transform(&local, &against).unwrap();
+        if let Step::InsertSubtree { index, .. } = &out[0] {
+            assert_eq!(*index, 4);
+        } else {
+            panic!("expected InsertSubtree, got {:?}", out[0]);
+        }
+    }
+
+    #[test]
+    fn transform_insert_against_remove_after_unchanged() {
+        let parent = NodeId::new();
+        let local = Step::InsertSubtree {
+            parent_id: parent,
+            index: 1,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        let against = Step::RemoveSubtree {
+            parent_id: parent,
+            index: 5,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        let out = crate::transform::transform(&local, &against).unwrap();
+        if let Step::InsertSubtree { index, .. } = &out[0] {
+            assert_eq!(*index, 1);
+        } else {
+            panic!("expected InsertSubtree, got {:?}", out[0]);
+        }
+    }
+
+    #[test]
+    fn transform_insert_different_parent_unchanged() {
+        let parent_a = NodeId::new();
+        let parent_b = NodeId::new();
+        let local = Step::InsertSubtree {
+            parent_id: parent_a,
+            index: 3,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        let against = Step::InsertSubtree {
+            parent_id: parent_b,
+            index: 0,
+            subtree: paragraph_subtree(NodeId::new()),
+        };
+        assert_eq!(
+            crate::transform::transform(&local, &against).unwrap(),
+            vec![local.clone()],
+        );
     }
 
     #[test]
