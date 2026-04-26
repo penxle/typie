@@ -1,5 +1,4 @@
 use editor_model::*;
-use editor_schema::NodeSpecExt;
 use editor_state::{Affinity, PendingModifier, State};
 use std::fmt::Write;
 

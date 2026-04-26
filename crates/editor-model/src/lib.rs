@@ -9,6 +9,7 @@ mod id;
 mod modifier;
 mod node_ref;
 mod nodes;
+mod schema;
 mod subtree;
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -24,6 +25,7 @@ pub use imbl;
 pub use modifier::*;
 pub use node_ref::*;
 pub use nodes::*;
+pub use schema::*;
 pub use subtree::*;
 
 #[cfg(any(test, feature = "test-utils"))]

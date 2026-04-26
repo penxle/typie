@@ -8,7 +8,6 @@ uniffi = [
   "dep:uniffi",
   "editor-common/uniffi",
   "editor-model/uniffi",
-  "editor-schema/uniffi",
   "editor-state/uniffi",
 ]
 wasm = [
@@ -16,7 +15,6 @@ wasm = [
   "dep:wasm-bindgen",
   "editor-common/wasm",
   "editor-model/wasm",
-  "editor-schema/wasm",
   "editor-state/wasm",
 ]
 
@@ -24,7 +22,6 @@ wasm = [
 editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
-editor-schema = { path = "../editor-schema" }
 editor-state = { path = "../editor-state" }
 log.workspace = true
 serde.workspace = true

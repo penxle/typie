@@ -5,7 +5,7 @@
 Turborepo monorepo using pnpm as package manager.
 
 - `apps/`: api, website, desktop, mobile, mobile, bmo, literoom, caddy
-- `crates/`: editor (Rust, WASM) — 15 crates: core, commands, state, model, transaction, view, schema, renderer, common, macros, ffi, bindgen, introspection, resource, server
+- `crates/`: editor (Rust, WASM) — 14 crates: core, commands, state, model, transaction, view, renderer, common, macros, ffi, bindgen, introspection, resource, server
 - `packages/`: adapter-node, lib, ui, styled-system, tsconfig, lintconfig
 
 ## Commands

@@ -1,5 +1,4 @@
 use editor_model::*;
-use editor_schema::NodeSpecExt;
 
 use crate::Step;
 
@@ -26,7 +25,7 @@ pub fn dissolve(node: &NodeRef) -> Vec<Step> {
 fn dissolve_into(
     node: &NodeRef,
     effective_parent_id: NodeId,
-    effective_parent_spec: &'static editor_schema::NodeSpec,
+    effective_parent_spec: &'static NodeSpec,
     node_index: usize,
 ) -> Vec<Step> {
     let children: Vec<(NodeId, NodeType)> =

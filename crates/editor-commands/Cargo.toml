@@ -9,7 +9,6 @@ uniffi = [
   "editor-common/uniffi",
   "editor-model/uniffi",
   "editor-resource/uniffi",
-  "editor-schema/uniffi",
   "editor-state/uniffi",
   "editor-transaction/uniffi",
 ]
@@ -19,7 +18,6 @@ wasm = [
   "editor-common/wasm",
   "editor-model/wasm",
   "editor-resource/wasm",
-  "editor-schema/wasm",
   "editor-state/wasm",
   "editor-transaction/wasm",
 ]
@@ -29,7 +27,6 @@ editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-resource = { path = "../editor-resource" }
-editor-schema = { path = "../editor-schema" }
 editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 enum-map.workspace = true

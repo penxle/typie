@@ -2,6 +2,7 @@ editor_macros::preamble!();
 
 mod affinity;
 mod composition;
+mod flat;
 mod pending_modifier;
 mod position;
 mod resolved_position;
@@ -11,6 +12,7 @@ mod state;
 
 pub use affinity::*;
 pub use composition::*;
+pub use flat::*;
 pub use pending_modifier::*;
 pub use position::*;
 pub use resolved_position::*;

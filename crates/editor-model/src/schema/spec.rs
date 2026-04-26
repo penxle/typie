@@ -1,8 +1,8 @@
-use editor_model::NodeType;
+use crate::NodeType;
 
-use crate::Schema;
-use crate::content::ContentExpr;
-use crate::context::ContextExpr;
+use super::Schema;
+use super::content::ContentExpr;
+use super::context::ContextExpr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockSelectionBoundaryMode {
@@ -85,7 +85,6 @@ pub enum Expand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Schema;
 
     #[test]
     fn is_leaf_classifies_nodes() {

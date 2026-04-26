@@ -1,5 +1,4 @@
 use editor_model::*;
-use editor_schema::{ContentExpr, NodeSpecExt};
 
 use crate::Step;
 

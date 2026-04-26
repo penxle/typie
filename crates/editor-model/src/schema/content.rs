@@ -1,6 +1,6 @@
-use editor_model::NodeType;
+use crate::NodeType;
 
-use crate::SchemaError;
+use super::SchemaError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ContentExpr {

@@ -1,5 +1,4 @@
-use editor_model::{Doc, ModifierType, NodeId};
-use editor_schema::{ContextExpr, ModifierSpecExt, NodeSpecExt};
+use editor_model::{ContextExpr, Doc, ModifierType, NodeId};
 
 use crate::StepError;
 

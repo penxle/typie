@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// `start` and `end` are **flat offsets** — absolute positions over the
 /// entire document, not per-node offsets. Flat offsets are defined by
-/// the flat-offset scheme implemented in the `editor-schema::flat`
-/// module (see `FlatClass`, `ResolvedPositionFlatExt`).
+/// the flat-offset scheme implemented in this crate's `flat` module
+/// (see `FlatClass`, `ResolvedPositionFlatExt`).
 ///
 /// A composition can span multiple nodes. The set of nodes covered by
 /// a composition is computed on demand by walking the document from

@@ -1,6 +1,5 @@
 use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
-use editor_schema::NodeSpecExt;
 use editor_state::Selection;
 use editor_transaction::{Transaction, compact, dissolve, prune};
 

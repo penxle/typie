@@ -1,23 +1,9 @@
-editor_macros::preamble!();
-
-mod content;
-mod context;
-mod error;
-mod ext;
-mod flat;
-mod spec;
-
-pub use content::*;
-pub use context::*;
-pub use error::*;
-pub use ext::*;
-pub use flat::*;
-pub use spec::*;
-
 use editor_macros::{content_expr, context_expr};
-use editor_model::{ModifierType, NodeType};
 use enum_map::{EnumMap, enum_map};
 use std::sync::LazyLock;
+
+use super::{BlockSelectionBoundaryMode, Expand, ModifierSpec, NodeSpec};
+use crate::{ModifierType, NodeType};
 
 static INNER: LazyLock<SchemaInner> = LazyLock::new(SchemaInner::default);
 

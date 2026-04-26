@@ -1,6 +1,5 @@
 use editor_model::{Doc, Modifier, Node, NodeId};
 use editor_resource::Resolution;
-use editor_schema::NodeSpecExt;
 use editor_transaction::Effect;
 use editor_view::Viewport;
 use hashbrown::{HashMap, HashSet};

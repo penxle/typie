@@ -1,6 +1,5 @@
 use editor_macros::context_expr;
-use editor_model::NodeType;
-use editor_schema::ContextExpr;
+use editor_model::{ContextExpr, NodeType};
 
 #[test]
 fn any() {

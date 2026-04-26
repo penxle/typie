@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use editor_commands::{self as commands, CommandError, CommandResult};
-use editor_schema::{DocFlatExt, ResolvedPositionFlatExt};
-use editor_state::{ResolvedPosition, Selection};
+use editor_state::{DocFlatExt, ResolvedPosition, ResolvedPositionFlatExt, Selection};
 use editor_transaction::Transaction;
 
 use crate::editor::Editor;

@@ -1,5 +1,4 @@
 use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
-use editor_schema::NodeSpecExt;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 

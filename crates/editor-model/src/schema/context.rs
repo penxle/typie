@@ -1,4 +1,4 @@
-use editor_model::NodeType;
+use crate::NodeType;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum ContextExpr {
@@ -41,7 +41,7 @@ impl ContextExpr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_model::NodeType::*;
+    use crate::NodeType::*;
 
     #[test]
     fn any_matches_everything() {

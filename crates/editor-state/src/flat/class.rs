@@ -1,7 +1,5 @@
 use editor_model::Node;
 
-use crate::NodeSpecExt;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlatClass {
     Text,

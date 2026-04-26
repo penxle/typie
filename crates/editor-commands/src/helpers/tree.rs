@@ -1,6 +1,5 @@
 use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId, NodeRef};
-use editor_schema::NodeSpecExt;
 use editor_state::Position;
 
 /// Find the lowest common ancestor of two nodes.

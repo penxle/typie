@@ -1,6 +1,5 @@
 use editor_common::StrExt;
 use editor_model::{Fragment, Node, NodeId};
-use editor_schema::NodeSpecExt;
 use editor_state::Selection;
 use editor_transaction::{Transaction, fulfill};
 

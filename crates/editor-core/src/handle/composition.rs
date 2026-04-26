@@ -1,8 +1,10 @@
 use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_common::StrExt;
 use editor_model::Doc;
-use editor_schema::{DocFlatExt, FLAT_CLOSE, FLAT_OPEN, FlatSegment, ResolvedPositionFlatExt};
-use editor_state::{Composition, ResolvedPosition, Selection};
+use editor_state::{
+    Composition, DocFlatExt, FLAT_CLOSE, FLAT_OPEN, FlatSegment, ResolvedPosition,
+    ResolvedPositionFlatExt, Selection,
+};
 use editor_transaction::Transaction;
 
 use crate::editor::Editor;

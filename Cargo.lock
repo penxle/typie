@@ -579,7 +579,6 @@ dependencies = [
  "editor-macros",
  "editor-model",
  "editor-resource",
- "editor-schema",
  "editor-state",
  "editor-transaction",
  "enum-map",
@@ -616,7 +615,6 @@ dependencies = [
  "editor-model",
  "editor-renderer",
  "editor-resource",
- "editor-schema",
  "editor-state",
  "editor-transaction",
  "editor-view",
@@ -675,7 +673,6 @@ version = "0.0.1"
 dependencies = [
  "editor-macros",
  "editor-model",
- "editor-schema",
  "editor-state",
  "serde",
  "tsify",
@@ -776,22 +773,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "editor-schema"
-version = "0.0.1"
-dependencies = [
- "editor-common",
- "editor-macros",
- "editor-model",
- "editor-state",
- "enum-map",
- "log",
- "thiserror",
- "tsify",
- "uniffi",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "editor-server"
 version = "0.0.1"
 dependencies = [
@@ -836,7 +817,6 @@ dependencies = [
  "editor-common",
  "editor-macros",
  "editor-model",
- "editor-schema",
  "editor-state",
  "log",
  "proptest",

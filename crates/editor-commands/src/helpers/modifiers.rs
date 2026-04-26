@@ -1,6 +1,5 @@
 use editor_common::StrExt;
-use editor_model::{Modifier, ModifierType, Node, NodeRef};
-use editor_schema::{Expand, ModifierSpecExt};
+use editor_model::{Expand, Modifier, ModifierType, Node, NodeRef};
 use editor_state::{PendingModifier, PendingModifiers};
 
 pub(crate) fn resolve_effective_modifiers(

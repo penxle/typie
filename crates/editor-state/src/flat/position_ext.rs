@@ -1,8 +1,8 @@
 use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId};
-use editor_state::{Position, ResolvedPosition};
 
 use super::class::{FlatClass, classify};
+use crate::{Position, ResolvedPosition};
 
 pub trait ResolvedPositionFlatExt<'a>: Sized {
     fn to_flat(&self) -> usize;

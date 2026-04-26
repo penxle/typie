@@ -1,6 +1,5 @@
 use editor_commands::{self as commands};
-use editor_schema::ResolvedPositionFlatExt;
-use editor_state::{Position, ResolvedPosition, Selection};
+use editor_state::{Position, ResolvedPosition, ResolvedPositionFlatExt, Selection};
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
