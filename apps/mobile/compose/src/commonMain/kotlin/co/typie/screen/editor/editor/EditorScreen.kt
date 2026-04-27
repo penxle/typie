@@ -153,7 +153,8 @@ fun EditorScreen(entityId: String) {
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val toolbarBottomState = rememberEditorToolbarBottomState()
-    val toolbarVisibleImeBottom = toolbarBottomState.visibleImeInset(imeBottom)
+    val toolbarVisibleImeBottom =
+      toolbarBottomState.visibleImeInset(imeBottom = imeBottom, safeBottomInset = bottomSafeInset)
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val devMode = Preference.devMode

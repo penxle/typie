@@ -25,22 +25,18 @@ internal class EditorToolbarBottomState {
   val textInputSessionEnabled: Boolean
     get() = activePanel == null
 
-  fun visibleImeInset(imeBottom: Dp): Dp =
+  fun visibleImeInset(imeBottom: Dp, safeBottomInset: Dp): Dp =
     if (activePanel == null) {
       maxOf(imeBottom, rememberedKeyboardInset)
     } else {
-      0.dp
+      bottomPanelInset(safeBottomInset)
     }
 
   fun toolbarVisible(visible: Boolean, editorFocused: Boolean): Boolean =
     visible && (editorFocused || activePanel != null || rememberedKeyboardInset > 0.dp)
 
-  fun toolbarBottomInset(imeBottom: Dp, safeBottomInset: Dp): Dp =
-    if (activePanel == null) {
-      maxOf(imeBottom, rememberedKeyboardInset, safeBottomInset)
-    } else {
-      safeBottomInset
-    }
+  fun inputBottomInset(imeBottom: Dp, safeBottomInset: Dp): Dp =
+    maxOf(imeBottom, rememberedKeyboardInset, safeBottomInset)
 
   fun bottomPanelHeight(safeBottomInset: Dp): Dp =
     (bottomPanelInset(safeBottomInset) - safeBottomInset - ToolbarBottomPanelGap).coerceAtLeast(
@@ -50,7 +46,10 @@ internal class EditorToolbarBottomState {
   fun openPanel(panel: EditorToolbarBottomPanelKey, imeBottom: Dp, safeBottomInset: Dp) {
     if (activePanel == null) {
       rememberedKeyboardInset =
-        resolveRememberedKeyboardInset(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
+        maxOf(
+          rememberedKeyboardInset,
+          resolveRememberedKeyboardInset(imeBottom = imeBottom, safeBottomInset = safeBottomInset),
+        )
     }
     activePanel = panel
   }

@@ -82,7 +82,7 @@ internal fun EditorToolbarLabelButton(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
+  val interactionSource = remember { MutableInteractionSource() }
 
   Box(
     modifier =
@@ -117,8 +117,16 @@ internal fun EditorToolbarIconButton(
   selected: Boolean = false,
   iconSize: Dp = ToolbarIconSize,
   tint: Color? = null,
+  inheritInteractionSource: Boolean = false,
 ) {
-  val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
+  val inheritedInteractionSource = LocalInteractionSource.current
+  val localInteractionSource = remember { MutableInteractionSource() }
+  val interactionSource =
+    if (inheritInteractionSource && inheritedInteractionSource != null) {
+      inheritedInteractionSource
+    } else {
+      localInteractionSource
+    }
   val surfaceModifier =
     when {
       fixedActionSurface ->
@@ -188,6 +196,25 @@ internal fun Modifier.emitPressInteractions(interactionSource: MutableInteractio
           PressInteraction.Release(press)
         }
       interactionSource.tryEmit(release)
+    }
+  }
+
+internal fun Modifier.trackToolbarScrollGestureStart(
+  onStart: () -> Unit,
+  onEnd: () -> Unit,
+): Modifier =
+  pointerInput(Unit) {
+    awaitEachGesture {
+      awaitFirstDown(requireUnconsumed = false)
+      onStart()
+
+      try {
+        do {
+          val event = awaitPointerEvent(PointerEventPass.Final)
+        } while (event.changes.any { it.pressed })
+      } finally {
+        onEnd()
+      }
     }
   }
 

@@ -33,6 +33,7 @@ import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportWheelPan
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarFloatingOverhang
+import co.typie.screen.editor.editor.toolbar.ToolbarHeight
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -77,7 +78,10 @@ internal fun EditorScreenLayout(
       }
     val toolbarHeight = toolbarPlaceables.maxOfOrNull { it.height } ?: 0
     val toolbarViewportInsetHeight =
-      (toolbarHeight - EditorToolbarFloatingOverhang.roundToPx()).coerceAtLeast(0)
+      (toolbarHeight - EditorToolbarFloatingOverhang.roundToPx()).coerceIn(
+        0,
+        ToolbarHeight.roundToPx(),
+      )
     val viewportHeight = (constraints.maxHeight - toolbarViewportInsetHeight).coerceAtLeast(0)
     val viewportConstraints =
       constraints.copy(

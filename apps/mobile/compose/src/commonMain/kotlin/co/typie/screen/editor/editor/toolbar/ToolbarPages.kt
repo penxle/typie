@@ -47,8 +47,10 @@ import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 @Composable
@@ -80,12 +82,15 @@ internal fun EditorToolbarPages(
   var indicatorDragProgress by remember { mutableStateOf<Float?>(null) }
   var settledPageIndex by remember { mutableIntStateOf(0) }
   var activeHardStop by remember { mutableStateOf<ToolbarHardStop?>(null) }
+  var scrollGestureStartPosition by remember { mutableStateOf<Float?>(null) }
+  var pointerScrollGestureActive by remember { mutableStateOf(false) }
 
   BoxWithConstraints(modifier = modifier.height(ToolbarStackHeight)) {
     val pageCount = pages.size.coerceAtLeast(1)
     val lastPageIndex = pageCount - 1
     val pageDistance = with(density) { maxWidth.roundToPx().coerceAtLeast(0) }.toFloat()
     val hardStopOverscrollLimitPx = with(density) { ToolbarHardStopOverscrollLimit.toPx() }
+    val hardStopActivationEpsilonPx = with(density) { ToolbarHardStopActivationEpsilon.toPx() }
     val pageScrollRanges = pages.map { it.scrollState?.maxValue ?: 0 }
     val pageMetrics =
       remember(pageDistance, pageScrollRanges) {
@@ -96,15 +101,24 @@ internal fun EditorToolbarPages(
     val currentPageIndex = pageMetrics.pageIndexForPosition(scrollPosition.value)
     val scrollableState = rememberScrollableState { delta ->
       val currentPosition = scrollPosition.value
+      val gestureStartPosition =
+        scrollGestureStartPosition ?: currentPosition.also { scrollGestureStartPosition = it }
       val proposedPosition = (currentPosition - delta).coerceIn(0f, pageMetrics.maxPosition)
       val scrollResult =
         pageMetrics.applyHardStop(
           currentPosition = currentPosition,
           proposedPosition = proposedPosition,
           hardStop = activeHardStop,
+          gestureStartPosition = gestureStartPosition,
+          activationEpsilon = hardStopActivationEpsilonPx,
         )
       val nextPosition = scrollResult.position
-      val consumed = currentPosition - nextPosition
+      val consumed =
+        if (scrollResult.rejectedDelta != 0f) {
+          delta
+        } else {
+          currentPosition - nextPosition
+        }
       val nextVisualOffset =
         if (scrollResult.rejectedDelta != 0f) {
           (hardStopVisualOffset.value -
@@ -130,6 +144,19 @@ internal fun EditorToolbarPages(
         }
       }
       consumed
+    }
+
+    LaunchedEffect(scrollableState) {
+      snapshotFlow { scrollableState.isScrollInProgress }
+        .distinctUntilChanged()
+        .collect { inProgress ->
+          if (!inProgress) {
+            delay(ToolbarScrollGestureIdleResetMillis)
+            if (!scrollableState.isScrollInProgress && !pointerScrollGestureActive) {
+              scrollGestureStartPosition = null
+            }
+          }
+        }
     }
 
     LaunchedEffect(pageCount, pageMetrics) {
@@ -158,11 +185,25 @@ internal fun EditorToolbarPages(
         }
     }
 
-    LaunchedEffect(scrollPosition) {
+    LaunchedEffect(scrollPosition, pageMetrics) {
       var initialized = false
-      snapshotFlow { scrollPosition.value.roundToInt() }
-        .collect {
-          if (initialized) {
+      snapshotFlow { pageMetrics.isPageTransitionPosition(scrollPosition.value) }
+        .distinctUntilChanged()
+        .collect { transitioning ->
+          if (initialized && transitioning) {
+            indicatorPulse++
+          } else {
+            initialized = true
+          }
+        }
+    }
+
+    LaunchedEffect(hardStopVisualOffset) {
+      var initialized = false
+      snapshotFlow { abs(hardStopVisualOffset.value) > ToolbarSnapPositionEpsilon }
+        .distinctUntilChanged()
+        .collect { hardStopping ->
+          if (initialized && hardStopping) {
             indicatorPulse++
           } else {
             initialized = true
@@ -275,7 +316,6 @@ internal fun EditorToolbarPages(
     InteractionScope {
       val toolbarInteractionSource =
         LocalInteractionSource.current ?: remember { MutableInteractionSource() }
-
       Box(
         modifier =
           Modifier.align(Alignment.BottomCenter)
@@ -293,6 +333,16 @@ internal fun EditorToolbarPages(
             Modifier.matchParentSize()
               .clipToBounds()
               .emitPressInteractions(toolbarInteractionSource)
+              .trackToolbarScrollGestureStart(
+                onStart = {
+                  pointerScrollGestureActive = true
+                  scrollGestureStartPosition = scrollPosition.value
+                },
+                onEnd = {
+                  pointerScrollGestureActive = false
+                  scrollGestureStartPosition = null
+                },
+              )
               .scrollable(
                 state = scrollableState,
                 orientation = Orientation.Horizontal,
@@ -337,6 +387,7 @@ internal fun EditorToolbarPages(
             onClick = onKeyboardDismissRequest,
             shape = ToolbarFixedActionShape,
             fixedActionSurface = true,
+            inheritInteractionSource = true,
             modifier =
               Modifier.align(Alignment.CenterEnd)
                 .width(ToolbarFixedActionWidth)
@@ -350,15 +401,15 @@ internal fun EditorToolbarPages(
   }
 }
 
-private data class ToolbarHardStop(val position: Float, val blockedDirection: Int)
+internal data class ToolbarHardStop(val position: Float, val blockedDirection: Int)
 
-private data class ToolbarScrollResult(
+internal data class ToolbarScrollResult(
   val position: Float,
   val hardStop: ToolbarHardStop?,
   val rejectedDelta: Float = 0f,
 )
 
-private data class ToolbarPageMetrics(
+internal data class ToolbarPageMetrics(
   private val pageDistance: Float,
   private val scrollRanges: List<Int>,
 ) {
@@ -422,6 +473,26 @@ private data class ToolbarPageMetrics(
   fun pageIndexForPosition(position: Float): Int =
     progressFor(position).roundToInt().coerceIn(0, lastPageIndex.coerceAtLeast(0))
 
+  fun isPageTransitionPosition(position: Float): Boolean {
+    if (scrollRanges.isEmpty() || pageDistance <= 0f) {
+      return false
+    }
+
+    val boundedPosition = position.coerceIn(0f, maxPosition)
+    for (index in 0 until lastPageIndex) {
+      val pageStart = pageStarts[index]
+      val scrollEnd = pageStart + scrollRanges[index].coerceAtLeast(0)
+      val nextPageStart = pageStarts[index + 1]
+      if (
+        boundedPosition > scrollEnd + ToolbarSnapPositionEpsilon &&
+          boundedPosition < nextPageStart - ToolbarSnapPositionEpsilon
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
   fun positionForPageEntry(pageIndex: Int, fromPageIndex: Int? = null): Float {
     val coercedPageIndex = pageIndex.coerceIn(0, lastPageIndex.coerceAtLeast(0))
     val pageStart = pageStarts.getOrNull(coercedPageIndex) ?: 0f
@@ -437,9 +508,13 @@ private data class ToolbarPageMetrics(
     currentPosition: Float,
     proposedPosition: Float,
     hardStop: ToolbarHardStop?,
+    gestureStartPosition: Float?,
+    activationEpsilon: Float,
   ): ToolbarScrollResult {
     val boundedCurrent = currentPosition.coerceIn(0f, maxPosition)
     val boundedProposed = proposedPosition.coerceIn(0f, maxPosition)
+    val boundedGestureStart = gestureStartPosition?.coerceIn(0f, maxPosition)
+    val boundedActivationEpsilon = activationEpsilon.coerceAtLeast(0f)
     val direction = (boundedProposed - boundedCurrent).directionSign()
     if (direction == 0) {
       return ToolbarScrollResult(position = boundedProposed, hardStop = hardStop)
@@ -447,7 +522,10 @@ private data class ToolbarPageMetrics(
 
     val nextHardStop =
       if (hardStop != null && boundedCurrent.isNear(hardStop.position)) {
-        if (direction == hardStop.blockedDirection) {
+        val startedNearHardStop =
+          boundedGestureStart != null &&
+            abs(boundedGestureStart - hardStop.position) <= boundedActivationEpsilon
+        if (direction == hardStop.blockedDirection && !startedNearHardStop) {
           return ToolbarScrollResult(
             position = hardStop.position,
             hardStop = hardStop,
@@ -466,8 +544,12 @@ private data class ToolbarPageMetrics(
       }
 
       val scrollEnd = pageStart + scrollRange
+      val edgeActivationEpsilon = min(boundedActivationEpsilon, scrollRange / 2f)
       if (direction > 0) {
-        if (boundedCurrent < scrollEnd && boundedProposed > scrollEnd) {
+        val startedNearScrollEnd =
+          boundedGestureStart != null &&
+            abs(boundedGestureStart - scrollEnd) <= edgeActivationEpsilon
+        if (boundedCurrent <= scrollEnd && boundedProposed > scrollEnd && !startedNearScrollEnd) {
           val stop = ToolbarHardStop(position = scrollEnd, blockedDirection = direction)
           return ToolbarScrollResult(
             position = scrollEnd,
@@ -476,7 +558,10 @@ private data class ToolbarPageMetrics(
           )
         }
       } else {
-        if (boundedCurrent > pageStart && boundedProposed < pageStart) {
+        val startedNearScrollStart =
+          boundedGestureStart != null &&
+            abs(boundedGestureStart - pageStart) <= edgeActivationEpsilon
+        if (boundedCurrent >= pageStart && boundedProposed < pageStart && !startedNearScrollStart) {
           val stop = ToolbarHardStop(position = pageStart, blockedDirection = direction)
           return ToolbarScrollResult(
             position = pageStart,

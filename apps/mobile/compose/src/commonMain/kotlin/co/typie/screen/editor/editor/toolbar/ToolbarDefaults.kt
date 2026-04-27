@@ -33,6 +33,7 @@ internal val ToolbarIndicatorIconSize = 16.dp
 internal val ToolbarIndicatorPadding = 2.dp
 internal val ToolbarIndicatorItemGap = 2.dp
 internal val ToolbarHardStopOverscrollLimit = ToolbarPageIndicatorSlotWidth
+internal val ToolbarHardStopActivationEpsilon = 10.dp
 
 internal const val ToolbarCapsulePressedScale = 1.015f
 internal const val ToolbarFixedActionPressedScale = 1.1f
@@ -40,9 +41,13 @@ internal const val ToolbarHardStopOverscrollResistance = 0.45f
 internal const val ToolbarSwipeVelocityThreshold = 600f
 internal const val ToolbarVisibilityEnterMillis = 200
 internal const val ToolbarVisibilityExitMillis = 160
+internal const val ToolbarBottomPanelVisibilityEnterMillis = 180
+internal const val ToolbarBottomPanelVisibilityExitMillis = 140
+internal const val ToolbarBottomPanelHiddenScale = 0.96f
 internal const val ToolbarIndicatorBackgroundMillis = 120
 internal const val ToolbarIndicatorFadeMillis = 220
 internal const val ToolbarIndicatorVisibleMillis = 1200L
+internal const val ToolbarScrollGestureIdleResetMillis = 180L
 internal const val ToolbarIndicatorFollowMovementThresholdPx = 1f
 internal const val ToolbarSurfaceOpacity = 0.86f
 

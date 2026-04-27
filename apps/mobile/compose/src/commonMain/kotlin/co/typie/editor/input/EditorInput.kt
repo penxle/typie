@@ -181,9 +181,10 @@ internal class EditorInputNode(
 
   private fun syncTextInputSession() {
     val sessionEnabled = focused && textInputSessionEnabled
+    focusedJob?.cancel()
+    focusedJob = null
     notifyTextInputFocusChanged(this, sessionEnabled)
     registerTextInputClient(this, if (sessionEnabled) textInputClient else null)
-    focusedJob?.cancel()
     focusedJob =
       if (sessionEnabled) {
         coroutineScope.launch {
