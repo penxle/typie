@@ -81,6 +81,7 @@ internal fun EditorToolbarPages(
   var indicatorDragging by remember { mutableStateOf(false) }
   var indicatorPulse by remember { mutableIntStateOf(0) }
   var indicatorDragProgress by remember { mutableStateOf<Float?>(null) }
+  var indicatorPageTransitioning by remember { mutableStateOf(false) }
   var settledPageIndex by remember { mutableIntStateOf(0) }
   var activeHardStop by remember { mutableStateOf<ToolbarHardStop?>(null) }
   var scrollGestureStartPosition by remember { mutableStateOf<Float?>(null) }
@@ -213,6 +214,7 @@ internal fun EditorToolbarPages(
       snapshotFlow { pageMetrics.isPageTransitionPosition(scrollPosition.value) }
         .distinctUntilChanged()
         .collect { transitioning ->
+          indicatorPageTransitioning = transitioning
           if (initialized && transitioning) {
             indicatorPulse++
           } else {
@@ -234,13 +236,14 @@ internal fun EditorToolbarPages(
         }
     }
 
-    LaunchedEffect(indicatorPulse, indicatorInteracting) {
-      if (indicatorPulse == 0 && !indicatorInteracting) {
+    val indicatorHeldVisible = indicatorInteracting || indicatorPageTransitioning
+    LaunchedEffect(indicatorPulse, indicatorHeldVisible) {
+      if (indicatorPulse == 0 && !indicatorHeldVisible) {
         indicatorVisible = false
         return@LaunchedEffect
       }
       indicatorVisible = true
-      if (!indicatorInteracting) {
+      if (!indicatorHeldVisible) {
         delay(ToolbarIndicatorVisibleMillis)
         indicatorVisible = false
       }
@@ -321,7 +324,7 @@ internal fun EditorToolbarPages(
 
     val indicatorAlpha by
       animateFloatAsState(
-        targetValue = if (indicatorVisible || indicatorInteracting) 1f else 0f,
+        targetValue = if (indicatorVisible || indicatorHeldVisible) 1f else 0f,
         animationSpec = tween(ToolbarIndicatorFadeMillis),
         label = "editor-toolbar-indicator-alpha",
       )
