@@ -7,6 +7,8 @@ import co.typie.platform.PlatformModule
 import co.typie.ui.theme.ThemeMode
 import eu.anifantakis.lib.ksafe.KSafeWriteMode
 import eu.anifantakis.lib.ksafe.invoke
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 internal inline fun <reified T> prefs(key: String, defaultValue: T): PersistentState<T> {
   val delegate = PlatformModule.ksafePrefs.invoke(defaultValue, key, mode = KSafeWriteMode.Plain)
@@ -35,4 +37,10 @@ object Preference {
   var devMode by prefs("dev_mode", false)
 
   var preflightCache by prefs<Preflight?>("preflight_cache", null)
+
+  private var _deviceId: String? by prefs<String?>("device_id", null)
+
+  @OptIn(ExperimentalUuidApi::class)
+  val deviceId: String
+    get() = _deviceId ?: Uuid.random().toHexString().also { _deviceId = it }
 }

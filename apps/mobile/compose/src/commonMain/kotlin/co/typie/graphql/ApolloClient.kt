@@ -36,4 +36,5 @@ val Apollo: ApolloClient =
       enableOptimisticUpdates = true,
     )
     .addHttpInterceptor(AuthInterceptor)
+    .addHttpInterceptor(DeviceInterceptor)
     .build()
