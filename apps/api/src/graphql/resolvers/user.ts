@@ -12,6 +12,7 @@ import {
   SingleSignOnProvider,
   SiteState,
   SubscriptionState,
+  UserDevicePlatform,
   UserRole,
   UserState,
 } from '@typie/lib/enums';
@@ -42,6 +43,7 @@ import {
   Subscriptions,
   TableCode,
   UserBillingKeys,
+  UserDevices,
   UserInAppPurchases,
   UserMarketingConsents,
   UserPaymentCredits,
@@ -81,6 +83,7 @@ import {
   Subscription,
   User,
   UserBillingKey,
+  UserDevice,
   UserPersonalIdentity,
   UserSingleSignOn,
   UserTrial,
@@ -204,6 +207,30 @@ User.implement({
       nullable: true,
       resolve: async (self) => {
         return await db.select().from(UserBillingKeys).where(eq(UserBillingKeys.userId, self.id)).then(first);
+      },
+    }),
+
+    devices: t.field({
+      type: [UserDevice],
+      resolve: async (self, _args, ctx) => {
+        if (ctx.session?.userId !== self.id) {
+          throw new TypieError({ code: 'permission_denied' });
+        }
+        return db
+          .select({
+            id: UserDevices.id,
+            userId: UserDevices.userId,
+            identifier: UserDevices.identifier,
+            name: UserDevices.name,
+            platform: UserDevices.platform,
+            lastActiveAt: UserDevices.lastActiveAt,
+            lastActiveIp: UserDevices.lastActiveIp,
+            createdAt: UserDevices.createdAt,
+          })
+          .from(UserDevices)
+          .innerJoin(UserSessions, eq(UserSessions.deviceId, UserDevices.id))
+          .where(eq(UserDevices.userId, self.id))
+          .orderBy(desc(UserDevices.lastActiveAt));
       },
     }),
 
@@ -491,6 +518,21 @@ UserPersonalIdentity.implement({
     gender: t.exposeString('gender'),
     phoneNumber: t.exposeString('phoneNumber', { nullable: true }),
     expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
+  }),
+});
+
+UserDevice.implement({
+  isTypeOf: isTypeOf(TableCode.USER_DEVICES),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    name: t.exposeString('name'),
+    platform: t.expose('platform', { type: UserDevicePlatform }),
+    lastActiveAt: t.expose('lastActiveAt', { type: 'DateTime' }),
+    lastActiveIp: t.exposeString('lastActiveIp', { nullable: true }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    isCurrent: t.boolean({
+      resolve: (self, _args, ctx) => ctx.session?.deviceId === self.id,
+    }),
   }),
 });
 
@@ -892,6 +934,30 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  revokeUserDevice: t.withAuth({ session: true }).fieldWithInput({
+    type: UserDevice,
+    input: { deviceId: t.input.id({ validate: validateDbId(TableCode.USER_DEVICES) }) },
+    resolve: async (_, { input }, ctx) => {
+      if (input.deviceId === ctx.session.deviceId) {
+        throw new TypieError({ code: 'cannot_revoke_current_device' });
+      }
+
+      const device = await db
+        .select()
+        .from(UserDevices)
+        .where(and(eq(UserDevices.id, input.deviceId), eq(UserDevices.userId, ctx.session.userId)))
+        .then(first);
+
+      if (!device) {
+        throw new TypieError({ code: 'permission_denied' });
+      }
+
+      await db.delete(UserSessions).where(and(eq(UserSessions.userId, ctx.session.userId), eq(UserSessions.deviceId, device.id)));
+
+      return device;
+    },
+  }),
+
   createWsSession: t.withAuth({ session: true }).field({
     type: 'String',
     resolve: async (_, __, ctx) => {
@@ -900,7 +966,12 @@ builder.mutationFields((t) => ({
       await redis.setex(
         `user:ws:${token}`,
         60 * 10,
-        JSON.stringify({ userId: ctx.session.userId, bootstrapBypassKeyHash: ctx.c.req.header('X-Bootstrap-Bypass') }),
+        JSON.stringify({
+          sessionId: ctx.session.id,
+          userId: ctx.session.userId,
+          deviceId: ctx.session.deviceId,
+          bootstrapBypassKeyHash: ctx.c.req.header('X-Bootstrap-Bypass'),
+        }),
       );
 
       return token;

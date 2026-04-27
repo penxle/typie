@@ -1,6 +1,7 @@
 import { clearAllDataLoaders } from '@pothos/plugin-dataloader';
 import { getClientAddress } from '@typie/lib';
 import DataLoader from 'dataloader';
+import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
 import { HTTPException } from 'hono/http-exception';
@@ -8,7 +9,7 @@ import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
 import { redis } from '#/cache.ts';
-import { db, first, UserSessions } from '#/db/index.ts';
+import { db, first, UserDevices, UserSessions } from '#/db/index.ts';
 import { publicKey } from '#/utils/index.ts';
 import type { Context as HonoContext } from 'hono';
 
@@ -44,6 +45,7 @@ export type SessionContext = {
   session: {
     id: string;
     userId: string;
+    deviceId: string;
   };
 };
 
@@ -121,7 +123,7 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
     }
 
     const session = await db
-      .select({ id: UserSessions.id, userId: UserSessions.userId })
+      .select({ id: UserSessions.id, userId: UserSessions.userId, deviceId: UserSessions.deviceId })
       .from(UserSessions)
       .where(and(eq(UserSessions.id, sid), eq(UserSessions.userId, sub)))
       .then(first);
@@ -135,10 +137,24 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
     ctx.session = {
       id: session.id,
       userId: impersonatedUserId ?? session.userId,
+      deviceId: session.deviceId,
     };
+
+    void refreshDeviceLastActive(session.deviceId, ctx.ip);
   }
 
   return ctx;
+};
+
+const refreshDeviceLastActive = async (deviceId: string, ip: string) => {
+  try {
+    const key = `device:lastActive:${deviceId}`;
+    const isFresh = await redis.set(key, '1', 'EX', 300, 'NX');
+    if (isFresh !== 'OK') return;
+    await db.update(UserDevices).set({ lastActiveAt: dayjs(), lastActiveIp: ip }).where(eq(UserDevices.id, deviceId));
+  } catch {
+    // best-effort
+  }
 };
 
 export const clearLoaders = (ctx: Context) => {

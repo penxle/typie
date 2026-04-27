@@ -17,6 +17,7 @@ import {
   Images,
   ReferralCodes,
   Referrals,
+  UserDevices,
   UserMarketingConsents,
   UserPaymentCredits,
   Users,
@@ -344,14 +345,66 @@ builder.mutationFields((t) => ({
  * * Utils
  */
 
+const inferPlatformFromUserAgent = (ua: string | undefined): 'IOS' | 'ANDROID' | 'WEB' => {
+  if (!ua) return 'WEB';
+  if (/iPhone|iPad|iPod/.test(ua)) return 'IOS';
+  if (/Android/.test(ua)) return 'ANDROID';
+  return 'WEB';
+};
+
+const resolveDeviceMetadata = (ctx: UserContext) => {
+  const identifier = ctx.c.req.header('X-Device-Id');
+  if (!identifier) {
+    throw new TypieError({ code: 'device_id_required' });
+  }
+
+  const rawName = ctx.c.req.header('X-Device-Name');
+  const rawPlatform = ctx.c.req.header('X-Device-Platform');
+  const userAgent = ctx.c.req.header('User-Agent');
+
+  const name = (rawName?.trim() || '알 수 없는 기기').slice(0, 100);
+  const platform =
+    rawPlatform === 'IOS' || rawPlatform === 'ANDROID' || rawPlatform === 'WEB' ? rawPlatform : inferPlatformFromUserAgent(userAgent);
+
+  return { identifier, name, platform };
+};
+
 const createSession = async (ctx: UserContext, userId: string) => {
   const token = nanoid(64);
   const expiresAt = dayjs().add(1, 'year');
+  const meta = resolveDeviceMetadata(ctx);
 
-  await db.insert(UserSessions).values({
-    userId,
-    token,
-    expiresAt,
+  await db.transaction(async (tx) => {
+    const device = await tx
+      .insert(UserDevices)
+      .values({
+        userId,
+        identifier: meta.identifier,
+        name: meta.name,
+        platform: meta.platform,
+        lastActiveAt: dayjs(),
+        lastActiveIp: ctx.ip,
+      })
+      .onConflictDoUpdate({
+        target: [UserDevices.userId, UserDevices.identifier],
+        set: {
+          name: meta.name,
+          platform: meta.platform,
+          lastActiveAt: dayjs(),
+          lastActiveIp: ctx.ip,
+        },
+      })
+      .returning({ id: UserDevices.id })
+      .then(firstOrThrow);
+
+    await tx.delete(UserSessions).where(and(eq(UserSessions.userId, userId), eq(UserSessions.deviceId, device.id)));
+
+    await tx.insert(UserSessions).values({
+      userId,
+      deviceId: device.id,
+      token,
+      expiresAt,
+    });
   });
 
   setCookie(ctx.c, 'typie-st', token, {

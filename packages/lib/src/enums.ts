@@ -227,6 +227,13 @@ export const SubscriptionState = {
   EXPIRED: 'EXPIRED',
 } as const;
 
+export type UserDevicePlatform = keyof typeof UserDevicePlatform;
+export const UserDevicePlatform = {
+  IOS: 'IOS',
+  ANDROID: 'ANDROID',
+  WEB: 'WEB',
+} as const;
+
 export type UserRole = keyof typeof UserRole;
 export const UserRole = {
   ADMIN: 'ADMIN',

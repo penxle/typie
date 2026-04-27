@@ -748,6 +748,7 @@ type Mutation {
   reportDocument(input: ReportDocumentInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
+  revokeUserDevice(input: RevokeUserDeviceInput!): UserDevice!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
   scheduleSubscriptionCancellation: Subscription_!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
@@ -1102,6 +1103,10 @@ input ResetPasswordInput {
   password: String!
 }
 
+input RevokeUserDeviceInput {
+  deviceId: ID!
+}
+
 input SchedulePlanChangeInput {
   planId: ID!
 }
@@ -1425,6 +1430,7 @@ type User implements IUser {
   characterCountChanges: [CharacterCountChange!]!
   createdAt: DateTime!
   credit: Int!
+  devices: [UserDevice!]!
   documentCount: Int!
   documentFontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   email: String!
@@ -1460,6 +1466,22 @@ type UserBillingKey {
   createdAt: DateTime!
   id: ID!
   name: String!
+}
+
+type UserDevice {
+  createdAt: DateTime!
+  id: ID!
+  isCurrent: Boolean!
+  lastActiveAt: DateTime!
+  lastActiveIp: String
+  name: String!
+  platform: UserDevicePlatform!
+}
+
+enum UserDevicePlatform {
+  ANDROID
+  IOS
+  WEB
 }
 
 type UserPersonalIdentity {

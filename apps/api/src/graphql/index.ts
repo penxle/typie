@@ -49,14 +49,15 @@ const server = makeServer<{ session: string }, Extra>({
       return false;
     }
 
-    const { userId, bootstrapBypassKeyHash } = JSON.parse(session);
-    if (!userId) {
+    const { sessionId, userId, deviceId, bootstrapBypassKeyHash } = JSON.parse(session);
+    if (!sessionId || !userId || !deviceId) {
       return false;
     }
 
     ctx.extra.c.var.context.session = {
-      id: ctx.connectionParams.session,
+      id: sessionId,
       userId,
+      deviceId,
     };
 
     ctx.extra.bootstrapBypassKeyHash = bootstrapBypassKeyHash;

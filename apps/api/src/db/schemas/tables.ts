@@ -1001,6 +1001,29 @@ export const UserPushNotificationTokens = pgTable(
   (t) => [index().on(t.userId)],
 );
 
+export const UserDevices = pgTable(
+  'user_devices',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.USER_DEVICES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    identifier: text('identifier').notNull(),
+    name: text('name').notNull(),
+    platform: E._UserDevicePlatform('platform').notNull(),
+    lastActiveAt: datetime('last_active_at')
+      .notNull()
+      .default(sql`now()`),
+    lastActiveIp: text('last_active_ip'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.userId, t.identifier), index().on(t.userId)],
+);
+
 export const UserSessions = pgTable(
   'user_sessions',
   {
@@ -1010,13 +1033,16 @@ export const UserSessions = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => UserDevices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     token: text('token').notNull().unique(),
     expiresAt: datetime('expires_at').notNull(),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.userId)],
+  (t) => [index().on(t.userId), unique().on(t.userId, t.deviceId)],
 );
 
 export const UserSingleSignOns = pgTable(
