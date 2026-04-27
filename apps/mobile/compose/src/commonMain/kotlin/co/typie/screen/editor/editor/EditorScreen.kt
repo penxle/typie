@@ -202,7 +202,6 @@ fun EditorScreen(entityId: String) {
           uiState = uiState,
           headerHeight = screenState.headerHeight,
           pagesContentHeight = pagesContentHeight,
-          bottomOcclusion = visibleArea.bottomOcclusion,
           target = EditorBringIntoViewTarget.CurrentSelectionHead,
           density = density,
         )

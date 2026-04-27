@@ -80,7 +80,6 @@ internal fun resolveDistanceToPagesBottom(
   uiState: EditorUiState,
   headerHeight: Float,
   pagesContentHeight: Float,
-  bottomOcclusion: Float,
   target: EditorBringIntoViewTarget,
   density: Float = 0f,
 ): Float? {
@@ -99,7 +98,7 @@ internal fun resolveDistanceToPagesBottom(
       target = target,
     ) ?: return null
   val contentBottomInContent = headerHeight + editorBounds.y + pagesContentHeight
-  return (contentBottomInContent - rect.top + bottomOcclusion).coerceAtLeast(0f)
+  return (contentBottomInContent - rect.top).coerceAtLeast(0f)
 }
 
 private fun resolveBringIntoViewTargetRect(
