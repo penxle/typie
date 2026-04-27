@@ -365,7 +365,10 @@ fun EditorScreen(entityId: String) {
         },
         toolbar = {
           EditorToolbarHost(
-            bodyFocused = screenState.shouldShowToolbar(bodyFocused = uiState.focused),
+            editorFocused = uiState.focused,
+            visible = screenState.sceneInForeground,
+            safeBottomInset = bottomSafeInset,
+            onEditorFocusRequest = { runtime.focus() },
             modifier = Modifier,
           )
         },
