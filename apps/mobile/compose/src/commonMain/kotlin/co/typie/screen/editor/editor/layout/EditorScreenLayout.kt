@@ -31,6 +31,7 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportWheelPan
+import co.typie.navigation.navigationPopNestedScroll
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarFloatingOverhang
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPadding
@@ -98,6 +99,7 @@ internal fun EditorScreenLayout(
             modifier =
               Modifier.fillMaxSize()
                 .clipToBounds()
+                .navigationPopNestedScroll()
                 .scrollable2D(state = viewportScrollableState)
                 .editorViewportWheelScroll(state.viewportState),
             content = {

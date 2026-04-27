@@ -255,8 +255,12 @@ internal fun consumeEditorViewportTouchPan(
   viewportState: EditorViewportState,
   deltaPx: Offset,
   density: Float,
+  canNavigateBack: Boolean = false,
 ): Offset {
   if (density <= 0f) {
+    return Offset.Zero
+  }
+  if (canNavigateBack && deltaPx.isDominantRightPan() && viewportState.scrollOffset.x <= 0f) {
     return Offset.Zero
   }
 
@@ -294,6 +298,8 @@ private fun Offset.consumeCrossAxisDelta(requested: Offset): Offset =
   } else {
     if (x != 0f) copy(y = requested.y) else this
   }
+
+private fun Offset.isDominantRightPan(): Boolean = x > 0f && abs(x) > abs(y)
 
 internal data class EditorZoomViewportScrollOffset(
   val horizontalScroll: Float,

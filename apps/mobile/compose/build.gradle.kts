@@ -133,6 +133,14 @@ kotlin {
         implementation(libs.ktor.client.cio)
       }
     }
+
+    val desktopTest by getting {
+      dependencies {
+        implementation(
+          "org.jetbrains.compose.ui:ui-test-junit4:${libs.versions.composeMultiplatform.get()}"
+        )
+      }
+    }
   }
 
   dependencies {

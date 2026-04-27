@@ -165,18 +165,27 @@ internal object DesktopDebugKeyboard {
   private var koreanFixtureStepIndex by mutableStateOf(0)
   private var activeFixtureLanguage: Boolean? by mutableStateOf(null)
 
+  var hardwareKeyboardConnected by mutableStateOf(false)
+    private set
+
   var height by mutableStateOf(DesktopDebugKeyboardDefaultHeight)
     private set
 
+  val visible: Boolean
+    get() = isVisible
+
   fun notifyFocusChanged(owner: Any, isFocused: Boolean) {
     if (isFocused) {
+      val focusGained = owner !in focusedOwners
       focusedOwners.remove(owner)
       focusedOwners.add(owner)
       hideJob?.cancel()
-      isVisible = true
       if (clients.containsKey(owner)) {
         activeOwner = owner
         updateRecentClient(clients.getValue(owner))
+      }
+      if (focusGained && !hardwareKeyboardConnected) {
+        isVisible = true
       }
       return
     }
@@ -189,6 +198,15 @@ internal object DesktopDebugKeyboard {
     if (isPointerInteracting) return
 
     scheduleHideIfNeeded()
+  }
+
+  fun updateHardwareKeyboardConnected(connected: Boolean) {
+    hardwareKeyboardConnected = connected
+    if (connected) {
+      hideKeyboardSurface()
+    } else {
+      showKeyboard()
+    }
   }
 
   fun registerClient(owner: Any, client: TextInputClient?) {
@@ -310,7 +328,7 @@ internal object DesktopDebugKeyboard {
           verticalAlignment = Alignment.CenterVertically,
         ) {
           KeyboardKey(
-            spec = ActionKeySpec("hide", DesktopDebugKeyboardPink, 1f) { dismissKeyboard() },
+            spec = ActionKeySpec("hide", DesktopDebugKeyboardPink, 1f) { dismissInput() },
             modifier = Modifier.size(width = 86.dp, height = 34.dp),
           )
         }
@@ -318,17 +336,34 @@ internal object DesktopDebugKeyboard {
     }
   }
 
-  private fun dismissKeyboard() {
+  internal fun hideKeyboardSurface() {
+    resetFixtureProgress()
+    hideJob?.cancel()
+    isVisible = false
+  }
+
+  internal fun dismissInput() {
     rememberedClient()?.dismiss()
     clearRecentClient()
-    resetFixtureProgress()
-    isVisible = false
+    hideKeyboardSurface()
+  }
+
+  internal fun showKeyboard() {
+    if (hardwareKeyboardConnected) return
+    val owner = focusedOwners.lastOrNull { clients.containsKey(it) } ?: return
+    val client = clients[owner] ?: return
+    hideJob?.cancel()
+    activeOwner = owner
+    updateRecentClient(client)
+    isVisible = true
   }
 
   private fun beginPointerInteraction() {
     isPointerInteracting = true
     hideJob?.cancel()
-    isVisible = true
+    if (!hardwareKeyboardConnected) {
+      isVisible = true
+    }
   }
 
   private fun endPointerInteraction() {
@@ -497,7 +532,9 @@ internal object DesktopDebugKeyboard {
   private fun withRefocusedClient(action: (TextInputClient) -> Unit) {
     val client = rememberedClient() ?: return
     hideJob?.cancel()
-    isVisible = true
+    if (!hardwareKeyboardConnected) {
+      isVisible = true
+    }
     client.requestFocus()
     scope.launch {
       delay(24)

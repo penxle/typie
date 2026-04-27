@@ -27,12 +27,16 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.lifecycle.ViewModelStoreOwner
@@ -125,6 +129,7 @@ fun NavigationStack(
   val progress = remember { Animatable(0f) }
 
   var lastDragAmount by remember { mutableStateOf(0f) }
+  var nestedPopDragActive by remember { mutableStateOf(false) }
 
   fun startPopDrag() {
     val prev = navigator.previous ?: return
@@ -143,6 +148,7 @@ fun NavigationStack(
   }
 
   fun finishPopDrag() {
+    nestedPopDragActive = false
     val velocity = lastDragAmount * 1000f / 16f
     scope.launch {
       if (progress.value > 0.5f || velocity > 1000f) {
@@ -164,7 +170,64 @@ fun NavigationStack(
     }
   }
 
+  val popNestedScrollConnection =
+    remember(navigator.canPop, animState, containerWidth) {
+      object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+          if (source != NestedScrollSource.UserInput || !nestedPopDragActive) {
+            return Offset.Zero
+          }
+
+          updatePopDrag(available.x)
+          return available
+        }
+
+        override fun onPostScroll(
+          consumed: Offset,
+          available: Offset,
+          source: NestedScrollSource,
+        ): Offset {
+          if (
+            source != NestedScrollSource.UserInput ||
+              nestedPopDragActive ||
+              !navigator.canPop ||
+              containerWidth <= 0f ||
+              (animState != AnimState.Idle && animState != AnimState.Dragging) ||
+              !available.isDominantRightDrag()
+          ) {
+            return Offset.Zero
+          }
+
+          nestedPopDragActive = true
+          startPopDrag()
+          updatePopDrag(available.x)
+          return available
+        }
+
+        override suspend fun onPreFling(available: Velocity): Velocity {
+          if (!nestedPopDragActive) {
+            return Velocity.Zero
+          }
+
+          nestedPopDragActive = false
+          finishPopDrag()
+          return available
+        }
+
+        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+          if (!nestedPopDragActive) {
+            return Velocity.Zero
+          }
+
+          nestedPopDragActive = false
+          finishPopDrag()
+          return available
+        }
+      }
+    }
+
   fun cancelPopDrag() {
+    nestedPopDragActive = false
     scope.launch {
       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
       behindRoute = null
@@ -252,6 +315,7 @@ fun NavigationStack(
   val animationProviders =
     buildList<ProvidedValue<*>> {
       add(Nav provides navigator)
+      add(LocalNavigationPopNestedScrollConnection provides popNestedScrollConnection)
       add(LocalTopBarAnimationSource provides topBarState)
       bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
     }
@@ -587,3 +651,5 @@ private fun cornerRadius(progress: Float): Dp {
     }
   return maxRadius * factor.coerceIn(0f, 1f)
 }
+
+private fun Offset.isDominantRightDrag(): Boolean = x > 0f && abs(x) > abs(y)

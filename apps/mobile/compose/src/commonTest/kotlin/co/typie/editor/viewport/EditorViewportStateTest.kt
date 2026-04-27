@@ -49,6 +49,47 @@ class EditorViewportStateTest {
   }
 
   @Test
+  fun `dominant right touch pan at horizontal start scrolls vertically when back navigation is unavailable`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 100f, height = 300f),
+    )
+
+    val consumed =
+      consumeEditorViewportTouchPan(
+        viewportState = state,
+        deltaPx = Offset(x = 80f, y = -20f),
+        density = 2f,
+        canNavigateBack = false,
+      )
+
+    assertTrue(consumed.x == 0f)
+    assertEquals(-20f, consumed.y)
+    assertEquals(Offset(x = 0f, y = 10f), state.scrollOffset)
+  }
+
+  @Test
+  fun `dominant right touch pan at horizontal start yields to back navigation when available`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 100f, height = 300f),
+    )
+
+    val consumed =
+      consumeEditorViewportTouchPan(
+        viewportState = state,
+        deltaPx = Offset(x = 80f, y = -20f),
+        density = 2f,
+        canNavigateBack = true,
+      )
+
+    assertEquals(Offset.Zero, consumed)
+    assertEquals(Offset.Zero, state.scrollOffset)
+  }
+
+  @Test
   fun `touch pan reports partially consumed incidental cross-axis delta consumed when main axis scrolls`() {
     val state = EditorViewportState()
     state.updateMeasuredBounds(

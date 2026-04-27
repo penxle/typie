@@ -43,6 +43,7 @@ internal fun EditorBody(
   autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
   textInputSessionEnabled: Boolean = true,
+  suppressSoftwareKeyboard: Boolean = false,
   showDebugBodyOverlay: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
   overlay: @Composable BoxScope.() -> Unit = {},
@@ -114,6 +115,7 @@ internal fun EditorBody(
                 viewportHeight = geometry.visibleBodySize.height,
                 modifier = Modifier.fillMaxWidth(),
                 textInputSessionEnabled = textInputSessionEnabled,
+                suppressSoftwareKeyboard = suppressSoftwareKeyboard,
                 showDebugSurfaceOverlay = showDebugSurfaceOverlay,
               )
             }

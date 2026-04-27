@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import co.typie.dev.DesktopDebugKeyboard
 import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
 import co.typie.dev.createDevToolsWindow
@@ -137,6 +138,9 @@ fun main() {
       .getOrNull()
       ?.let { networkSimulator.select(it) }
   }
+  DesktopDebugKeyboard.updateHardwareKeyboardConnected(
+    prefs.getBoolean("hardwareKeyboardConnected", false)
+  )
 
   application {
     var usePhysicalScale by remember { mutableStateOf(preferPhysical) }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,68 +73,81 @@ private val BezelScreenEdge = Color(0xFF000000) // screen-to-frame seam
 @Composable
 actual fun SystemChrome(content: @Composable () -> Unit) {
   val r = ScreenCornerRadius
+  val keyboardController = remember {
+    object : SoftwareKeyboardController {
+      override fun show() {
+        DesktopDebugKeyboard.showKeyboard()
+      }
 
-  Box(Modifier.fillMaxSize()) {
-    // Content fills the full window so the Compose root lines up with the window
-    // origin, matching iOS/Android. The bezel is a decorative overlay drawn on top
-    // rather than a layout container, so positionInWindow works consistently.
-    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(r + BezelThickness))) {
-      content()
-      DesktopDebugKeyboard.Overlay(
-        Modifier.align(Alignment.BottomStart)
-          .padding(start = BezelThickness, end = BezelThickness, bottom = BezelThickness)
-      )
-      StatusBar(
-        Modifier.fillMaxWidth()
-          .align(Alignment.TopStart)
-          .padding(start = BezelThickness, top = BezelThickness, end = BezelThickness)
-      )
-      HomeIndicator(Modifier.align(Alignment.BottomCenter).padding(bottom = BezelThickness))
+      override fun hide() {
+        DesktopDebugKeyboard.hideKeyboardSurface()
+      }
     }
+  }
 
-    // Bezel overlay: four concentric rounded rects filled outer→inner, then the
-    // screen area is cleared to reveal the content underneath. Requires an
-    // offscreen layer so BlendMode.Clear can punch a transparent hole.
-    Box(
-      Modifier.fillMaxSize()
-        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-        .drawBehind {
-          val rPx = r.toPx()
-          drawRoundRect(
-            color = BezelOuterHighlight,
-            cornerRadius = CornerRadius(rPx + 12.dp.toPx()),
-          )
-          val body = 1.5.dp.toPx()
-          drawRoundRect(
-            color = BezelBody,
-            topLeft = Offset(body, body),
-            size = Size(size.width - 2 * body, size.height - 2 * body),
-            cornerRadius = CornerRadius(rPx + 10.5.dp.toPx()),
-          )
-          val innerEdge = 10.5.dp.toPx()
-          drawRoundRect(
-            color = BezelInnerEdge,
-            topLeft = Offset(innerEdge, innerEdge),
-            size = Size(size.width - 2 * innerEdge, size.height - 2 * innerEdge),
-            cornerRadius = CornerRadius(rPx + 1.5.dp.toPx()),
-          )
-          val screenEdge = 11.5.dp.toPx()
-          drawRoundRect(
-            color = BezelScreenEdge,
-            topLeft = Offset(screenEdge, screenEdge),
-            size = Size(size.width - 2 * screenEdge, size.height - 2 * screenEdge),
-            cornerRadius = CornerRadius(rPx + 0.5.dp.toPx()),
-          )
-          val screen = BezelThickness.toPx()
-          drawRoundRect(
-            color = Color.Black,
-            topLeft = Offset(screen, screen),
-            size = Size(size.width - 2 * screen, size.height - 2 * screen),
-            cornerRadius = CornerRadius(rPx),
-            blendMode = BlendMode.Clear,
-          )
-        }
-    )
+  CompositionLocalProvider(LocalSoftwareKeyboardController provides keyboardController) {
+    Box(Modifier.fillMaxSize()) {
+      // Content fills the full window so the Compose root lines up with the window
+      // origin, matching iOS/Android. The bezel is a decorative overlay drawn on top
+      // rather than a layout container, so positionInWindow works consistently.
+      Box(Modifier.fillMaxSize().clip(RoundedCornerShape(r + BezelThickness))) {
+        content()
+        DesktopDebugKeyboard.Overlay(
+          Modifier.align(Alignment.BottomStart)
+            .padding(start = BezelThickness, end = BezelThickness, bottom = BezelThickness)
+        )
+        StatusBar(
+          Modifier.fillMaxWidth()
+            .align(Alignment.TopStart)
+            .padding(start = BezelThickness, top = BezelThickness, end = BezelThickness)
+        )
+        HomeIndicator(Modifier.align(Alignment.BottomCenter).padding(bottom = BezelThickness))
+      }
+
+      // Bezel overlay: four concentric rounded rects filled outer→inner, then the
+      // screen area is cleared to reveal the content underneath. Requires an
+      // offscreen layer so BlendMode.Clear can punch a transparent hole.
+      Box(
+        Modifier.fillMaxSize()
+          .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+          .drawBehind {
+            val rPx = r.toPx()
+            drawRoundRect(
+              color = BezelOuterHighlight,
+              cornerRadius = CornerRadius(rPx + 12.dp.toPx()),
+            )
+            val body = 1.5.dp.toPx()
+            drawRoundRect(
+              color = BezelBody,
+              topLeft = Offset(body, body),
+              size = Size(size.width - 2 * body, size.height - 2 * body),
+              cornerRadius = CornerRadius(rPx + 10.5.dp.toPx()),
+            )
+            val innerEdge = 10.5.dp.toPx()
+            drawRoundRect(
+              color = BezelInnerEdge,
+              topLeft = Offset(innerEdge, innerEdge),
+              size = Size(size.width - 2 * innerEdge, size.height - 2 * innerEdge),
+              cornerRadius = CornerRadius(rPx + 1.5.dp.toPx()),
+            )
+            val screenEdge = 11.5.dp.toPx()
+            drawRoundRect(
+              color = BezelScreenEdge,
+              topLeft = Offset(screenEdge, screenEdge),
+              size = Size(size.width - 2 * screenEdge, size.height - 2 * screenEdge),
+              cornerRadius = CornerRadius(rPx + 0.5.dp.toPx()),
+            )
+            val screen = BezelThickness.toPx()
+            drawRoundRect(
+              color = Color.Black,
+              topLeft = Offset(screen, screen),
+              size = Size(size.width - 2 * screen, size.height - 2 * screen),
+              cornerRadius = CornerRadius(rPx),
+              blendMode = BlendMode.Clear,
+            )
+          }
+      )
+    }
   }
 }
 

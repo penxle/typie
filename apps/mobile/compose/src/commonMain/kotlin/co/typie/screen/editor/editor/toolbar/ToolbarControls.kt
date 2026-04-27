@@ -1,5 +1,7 @@
 package co.typie.screen.editor.editor.toolbar
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -118,6 +120,7 @@ internal fun EditorToolbarIconButton(
   iconSize: Dp = ToolbarIconSize,
   tint: Color? = null,
   inheritInteractionSource: Boolean = false,
+  crossfadeIcon: Boolean = false,
 ) {
   val inheritedInteractionSource = LocalInteractionSource.current
   val localInteractionSource = remember { MutableInteractionSource() }
@@ -146,12 +149,28 @@ internal fun EditorToolbarIconButton(
         .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
     contentAlignment = Alignment.Center,
   ) {
-    Icon(
-      icon = icon,
-      contentDescription = contentDescription,
-      modifier = Modifier.size(iconSize),
-      tint = tint ?: AppTheme.colors.textDefault,
-    )
+    val resolvedTint = tint ?: AppTheme.colors.textDefault
+    if (crossfadeIcon) {
+      Crossfade(
+        targetState = icon,
+        animationSpec = tween(ToolbarFixedActionIconCrossfadeMillis),
+        label = "EditorToolbarIconButtonIcon",
+      ) { targetIcon ->
+        Icon(
+          icon = targetIcon,
+          contentDescription = contentDescription,
+          modifier = Modifier.size(iconSize),
+          tint = resolvedTint,
+        )
+      }
+    } else {
+      Icon(
+        icon = icon,
+        contentDescription = contentDescription,
+        modifier = Modifier.size(iconSize),
+        tint = resolvedTint,
+      )
+    }
   }
 }
 

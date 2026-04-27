@@ -54,6 +54,7 @@ fun createDevToolsWindow(mainWindow: Window, networkSimulator: NetworkSimulator)
   devWindow.background = Color(0, 0, 0, 0)
 
   val scope = CoroutineScope(Dispatchers.Main)
+  val prefs = Preferences.userRoot().node("co/typie")
 
   // Icon button
   val iconButton =
@@ -73,7 +74,11 @@ fun createDevToolsWindow(mainWindow: Window, networkSimulator: NetworkSimulator)
 
         val dotSize = 6.0
         val dotGap = 2.0
-        val accents = devToolsCollapsedIndicatorAccents(networkPreset = networkSimulator.preset)
+        val accents =
+          devToolsCollapsedIndicatorAccents(
+            networkPreset = networkSimulator.preset,
+            hardwareKeyboardConnected = DesktopDebugKeyboard.hardwareKeyboardConnected,
+          )
         val totalHeight = accents.size * dotSize + (accents.size - 1) * dotGap
         val x = (32.0 - dotSize) / 2
         var y = (32.0 - totalHeight) / 2
@@ -215,11 +220,35 @@ fun createDevToolsWindow(mainWindow: Window, networkSimulator: NetworkSimulator)
         selected = { networkSimulator.preset == option },
         onClick = {
           networkSimulator.select(option)
-          Preferences.userRoot().node("co/typie").put("networkPreset", option.name)
+          prefs.put("networkPreset", option.name)
         },
       )
     )
   }
+
+  dropdownPanel.add(createSectionLabel("Keyboard"))
+  dropdownPanel.add(
+    createOptionItem(
+      labelText = "Hardware off",
+      accentColor = AccentMuted,
+      selected = { !DesktopDebugKeyboard.hardwareKeyboardConnected },
+      onClick = {
+        DesktopDebugKeyboard.updateHardwareKeyboardConnected(false)
+        prefs.putBoolean("hardwareKeyboardConnected", false)
+      },
+    )
+  )
+  dropdownPanel.add(
+    createOptionItem(
+      labelText = "Hardware on",
+      accentColor = AccentInfo,
+      selected = { DesktopDebugKeyboard.hardwareKeyboardConnected },
+      onClick = {
+        DesktopDebugKeyboard.updateHardwareKeyboardConnected(true)
+        prefs.putBoolean("hardwareKeyboardConnected", true)
+      },
+    )
+  )
 
   dropdownPanel.add(createSectionLabel("Bootstrap"))
 
@@ -259,6 +288,9 @@ fun createDevToolsWindow(mainWindow: Window, networkSimulator: NetworkSimulator)
 
   // Repaint on preset change
   snapshotFlow { networkSimulator.preset }
+    .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
+    .launchIn(scope)
+  snapshotFlow { DesktopDebugKeyboard.hardwareKeyboardConnected }
     .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
     .launchIn(scope)
 

@@ -43,6 +43,7 @@ internal fun EditorView(
   viewportHeight: Float,
   modifier: Modifier = Modifier,
   textInputSessionEnabled: Boolean = true,
+  suppressSoftwareKeyboard: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
 ) {
   val platform = PlatformModule.platform
@@ -88,6 +89,7 @@ internal fun EditorView(
           platform = platform,
           bringIntoViewRequests = bringIntoViewRequests,
           textInputSessionEnabled = textInputSessionEnabled,
+          suppressSoftwareKeyboard = suppressSoftwareKeyboard,
         )
         .focusable()
         .editorGestures(

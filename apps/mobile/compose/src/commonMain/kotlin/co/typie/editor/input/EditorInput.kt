@@ -41,14 +41,37 @@ internal fun Modifier.editorInput(
   platform: Platform,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   textInputSessionEnabled: Boolean,
+  suppressSoftwareKeyboard: Boolean,
 ): Modifier =
-  this then EditorInputElement(editor, platform, bringIntoViewRequests, textInputSessionEnabled)
+  this then
+    EditorInputElement(
+      editor = editor,
+      platform = platform,
+      bringIntoViewRequests = bringIntoViewRequests,
+      textInputSessionEnabled = textInputSessionEnabled,
+      suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+    )
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal expect suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest
+
+internal expect fun shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(): Boolean
+
+internal fun shouldRestartEditorInputSession(
+  previousTextInputSessionEnabled: Boolean,
+  textInputSessionEnabled: Boolean,
+  previousSuppressSoftwareKeyboard: Boolean,
+  suppressSoftwareKeyboard: Boolean,
+  restartOnSoftwareKeyboardSuppressionChange: Boolean =
+    shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(),
+): Boolean =
+  previousTextInputSessionEnabled != textInputSessionEnabled ||
+    (previousSuppressSoftwareKeyboard != suppressSoftwareKeyboard &&
+      restartOnSoftwareKeyboardSuppressionChange)
 
 internal fun requiresRawKeyTextFallback(platform: Platform): Boolean =
   platform == Platform.Android || platform == Platform.Desktop
@@ -58,15 +81,25 @@ private data class EditorInputElement(
   private val platform: Platform,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val textInputSessionEnabled: Boolean,
+  private val suppressSoftwareKeyboard: Boolean,
 ) : ModifierNodeElement<EditorInputNode>() {
   override fun create(): EditorInputNode =
-    EditorInputNode(editor, platform, bringIntoViewRequests, textInputSessionEnabled)
+    EditorInputNode(
+      editor = editor,
+      platform = platform,
+      bringIntoViewRequests = bringIntoViewRequests,
+      textInputSessionEnabled = textInputSessionEnabled,
+      suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+    )
 
   override fun update(node: EditorInputNode) {
     node.editor = editor
     node.platform = platform
     node.bringIntoViewRequests = bringIntoViewRequests
-    node.textInputSessionEnabled = textInputSessionEnabled
+    node.updateInputSessionPolicy(
+      textInputSessionEnabled = textInputSessionEnabled,
+      suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+    )
   }
 }
 
@@ -76,19 +109,38 @@ internal class EditorInputNode(
   var platform: Platform,
   var bringIntoViewRequests: EditorBringIntoViewRequests,
   textInputSessionEnabled: Boolean,
+  suppressSoftwareKeyboard: Boolean,
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private var focused = false
   private val bindings by lazy { createBindings(platform) }
-  var textInputSessionEnabled = textInputSessionEnabled
-    set(value) {
-      if (field == value) {
-        return
-      }
+  private var textInputSessionEnabled = textInputSessionEnabled
+  private var suppressSoftwareKeyboard = suppressSoftwareKeyboard
 
-      field = value
+  fun updateInputSessionPolicy(
+    textInputSessionEnabled: Boolean,
+    suppressSoftwareKeyboard: Boolean,
+  ) {
+    val shouldRestart =
+      shouldRestartEditorInputSession(
+        previousTextInputSessionEnabled = this.textInputSessionEnabled,
+        textInputSessionEnabled = textInputSessionEnabled,
+        previousSuppressSoftwareKeyboard = this.suppressSoftwareKeyboard,
+        suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+      )
+    if (
+      this.textInputSessionEnabled == textInputSessionEnabled &&
+        this.suppressSoftwareKeyboard == suppressSoftwareKeyboard
+    ) {
+      return
+    }
+
+    this.textInputSessionEnabled = textInputSessionEnabled
+    this.suppressSoftwareKeyboard = suppressSoftwareKeyboard
+    if (shouldRestart) {
       syncTextInputSession()
     }
+  }
 
   private fun dispatchAndScrollToCurrentCursorLine(vararg messages: Message) {
     coroutineScope.launch {
@@ -189,7 +241,12 @@ internal class EditorInputNode(
       if (sessionEnabled) {
         coroutineScope.launch {
           establishTextInputSession {
-            val request = createEditorInputRequest(editor, bringIntoViewRequests)
+            val request =
+              createEditorInputRequest(
+                editor = editor,
+                bringIntoViewRequests = bringIntoViewRequests,
+                suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+              )
             launch {
               notifyImeSelectionChanged(editor)
               snapshotFlow { editor.selection to editor.cursor }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +68,8 @@ internal fun EditorToolbarPages(
   pages: List<EditorToolbarPage>,
   editorFocused: Boolean,
   activeBottomPanel: EditorToolbarBottomPanelKey?,
+  keyboardType: EditorKeyboardType,
+  softwareKeyboardVisible: Boolean,
   onEditorInputRequest: () -> Unit,
   onKeyboardDismissRequest: () -> Unit,
   onBottomPanelToggle: (EditorToolbarBottomPanelKey) -> Unit,
@@ -74,7 +77,8 @@ internal fun EditorToolbarPages(
 ) {
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
-  val scrollPosition = remember { Animatable(0f) }
+  var scrollPosition by remember { mutableFloatStateOf(0f) }
+  val scrollPositionAnimation = remember { Animatable(0f) }
   val hardStopVisualOffset = remember { Animatable(0f) }
   var indicatorVisible by remember { mutableStateOf(false) }
   var indicatorInteracting by remember { mutableStateOf(false) }
@@ -100,11 +104,11 @@ internal fun EditorToolbarPages(
       remember(pageDistance, pageScrollRanges) {
         ToolbarPageMetrics(pageDistance = pageDistance, scrollRanges = pageScrollRanges)
       }
-    val pageProgress = pageMetrics.progressFor(scrollPosition.value)
+    val pageProgress = pageMetrics.progressFor(scrollPosition)
     val indicatorProgress = indicatorDragProgress ?: pageProgress
-    val currentPageIndex = pageMetrics.pageIndexForPosition(scrollPosition.value)
+    val currentPageIndex = pageMetrics.pageIndexForPosition(scrollPosition)
     val scrollableState = rememberScrollableState { delta ->
-      val currentPosition = scrollPosition.value
+      val currentPosition = scrollPosition
       val gestureStartPosition =
         scrollGestureStartPosition ?: currentPosition.also { scrollGestureStartPosition = it }
       val proposedPosition = (currentPosition - delta).coerceIn(0f, pageMetrics.maxPosition)
@@ -144,9 +148,12 @@ internal fun EditorToolbarPages(
 
       activeHardStop = scrollResult.hardStop
       if (consumed != 0f) {
-        scope.launch {
-          scrollPosition.stop()
-          scrollPosition.snapTo(nextPosition)
+        scrollPosition = nextPosition
+        if (scrollPositionAnimation.isRunning) {
+          scope.launch {
+            scrollPositionAnimation.stop()
+            scrollPositionAnimation.snapTo(nextPosition)
+          }
         }
       }
       if (scrollResult.rejectedDelta == 0f) {
@@ -185,9 +192,10 @@ internal fun EditorToolbarPages(
 
     LaunchedEffect(pageCount, pageMetrics) {
       val coercedPage = settledPageIndex.coerceIn(0, lastPageIndex)
-      val coercedPosition = scrollPosition.value.coerceIn(0f, pageMetrics.maxPosition)
-      if (coercedPosition != scrollPosition.value) {
-        scrollPosition.snapTo(coercedPosition)
+      val coercedPosition = scrollPosition.coerceIn(0f, pageMetrics.maxPosition)
+      if (coercedPosition != scrollPosition) {
+        scrollPosition = coercedPosition
+        scrollPositionAnimation.snapTo(coercedPosition)
       }
       settledPageIndex = coercedPage
     }
@@ -196,7 +204,7 @@ internal fun EditorToolbarPages(
       snapshotFlow {
           pages.mapIndexedNotNull { index, page ->
             val scrollState = page.scrollState ?: return@mapIndexedNotNull null
-            val target = pageMetrics.internalScrollFor(index, scrollPosition.value).roundToInt()
+            val target = pageMetrics.internalScrollFor(index, scrollPosition).roundToInt()
             scrollState to target.coerceIn(0, scrollState.maxValue)
           }
         }
@@ -209,9 +217,9 @@ internal fun EditorToolbarPages(
         }
     }
 
-    LaunchedEffect(scrollPosition, pageMetrics) {
+    LaunchedEffect(pageMetrics) {
       var initialized = false
-      snapshotFlow { pageMetrics.isPageTransitionPosition(scrollPosition.value) }
+      snapshotFlow { pageMetrics.isPageTransitionPosition(scrollPosition) }
         .distinctUntilChanged()
         .collect { transitioning ->
           indicatorPageTransitioning = transitioning
@@ -249,6 +257,14 @@ internal fun EditorToolbarPages(
       }
     }
 
+    suspend fun animateScrollPositionTo(targetPosition: Float, initialVelocity: Float = 0f) {
+      scrollPositionAnimation.stop()
+      scrollPositionAnimation.snapTo(scrollPosition)
+      scrollPositionAnimation.animateTo(targetPosition, initialVelocity = initialVelocity) {
+        scrollPosition = value
+      }
+    }
+
     fun navigateToPageIndex(pageIndex: Int) {
       scope.launch {
         val targetPageIndex = pageIndex.coerceIn(0, lastPageIndex)
@@ -262,7 +278,7 @@ internal fun EditorToolbarPages(
             pageIndex = targetPageIndex,
             fromPageIndex = currentPageIndex,
           )
-        scrollPosition.animateTo(targetPosition)
+        animateScrollPositionTo(targetPosition = targetPosition)
         settledPageIndex = targetPageIndex
       }
     }
@@ -275,12 +291,12 @@ internal fun EditorToolbarPages(
     }
 
     suspend fun settlePages(velocity: Float = 0f) {
-      val snapPosition = pageMetrics.snapPosition(scrollPosition.value, velocity, activeHardStop)
+      val snapPosition = pageMetrics.snapPosition(scrollPosition, velocity, activeHardStop)
       val snapPage = pageMetrics.pageIndexForPosition(snapPosition)
       if (snapPage != settledPageIndex) {
         onEditorInputRequest()
       }
-      scrollPosition.animateTo(snapPosition)
+      animateScrollPositionTo(targetPosition = snapPosition, initialVelocity = -velocity)
       settledPageIndex = snapPage
       activeHardStop = null
       if (hardStopVisualOffset.value != 0f) {
@@ -290,19 +306,13 @@ internal fun EditorToolbarPages(
 
     val defaultFlingBehavior = ScrollableDefaults.flingBehavior()
     val flingBehavior =
-      remember(
-        scrollPosition,
-        pageMetrics,
-        activeHardStop,
-        onEditorInputRequest,
-        defaultFlingBehavior,
-      ) {
+      remember(pageMetrics, activeHardStop, onEditorInputRequest, defaultFlingBehavior) {
         object : FlingBehavior {
           override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
             val remainingVelocity =
               if (
                 pageMetrics.shouldDecayFlingWithinInternalScroll(
-                  position = scrollPosition.value,
+                  position = scrollPosition,
                   velocity = initialVelocity,
                 )
               ) {
@@ -386,12 +396,9 @@ internal fun EditorToolbarPages(
               .trackToolbarScrollGestureStart(
                 onStart = {
                   pointerScrollGestureActive = true
-                  scrollGestureStartPosition = scrollPosition.value
+                  scrollGestureStartPosition = scrollPosition
                 },
-                onEnd = {
-                  pointerScrollGestureActive = false
-                  scrollGestureStartPosition = null
-                },
+                onEnd = { pointerScrollGestureActive = false },
               )
               .scrollable(
                 state = scrollableState,
@@ -418,7 +425,7 @@ internal fun EditorToolbarPages(
               Box(
                 modifier =
                   Modifier.fillMaxSize().offset {
-                    val pageOffset = pageMetrics.pageOffsetFor(index, scrollPosition.value)
+                    val pageOffset = pageMetrics.pageOffsetFor(index, scrollPosition)
                     IntOffset(x = pageOffset.roundToInt(), y = 0)
                   }
               ) {
@@ -429,15 +436,31 @@ internal fun EditorToolbarPages(
         }
 
         InteractionScope {
+          val fixedAction =
+            resolveEditorToolbarFixedAction(
+              activeBottomPanel = activeBottomPanel,
+              keyboardType = keyboardType,
+              softwareKeyboardVisible = softwareKeyboardVisible,
+            )
           EditorToolbarIconButton(
-            icon = if (activeBottomPanel != null) Lucide.CircleX else Lucide.KeyboardOff,
+            icon =
+              when (fixedAction) {
+                EditorToolbarFixedAction.ClosePanel -> Lucide.CircleX
+                EditorToolbarFixedAction.HideToolbar -> Lucide.ChevronDown
+                EditorToolbarFixedAction.DismissInput -> Lucide.KeyboardOff
+              },
             contentDescription =
-              if (activeBottomPanel != null) "하단 패널 닫기"
-              else if (editorFocused) "에디터 포커스 해제" else "키보드 닫기",
+              when (fixedAction) {
+                EditorToolbarFixedAction.ClosePanel -> "하단 패널 닫기"
+                EditorToolbarFixedAction.HideToolbar -> "툴바 숨기기"
+                EditorToolbarFixedAction.DismissInput ->
+                  if (editorFocused) "에디터 포커스 해제" else "키보드 닫기"
+              },
             onClick = onKeyboardDismissRequest,
             shape = ToolbarFixedActionShape,
             fixedActionSurface = true,
             inheritInteractionSource = true,
+            crossfadeIcon = true,
             modifier =
               Modifier.align(Alignment.CenterEnd)
                 .width(ToolbarFixedActionWidth)

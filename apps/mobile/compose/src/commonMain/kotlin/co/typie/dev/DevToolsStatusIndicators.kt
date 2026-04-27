@@ -16,6 +16,12 @@ fun NetworkPreset.devToolsAccent(): DevToolsAccent =
     NetworkPreset.Offline -> DevToolsAccent.Danger
   }
 
-fun devToolsCollapsedIndicatorAccents(networkPreset: NetworkPreset): List<DevToolsAccent> {
-  return listOf(networkPreset.devToolsAccent())
+fun devToolsCollapsedIndicatorAccents(
+  networkPreset: NetworkPreset,
+  hardwareKeyboardConnected: Boolean = false,
+): List<DevToolsAccent> {
+  return listOf(
+    networkPreset.devToolsAccent(),
+    if (hardwareKeyboardConnected) DevToolsAccent.Info else DevToolsAccent.Muted,
+  )
 }

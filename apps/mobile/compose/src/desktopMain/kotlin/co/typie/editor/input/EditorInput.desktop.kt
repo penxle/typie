@@ -29,6 +29,7 @@ import co.typie.editor.scroll.syncWithBringIntoView
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {
@@ -119,6 +120,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     }
   }
 }
+
+internal actual fun shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(): Boolean =
+  false
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {

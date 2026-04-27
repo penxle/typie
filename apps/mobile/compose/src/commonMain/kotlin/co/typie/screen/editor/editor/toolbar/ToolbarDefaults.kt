@@ -14,6 +14,7 @@ internal val EditorToolbarFloatingOverhang = ToolbarIndicatorHeight + ToolbarInd
 internal val ToolbarStackHeight = ToolbarIndicatorHeight + ToolbarIndicatorGap + ToolbarHeight
 internal val ToolbarBottomPanelGap = 8.dp
 internal val ToolbarBottomPanelHeight = 220.dp
+internal val ToolbarBottomPanelMinHeight = 180.dp
 internal val ToolbarButtonSize = 30.dp
 internal val ToolbarLabelMinWidth = 52.dp
 internal val ToolbarLabelHorizontalPadding = 10.dp
@@ -41,8 +42,14 @@ internal const val ToolbarHardStopOverscrollResistance = 0.45f
 internal const val ToolbarSwipeVelocityThreshold = 600f
 internal const val ToolbarVisibilityEnterMillis = 200
 internal const val ToolbarVisibilityExitMillis = 160
+internal const val ToolbarFixedActionIconCrossfadeMillis = 150
 internal const val ToolbarBottomPanelVisibilityEnterMillis = 180
 internal const val ToolbarBottomPanelVisibilityExitMillis = 140
+
+// iOS can report a focus-driven software keyboard restore after the panel exit finishes.
+// Keep the remembered keyboard inset through this fallback window so the toolbar does not drop
+// first.
+internal const val ToolbarImplicitSoftwareKeyboardRestoreGraceMillis = 260L
 internal const val ToolbarBottomPanelHiddenScale = 0.96f
 internal const val ToolbarIndicatorBackgroundMillis = 120
 internal const val ToolbarIndicatorFadeMillis = 220

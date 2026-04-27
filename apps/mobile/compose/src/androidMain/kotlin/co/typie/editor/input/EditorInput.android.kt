@@ -3,6 +3,7 @@ package co.typie.editor.input
 import android.content.Context
 import android.os.Looper
 import android.text.InputType
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -15,6 +16,7 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   val androidView = view
   return PlatformTextInputMethodRequest { outAttrs ->
@@ -26,9 +28,16 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     val ctx = editor.ime(0, 0)
     outAttrs.initialSelStart = ctx.selection.start
     outAttrs.initialSelEnd = ctx.selection.end
-    EditorInputConnection(editor, androidView, bringIntoViewRequests)
+    val connection = EditorInputConnection(editor, androidView, bringIntoViewRequests)
+    if (suppressSoftwareKeyboard) {
+      androidView.post { hideEditorSoftwareKeyboard(androidView) }
+    }
+    connection
   }
 }
+
+internal actual fun shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(): Boolean =
+  false
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
@@ -55,4 +64,10 @@ internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(edit
   } else {
     androidView.post { update() }
   }
+}
+
+private fun hideEditorSoftwareKeyboard(view: View) {
+  val imm =
+    view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
+  imm.hideSoftInputFromWindow(view.windowToken, 0)
 }
