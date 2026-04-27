@@ -67,6 +67,8 @@ internal fun EditorToolbarPages(
   pages: List<EditorToolbarPage>,
   editorFocused: Boolean,
   activeBottomPanel: EditorToolbarBottomPanelKey?,
+  keyboardType: EditorKeyboardType,
+  softwareKeyboardVisible: Boolean,
   onEditorInputRequest: () -> Unit,
   onKeyboardDismissRequest: () -> Unit,
   onBottomPanelToggle: (EditorToolbarBottomPanelKey) -> Unit,
@@ -429,11 +431,26 @@ internal fun EditorToolbarPages(
         }
 
         InteractionScope {
+          val fixedAction =
+            resolveEditorToolbarFixedAction(
+              activeBottomPanel = activeBottomPanel,
+              keyboardType = keyboardType,
+              softwareKeyboardVisible = softwareKeyboardVisible,
+            )
           EditorToolbarIconButton(
-            icon = if (activeBottomPanel != null) Lucide.CircleX else Lucide.KeyboardOff,
+            icon =
+              when (fixedAction) {
+                EditorToolbarFixedAction.ClosePanel -> Lucide.CircleX
+                EditorToolbarFixedAction.HideToolbar -> Lucide.ChevronDown
+                EditorToolbarFixedAction.DismissInput -> Lucide.KeyboardOff
+              },
             contentDescription =
-              if (activeBottomPanel != null) "하단 패널 닫기"
-              else if (editorFocused) "에디터 포커스 해제" else "키보드 닫기",
+              when (fixedAction) {
+                EditorToolbarFixedAction.ClosePanel -> "하단 패널 닫기"
+                EditorToolbarFixedAction.HideToolbar -> "툴바 숨기기"
+                EditorToolbarFixedAction.DismissInput ->
+                  if (editorFocused) "에디터 포커스 해제" else "키보드 닫기"
+              },
             onClick = onKeyboardDismissRequest,
             shape = ToolbarFixedActionShape,
             fixedActionSurface = true,

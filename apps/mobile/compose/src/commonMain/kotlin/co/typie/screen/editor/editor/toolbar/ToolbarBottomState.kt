@@ -22,8 +22,8 @@ internal class EditorToolbarBottomState {
   var rememberedKeyboardInset by mutableStateOf(0.dp)
     private set
 
-  val textInputSessionEnabled: Boolean
-    get() = activePanel == null
+  fun textInputSessionEnabled(keyboardType: EditorKeyboardType): Boolean =
+    activePanel == null || keyboardType == EditorKeyboardType.Hardware
 
   fun visibleImeInset(imeBottom: Dp, safeBottomInset: Dp): Dp =
     if (activePanel == null) {
@@ -78,6 +78,11 @@ internal class EditorToolbarBottomState {
       safeBottomInset + ToolbarBottomPanelGap + ToolbarBottomPanelHeight
     }
 }
+
+internal fun resolveEditorToolbarBottomPanelLayoutHeight(
+  bottomPanelVisible: Boolean,
+  bottomPanelHeight: Dp,
+): Dp = if (bottomPanelVisible) ToolbarBottomPanelGap + bottomPanelHeight else 0.dp
 
 private fun resolveRememberedKeyboardInset(imeBottom: Dp, safeBottomInset: Dp): Dp =
   if (imeBottom > safeBottomInset) imeBottom else 0.dp

@@ -2,6 +2,8 @@ package co.typie.screen.editor.editor.toolbar
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -41,6 +45,7 @@ internal fun EditorToolbarHost(
   visible: Boolean,
   safeBottomInset: Dp,
   bottomState: EditorToolbarBottomState,
+  keyboardType: EditorKeyboardType,
   onEditorFocusRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -50,18 +55,49 @@ internal fun EditorToolbarHost(
   val pages = rememberEditorToolbarPages()
   val activeBottomPanel = bottomState.activePanel
   val bottomPanelVisible = activeBottomPanel != null
+  val softwareKeyboardVisible =
+    isSoftwareKeyboardVisible(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
   var lastBottomPanel by remember { mutableStateOf(activeBottomPanel) }
   val bottomPanelTransition = remember { MutableTransitionState(activeBottomPanel != null) }
   bottomPanelTransition.targetState = bottomPanelVisible
-  val bottomPanelInLayout = bottomPanelTransition.currentState || bottomPanelTransition.targetState
   val toolbarVisible = bottomState.toolbarVisible(visible = visible, editorFocused = editorFocused)
-  val bottomInset =
-    if (bottomPanelInLayout) {
+  val bottomPanelHeight = bottomState.bottomPanelHeight(safeBottomInset = safeBottomInset)
+  val bottomPanelAnimationPrevious = remember { mutableStateOf(bottomPanelVisible) }
+  val bottomPanelAnimationSpec =
+    if (bottomPanelAnimationPrevious.value != bottomPanelVisible) {
+      tween<Dp>(
+        if (bottomPanelVisible) {
+          ToolbarBottomPanelVisibilityEnterMillis
+        } else {
+          ToolbarBottomPanelVisibilityExitMillis
+        }
+      )
+    } else {
+      snap()
+    }
+  val bottomInsetTarget =
+    if (bottomPanelVisible) {
       safeBottomInset
     } else {
       bottomState.inputBottomInset(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
     }
-  val bottomPanelHeight = bottomState.bottomPanelHeight(safeBottomInset = safeBottomInset)
+  val bottomInset by
+    animateDpAsState(
+      targetValue = bottomInsetTarget,
+      animationSpec = bottomPanelAnimationSpec,
+      label = "EditorToolbarBottomInset",
+    )
+  val bottomPanelLayoutHeight by
+    animateDpAsState(
+      targetValue =
+        resolveEditorToolbarBottomPanelLayoutHeight(
+          bottomPanelVisible = bottomPanelVisible,
+          bottomPanelHeight = bottomPanelHeight,
+        ),
+      animationSpec = bottomPanelAnimationSpec,
+      label = "EditorToolbarBottomPanelLayoutHeight",
+    )
+  SideEffect { bottomPanelAnimationPrevious.value = bottomPanelVisible }
 
   fun restoreEditorInput() {
     if (bottomState.activePanel != null) {
@@ -124,6 +160,8 @@ internal fun EditorToolbarHost(
           pages = pages,
           editorFocused = editorFocused,
           activeBottomPanel = activeBottomPanel,
+          keyboardType = keyboardType,
+          softwareKeyboardVisible = softwareKeyboardVisible,
           onEditorInputRequest = ::restoreEditorInput,
           onKeyboardDismissRequest = ::dismissEditorInput,
           onBottomPanelToggle = ::toggleBottomPanel,
@@ -146,7 +184,7 @@ internal fun EditorToolbarHost(
                 targetScale = ToolbarBottomPanelHiddenScale,
                 transformOrigin = TransformOrigin(0.5f, 0f),
               ),
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier.fillMaxWidth().height(bottomPanelLayoutHeight).clipToBounds(),
         ) {
           val panel = activeBottomPanel ?: lastBottomPanel
           if (panel != null) {

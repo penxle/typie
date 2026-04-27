@@ -1,5 +1,8 @@
 package co.typie.screen.editor.editor
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.rememberScrollable2DState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -56,6 +60,9 @@ import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
+import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMillis
+import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMillis
+import co.typie.screen.editor.editor.toolbar.rememberEditorKeyboardType
 import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarBottomState
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
 import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
@@ -153,8 +160,29 @@ fun EditorScreen(entityId: String) {
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val toolbarBottomState = rememberEditorToolbarBottomState()
-    val toolbarVisibleImeBottom =
+    val keyboardType = rememberEditorKeyboardType()
+    val toolbarVisibleImeBottomTarget =
       toolbarBottomState.visibleImeInset(imeBottom = imeBottom, safeBottomInset = bottomSafeInset)
+    val bottomPanelOpen = toolbarBottomState.activePanel != null
+    val previousBottomPanelOpen = remember { mutableStateOf(bottomPanelOpen) }
+    val toolbarVisibleImeBottom =
+      animateDpAsState(
+        targetValue = toolbarVisibleImeBottomTarget,
+        animationSpec =
+          if (previousBottomPanelOpen.value != bottomPanelOpen) {
+            tween(
+              if (bottomPanelOpen) {
+                ToolbarBottomPanelVisibilityEnterMillis
+              } else {
+                ToolbarBottomPanelVisibilityExitMillis
+              }
+            )
+          } else {
+            snap()
+          },
+        label = "EditorToolbarVisibleImeBottom",
+      )
+    SideEffect { previousBottomPanelOpen.value = bottomPanelOpen }
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val devMode = Preference.devMode
@@ -164,7 +192,7 @@ fun EditorScreen(entityId: String) {
       screenState.resolveVisibleArea(
         topInset = topInset.value,
         rawBottomSafeInset = bottomSafeInset.value,
-        rawImeInset = toolbarVisibleImeBottom.value,
+        rawImeInset = toolbarVisibleImeBottom.value.value,
       )
     LaunchedEffect(
       toolbarBottomState.activePanel,
@@ -369,7 +397,7 @@ fun EditorScreen(entityId: String) {
             layoutSpec = layoutSpec,
             autoScrollPolicy = autoScrollPolicy,
             modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
-            textInputSessionEnabled = toolbarBottomState.textInputSessionEnabled,
+            textInputSessionEnabled = toolbarBottomState.textInputSessionEnabled(keyboardType),
             showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
             showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
           )
@@ -380,6 +408,7 @@ fun EditorScreen(entityId: String) {
             visible = screenState.sceneInForeground,
             safeBottomInset = bottomSafeInset,
             bottomState = toolbarBottomState,
+            keyboardType = keyboardType,
             onEditorFocusRequest = { runtime.focus() },
             modifier = Modifier,
           )
