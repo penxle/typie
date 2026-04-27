@@ -59,7 +59,7 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest
 
-internal expect fun shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(): Boolean
+internal expect fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean
 
 internal fun shouldRestartEditorInputSession(
   previousTextInputSessionEnabled: Boolean,
@@ -67,7 +67,7 @@ internal fun shouldRestartEditorInputSession(
   previousSuppressSoftwareKeyboard: Boolean,
   suppressSoftwareKeyboard: Boolean,
   restartOnSoftwareKeyboardSuppressionChange: Boolean =
-    shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(),
+    requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(),
 ): Boolean =
   previousTextInputSessionEnabled != textInputSessionEnabled ||
     (previousSuppressSoftwareKeyboard != suppressSoftwareKeyboard &&

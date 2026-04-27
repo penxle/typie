@@ -36,7 +36,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   }
 }
 
-internal actual fun shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(): Boolean =
+internal actual fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean =
   false
 
 @OptIn(ExperimentalComposeUiApi::class)

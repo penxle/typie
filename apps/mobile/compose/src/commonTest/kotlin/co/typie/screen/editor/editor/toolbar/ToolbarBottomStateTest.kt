@@ -52,16 +52,6 @@ class ToolbarBottomStateTest {
   }
 
   @Test
-  fun panel_opened_from_software_keyboard_restores_software_keyboard_even_when_hardware_keyboard_is_detected() {
-    assertEquals(
-      true,
-      resolveEditorToolbarShouldRestoreSoftwareKeyboard(
-        softwareKeyboardRestorePendingForPanel = true
-      ),
-    )
-  }
-
-  @Test
   fun panel_opened_from_software_keyboard_restores_software_keyboard_in_software_keyboard_mode() {
     assertEquals(
       true,
@@ -182,9 +172,9 @@ class ToolbarBottomStateTest {
         bottomPanelVisible = true,
         softwareKeyboardVisible = false,
         tracksImeInsetForPanel = true,
-        softwareKeyboardRestorePendingForPanel = true,
+        softwareKeyboardRestorePendingForPanel = false,
         hardwareKeyboardModeGenerationAtOpen = 0,
-        hardwareKeyboardModeGeneration = 0,
+        hardwareKeyboardModeGeneration = 1,
         hardwareKeyboardModeSwitchPendingForPanel = true,
         keyboardType = EditorKeyboardType.Hardware,
         hardwareKeyboardConnected = true,
@@ -193,7 +183,7 @@ class ToolbarBottomStateTest {
   }
 
   @Test
-  fun hardware_keyboard_mode_switches_panel_when_hardware_state_is_observed_after_ime_hides() {
+  fun hardware_keyboard_mode_switches_panel_when_hardware_connects_after_panel_opens() {
     assertEquals(
       true,
       shouldSwitchOpenEditorToolbarPanelToHardwareKeyboardMode(
@@ -229,21 +219,57 @@ class ToolbarBottomStateTest {
   }
 
   @Test
-  fun hardware_keyboard_mode_switches_panel_when_hardware_connects_after_panel_opens() {
+  fun hardware_keyboard_mode_filters_stale_software_keyboard_sized_inset_when_reopened() {
+    val state = EditorToolbarBottomState()
+
+    state.openPanel(
+      panel = EditorToolbarBottomPanelKey.Insert,
+      imeBottom = 320.dp,
+      safeBottomInset = 24.dp,
+    )
+    state.switchOpenPanelToHardwareKeyboardMode()
+    state.closePanel()
+
+    state.openPanel(
+      panel = EditorToolbarBottomPanelKey.Insert,
+      imeBottom = 320.dp,
+      safeBottomInset = 24.dp,
+      keyboardType = EditorKeyboardType.Hardware,
+    )
+
+    assertEquals(0.dp, state.rememberedKeyboardInset)
     assertEquals(
-      true,
-      shouldSwitchOpenEditorToolbarPanelToHardwareKeyboardMode(
-        bottomPanelVisible = true,
-        softwareKeyboardVisible = false,
-        tracksImeInsetForPanel = true,
-        softwareKeyboardRestorePendingForPanel = false,
-        hardwareKeyboardModeGenerationAtOpen = 0,
-        hardwareKeyboardModeGeneration = 1,
-        hardwareKeyboardModeSwitchPendingForPanel = true,
+      180.dp,
+      state.bottomPanelHeight(
+        imeBottom = 320.dp,
+        safeBottomInset = 24.dp,
         keyboardType = EditorKeyboardType.Hardware,
-        hardwareKeyboardConnected = true,
       ),
     )
+  }
+
+  @Test
+  fun hardware_keyboard_mode_keeps_accessory_sized_ime_inset_when_reopened() {
+    val state = EditorToolbarBottomState()
+
+    state.openPanel(
+      panel = EditorToolbarBottomPanelKey.Insert,
+      imeBottom = 320.dp,
+      safeBottomInset = 24.dp,
+    )
+    state.switchOpenPanelToHardwareKeyboardMode()
+    state.closePanel()
+
+    state.openPanel(
+      panel = EditorToolbarBottomPanelKey.Insert,
+      imeBottom = 80.dp,
+      safeBottomInset = 24.dp,
+      keyboardType = EditorKeyboardType.Hardware,
+    )
+
+    assertEquals(80.dp, state.rememberedKeyboardInset)
+    assertEquals(true, state.softwareKeyboardSuppressedForPanel)
+    assertEquals(true, state.tracksImeInsetForPanel)
   }
 
   @Test
@@ -266,24 +292,6 @@ class ToolbarBottomStateTest {
 
   @Test
   fun hardware_keyboard_mode_does_not_switch_panel_opened_without_visible_software_keyboard() {
-    assertEquals(
-      false,
-      shouldSwitchOpenEditorToolbarPanelToHardwareKeyboardMode(
-        bottomPanelVisible = true,
-        softwareKeyboardVisible = false,
-        tracksImeInsetForPanel = false,
-        softwareKeyboardRestorePendingForPanel = false,
-        hardwareKeyboardModeGenerationAtOpen = 0,
-        hardwareKeyboardModeGeneration = 0,
-        hardwareKeyboardModeSwitchPendingForPanel = false,
-        keyboardType = EditorKeyboardType.Hardware,
-        hardwareKeyboardConnected = true,
-      ),
-    )
-  }
-
-  @Test
-  fun hardware_keyboard_mode_does_not_switch_desktop_panel_without_software_to_hardware_transition() {
     assertEquals(
       false,
       shouldSwitchOpenEditorToolbarPanelToHardwareKeyboardMode(

@@ -64,7 +64,14 @@ internal class EditorToolbarBottomState {
 
   fun visibleImeInset(imeBottom: Dp, safeBottomInset: Dp, keyboardType: EditorKeyboardType): Dp =
     if (activePanel == null) {
-      maxOf(effectiveImeInset(imeBottom, keyboardType), rememberedKeyboardInset)
+      maxOf(
+        trustedImeInset(
+          imeBottom = imeBottom,
+          safeBottomInset = safeBottomInset,
+          keyboardType = keyboardType,
+        ),
+        rememberedKeyboardInset,
+      )
     } else {
       bottomPanelInset(
         imeBottom = imeBottom,
@@ -84,7 +91,15 @@ internal class EditorToolbarBottomState {
     )
 
   fun inputBottomInset(imeBottom: Dp, safeBottomInset: Dp, keyboardType: EditorKeyboardType): Dp =
-    maxOf(effectiveImeInset(imeBottom, keyboardType), rememberedKeyboardInset, safeBottomInset)
+    maxOf(
+      trustedImeInset(
+        imeBottom = imeBottom,
+        safeBottomInset = safeBottomInset,
+        keyboardType = keyboardType,
+      ),
+      rememberedKeyboardInset,
+      safeBottomInset,
+    )
 
   fun bottomPanelHeight(imeBottom: Dp, safeBottomInset: Dp): Dp =
     bottomPanelHeight(
@@ -107,7 +122,12 @@ internal class EditorToolbarBottomState {
     safeBottomInset: Dp,
   ): Boolean =
     isSoftwareKeyboardVisible(
-      imeBottom = effectiveImeInset(imeBottom, keyboardType),
+      imeBottom =
+        trustedImeInset(
+          imeBottom = imeBottom,
+          safeBottomInset = safeBottomInset,
+          keyboardType = keyboardType,
+        ),
       safeBottomInset = safeBottomInset,
     )
 
@@ -119,15 +139,25 @@ internal class EditorToolbarBottomState {
     hardwareKeyboardModeGeneration: Int = 0,
   ) {
     if (activePanel == null) {
+      val trustedImeBottom =
+        trustedImeInset(
+          imeBottom = imeBottom,
+          safeBottomInset = safeBottomInset,
+          keyboardType = keyboardType,
+        )
       val softwareKeyboardVisible =
-        isSoftwareKeyboardVisible(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
+        isSoftwareKeyboardVisible(imeBottom = trustedImeBottom, safeBottomInset = safeBottomInset)
       panelInputState =
         resolveEditorToolbarPanelInputState(
           keyboardType = keyboardType,
           softwareKeyboardVisible = softwareKeyboardVisible,
           hardwareKeyboardModeGeneration = hardwareKeyboardModeGeneration,
         )
-      rememberKeyboardInset(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
+      rememberKeyboardInset(
+        imeBottom = imeBottom,
+        safeBottomInset = safeBottomInset,
+        keyboardType = keyboardType,
+      )
     }
     activePanel = panel
   }
@@ -154,7 +184,7 @@ internal class EditorToolbarBottomState {
         softwareKeyboardSuppressed = keepSoftwareKeyboardSuppressed,
         heightMode = EditorToolbarPanelHeightMode.Minimum,
       )
-    imeInsetMode = EditorToolbarImeInsetMode.IgnoreWhileHardwareKeyboard
+    imeInsetMode = EditorToolbarImeInsetMode.FilterStaleSoftwareKeyboardInset
     clearRememberedKeyboardInset()
   }
 
@@ -165,7 +195,11 @@ internal class EditorToolbarBottomState {
     safeBottomInset: Dp,
   ) {
     if (activePanel != null && !previousSoftwareKeyboardVisible && softwareKeyboardVisible) {
-      rememberKeyboardInset(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
+      rememberKeyboardInset(
+        imeBottom = imeBottom,
+        safeBottomInset = safeBottomInset,
+        keyboardType = EditorKeyboardType.Software,
+      )
       closePanel()
     }
   }
@@ -184,11 +218,19 @@ internal class EditorToolbarBottomState {
     safeBottomInset: Dp,
     editorInputActive: Boolean = true,
   ) {
-    val softwareKeyboardVisible =
+    val rawSoftwareKeyboardVisible =
       isSoftwareKeyboardVisible(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
+    val trustedImeBottom =
+      trustedImeInset(
+        imeBottom = imeBottom,
+        safeBottomInset = safeBottomInset,
+        keyboardType = keyboardType,
+      )
+    val softwareKeyboardVisible =
+      isSoftwareKeyboardVisible(imeBottom = trustedImeBottom, safeBottomInset = safeBottomInset)
     if (
-      imeInsetMode == EditorToolbarImeInsetMode.IgnoreWhileHardwareKeyboard &&
-        (!softwareKeyboardVisible || keyboardType == EditorKeyboardType.Software)
+      imeInsetMode == EditorToolbarImeInsetMode.FilterStaleSoftwareKeyboardInset &&
+        (!rawSoftwareKeyboardVisible || keyboardType == EditorKeyboardType.Software)
     ) {
       imeInsetMode = EditorToolbarImeInsetMode.Track
     }
@@ -202,11 +244,13 @@ internal class EditorToolbarBottomState {
       rememberKeyboardInset(
         imeBottom = imeBottom,
         safeBottomInset = safeBottomInset,
+        keyboardType = keyboardType,
         preserveCurrentInset =
           (activePanel != null && panelInputState.softwareKeyboardSuppressed) ||
             shouldKeepRememberedKeyboardInsetUntilImeRestored(
               imeBottom = imeBottom,
               safeBottomInset = safeBottomInset,
+              keyboardType = keyboardType,
             ),
       )
     }
@@ -229,9 +273,10 @@ internal class EditorToolbarBottomState {
     if (panelInputState.keyboardSizedPanel) {
       maxOf(
         if (panelInputState.tracksImeInset) {
-          resolveRememberedKeyboardInset(
-            imeBottom = effectiveImeInset(imeBottom, keyboardType),
+          rememberedImeInset(
+            imeBottom = imeBottom,
             safeBottomInset = safeBottomInset,
+            keyboardType = keyboardType,
           )
         } else {
           0.dp
@@ -251,10 +296,15 @@ internal class EditorToolbarBottomState {
   private fun rememberKeyboardInset(
     imeBottom: Dp,
     safeBottomInset: Dp,
+    keyboardType: EditorKeyboardType,
     preserveCurrentInset: Boolean = false,
   ) {
     val nextInset =
-      resolveRememberedKeyboardInset(imeBottom = imeBottom, safeBottomInset = safeBottomInset)
+      rememberedImeInset(
+        imeBottom = imeBottom,
+        safeBottomInset = safeBottomInset,
+        keyboardType = keyboardType,
+      )
     rememberedKeyboardInset =
       if (preserveCurrentInset) {
         maxOf(rememberedKeyboardInset, nextInset)
@@ -266,17 +316,41 @@ internal class EditorToolbarBottomState {
   private fun shouldKeepRememberedKeyboardInsetUntilImeRestored(
     imeBottom: Dp,
     safeBottomInset: Dp,
+    keyboardType: EditorKeyboardType,
   ): Boolean =
     keepRememberedKeyboardInsetUntilImeRestored &&
       activePanel == null &&
       rememberedKeyboardInset > 0.dp &&
-      resolveRememberedKeyboardInset(imeBottom = imeBottom, safeBottomInset = safeBottomInset) <
-        rememberedKeyboardInset
+      rememberedImeInset(
+        imeBottom = imeBottom,
+        safeBottomInset = safeBottomInset,
+        keyboardType = keyboardType,
+      ) < rememberedKeyboardInset
 
-  private fun effectiveImeInset(imeBottom: Dp, keyboardType: EditorKeyboardType): Dp =
+  private fun rememberedImeInset(
+    imeBottom: Dp,
+    safeBottomInset: Dp,
+    keyboardType: EditorKeyboardType,
+  ): Dp =
+    resolveRememberedKeyboardInset(
+      imeBottom =
+        trustedImeInset(
+          imeBottom = imeBottom,
+          safeBottomInset = safeBottomInset,
+          keyboardType = keyboardType,
+        ),
+      safeBottomInset = safeBottomInset,
+    )
+
+  private fun trustedImeInset(
+    imeBottom: Dp,
+    safeBottomInset: Dp,
+    keyboardType: EditorKeyboardType,
+  ): Dp =
     if (
-      imeInsetMode == EditorToolbarImeInsetMode.IgnoreWhileHardwareKeyboard &&
-        keyboardType == EditorKeyboardType.Hardware
+      imeInsetMode == EditorToolbarImeInsetMode.FilterStaleSoftwareKeyboardInset &&
+        keyboardType == EditorKeyboardType.Hardware &&
+        imeBottom >= safeBottomInset + ToolbarBottomPanelGap + ToolbarBottomPanelMinHeight
     ) {
       0.dp
     } else {

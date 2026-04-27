@@ -168,18 +168,18 @@ internal fun EditorToolbarHost(
       return false
     }
 
+    val restoreKeyboardType =
+      resolveEditorToolbarRestoreKeyboardType(
+        keyboardType = keyboardType,
+        softwareKeyboardRestorePendingForPanel = bottomState.softwareKeyboardRestorePendingForPanel,
+        hardwareKeyboardConnected = hardwareKeyboardConnected,
+      )
     val shouldRestoreSoftwareKeyboard =
       resolveEditorToolbarShouldRestoreSoftwareKeyboard(
         softwareKeyboardRestorePendingForPanel = bottomState.softwareKeyboardRestorePendingForPanel,
-        keyboardType =
-          resolveEditorToolbarRestoreKeyboardType(
-            keyboardType = keyboardType,
-            softwareKeyboardRestorePendingForPanel =
-              bottomState.softwareKeyboardRestorePendingForPanel,
-            hardwareKeyboardConnected = hardwareKeyboardConnected,
-          ),
+        keyboardType = restoreKeyboardType,
       )
-    val rememberedKeyboardInsetClosePolicy =
+    val closePolicy =
       resolveEditorToolbarRememberedKeyboardInsetClosePolicy(
         shouldRestoreSoftwareKeyboard = shouldRestoreSoftwareKeyboard,
         softwareKeyboardSuppressedForPanel = bottomState.softwareKeyboardSuppressedForPanel,
@@ -188,14 +188,12 @@ internal fun EditorToolbarHost(
 
     softwareKeyboardRestorePending = shouldRestoreSoftwareKeyboard
     rememberedKeyboardInsetRestoreFallbackPending =
-      rememberedKeyboardInsetClosePolicy.restoreFallbackAfterPanelClose &&
-        bottomState.rememberedKeyboardInset > 0.dp
-    if (rememberedKeyboardInsetClosePolicy.clearBeforePanelClose) {
+      closePolicy.restoreFallbackAfterPanelClose && bottomState.rememberedKeyboardInset > 0.dp
+    if (closePolicy.clearBeforePanelClose) {
       bottomState.clearRememberedKeyboardInset()
     }
     bottomState.closePanel(
-      keepRememberedKeyboardInsetUntilImeRestored =
-        !rememberedKeyboardInsetClosePolicy.clearBeforePanelClose
+      keepRememberedKeyboardInsetUntilImeRestored = !closePolicy.clearBeforePanelClose
     )
 
     return shouldRestoreSoftwareKeyboard

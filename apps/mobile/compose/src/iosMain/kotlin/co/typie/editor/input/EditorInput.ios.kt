@@ -85,7 +85,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   }
 }
 
-internal actual fun shouldRestartEditorInputSessionOnSoftwareKeyboardSuppressionChange(): Boolean =
+internal actual fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean =
   true
 
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {

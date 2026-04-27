@@ -14,7 +14,7 @@ internal enum class EditorToolbarPanelHeightMode {
 
 internal enum class EditorToolbarImeInsetMode {
   Track,
-  IgnoreWhileHardwareKeyboard,
+  FilterStaleSoftwareKeyboardInset,
 }
 
 internal data class EditorToolbarPanelInputState(
