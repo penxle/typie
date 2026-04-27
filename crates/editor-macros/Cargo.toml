@@ -15,7 +15,10 @@ quote.workspace = true
 syn.workspace = true
 
 [dev-dependencies]
+editor-common = { path = "../editor-common" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state" }
 imbl.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 smallvec.workspace = true

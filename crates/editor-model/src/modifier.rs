@@ -1,11 +1,22 @@
 use crate::alignment::Alignment;
+use editor_common::Tri;
 use editor_macros::ffi;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
 
 #[ffi]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, EnumDiscriminants)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumDiscriminants,
+    editor_macros::ModifierState,
+)]
 #[strum_discriminants(name(ModifierType))]
 #[strum_discriminants(ffi)]
 #[strum_discriminants(derive(
@@ -85,6 +96,104 @@ pub enum Modifier {
 impl Modifier {
     pub fn as_type(&self) -> ModifierType {
         ModifierType::from(self)
+    }
+}
+
+impl ModifierState {
+    pub fn set_uniform(&mut self, m: &Modifier) {
+        match m {
+            Modifier::Bold => self.bold = Tri::Uniform { value: () },
+            Modifier::Italic => self.italic = Tri::Uniform { value: () },
+            Modifier::Underline => self.underline = Tri::Uniform { value: () },
+            Modifier::Strikethrough => self.strikethrough = Tri::Uniform { value: () },
+            Modifier::FontSize { value } => {
+                self.font_size = Tri::Uniform {
+                    value: FontSizeValue { value: *value },
+                }
+            }
+            Modifier::FontFamily { value } => {
+                self.font_family = Tri::Uniform {
+                    value: FontFamilyValue {
+                        value: value.clone(),
+                    },
+                }
+            }
+            Modifier::FontWeight { value } => {
+                self.font_weight = Tri::Uniform {
+                    value: FontWeightValue { value: *value },
+                }
+            }
+            Modifier::TextColor { value } => {
+                self.text_color = Tri::Uniform {
+                    value: TextColorValue {
+                        value: value.clone(),
+                    },
+                }
+            }
+            Modifier::BackgroundColor { value } => {
+                self.background_color = Tri::Uniform {
+                    value: BackgroundColorValue {
+                        value: value.clone(),
+                    },
+                }
+            }
+            Modifier::LetterSpacing { value } => {
+                self.letter_spacing = Tri::Uniform {
+                    value: LetterSpacingValue { value: *value },
+                }
+            }
+            Modifier::Link { href } => {
+                self.link = Tri::Uniform {
+                    value: LinkValue { href: href.clone() },
+                }
+            }
+            Modifier::Ruby { text } => {
+                self.ruby = Tri::Uniform {
+                    value: RubyValue { text: text.clone() },
+                }
+            }
+            Modifier::LineHeight { value } => {
+                self.line_height = Tri::Uniform {
+                    value: LineHeightValue { value: *value },
+                }
+            }
+            Modifier::BlockGap { value } => {
+                self.block_gap = Tri::Uniform {
+                    value: BlockGapValue { value: *value },
+                }
+            }
+            Modifier::ParagraphIndent { value } => {
+                self.paragraph_indent = Tri::Uniform {
+                    value: ParagraphIndentValue { value: *value },
+                }
+            }
+            Modifier::Alignment { value } => {
+                self.alignment = Tri::Uniform {
+                    value: AlignmentValue { value: *value },
+                }
+            }
+        }
+    }
+
+    pub fn set_mixed(&mut self, t: ModifierType) {
+        match t {
+            ModifierType::Bold => self.bold = Tri::Mixed,
+            ModifierType::Italic => self.italic = Tri::Mixed,
+            ModifierType::Underline => self.underline = Tri::Mixed,
+            ModifierType::Strikethrough => self.strikethrough = Tri::Mixed,
+            ModifierType::FontSize => self.font_size = Tri::Mixed,
+            ModifierType::FontFamily => self.font_family = Tri::Mixed,
+            ModifierType::FontWeight => self.font_weight = Tri::Mixed,
+            ModifierType::TextColor => self.text_color = Tri::Mixed,
+            ModifierType::BackgroundColor => self.background_color = Tri::Mixed,
+            ModifierType::LetterSpacing => self.letter_spacing = Tri::Mixed,
+            ModifierType::Link => self.link = Tri::Mixed,
+            ModifierType::Ruby => self.ruby = Tri::Mixed,
+            ModifierType::LineHeight => self.line_height = Tri::Mixed,
+            ModifierType::BlockGap => self.block_gap = Tri::Mixed,
+            ModifierType::ParagraphIndent => self.paragraph_indent = Tri::Mixed,
+            ModifierType::Alignment => self.alignment = Tri::Mixed,
+        }
     }
 }
 
@@ -194,5 +303,73 @@ mod tests {
         set.insert(Modifier::FontSize { value: 1600 });
         set.insert(Modifier::FontSize { value: 1200 });
         assert_eq!(set.len(), 3);
+    }
+
+    #[test]
+    fn modifier_state_default_all_absent() {
+        let s = ModifierState::default();
+        assert_eq!(s.bold, editor_common::Tri::Absent);
+        assert_eq!(s.font_size, editor_common::Tri::Absent);
+        assert_eq!(s.link, editor_common::Tri::Absent);
+    }
+
+    #[test]
+    fn set_uniform_bold() {
+        let mut s = ModifierState::default();
+        s.set_uniform(&Modifier::Bold);
+        assert_eq!(s.bold, editor_common::Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn set_uniform_font_size() {
+        let mut s = ModifierState::default();
+        s.set_uniform(&Modifier::FontSize { value: 1600 });
+        assert_eq!(
+            s.font_size,
+            editor_common::Tri::Uniform {
+                value: FontSizeValue { value: 1600 }
+            }
+        );
+    }
+
+    #[test]
+    fn set_mixed_bold() {
+        let mut s = ModifierState::default();
+        s.set_mixed(ModifierType::Bold);
+        assert_eq!(s.bold, editor_common::Tri::Mixed);
+    }
+
+    #[test]
+    fn set_uniform_link_preserves_href_field_name() {
+        // Pin down that the macro emits LinkValue { href: ... } (not LinkValue { value: ... }),
+        // and that set_uniform threads `href` through correctly.
+        let mut s = ModifierState::default();
+        s.set_uniform(&Modifier::Link {
+            href: "https://example.com".to_string(),
+        });
+        assert_eq!(
+            s.link,
+            Tri::Uniform {
+                value: LinkValue {
+                    href: "https://example.com".to_string()
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn set_uniform_alignment_uses_copy_path() {
+        let mut s = ModifierState::default();
+        s.set_uniform(&Modifier::Alignment {
+            value: Alignment::Center,
+        });
+        assert_eq!(
+            s.alignment,
+            Tri::Uniform {
+                value: AlignmentValue {
+                    value: Alignment::Center
+                }
+            }
+        );
     }
 }

@@ -4,6 +4,7 @@ mod doc_macro;
 mod ffi_export_macro;
 mod ffi_macro;
 mod from_discriminant_macro;
+mod modifier_state_macro;
 mod preamble_macro;
 mod state_macro;
 
@@ -43,6 +44,16 @@ pub fn derive_from_discriminant(input: TokenStream) -> TokenStream {
     let input =
         syn::parse_macro_input!(input as from_discriminant_macro::parse::FromDiscriminantInput);
     from_discriminant_macro::codegen::generate(&input).into()
+}
+
+#[proc_macro_derive(ModifierState)]
+pub fn derive_modifier_state(input: TokenStream) -> TokenStream {
+    let derive_input = syn::parse_macro_input!(input as syn::DeriveInput);
+    let parsed = match modifier_state_macro::parse::ModifierStateInput::from_derive(&derive_input) {
+        Ok(v) => v,
+        Err(e) => return e.to_compile_error().into(),
+    };
+    modifier_state_macro::codegen::generate(&parsed).into()
 }
 
 #[proc_macro_attribute]

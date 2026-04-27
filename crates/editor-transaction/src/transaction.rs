@@ -35,6 +35,10 @@ impl Transaction {
         }
     }
 
+    pub fn state(&self) -> &State {
+        &self.state
+    }
+
     pub fn doc(&self) -> Doc {
         self.state.doc.clone()
     }

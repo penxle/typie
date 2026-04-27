@@ -14,6 +14,8 @@
 
   const ctx = getEditorContext();
 
+  const boldState = $derived(ctx.editor?.modifierState?.bold);
+
   const enqueue = (message: Message) => {
     ctx.editor?.enqueue(message);
     ctx.editor?.focus();
@@ -73,7 +75,13 @@
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
-  <ToolbarButton icon={BoldIcon} label="굵게" onclick={() => toggleModifier('bold')} />
+  <ToolbarButton
+    active={boldState?.type === 'uniform'}
+    icon={BoldIcon}
+    indeterminate={boldState?.type === 'mixed'}
+    label="굵게"
+    onclick={() => toggleModifier('bold')}
+  />
   <ToolbarButton icon={ItalicIcon} label="기울임" onclick={() => toggleModifier('italic')} />
   <ToolbarButton icon={StrikethroughIcon} label="취소선" onclick={() => toggleModifier('strikethrough')} />
   <ToolbarButton icon={UnderlineIcon} label="밑줄" onclick={() => toggleModifier('underline')} />

@@ -58,6 +58,7 @@ fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers)
 /// Collects inherited modifiers from the ancestor chain (excluding the node itself).
 /// For each modifier type, returns the nearest ancestor's value.
 /// Root has all modifiers (invariant).
+// TODO: dedup with editor_state::modifier_resolution::resolve_inherited_modifiers — follow-up plan
 pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
     let mut found = Vec::new();
     for ancestor in node.ancestors().skip(1) {

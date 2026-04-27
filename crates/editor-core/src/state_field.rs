@@ -15,4 +15,5 @@ pub enum StateField {
     PageSizes,
     Ime,
     Modifiers,
+    Block,
 }

@@ -56,6 +56,14 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.state().doc.attrs().clone().into_ffi()?))
     }
 
+    pub fn modifier_state(&self) -> EditorResult<Complex<editor_model::ModifierState>> {
+        self.with_inner(|inner| Ok(inner.editor.modifier_state().into_ffi()?))
+    }
+
+    pub fn block_state(&self) -> EditorResult<Complex<editor_core::BlockState>> {
+        self.with_inner(|inner| Ok(inner.editor.block_state().into_ffi()?))
+    }
+
     pub fn inspect_state(
         &self,
         options: Option<Complex<editor_introspection::InspectStateOptions>>,

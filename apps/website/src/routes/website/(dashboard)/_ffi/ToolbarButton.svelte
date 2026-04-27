@@ -8,12 +8,13 @@
     label: string;
     icon?: Component;
     active?: boolean;
+    indeterminate?: boolean;
     disabled?: boolean;
     onclick: () => void;
     style?: SystemStyleObject;
   };
 
-  let { label, icon, active, disabled = false, onclick, style }: Props = $props();
+  let { label, icon, active, indeterminate, disabled = false, onclick, style }: Props = $props();
 </script>
 
 <button
@@ -35,6 +36,12 @@
     },
     active === true && { backgroundColor: 'surface.muted', borderColor: 'border.subtle', color: 'text.default' },
     active === false && {},
+    indeterminate === true && {
+      backgroundColor: 'surface.muted',
+      borderColor: 'border.subtle',
+      borderStyle: 'dashed',
+      color: 'text.subtle',
+    },
     style,
   )}
   {disabled}

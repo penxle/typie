@@ -76,6 +76,14 @@ impl Editor {
         &self.view
     }
 
+    pub fn modifier_state(&self) -> editor_model::ModifierState {
+        editor_state::resolve_modifier_state(&self.state)
+    }
+
+    pub fn block_state(&self) -> crate::block_state::BlockState {
+        crate::block_state::resolve_block_state(&self.state)
+    }
+
     pub fn set_theme_variant(&mut self, variant: ThemeVariant) {
         self.renderer.set_theme_variant(variant);
     }
@@ -158,6 +166,8 @@ impl Editor {
         if steps.iter().any(|s| s.is_doc_step()) {
             fields.insert(StateField::Doc);
             fields.insert(StateField::Ime);
+            fields.insert(StateField::Modifiers);
+            fields.insert(StateField::Block);
         }
 
         if steps.iter().any(|s| s.is_doc_attr_step()) {
@@ -169,7 +179,13 @@ impl Editor {
             fields.insert(StateField::Cursor);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Selection);
+            fields.insert(StateField::Modifiers);
+            fields.insert(StateField::Block);
             self.push_event(EditorEvent::RenderInvalidated);
+        }
+
+        if steps.iter().any(|s| s.is_pending_modifiers_step()) {
+            fields.insert(StateField::Modifiers);
         }
 
         if !fields.is_empty() {
@@ -607,6 +623,55 @@ mod tests {
     }
 
     #[test]
+    fn tick_emits_modifiers_and_block_on_selection_step() {
+        let (mut editor, t) = test_editor();
+        let target = Selection::collapsed(Position::new(t, 3));
+        editor.enqueue(Message::Selection {
+            op: SelectionOp::Set { selection: target },
+        });
+
+        let events = editor.tick().unwrap();
+
+        let has_modifiers = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::StateChanged { fields } if fields.contains(&StateField::Modifiers)
+            )
+        });
+        let has_block = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::StateChanged { fields } if fields.contains(&StateField::Block)
+            )
+        });
+        assert!(has_modifiers);
+        assert!(has_block);
+    }
+
+    #[test]
+    fn tick_emits_modifiers_and_block_on_doc_step() {
+        let (mut editor, _) = test_editor();
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "x".into() },
+        });
+
+        let has_modifiers = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::StateChanged { fields } if fields.contains(&StateField::Modifiers)
+            )
+        });
+        let has_block = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::StateChanged { fields } if fields.contains(&StateField::Block)
+            )
+        });
+        assert!(has_modifiers);
+        assert!(has_block);
+    }
+
+    #[test]
     fn input_context_full_window_returns_whole_doc() {
         let (state, ..) = state! {
             doc { root { paragraph { t1: text("hello") } } }
@@ -755,6 +820,29 @@ mod tests {
             .unwrap();
 
         assert_eq!(editor.pending_effects.len(), 1);
+    }
+
+    #[test]
+    fn editor_exposes_modifier_state() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hi") [bold] } } }
+            selection: (t1, 1)
+        };
+        let editor = Editor::new_test(state);
+        let s = editor.modifier_state();
+        assert_eq!(s.bold, editor_common::Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn editor_exposes_block_state() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hi") } } }
+            selection: (t1, 1)
+        };
+        let editor = Editor::new_test(state);
+        let bs = editor.block_state();
+        assert_eq!(bs.ancestors.len(), 2);
+        assert!(bs.nodes.is_empty());
     }
 
     #[test]

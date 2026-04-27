@@ -6,6 +6,7 @@ use crate::id::NodeId;
 use crate::modifier::Modifier;
 use crate::nodes::{Node, NodeType};
 
+#[derive(Clone, Copy)]
 pub struct NodeRef<'a> {
     doc: &'a Doc,
     id: NodeId,

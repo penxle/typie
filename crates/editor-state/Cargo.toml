@@ -16,6 +16,7 @@ editor-resource = { path = "../editor-resource" }
 log.workspace = true
 serde.workspace = true
 smallvec.workspace = true
+strum.workspace = true
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }

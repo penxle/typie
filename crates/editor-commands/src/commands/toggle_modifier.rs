@@ -1,10 +1,9 @@
 use editor_model::{Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers, Position};
+use editor_state::{PendingModifier, PendingModifiers, Position, resolve_effective_modifiers_at};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
     check_range_all_has_modifier, collect_text_nodes_in_range, compact_and_restore_selection,
-    resolve_effective_modifiers,
 };
 use crate::{CommandError, CommandResult};
 
@@ -72,11 +71,9 @@ fn toggle_modifier_collapsed(
 ) -> CommandResult {
     let pos = tr.selection().head;
     let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
+    doc.node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-
-    let effective = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
+    let effective = resolve_effective_modifiers_at(tr.state(), &pos);
     let has_modifier = effective.iter().any(|m| m.as_type() == modifier_type);
 
     let mut pending: PendingModifiers = tr

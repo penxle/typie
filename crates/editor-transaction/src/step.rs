@@ -129,6 +129,10 @@ impl Step {
         matches!(self, Step::SetSelection { .. })
     }
 
+    pub fn is_pending_modifiers_step(&self) -> bool {
+        matches!(self, Step::SetPendingModifiers { .. })
+    }
+
     pub fn is_syncable(&self) -> bool {
         !matches!(
             self,

@@ -4,12 +4,14 @@ import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
 import { register, unregister } from './registry';
 import type {
+  BlockState,
   CursorMetrics,
   Doc,
   DocumentAttrs,
   Editor as WasmEditor,
   EditorEvent,
   Message,
+  ModifierState,
   Selection,
   Size,
   Viewport,
@@ -52,6 +54,8 @@ export class Editor {
   #selection = $state<Selection>();
   #pageSizes = $state<Size[]>([]);
   #documentAttrs = $state<DocumentAttrs>();
+  #modifierState = $state<ModifierState>();
+  #blockState = $state<BlockState>();
   #focused = $state(false);
   #effectCleanup: (() => void) | null = null;
 
@@ -117,6 +121,14 @@ export class Editor {
 
   get documentAttrs() {
     return this.#documentAttrs;
+  }
+
+  get modifierState() {
+    return this.#modifierState;
+  }
+
+  get blockState() {
+    return this.#blockState;
   }
 
   get scaleFactor() {
@@ -277,6 +289,14 @@ export class Editor {
 
     if (fields.includes('doc_attrs')) {
       this.#documentAttrs = this.#wasm.document_attrs();
+    }
+
+    if (fields.includes('modifiers')) {
+      this.#modifierState = this.#wasm.modifier_state();
+    }
+
+    if (fields.includes('block')) {
+      this.#blockState = this.#wasm.block_state();
     }
   };
 

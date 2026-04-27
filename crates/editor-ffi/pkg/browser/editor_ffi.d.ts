@@ -148,8 +148,30 @@ export type ModifierType = "bold" | "italic" | "underline" | "strikethrough" | "
  */
 export type NodeType = "root" | "paragraph" | "blockquote" | "callout" | "text" | "bullet_list" | "ordered_list" | "list_item" | "fold" | "fold_title" | "fold_content" | "table" | "table_row" | "table_cell" | "image" | "file" | "embed" | "archived" | "hard_break" | "horizontal_rule" | "page_break";
 
+export interface AlignmentValue {
+    value: Alignment;
+}
+
 export interface ArchivedNode {
     id: string | undefined;
+}
+
+export interface BackgroundColorValue {
+    value: string;
+}
+
+export interface Block {
+    id: NodeId;
+    node: Node;
+}
+
+export interface BlockGapValue {
+    value: number;
+}
+
+export interface BlockState {
+    ancestors: Block[];
+    nodes: Block[];
 }
 
 export interface BlockquoteNode {
@@ -197,6 +219,18 @@ export interface FontFamily {
     weights: FontWeight[];
 }
 
+export interface FontFamilyValue {
+    value: string;
+}
+
+export interface FontSizeValue {
+    value: number;
+}
+
+export interface FontWeightValue {
+    value: number;
+}
+
 export interface Fragment {
     node: Node;
     modifiers?: Modifier[];
@@ -242,7 +276,38 @@ export interface KeyEvent {
     modifiers?: InputModifiers;
 }
 
+export interface LetterSpacingValue {
+    value: number;
+}
+
+export interface LineHeightValue {
+    value: number;
+}
+
+export interface LinkValue {
+    href: string;
+}
+
 export interface ListItemNode {}
+
+export interface ModifierState {
+    bold: Tri<undefined>;
+    italic: Tri<undefined>;
+    underline: Tri<undefined>;
+    strikethrough: Tri<undefined>;
+    font_size: Tri<FontSizeValue>;
+    font_family: Tri<FontFamilyValue>;
+    font_weight: Tri<FontWeightValue>;
+    text_color: Tri<TextColorValue>;
+    background_color: Tri<BackgroundColorValue>;
+    letter_spacing: Tri<LetterSpacingValue>;
+    link: Tri<LinkValue>;
+    ruby: Tri<RubyValue>;
+    line_height: Tri<LineHeightValue>;
+    block_gap: Tri<BlockGapValue>;
+    paragraph_indent: Tri<ParagraphIndentValue>;
+    alignment: Tri<AlignmentValue>;
+}
 
 export interface NodeEntry {
     node: Node;
@@ -260,6 +325,10 @@ export interface PageRect {
     rect: Rect;
 }
 
+export interface ParagraphIndentValue {
+    value: number;
+}
+
 export interface ParagraphNode {}
 
 export interface Rect {
@@ -270,6 +339,10 @@ export interface Rect {
 }
 
 export interface RootNode {}
+
+export interface RubyValue {
+    text: string;
+}
 
 export interface Size {
     width: number;
@@ -286,6 +359,10 @@ export interface TableNode {
 }
 
 export interface TableRowNode {}
+
+export interface TextColorValue {
+    value: string;
+}
 
 export interface TextNode {
     text: string;
@@ -357,7 +434,7 @@ export type PointerEvent = { type: "down"; page: number; x: number; y: number; c
 
 export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
-export type StateField = "doc" | "doc_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers";
+export type StateField = "doc" | "doc_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -365,12 +442,15 @@ export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
 export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined } | { type: "set_column_widths"; widths: number[] };
 
+export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
+
 
 declare class Editor {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
+    block_state(): BlockState;
     cursor(): CursorMetrics | undefined;
     detach_surface(page: number): void;
     document_attrs(): DocumentAttrs;
@@ -378,6 +458,7 @@ declare class Editor {
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
+    modifier_state(): ModifierState;
     page_sizes(): Size[];
     render_surface(page: number): void;
     resize_surface(page: number, width: number, height: number, scale_factor: number): void;

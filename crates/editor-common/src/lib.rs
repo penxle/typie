@@ -5,8 +5,10 @@ mod geometry;
 mod movement;
 mod str;
 pub mod time;
+mod tri;
 
 pub use ffi::*;
 pub use geometry::*;
 pub use movement::*;
 pub use str::*;
+pub use tri::*;
