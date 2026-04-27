@@ -1,7 +1,6 @@
 use editor_model::NodeId;
 use editor_state::State;
 
-use crate::transform::Conflict;
 use crate::{Step, StepError, StepOutput, Validation};
 
 pub(crate) fn apply(
@@ -87,26 +86,6 @@ pub(crate) fn inverse(
         new_parent: old_parent,
         new_index: old_index,
     }
-}
-
-pub(crate) fn transform_against(
-    local_node_id: NodeId,
-    local_old_parent: NodeId,
-    local_old_index: usize,
-    local_new_parent: NodeId,
-    local_new_index: usize,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    crate::transform::transform_default(
-        Step::MoveNode {
-            node_id: local_node_id,
-            old_parent: local_old_parent,
-            old_index: local_old_index,
-            new_parent: local_new_parent,
-            new_index: local_new_index,
-        },
-        against,
-    )
 }
 
 #[cfg(test)]

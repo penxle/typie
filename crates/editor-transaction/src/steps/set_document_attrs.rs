@@ -1,7 +1,6 @@
 use editor_model::DocumentAttrs;
 use editor_state::State;
 
-use crate::transform::Conflict;
 use crate::{Step, StepError, StepOutput};
 
 pub(crate) fn apply(state: &State, new_attrs: &DocumentAttrs) -> Result<StepOutput, StepError> {
@@ -19,20 +18,6 @@ pub(crate) fn inverse(old_attrs: DocumentAttrs, new_attrs: DocumentAttrs) -> Ste
         old: new_attrs,
         new: old_attrs,
     }
-}
-
-pub(crate) fn transform_against(
-    local_old: &DocumentAttrs,
-    local_new: &DocumentAttrs,
-    against: &Step,
-) -> Result<Vec<Step>, Conflict> {
-    crate::transform::transform_default(
-        Step::SetDocumentAttrs {
-            old: local_old.clone(),
-            new: local_new.clone(),
-        },
-        against,
-    )
 }
 
 #[cfg(test)]
@@ -68,21 +53,6 @@ mod tests {
         let output = step.apply(&state).unwrap();
 
         assert_eq!(output.state.doc.attrs().layout_mode, new_attrs.layout_mode);
-    }
-
-    #[test]
-    fn transform_set_document_attrs_commutes() {
-        let attrs1 = editor_model::DocumentAttrs::default();
-        let attrs2 = editor_model::DocumentAttrs::default();
-        let local = Step::SetDocumentAttrs {
-            old: attrs1.clone(),
-            new: attrs2.clone(),
-        };
-        let against = local.clone();
-        assert_eq!(
-            crate::transform::transform(&local, &against).unwrap(),
-            vec![local],
-        );
     }
 
     #[test]
