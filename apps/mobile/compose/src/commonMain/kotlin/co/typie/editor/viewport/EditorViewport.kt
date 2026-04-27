@@ -20,6 +20,7 @@ import co.typie.editor.EditorViewportAnchor
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ffi.Size as PageSize
+import kotlin.math.abs
 import kotlin.math.max
 
 private const val EditorViewportWheelPanScale = 10f
@@ -264,7 +265,8 @@ internal fun consumeEditorViewportTouchPan(
   if (consumed == Offset.Zero) {
     return Offset.Zero
   }
-  return Offset(x = -consumed.x * density, y = -consumed.y * density)
+  val consumedPx = Offset(x = -consumed.x * density, y = -consumed.y * density)
+  return consumedPx.consumeCrossAxisDelta(deltaPx)
 }
 
 internal fun consumeEditorViewportWheelPan(
@@ -284,6 +286,13 @@ internal fun normalizeEditorViewportWheelZoomDelta(delta: Float): Float =
     delta * EditorViewportWheelZoomScale
   } else {
     0f
+  }
+
+private fun Offset.consumeCrossAxisDelta(requested: Offset): Offset =
+  if (abs(requested.y) >= abs(requested.x)) {
+    if (y != 0f) copy(x = requested.x) else this
+  } else {
+    if (x != 0f) copy(y = requested.y) else this
   }
 
 internal data class EditorZoomViewportScrollOffset(

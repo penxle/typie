@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -84,6 +85,8 @@ internal fun EditorToolbarPages(
   var activeHardStop by remember { mutableStateOf<ToolbarHardStop?>(null) }
   var scrollGestureStartPosition by remember { mutableStateOf<Float?>(null) }
   var pointerScrollGestureActive by remember { mutableStateOf(false) }
+  val decayFlingInProgress = remember { mutableStateOf(false) }
+  val decayHardStopBounceStarted = remember { mutableStateOf(false) }
 
   BoxWithConstraints(modifier = modifier.height(ToolbarStackHeight)) {
     val pageCount = pages.size.coerceAtLeast(1)
@@ -113,17 +116,25 @@ internal fun EditorToolbarPages(
           activationEpsilon = hardStopActivationEpsilonPx,
         )
       val nextPosition = scrollResult.position
+      val shouldBounceHardStopDuringDecay =
+        decayFlingInProgress.value &&
+          scrollResult.rejectedDelta != 0f &&
+          !decayHardStopBounceStarted.value
       val consumed =
         if (scrollResult.rejectedDelta != 0f) {
-          delta
+          if (decayFlingInProgress.value) currentPosition - nextPosition else delta
         } else {
           currentPosition - nextPosition
         }
       val nextVisualOffset =
         if (scrollResult.rejectedDelta != 0f) {
-          (hardStopVisualOffset.value -
-              scrollResult.rejectedDelta * ToolbarHardStopOverscrollResistance)
-            .coerceIn(-hardStopOverscrollLimitPx, hardStopOverscrollLimitPx)
+          if (decayFlingInProgress.value && decayHardStopBounceStarted.value) {
+            hardStopVisualOffset.value
+          } else {
+            (hardStopVisualOffset.value -
+                scrollResult.rejectedDelta * ToolbarHardStopOverscrollResistance)
+              .coerceIn(-hardStopOverscrollLimitPx, hardStopOverscrollLimitPx)
+          }
         } else if (scrollResult.hardStop == null) {
           0f
         } else {
@@ -137,10 +148,22 @@ internal fun EditorToolbarPages(
           scrollPosition.snapTo(nextPosition)
         }
       }
-      if (nextVisualOffset != hardStopVisualOffset.value) {
+      if (scrollResult.rejectedDelta == 0f) {
+        decayHardStopBounceStarted.value = false
+      }
+      if (shouldBounceHardStopDuringDecay) {
+        decayHardStopBounceStarted.value = true
+      }
+      if (nextVisualOffset != hardStopVisualOffset.value || shouldBounceHardStopDuringDecay) {
         scope.launch {
           hardStopVisualOffset.stop()
-          hardStopVisualOffset.snapTo(nextVisualOffset)
+          if (nextVisualOffset != hardStopVisualOffset.value) {
+            hardStopVisualOffset.snapTo(nextVisualOffset)
+          }
+          if (shouldBounceHardStopDuringDecay) {
+            hardStopVisualOffset.animateTo(0f, ToolbarHardStopOverscrollSpring)
+            decayHardStopBounceStarted.value = false
+          }
         }
       }
       consumed
@@ -262,11 +285,35 @@ internal fun EditorToolbarPages(
       }
     }
 
+    val defaultFlingBehavior = ScrollableDefaults.flingBehavior()
     val flingBehavior =
-      remember(scrollPosition, pageMetrics, activeHardStop, onEditorInputRequest) {
+      remember(
+        scrollPosition,
+        pageMetrics,
+        activeHardStop,
+        onEditorInputRequest,
+        defaultFlingBehavior,
+      ) {
         object : FlingBehavior {
           override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
-            settlePages(initialVelocity)
+            val remainingVelocity =
+              if (
+                pageMetrics.shouldDecayFlingWithinInternalScroll(
+                  position = scrollPosition.value,
+                  velocity = initialVelocity,
+                )
+              ) {
+                try {
+                  decayHardStopBounceStarted.value = false
+                  decayFlingInProgress.value = true
+                  with(defaultFlingBehavior) { performFling(initialVelocity) }
+                } finally {
+                  decayFlingInProgress.value = false
+                }
+              } else {
+                initialVelocity
+              }
+            settlePages(remainingVelocity)
             return 0f
           }
         }
@@ -472,6 +519,32 @@ internal data class ToolbarPageMetrics(
 
   fun pageIndexForPosition(position: Float): Int =
     progressFor(position).roundToInt().coerceIn(0, lastPageIndex.coerceAtLeast(0))
+
+  fun shouldDecayFlingWithinInternalScroll(position: Float, velocity: Float): Boolean {
+    if (velocity.directionSign() == 0) {
+      return false
+    }
+
+    val boundedPosition = position.coerceIn(0f, maxPosition)
+    pageStarts.forEachIndexed { index, pageStart ->
+      val scrollRange = scrollRanges[index].coerceAtLeast(0)
+      if (scrollRange <= 0) {
+        return@forEachIndexed
+      }
+
+      val scrollEnd = pageStart + scrollRange
+      if (boundedPosition > pageStart && boundedPosition < scrollEnd) {
+        return true
+      }
+      if (boundedPosition.isNear(pageStart) && velocity < 0f) {
+        return true
+      }
+      if (boundedPosition.isNear(scrollEnd) && velocity > 0f) {
+        return true
+      }
+    }
+    return false
+  }
 
   fun isPageTransitionPosition(position: Float): Boolean {
     if (scrollRanges.isEmpty() || pageDistance <= 0f) {

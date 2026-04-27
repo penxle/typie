@@ -30,6 +30,44 @@ class EditorViewportStateTest {
   }
 
   @Test
+  fun `touch pan reports incidental cross-axis delta consumed when main axis scrolls`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 100f, height = 300f),
+    )
+
+    val consumed =
+      consumeEditorViewportTouchPan(
+        viewportState = state,
+        deltaPx = Offset(x = 18f, y = -80f),
+        density = 2f,
+      )
+
+    assertEquals(Offset(x = 18f, y = -80f), consumed)
+    assertEquals(Offset(x = 0f, y = 40f), state.scrollOffset)
+  }
+
+  @Test
+  fun `touch pan reports partially consumed incidental cross-axis delta consumed when main axis scrolls`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 110f, height = 300f),
+    )
+
+    val consumed =
+      consumeEditorViewportTouchPan(
+        viewportState = state,
+        deltaPx = Offset(x = -30f, y = -80f),
+        density = 2f,
+      )
+
+    assertEquals(Offset(x = -30f, y = -80f), consumed)
+    assertEquals(Offset(x = 10f, y = 40f), state.scrollOffset)
+  }
+
+  @Test
   fun `auto scroll updates viewport scroll and records auto intent`() {
     val state = EditorViewportState()
     state.updateMeasuredBounds(
