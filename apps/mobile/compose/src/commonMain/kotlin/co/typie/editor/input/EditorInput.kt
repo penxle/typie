@@ -40,7 +40,9 @@ internal fun Modifier.editorInput(
   editor: Editor,
   platform: Platform,
   bringIntoViewRequests: EditorBringIntoViewRequests,
-): Modifier = this then EditorInputElement(editor, platform, bringIntoViewRequests)
+  textInputSessionEnabled: Boolean,
+): Modifier =
+  this then EditorInputElement(editor, platform, bringIntoViewRequests, textInputSessionEnabled)
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal expect suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
@@ -55,13 +57,16 @@ private data class EditorInputElement(
   private val editor: Editor,
   private val platform: Platform,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
+  private val textInputSessionEnabled: Boolean,
 ) : ModifierNodeElement<EditorInputNode>() {
-  override fun create(): EditorInputNode = EditorInputNode(editor, platform, bringIntoViewRequests)
+  override fun create(): EditorInputNode =
+    EditorInputNode(editor, platform, bringIntoViewRequests, textInputSessionEnabled)
 
   override fun update(node: EditorInputNode) {
     node.editor = editor
     node.platform = platform
     node.bringIntoViewRequests = bringIntoViewRequests
+    node.textInputSessionEnabled = textInputSessionEnabled
   }
 }
 
@@ -70,9 +75,20 @@ internal class EditorInputNode(
   var editor: Editor,
   var platform: Platform,
   var bringIntoViewRequests: EditorBringIntoViewRequests,
+  textInputSessionEnabled: Boolean,
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
+  private var focused = false
   private val bindings by lazy { createBindings(platform) }
+  var textInputSessionEnabled = textInputSessionEnabled
+    set(value) {
+      if (field == value) {
+        return
+      }
+
+      field = value
+      syncTextInputSession()
+    }
 
   private fun dispatchAndScrollToCurrentCursorLine(vararg messages: Message) {
     coroutineScope.launch {
@@ -159,11 +175,17 @@ internal class EditorInputNode(
   override fun onPreKeyEvent(event: KeyEvent) = false
 
   override fun onFocusEvent(focusState: FocusState) {
-    notifyTextInputFocusChanged(this, focusState.isFocused)
-    registerTextInputClient(this, if (focusState.isFocused) textInputClient else null)
+    focused = focusState.isFocused
+    syncTextInputSession()
+  }
+
+  private fun syncTextInputSession() {
+    val sessionEnabled = focused && textInputSessionEnabled
+    notifyTextInputFocusChanged(this, sessionEnabled)
+    registerTextInputClient(this, if (sessionEnabled) textInputClient else null)
     focusedJob?.cancel()
     focusedJob =
-      if (focusState.isFocused) {
+      if (sessionEnabled) {
         coroutineScope.launch {
           establishTextInputSession {
             val request = createEditorInputRequest(editor, bringIntoViewRequests)
@@ -184,6 +206,7 @@ internal class EditorInputNode(
   }
 
   override fun onDetach() {
+    focused = false
     notifyTextInputFocusChanged(this, false)
     registerTextInputClient(this, null)
     focusedJob?.cancel()

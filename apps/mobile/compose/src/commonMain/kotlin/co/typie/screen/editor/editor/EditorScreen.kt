@@ -56,6 +56,7 @@ import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
+import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarBottomState
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
 import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
 import co.typie.screen.editor.editor.viewport.rememberEditorTouchPinchZoomModifier
@@ -151,6 +152,8 @@ fun EditorScreen(entityId: String) {
     val topInset = contentPadding.calculateTopPadding()
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val toolbarBottomState = rememberEditorToolbarBottomState()
+    val toolbarVisibleImeBottom = toolbarBottomState.visibleImeInset(imeBottom)
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val devMode = Preference.devMode
@@ -160,8 +163,15 @@ fun EditorScreen(entityId: String) {
       screenState.resolveVisibleArea(
         topInset = topInset.value,
         rawBottomSafeInset = bottomSafeInset.value,
-        rawImeInset = imeBottom.value,
+        rawImeInset = toolbarVisibleImeBottom.value,
       )
+    LaunchedEffect(
+      toolbarBottomState.activePanel,
+      imeBottom,
+      toolbarBottomState.rememberedKeyboardInset,
+    ) {
+      toolbarBottomState.clearRememberedKeyboardInsetIfRestored(imeBottom)
+    }
     LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
       zoomController.syncLayout(
         layoutSpec = layoutSpec,
@@ -359,6 +369,7 @@ fun EditorScreen(entityId: String) {
             layoutSpec = layoutSpec,
             autoScrollPolicy = autoScrollPolicy,
             modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
+            textInputSessionEnabled = toolbarBottomState.textInputSessionEnabled,
             showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
             showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
           )
@@ -368,6 +379,7 @@ fun EditorScreen(entityId: String) {
             editorFocused = uiState.focused,
             visible = screenState.sceneInForeground,
             safeBottomInset = bottomSafeInset,
+            bottomState = toolbarBottomState,
             onEditorFocusRequest = { runtime.focus() },
             modifier = Modifier,
           )

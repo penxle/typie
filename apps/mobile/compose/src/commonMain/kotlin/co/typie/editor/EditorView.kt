@@ -42,6 +42,7 @@ internal fun EditorView(
   viewportWidth: Float,
   viewportHeight: Float,
   modifier: Modifier = Modifier,
+  textInputSessionEnabled: Boolean = true,
   showDebugSurfaceOverlay: Boolean = false,
 ) {
   val platform = PlatformModule.platform
@@ -82,7 +83,12 @@ internal fun EditorView(
       Modifier.fillMaxWidth()
         .focusRequester(editor.focusRequester)
         .onFocusChanged { uiState.updateFocus(it.isFocused) }
-        .editorInput(editor, platform, bringIntoViewRequests)
+        .editorInput(
+          editor = editor,
+          platform = platform,
+          bringIntoViewRequests = bringIntoViewRequests,
+          textInputSessionEnabled = textInputSessionEnabled,
+        )
         .focusable()
         .editorGestures(
           editor = editor,
