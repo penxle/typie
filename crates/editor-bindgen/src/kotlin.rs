@@ -177,6 +177,10 @@ fn map_syn_type(
 ) -> String {
     match ty {
         syn::Type::Path(type_path) => map_type_path(type_path, custom_types, known_types),
+        // Rust unit `()` serializes as JSON `null` via serde. We map to `Unit?` (nullable)
+        // so kotlinx.serialization can decode the `null` directly — `Unit` alone has no
+        // serializer that accepts null. Consumers carry a `null` value they ignore.
+        syn::Type::Tuple(tuple) if tuple.elems.is_empty() => "Unit?".into(),
         _ => panic!("unsupported type in FFI metadata"),
     }
 }
@@ -251,7 +255,31 @@ fn map_type_path(
                 map_syn_type(val_ty, custom_types, known_types)
             )
         }
-        _ => ident,
+        _ => {
+            // Unknown generic wrapper. If the head identifier is a known Ffi type,
+            // emit the FQN with mapped type arguments (e.g. `Tri<FontSizeValue>` →
+            // `co.typie.editor.ffi.Tri<co.typie.editor.ffi.FontSizeValue>`). Otherwise
+            // pass the bare identifier through (covers generic type parameters like `T`).
+            if known_types.contains(ident.as_str()) {
+                let mapped: Vec<String> = args
+                    .args
+                    .iter()
+                    .filter_map(|a| match a {
+                        syn::GenericArgument::Type(ty) => {
+                            Some(map_syn_type(ty, custom_types, known_types))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                if mapped.is_empty() {
+                    format!("{PACKAGE}.{ident}")
+                } else {
+                    format!("{PACKAGE}.{ident}<{}>", mapped.join(", "))
+                }
+            } else {
+                ident
+            }
+        }
     }
 }
 
@@ -318,10 +346,11 @@ fn generate_data_class(meta: &FfiMeta, fields: &[FfiField], ctx: &CodegenContext
     w.line("import kotlinx.serialization.Serializable");
     w.line("");
     w.line("@Serializable");
+    let generic_decl = format_generic_decl(&meta.generics);
     if fields.is_empty() {
-        w.line(&format!("class {}", meta.name));
+        w.line(&format!("class {}{}", meta.name, generic_decl));
     } else {
-        w.line(&format!("data class {}(", meta.name));
+        w.line(&format!("data class {}{}(", meta.name, generic_decl));
         w.indent += 1;
         for field in fields {
             let kt_name = field.name.to_lower_camel_case();
@@ -341,6 +370,49 @@ fn generate_data_class(meta: &FfiMeta, fields: &[FfiField], ctx: &CodegenContext
         w.line(")");
     }
     w.finish()
+}
+
+/// Format a Kotlin generic parameter declaration list, e.g. `<T>`, `<out T>`, or `""` if empty.
+/// `out` covariance is required so unit variants can extend `Tri<Nothing>` and still substitute
+/// for `Tri<X>` at use sites — see `format_parent_with_nothing`.
+fn format_generic_decl(generics: &[String]) -> String {
+    if generics.is_empty() {
+        return String::new();
+    }
+    let params: Vec<String> = generics.iter().map(|p| format!("out {}", p)).collect();
+    format!("<{}>", params.join(", "))
+}
+
+/// Format the parent reference for variants that DO use the type parameters, e.g. `Tri<T>`.
+fn format_parent_with_self_generics(name: &str, generics: &[String]) -> String {
+    if generics.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}<{}>", name, generics.join(", "))
+    }
+}
+
+/// Format the parent reference for unit variants (no type params on subclass), filling each
+/// type parameter with `Nothing`, e.g. `Tri<Nothing>`. `Nothing` is a subtype of every type,
+/// so combined with `out` variance this lets `data object Absent : Tri<Nothing>()` substitute
+/// for any `Tri<X>`.
+fn format_parent_with_nothing(name: &str, generics: &[String]) -> String {
+    if generics.is_empty() {
+        name.to_string()
+    } else {
+        let nothings: Vec<&str> = generics.iter().map(|_| "Nothing").collect();
+        format!("{}<{}>", name, nothings.join(", "))
+    }
+}
+
+/// Format a variant subclass's own generic declaration, e.g. `<T>` (no `out` here since the
+/// type parameter appears in member positions, which require invariance on the subclass).
+fn format_variant_generic_decl(generics: &[String]) -> String {
+    if generics.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", generics.join(", "))
+    }
 }
 
 fn generate_enum_class(meta: &FfiMeta, variants: &[FfiVariant], _ctx: &CodegenContext) -> String {
@@ -370,14 +442,18 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
     w.line("import kotlinx.serialization.Serializable");
     w.line("");
     w.line("@Serializable");
-    w.open_block(&format!("sealed class {}", meta.name));
+    let parent_decl = format_generic_decl(&meta.generics);
+    let parent_with_self = format_parent_with_self_generics(&meta.name, &meta.generics);
+    let parent_with_nothing = format_parent_with_nothing(&meta.name, &meta.generics);
+    let variant_decl = format_variant_generic_decl(&meta.generics);
+    w.open_block(&format!("sealed class {}{}", meta.name, parent_decl));
     for variant in variants {
         match variant {
             FfiVariant::Unit { name } => {
                 let serial_name = apply_rename(name, meta.serde_rename_all.as_deref());
                 w.line("");
                 w.line(&format!("@Serializable @SerialName(\"{}\")", serial_name));
-                w.line(&format!("data object {} : {}()", name, meta.name));
+                w.line(&format!("data object {} : {}()", name, parent_with_nothing));
             }
             FfiVariant::Tuple { name, tys } => {
                 let serial_name = apply_rename(name, meta.serde_rename_all.as_deref());
@@ -389,7 +465,10 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                         if let FfiKind::Struct { fields } = &inner_meta.kind {
                             let rename_all = inner_meta.serde_rename_all.as_deref();
                             if fields.is_empty() {
-                                w.line(&format!("data object {} : {}()", name, meta.name));
+                                w.line(&format!(
+                                    "data object {} : {}()",
+                                    name, parent_with_nothing
+                                ));
                             } else {
                                 let params = fields
                                     .iter()
@@ -411,8 +490,8 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                                     .collect::<Vec<_>>()
                                     .join(", ");
                                 w.line(&format!(
-                                    "data class {}({}) : {}()",
-                                    name, params, meta.name
+                                    "data class {}{}({}) : {}()",
+                                    name, variant_decl, params, parent_with_self
                                 ));
                             }
                             continue;
@@ -423,8 +502,8 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                 if tys.len() == 1 {
                     let kt_type = map_type(&tys[0], &ctx.custom_types, &ctx.known_types);
                     w.line(&format!(
-                        "data class {}(val value: {}) : {}()",
-                        name, kt_type, meta.name
+                        "data class {}{}(val value: {}) : {}()",
+                        name, variant_decl, kt_type, parent_with_self
                     ));
                 } else {
                     let params = tys
@@ -440,8 +519,8 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                         .collect::<Vec<_>>()
                         .join(", ");
                     w.line(&format!(
-                        "data class {}({}) : {}()",
-                        name, params, meta.name
+                        "data class {}{}({}) : {}()",
+                        name, variant_decl, params, parent_with_self
                     ));
                 }
             }
@@ -475,11 +554,11 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                 w.line("");
                 w.line(&format!("@Serializable @SerialName(\"{}\")", serial_name));
                 if fields.is_empty() {
-                    w.line(&format!("data object {} : {}()", name, meta.name));
+                    w.line(&format!("data object {} : {}()", name, parent_with_nothing));
                 } else {
                     w.line(&format!(
-                        "data class {}({}) : {}()",
-                        name, params, meta.name
+                        "data class {}{}({}) : {}()",
+                        name, variant_decl, params, parent_with_self
                     ));
                 }
             }
@@ -633,6 +712,7 @@ mod tests {
                     },
                 ],
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[]);
         let output = generate_data_class(
@@ -681,6 +761,7 @@ mod tests {
                     },
                 ],
             },
+            generics: Vec::new(),
         };
         let output = generate_data_class(
             &meta,
@@ -712,6 +793,7 @@ mod tests {
                 serde_tag: None,
                 default_variant: Some("Downstream".into()),
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[]);
         let output = generate_enum_class(
@@ -753,6 +835,7 @@ mod tests {
                 serde_tag: Some("type".into()),
                 default_variant: None,
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[]);
         let output = generate_sealed_class(
@@ -790,6 +873,7 @@ mod tests {
                 serde_tag: None,
                 default_variant: None,
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[]);
         let output = generate_enum_class(
@@ -834,6 +918,7 @@ mod tests {
                 serde_tag: Some("type".into()),
                 default_variant: None,
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[]);
         let output = generate_sealed_class(
@@ -865,6 +950,7 @@ mod tests {
                 serde_tag: Some("type".into()),
                 default_variant: None,
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[]);
         let output = generate_sealed_class(
@@ -895,6 +981,7 @@ mod tests {
                 serde_tag: None,
                 default_variant: Some("Downstream".into()),
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[&affinity_meta]);
         let meta = FfiMeta {
@@ -922,6 +1009,7 @@ mod tests {
                     },
                 ],
             },
+            generics: Vec::new(),
         };
         let output = generate_data_class(
             &meta,
@@ -954,6 +1042,7 @@ mod tests {
                     ffi_default_override: Some("1.0f".into()),
                 }],
             },
+            generics: Vec::new(),
         };
         let output = generate_data_class(
             &meta,
@@ -987,6 +1076,7 @@ mod tests {
                     },
                 ],
             },
+            generics: Vec::new(),
         };
         let ctx = test_context(&[&inner_meta]);
         let meta = FfiMeta {
@@ -1005,6 +1095,7 @@ mod tests {
                 serde_tag: Some("type".into()),
                 default_variant: None,
             },
+            generics: Vec::new(),
         };
         let output = generate_sealed_class(
             &meta,
@@ -1019,5 +1110,131 @@ mod tests {
         assert!(output.contains("@SerialName(\"fields\") val fields: List<String>"));
         assert!(!output.contains("val value:"));
         assert!(output.contains("data object RenderInvalidated : EditorEvent()"));
+    }
+
+    #[test]
+    fn map_unit_tuple_to_nullable_unit() {
+        // Rust `()` serializes as JSON `null`; emitting `Unit?` lets kotlinx.serialization
+        // accept the null directly (a bare `Unit` has no serializer that decodes null).
+        let ct = empty_custom_types();
+        let kt = empty_known_types();
+        assert_eq!(map_type("()", &ct, &kt), "Unit?");
+    }
+
+    #[test]
+    fn map_known_generic_type_uses_fqn_with_args() {
+        let ct = empty_custom_types();
+        let mut kt = HashSet::new();
+        kt.insert("Tri");
+        kt.insert("FontSizeValue");
+        assert_eq!(
+            map_type("Tri<FontSizeValue>", &ct, &kt),
+            "co.typie.editor.ffi.Tri<co.typie.editor.ffi.FontSizeValue>"
+        );
+        assert_eq!(
+            map_type("Tri<()>", &ct, &kt),
+            "co.typie.editor.ffi.Tri<Unit?>"
+        );
+        assert_eq!(
+            map_type("Tri<u32>", &ct, &kt),
+            "co.typie.editor.ffi.Tri<Int>"
+        );
+    }
+
+    #[test]
+    fn map_generic_param_passes_through() {
+        let ct = empty_custom_types();
+        let kt = empty_known_types();
+        // Bare `T` is not in known_types and not a primitive — it's a type parameter
+        // referenced inside a generic class body. Should pass through unchanged.
+        assert_eq!(map_type("T", &ct, &kt), "T");
+    }
+
+    #[test]
+    fn generate_generic_sealed_class() {
+        // Mimics the actual `Tri<T>` definition: one struct-like variant carrying T,
+        // two unit variants. Verifies the generated Kotlin compiles in shape:
+        //   - parent declares `<out T>`
+        //   - unit variants extend `Tri<Nothing>()`
+        //   - struct variant declares its own `<T>` and extends `Tri<T>()`
+        let meta = FfiMeta {
+            name: "Tri".into(),
+            serde_rename_all: Some("snake_case".into()),
+            kind: FfiKind::Enum {
+                variants: vec![
+                    FfiVariant::Unit {
+                        name: "Absent".into(),
+                    },
+                    FfiVariant::Struct {
+                        name: "Uniform".into(),
+                        fields: vec![FfiField {
+                            name: "value".into(),
+                            ty: "T".into(),
+                            has_serde_default: false,
+                            ffi_default_override: None,
+                        }],
+                        serde_rename_all: None,
+                    },
+                    FfiVariant::Unit {
+                        name: "Mixed".into(),
+                    },
+                ],
+                serde_tag: Some("type".into()),
+                default_variant: None,
+            },
+            generics: vec!["T".into()],
+        };
+        let ctx = test_context(&[]);
+        let output = generate_sealed_class(
+            &meta,
+            match &meta.kind {
+                FfiKind::Enum { variants, .. } => variants,
+                _ => unreachable!(),
+            },
+            &ctx,
+        );
+        assert!(output.contains("sealed class Tri<out T> {"));
+        assert!(output.contains("data object Absent : Tri<Nothing>()"));
+        assert!(output.contains("data object Mixed : Tri<Nothing>()"));
+        assert!(
+            output
+                .contains("data class Uniform<T>(@SerialName(\"value\") val value: T) : Tri<T>()")
+        );
+    }
+
+    #[test]
+    fn generate_non_generic_enum_unaffected() {
+        // Sanity check: `generics: vec![]` must produce the same Kotlin as before
+        // (no `<…>` decorations) so existing types like Modifier are unchanged.
+        let meta = FfiMeta {
+            name: "Affinity".into(),
+            serde_rename_all: Some("snake_case".into()),
+            kind: FfiKind::Enum {
+                variants: vec![
+                    FfiVariant::Unit { name: "Up".into() },
+                    FfiVariant::Unit {
+                        name: "Down".into(),
+                    },
+                ],
+                serde_tag: Some("type".into()),
+                default_variant: None,
+            },
+            generics: Vec::new(),
+        };
+        let ctx = test_context(&[]);
+        let output = generate_sealed_class(
+            &meta,
+            match &meta.kind {
+                FfiKind::Enum { variants, .. } => variants,
+                _ => unreachable!(),
+            },
+            &ctx,
+        );
+        assert!(output.contains("sealed class Affinity {"));
+        assert!(output.contains("data object Up : Affinity()"));
+        assert!(output.contains("data object Down : Affinity()"));
+        // No `<` or `Nothing` in the output — non-generic types must stay clean.
+        assert!(!output.contains("<"));
+        assert!(!output.contains("Nothing"));
     }
 }

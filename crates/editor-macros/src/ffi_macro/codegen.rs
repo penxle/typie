@@ -67,6 +67,7 @@ pub fn generate_type_alias(item: &syn::ItemType) -> TokenStream {
         name,
         serde_rename_all: None,
         kind: editor_bindgen::meta::FfiKind::Custom { target },
+        generics: Vec::new(),
     };
 
     let encoded = bitcode::encode(&ffi_meta);

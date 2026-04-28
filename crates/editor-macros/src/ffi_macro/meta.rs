@@ -13,6 +13,15 @@ pub(super) fn type_to_string(ty: &syn::Type) -> String {
 pub fn extract(input: &DeriveInput, custom: Option<&syn::Type>) -> FfiMeta {
     let name = input.ident.to_string();
     let serde_rename_all = parse_serde_rename_all(&input.attrs);
+    let generics = input
+        .generics
+        .params
+        .iter()
+        .filter_map(|p| match p {
+            syn::GenericParam::Type(t) => Some(t.ident.to_string()),
+            _ => None,
+        })
+        .collect();
 
     if let Some(custom) = custom {
         return FfiMeta {
@@ -21,6 +30,7 @@ pub fn extract(input: &DeriveInput, custom: Option<&syn::Type>) -> FfiMeta {
             kind: FfiKind::Custom {
                 target: type_to_string(custom),
             },
+            generics,
         };
     }
 
@@ -51,6 +61,7 @@ pub fn extract(input: &DeriveInput, custom: Option<&syn::Type>) -> FfiMeta {
         name,
         serde_rename_all,
         kind,
+        generics,
     }
 }
 

@@ -5,6 +5,9 @@ pub struct FfiMeta {
     pub name: String,
     pub kind: FfiKind,
     pub serde_rename_all: Option<String>,
+    /// Type parameter names for generic types (e.g. `Tri<T>` → `["T"]`).
+    /// Empty for non-generic types.
+    pub generics: Vec<String>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -129,6 +132,7 @@ mod tests {
                     },
                 ],
             },
+            generics: Vec::new(),
         };
         let encoded = bitcode::encode(&meta);
         let decoded: FfiMeta = bitcode::decode(&encoded).unwrap();
@@ -162,6 +166,7 @@ mod tests {
                 serde_tag: None,
                 default_variant: Some("Downstream".into()),
             },
+            generics: Vec::new(),
         };
         let encoded = bitcode::encode(&meta);
         let decoded: FfiMeta = bitcode::decode(&encoded).unwrap();
@@ -199,6 +204,7 @@ mod tests {
                 serde_tag: Some("type".into()),
                 default_variant: None,
             },
+            generics: Vec::new(),
         };
         let encoded = bitcode::encode(&meta);
         let decoded: FfiMeta = bitcode::decode(&encoded).unwrap();
@@ -218,6 +224,7 @@ mod tests {
             kind: FfiKind::Custom {
                 target: "String".into(),
             },
+            generics: Vec::new(),
         };
         let encoded = bitcode::encode(&meta);
         let decoded: FfiMeta = bitcode::decode(&encoded).unwrap();
@@ -240,6 +247,7 @@ mod tests {
                     ffi_default_override: Some("1.0f".into()),
                 }],
             },
+            generics: Vec::new(),
         };
         let encoded = bitcode::encode(&meta);
         let decoded: FfiMeta = bitcode::decode(&encoded).unwrap();
