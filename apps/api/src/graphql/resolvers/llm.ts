@@ -1,26 +1,33 @@
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import * as Sentry from '@sentry/node';
 import dedent from 'dedent';
 import { Repeater } from 'graphql-yoga';
-import pMap from 'p-map';
-import { rapidhash } from 'rapidhash-js';
-import { redis } from '#/cache.ts';
 import { env } from '#/env.ts';
 import { builder } from '../builder.ts';
 
-const ai = new GoogleGenAI({
-  vertexai: true,
-  project: 'typie-co',
-  location: 'global',
-  googleAuthOptions: {
-    credentials: JSON.parse(env.GOOGLE_SERVICE_ACCOUNT),
-  },
+const anthropic = new Anthropic({
+  apiKey: env.CLOUDFLARE_API_KEY,
+  baseURL: env.CLOUDFLARE_AIGATEWAY_URL,
 });
 
 type Feedback = {
   start: string;
   end: string;
   feedback: string;
+};
+
+const provideFeedbackTool: Anthropic.Tool = {
+  name: 'provide_feedback',
+  description: '현재 분석 구간에서 발견한 피드백 1건을 보고합니다. 피드백할 게 없으면 호출하지 마세요. 여러 건이면 여러 번 호출하세요.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      start: { type: 'string', description: '구간 시작 문장 (현재 분석할 구간 내 원문 그대로)' },
+      end: { type: 'string', description: '구간 끝 문장 (현재 분석할 구간 내 원문 그대로)' },
+      feedback: { type: 'string', description: '피드백 본문' },
+    },
+    required: ['start', 'end', 'feedback'],
+  },
 };
 
 const systemPrompt = dedent`
@@ -71,42 +78,12 @@ const systemPrompt = dedent`
   </tone>
 
   <output>
-  JSON Lines:
-  {"start":"구간 시작 문장","end":"구간 끝 문장","feedback":"피드백"}
-
-  피드백할 게 없으면 출력하지 마세요.
+  분석 결과는 provide_feedback tool을 호출해서 보고하세요.
+  피드백 1건당 한 번씩 호출하세요. 피드백할 게 없으면 호출하지 마세요.
   </output>
 `;
 
 const CHUNK_SIZE = 1000;
-const CACHE_TTL = 60 * 60 * 24;
-const SUMMARIZE_CONCURRENCY = 5;
-const ANALYZE_CONCURRENCY = 3;
-const MAX_RETRIES = 3;
-const INITIAL_RETRY_DELAY = 3000;
-
-const withRetry = async <T>(
-  fn: () => Promise<T>,
-  signal?: AbortSignal,
-  maxRetries = MAX_RETRIES,
-  initialDelay = INITIAL_RETRY_DELAY,
-): Promise<T> => {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    signal?.throwIfAborted();
-    try {
-      return await fn();
-    } catch (err) {
-      if (signal?.aborted) throw err;
-      lastError = err;
-      if (attempt < maxRetries) {
-        const delay = initialDelay * 2 ** attempt;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-  }
-  throw lastError;
-};
 
 const createChunks = (text: string) => {
   const chunks: { text: string; start: number; end: number }[] = [];
@@ -171,32 +148,24 @@ const summarizePrompt = dedent`
   - 대화의 핵심 내용
   - 중요하거나 일반적이지 않은 단어나 용어
 
+  없던 내용을 추측으로 만들어내거나, 내용을 왜곡하지 마세요. 최대한 원문을 그대로 보존하세요.
+  마크다운 및 섹션 구분 없이 연속된 요약 텍스트만 출력하세요.
+
   300자 이내로 작성하세요.
 `;
 
 const summarizeChunk = async (chunkText: string, signal?: AbortSignal): Promise<string> => {
-  const hash = rapidhash(summarizePrompt + chunkText);
-  const cacheKey = `literary:summary:${hash}`;
+  const response = await anthropic.messages.create(
+    {
+      model: 'claude-haiku-4-5',
+      max_tokens: 1024,
+      system: summarizePrompt,
+      messages: [{ role: 'user', content: `요약할 텍스트:\n\n${chunkText}` }],
+    },
+    { signal },
+  );
 
-  const cached = await redis.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  const summary = await withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      config: {
-        systemInstruction: summarizePrompt,
-        abortSignal: signal,
-      },
-      contents: `요약할 텍스트:\n\n${chunkText}`,
-    });
-    return response.text ?? '';
-  }, signal);
-  await redis.setex(cacheKey, CACHE_TTL, summary);
-
-  return summary;
+  return response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? '';
 };
 
 type ChunkContext = {
@@ -210,20 +179,6 @@ const analyzeChunkWithContext = async (
   onFeedback: (feedback: Feedback) => void,
   signal?: AbortSignal,
 ): Promise<void> => {
-  const hash = rapidhash(systemPrompt + JSON.stringify(context) + '1');
-  const cacheKey = `literary:feedback:${hash}`;
-
-  const cached = await redis.get(cacheKey);
-  if (cached) {
-    const feedbacks = JSON.parse(cached) as Feedback[];
-    for (const feedback of feedbacks) {
-      onFeedback(feedback);
-    }
-    return;
-  }
-
-  const feedbacks: Feedback[] = [];
-
   const userContent = dedent`
     <이전 내용>
     ${context.precedingSummary || '(글의 시작 부분입니다)'}
@@ -238,62 +193,28 @@ const analyzeChunkWithContext = async (
     </이후 내용>
   `;
 
-  const stream = await withRetry(
-    () =>
-      ai.models.generateContentStream({
-        model: 'gemini-3-flash-preview',
-        config: {
-          systemInstruction: systemPrompt,
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.HIGH,
-          },
-          abortSignal: signal,
-        },
-        contents: userContent,
-      }),
-    signal,
+  const stream = anthropic.messages.stream(
+    {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 16_384,
+      thinking: { type: 'adaptive', display: 'omitted' },
+      output_config: { effort: 'low' },
+      system: systemPrompt,
+      tools: [provideFeedbackTool],
+      messages: [{ role: 'user', content: userContent }],
+    },
+    { signal },
   );
 
-  let buffer = '';
-
-  for await (const chunk of stream) {
-    const text = chunk.text;
-    if (text) {
-      buffer += text;
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        try {
-          const feedback = JSON.parse(trimmed) as Feedback;
-          if (feedback.start && feedback.end && feedback.feedback) {
-            feedbacks.push(feedback);
-            onFeedback(feedback);
-          }
-        } catch {
-          // skip invalid JSON
-        }
-      }
+  stream.on('contentBlock', (block) => {
+    if (block.type !== 'tool_use' || block.name !== 'provide_feedback') return;
+    const input = block.input as Feedback;
+    if (input.start && input.end && input.feedback) {
+      onFeedback(input);
     }
-  }
+  });
 
-  if (buffer.trim()) {
-    try {
-      const feedback = JSON.parse(buffer.trim()) as Feedback;
-      if (feedback.start && feedback.end && feedback.feedback) {
-        feedbacks.push(feedback);
-        onFeedback(feedback);
-      }
-    } catch {
-      // skip invalid JSON
-    }
-  }
-
-  await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(feedbacks));
+  await stream.finalMessage();
 };
 
 const LiteraryAnalysisProgress = builder.simpleObject('LiteraryAnalysisProgress', {
@@ -424,9 +345,8 @@ builder.subscriptionFields((t) => ({
 
         try {
           const summaries: string[] = [];
-          await pMap(
-            chunks,
-            async (chunk, index) => {
+          await Promise.all(
+            chunks.map(async (chunk, index) => {
               signal.throwIfAborted();
               const summary = await summarizeChunk(chunk.text, signal);
               summaries[index] = summary;
@@ -434,8 +354,7 @@ builder.subscriptionFields((t) => ({
                 type: 'progress',
                 data: { current: summaries.filter(Boolean).length, total: chunks.length, phase: 'summarizing' },
               });
-            },
-            { concurrency: SUMMARIZE_CONCURRENCY },
+            }),
           );
 
           let analyzedCount = 0;
@@ -443,9 +362,8 @@ builder.subscriptionFields((t) => ({
             type: 'progress',
             data: { current: 0, total: chunks.length, phase: 'analyzing' },
           });
-          await pMap(
-            chunks,
-            async (chunk, i) => {
+          await Promise.all(
+            chunks.map(async (chunk, i) => {
               signal.throwIfAborted();
               const precedingSummary = summaries.slice(0, i).join('\n\n');
               const followingSummary = summaries.slice(i + 1).join('\n\n');
@@ -481,8 +399,7 @@ builder.subscriptionFields((t) => ({
                 type: 'progress',
                 data: { current: analyzedCount, total: chunks.length, phase: 'analyzing' },
               });
-            },
-            { concurrency: ANALYZE_CONCURRENCY },
+            }),
           );
 
           push({ type: 'complete' });

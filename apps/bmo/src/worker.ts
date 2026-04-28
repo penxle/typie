@@ -9,7 +9,6 @@ import { acquireLock, deleteSession, getSession, releaseLock, setSession } from 
 import { downloadSession, uploadSession } from './session-store.ts';
 import { toSlackMrkdwn } from './slack-mrkdwn.ts';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
-import type { BetaContentBlock } from '@anthropic-ai/sdk/resources/beta';
 import type { SlackAppMentionEvent } from './slack-types.ts';
 
 let dbSchema: unknown | null = null;
@@ -184,8 +183,12 @@ export const handler = async (event: SlackAppMentionEvent) => {
         effort: 'high',
         includePartialMessages: true,
         permissionMode: 'dontAsk',
-        betas: ['context-1m-2025-08-07'],
-        env: { ...process.env, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY, CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '300' },
+        env: {
+          ...process.env,
+          ANTHROPIC_BASE_URL: env.CLOUDFLARE_AIGATEWAY_URL,
+          ANTHROPIC_AUTH_TOKEN: env.CLOUDFLARE_API_KEY,
+          CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '300',
+        },
         stderr: (data) => console.error('[bmo:claude]', data),
       };
 
@@ -294,7 +297,7 @@ export const handler = async (event: SlackAppMentionEvent) => {
                   latestAssistantText = block.text;
                 }
               }
-              const hasToolUse = message.message.content.some((b: BetaContentBlock) => b.type === 'tool_use');
+              const hasToolUse = message.message.content.some((b) => b.type === 'tool_use');
               if (hasToolUse && latestAssistantText) {
                 if (currentTurnTextEntry) {
                   currentTurnTextEntry.text = latestAssistantText;

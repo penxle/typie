@@ -11,6 +11,7 @@ aapt
 affordances
 agentic
 aggs
+aigateway
 aisettings
 amazonses
 androidx

@@ -1,7 +1,8 @@
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 
 type Env = {
-  ANTHROPIC_API_KEY: string;
+  CLOUDFLARE_API_KEY: string;
+  CLOUDFLARE_AIGATEWAY_URL: string;
   SLACK_BOT_TOKEN: string;
   SLACK_SIGNING_SECRET: string;
   API_KEY: string;
@@ -9,7 +10,8 @@ type Env = {
 };
 
 const SSM_PARAMS: Record<keyof Env, string> = {
-  ANTHROPIC_API_KEY: '/bmo/ANTHROPIC_API_KEY',
+  CLOUDFLARE_API_KEY: '/bmo/CLOUDFLARE_API_KEY',
+  CLOUDFLARE_AIGATEWAY_URL: '/bmo/CLOUDFLARE_AIGATEWAY_URL',
   SLACK_BOT_TOKEN: '/bmo/SLACK_BOT_TOKEN',
   SLACK_SIGNING_SECRET: '/bmo/SLACK_SIGNING_SECRET',
   API_KEY: '/bmo/API_KEY',

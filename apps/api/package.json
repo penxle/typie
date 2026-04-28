@@ -17,6 +17,7 @@
     "start": "node --import ./src/instrumentation.ts src/main.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.85.0",
     "@apple/app-store-server-library": "^3.0.0",
     "@aws-sdk/client-s3": "^3.1026.0",
     "@aws-sdk/client-ses": "^3.1026.0",
@@ -25,7 +26,6 @@
     "@elastic/elasticsearch": "^9.3.4",
     "@envelop/core": "^5.5.1",
     "@faker-js/faker": "^10.4.0",
-    "@google/genai": "^1.48.0",
     "@googleapis/androidpublisher": "^35.3.0",
     "@graphql-yoga/redis-event-target": "^3.0.3",
     "@hono/node-server": "^1.19.13",

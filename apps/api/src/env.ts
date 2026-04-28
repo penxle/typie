@@ -12,6 +12,8 @@ const schema = z.object({
   APPLE_SIGN_IN_PRIVATE_KEY: z.string(),
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
+  CLOUDFLARE_AIGATEWAY_URL: z.string(),
+  CLOUDFLARE_API_KEY: z.string(),
   DATABASE_URL: z.string(),
   DATABASE_RO_URL: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),
