@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [features]
+test-utils = ["icu_segmenter/compiled_data", "icu_segmenter/auto"]
 uniffi = ["dep:uniffi", "editor-model/uniffi", "editor-resource/uniffi"]
 wasm = [
   "dep:tsify",
@@ -19,12 +20,19 @@ editor-resource = { path = "../editor-resource" }
 rapidhash.workspace = true
 hashbrown.workspace = true
 hex.workspace = true
+icu_segmenter = { workspace = true, features = ["serde"] }
 ruzstd.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
+serde_json.workspace = true
 skrifa.workspace = true
 thiserror.workspace = true
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 write-fonts.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+icu_segmenter = { workspace = true, features = ["compiled_data", "auto"] }
+editor-model = { path = "../editor-model", features = ["test-utils"] }
