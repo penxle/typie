@@ -1,4 +1,4 @@
-import { Button, Heading, Text } from '@react-email/components';
+import { Button, Heading, Text } from 'react-email';
 import TypieEmail from './TypieEmail.tsx';
 
 type Props = {

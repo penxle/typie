@@ -1,5 +1,5 @@
 import { SendEmailCommand } from '@aws-sdk/client-ses';
-import { render } from '@react-email/components';
+import { render } from 'react-email';
 import * as aws from '#/external/aws.ts';
 import type * as React from 'react';
 

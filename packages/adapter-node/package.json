@@ -14,14 +14,14 @@
     "lint:typecheck": "tsc"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.13",
+    "@hono/node-server": "^2.0.0",
     "@typie/lib": "workspace:*",
-    "hono": "^4.12.12"
+    "hono": "^4.12.15"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.57.0",
+    "@sveltejs/kit": "^2.58.0",
     "@typie/tsconfig": "workspace:*",
-    "rolldown": "1.0.0-rc.13",
-    "typescript": "^6.0.2"
+    "rolldown": "1.0.0-rc.17",
+    "typescript": "^6.0.3"
   }
 }

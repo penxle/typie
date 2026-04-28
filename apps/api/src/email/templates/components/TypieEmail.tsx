@@ -1,4 +1,4 @@
-import { Body, Container, Head, Hr, Html, Img, Preview, Tailwind, Text } from '@react-email/components';
+import { Body, Container, Head, Hr, Html, Img, Preview, Tailwind, Text } from 'react-email';
 
 type Props = {
   preview: string;

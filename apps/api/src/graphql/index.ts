@@ -1,3 +1,4 @@
+import { upgradeWebSocket } from '@hono/node-server';
 import { getClientAddress } from '@typie/lib';
 import { GraphQLError } from 'graphql';
 import { CloseCode, makeServer } from 'graphql-ws';
@@ -5,7 +6,6 @@ import { createYoga, useExecutionCancellation } from 'graphql-yoga';
 import { Hono } from 'hono';
 import { checkBootstrap } from '#/bootstrap.ts';
 import { redis } from '#/cache.ts';
-import { upgradeWebSocket } from '#/ws.ts';
 import { useError } from './plugins/error.ts';
 import { useLogger } from './plugins/logger.ts';
 import { useRateLimit } from './plugins/rate-limit.ts';
