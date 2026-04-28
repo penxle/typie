@@ -39,7 +39,6 @@ pub enum ConflictTarget {
 #[serde(tag = "scope", rename_all = "snake_case")]
 pub enum AttributeScope {
     Node { node_id: NodeId },
-    Document,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -75,7 +74,9 @@ mod tests {
         let record = ConflictRecord {
             kind: ConflictKind::Attribute,
             target: ConflictTarget::Attribute {
-                scope: AttributeScope::Document,
+                scope: AttributeScope::Node {
+                    node_id: NodeId::new(),
+                },
                 name: "page_layout".into(),
             },
             base_value: Some(json!("portrait")),

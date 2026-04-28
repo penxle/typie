@@ -8,7 +8,7 @@
 
   const show = $derived(!!editor?.focused && !!editor?.cursor);
 
-  const isPaginated = $derived(editor?.documentAttrs?.layout_mode.type === 'paginated');
+  const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
 
   const container = $derived(
     editor?.cursor ? (isPaginated ? editor.pageEls[editor.cursor.page_idx] : editor.scrollContainerEl) : undefined,

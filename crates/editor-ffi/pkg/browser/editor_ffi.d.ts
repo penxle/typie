@@ -210,11 +210,6 @@ export interface CursorMetrics {
 
 export interface Doc {
     nodes: Record<NodeId, NodeEntry>;
-    attrs: DocumentAttrs;
-}
-
-export interface DocumentAttrs {
-    layout_mode: LayoutMode;
 }
 
 export interface EmbedNode {
@@ -356,7 +351,9 @@ export interface Rect {
     height: number;
 }
 
-export interface RootNode {}
+export interface RootNode {
+    layout_mode: LayoutMode;
+}
 
 export interface RubyValue {
     text: string;
@@ -421,8 +418,6 @@ export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movem
 
 export type Direction = "forward" | "backward";
 
-export type DocOp = { type: "set_attrs"; attrs: DocumentAttrs };
-
 export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; steps: Step[]; meta: TransactionMeta };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
@@ -447,7 +442,7 @@ export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
 export type LayoutMode = { type: "paginated"; page_width: number; page_height: number; page_margin_top: number; page_margin_bottom: number; page_margin_left: number; page_margin_right: number } | { type: "continuous"; max_width: number };
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "doc"; op: DocOp } | { type: "node"; op: NodeOp } | { type: "clipboard"; op: ClipboardOp } | { type: "composition"; op: CompositionOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
+export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "clipboard"; op: ClipboardOp } | { type: "composition"; op: CompositionOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 
@@ -471,9 +466,9 @@ export type PointerEvent = { type: "down"; page: number; x: number; y: number; c
 
 export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
-export type StateField = "doc" | "doc_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
+export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
 
-export type Step = { type: "insert_text"; node_id: NodeId; offset: number; text: string } | { type: "remove_text"; node_id: NodeId; offset: number; text: string } | { type: "insert_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "remove_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "move_node"; node_id: NodeId; old_parent: NodeId; old_index: number; new_parent: NodeId; new_index: number } | { type: "split_node"; node_id: NodeId; offset: number; new_node_id: NodeId } | { type: "merge_node"; node_id: NodeId; target_id: NodeId; offset: number } | { type: "set_node"; node_id: NodeId; old_node: Node; new_node: Node } | { type: "add_modifier"; node_id: NodeId; modifier: Modifier } | { type: "remove_modifier"; node_id: NodeId; modifier: Modifier } | { type: "set_selection"; old: Selection; new: Selection } | { type: "set_pending_modifiers"; old: PendingModifiers; new: PendingModifiers } | { type: "set_modifiers"; node_id: NodeId; old_modifiers: Modifier[]; new_modifiers: Modifier[] } | { type: "set_composition"; old: Composition | undefined; new: Composition | undefined } | { type: "set_document_attrs"; old: DocumentAttrs; new: DocumentAttrs };
+export type Step = { type: "insert_text"; node_id: NodeId; offset: number; text: string } | { type: "remove_text"; node_id: NodeId; offset: number; text: string } | { type: "insert_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "remove_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "move_node"; node_id: NodeId; old_parent: NodeId; old_index: number; new_parent: NodeId; new_index: number } | { type: "split_node"; node_id: NodeId; offset: number; new_node_id: NodeId } | { type: "merge_node"; node_id: NodeId; target_id: NodeId; offset: number } | { type: "set_node"; node_id: NodeId; old_node: Node; new_node: Node } | { type: "add_modifier"; node_id: NodeId; modifier: Modifier } | { type: "remove_modifier"; node_id: NodeId; modifier: Modifier } | { type: "set_selection"; old: Selection; new: Selection } | { type: "set_pending_modifiers"; old: PendingModifiers; new: PendingModifiers } | { type: "set_modifiers"; node_id: NodeId; old_modifiers: Modifier[]; new_modifiers: Modifier[] } | { type: "set_composition"; old: Composition | undefined; new: Composition | undefined };
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -492,7 +487,6 @@ declare class Editor {
     block_state(): BlockState;
     cursor(): CursorMetrics | undefined;
     detach_surface(page: number): void;
-    document_attrs(): DocumentAttrs;
     enqueue(message: Message): void;
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
@@ -501,6 +495,7 @@ declare class Editor {
     page_sizes(): Size[];
     render_surface(page: number): void;
     resize_surface(page: number, width: number, height: number, scale_factor: number): void;
+    root_attrs(): RootNode;
     selection(): Selection;
     tick(): EditorEvent[];
 }

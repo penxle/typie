@@ -274,19 +274,6 @@ pub fn merge(
         });
     }
 
-    let (merged_attrs_val, doc_conflict) = merge_attribute(
-        ConflictTarget::Attribute {
-            scope: AttributeScope::Document,
-            name: "attrs".into(),
-        },
-        Some(&serde_json::to_value(&base.attrs).unwrap()),
-        Some(&serde_json::to_value(&ours.attrs).unwrap()),
-        Some(&serde_json::to_value(&theirs.attrs).unwrap()),
-    );
-    all_conflicts.extend(doc_conflict);
-    let merged_attrs = serde_json::from_value(merged_attrs_val.unwrap()).unwrap();
-    merged = merged.with_attrs(merged_attrs);
-
     (merged, all_conflicts)
 }
 
@@ -295,8 +282,8 @@ mod tests {
     use super::*;
     use editor_macros::doc;
     use editor_model::{
-        BulletListNode, CalloutNode, CalloutVariant, DocumentAttrs, LayoutMode, ListItemNode,
-        Modifier, Node, ParagraphNode, TableCellNode, TableNode, TableRowNode,
+        BulletListNode, CalloutNode, CalloutVariant, LayoutMode, ListItemNode, Modifier, Node,
+        ParagraphNode, RootNode, TableCellNode, TableNode, TableRowNode,
     };
     use icu_segmenter::GraphemeClusterSegmenter;
 
@@ -436,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn doc_attrs_one_side_changes_takes_change() {
+    fn root_layout_one_side_changes_takes_change() {
         let (base, ..) = doc! {
             root {
                 paragraph {
@@ -444,7 +431,7 @@ mod tests {
                 }
             }
         };
-        let new_attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 595.0,
                 page_height: 842.0,
@@ -453,8 +440,11 @@ mod tests {
                 page_margin_left: 50.0,
                 page_margin_right: 50.0,
             },
-        };
-        let ours = base.with_attrs(new_attrs.clone());
+        });
+        let ours = base.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root.clone();
+            e
+        });
         let theirs = base.clone();
 
         let (merged, conflicts) = merge(&segmenter(), &base, &ours, &theirs);
@@ -463,12 +453,13 @@ mod tests {
             "expected no conflicts, got {:?}",
             conflicts
         );
-        assert_eq!(merged.attrs, new_attrs);
+        let merged_root = &merged.get_entry(NodeId::ROOT).unwrap().node;
+        assert_eq!(merged_root, &new_root);
         crate::sync::test_helpers::assert_doc_consistent(&merged);
     }
 
     #[test]
-    fn doc_attrs_both_same_change_no_conflict() {
+    fn root_layout_both_same_change_no_conflict() {
         let (base, ..) = doc! {
             root {
                 paragraph {
@@ -476,11 +467,17 @@ mod tests {
                 }
             }
         };
-        let new_attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Continuous { max_width: 800.0 },
-        };
-        let ours = base.with_attrs(new_attrs.clone());
-        let theirs = base.with_attrs(new_attrs.clone());
+        });
+        let ours = base.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root.clone();
+            e
+        });
+        let theirs = base.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root.clone();
+            e
+        });
 
         let (merged, conflicts) = merge(&segmenter(), &base, &ours, &theirs);
         assert!(
@@ -488,12 +485,13 @@ mod tests {
             "expected no conflicts, got {:?}",
             conflicts
         );
-        assert_eq!(merged.attrs, new_attrs);
+        let merged_root = &merged.get_entry(NodeId::ROOT).unwrap().node;
+        assert_eq!(merged_root, &new_root);
         crate::sync::test_helpers::assert_doc_consistent(&merged);
     }
 
     #[test]
-    fn doc_attrs_both_change_to_different_values_creates_conflict() {
+    fn root_layout_both_change_to_different_values_creates_conflict() {
         let (base, ..) = doc! {
             root {
                 paragraph {
@@ -501,7 +499,7 @@ mod tests {
                 }
             }
         };
-        let ours_attrs = DocumentAttrs {
+        let ours_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 595.0,
                 page_height: 842.0,
@@ -510,12 +508,18 @@ mod tests {
                 page_margin_left: 50.0,
                 page_margin_right: 50.0,
             },
-        };
-        let theirs_attrs = DocumentAttrs {
+        });
+        let theirs_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Continuous { max_width: 800.0 },
-        };
-        let ours = base.with_attrs(ours_attrs);
-        let theirs = base.with_attrs(theirs_attrs);
+        });
+        let ours = base.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = ours_root.clone();
+            e
+        });
+        let theirs = base.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = theirs_root.clone();
+            e
+        });
 
         let (merged, conflicts) = merge(&segmenter(), &base, &ours, &theirs);
         assert_eq!(
@@ -530,11 +534,11 @@ mod tests {
         );
         match &conflicts[0].target {
             crate::sync::conflict::ConflictTarget::Attribute {
-                scope: crate::sync::conflict::AttributeScope::Document,
+                scope: crate::sync::conflict::AttributeScope::Node { node_id },
                 ..
-            } => {}
+            } => assert_eq!(*node_id, NodeId::ROOT),
             other => panic!(
-                "expected document-scope attribute conflict, got {:?}",
+                "expected node-scope attribute conflict on ROOT, got {:?}",
                 other
             ),
         }

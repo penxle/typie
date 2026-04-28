@@ -52,8 +52,17 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
 
-    pub fn document_attrs(&self) -> EditorResult<Complex<editor_model::DocumentAttrs>> {
-        self.with_inner(|inner| Ok(inner.editor.state().doc.attrs().clone().into_ffi()?))
+    pub fn root_attrs(&self) -> EditorResult<Complex<editor_model::RootNode>> {
+        self.with_inner(|inner| {
+            let doc = &inner.editor.state().doc;
+            let entry = doc
+                .get_entry(editor_model::NodeId::ROOT)
+                .expect("root entry must exist");
+            match &entry.node {
+                editor_model::Node::Root(r) => Ok(r.clone().into_ffi()?),
+                _ => unreachable!("root entry must be Node::Root"),
+            }
+        })
     }
 
     pub fn modifier_state(&self) -> EditorResult<Complex<editor_model::ModifierState>> {

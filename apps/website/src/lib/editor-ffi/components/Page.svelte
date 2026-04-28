@@ -17,7 +17,7 @@
   const scaleFactor = $derived(ctx.editor?.scaleFactor ?? 1);
   const cssWidth = $derived(Math.round(width * scaleFactor) / scaleFactor);
   const cssHeight = $derived(Math.round(height * scaleFactor) / scaleFactor);
-  const isPaginated = $derived(ctx.editor?.documentAttrs?.layout_mode.type === 'paginated');
+  const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
 </script>
 
 <div

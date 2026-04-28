@@ -11,7 +11,7 @@ class EditorStateTest {
     assertEquals(null, s.cursor)
     assertEquals(null, s.selection)
     assertEquals(emptyList(), s.pageSizes)
-    assertEquals(null, s.documentAttrs)
+    assertEquals(null, s.rootAttrs)
     assertEquals(null, s.ime)
   }
 }

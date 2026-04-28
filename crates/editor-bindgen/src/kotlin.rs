@@ -14,7 +14,6 @@ struct CodegenContext<'a> {
     custom_types: HashMap<String, String>,
     meta_map: HashMap<&'a str, &'a FfiMeta>,
     known_types: HashSet<&'a str>,
-    inlined_types: HashSet<String>,
 }
 
 pub fn generate_all(metas: &[FfiMeta], output_dir: &Path) {
@@ -25,36 +24,12 @@ pub fn generate_all(metas: &[FfiMeta], output_dir: &Path) {
         meta_map.insert(&m.name, m);
     }
 
-    let mut inlined_types = HashSet::new();
-    for meta in metas {
-        if let FfiKind::Enum {
-            variants,
-            serde_tag: Some(_),
-            ..
-        } = &meta.kind
-        {
-            for variant in variants {
-                if let FfiVariant::Tuple { tys, .. } = variant {
-                    if tys.len() == 1 {
-                        let arg_type = &tys[0];
-                        if let Some(arg_meta) = meta_map.get(arg_type.as_str()) {
-                            if matches!(arg_meta.kind, FfiKind::Struct { .. }) {
-                                inlined_types.insert(arg_type.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     let known_types: HashSet<&str> = meta_map.keys().copied().collect();
 
     let ctx = CodegenContext {
         custom_types,
         meta_map,
         known_types,
-        inlined_types,
     };
 
     let pkg_dir = output_dir.join(PACKAGE.replace('.', "/"));
@@ -69,9 +44,10 @@ pub fn generate_all(metas: &[FfiMeta], output_dir: &Path) {
             }
             continue;
         }
-        if ctx.inlined_types.contains(&meta.name) {
-            continue;
-        }
+        // Single-field tuple enum variants (e.g., `Node::Root(RootNode)`) flatten the inner
+        // struct's fields into the parent enum's variant in JSON via `serde(tag = ...)`. We
+        // still generate the standalone class so that FFI signatures referencing the inner
+        // type (e.g., `Editor::root_attrs() -> RootNode`) resolve to a real Kotlin type.
 
         let content = match &meta.kind {
             FfiKind::Struct { fields } => generate_data_class(meta, fields, &ctx),
@@ -590,7 +566,6 @@ mod tests {
             custom_types: HashMap::new(),
             meta_map,
             known_types,
-            inlined_types: HashSet::new(),
         }
     }
 

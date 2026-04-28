@@ -9,7 +9,7 @@ use strum::EnumIter;
 #[serde(rename_all = "snake_case")]
 pub enum StateField {
     Doc,
-    DocAttrs,
+    RootAttrs,
     Selection,
     Cursor,
     PageSizes,

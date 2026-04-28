@@ -56,7 +56,7 @@ mod tests {
         children.push_back(NodeId::new());
 
         let entry = NodeEntry {
-            node: Node::Root(RootNode {}),
+            node: Node::Root(RootNode::default()),
             parent: None,
             children: children.clone(),
             modifiers: vec![],

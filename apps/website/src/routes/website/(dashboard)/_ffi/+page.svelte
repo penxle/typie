@@ -33,7 +33,19 @@
   const doc: Doc = {
     nodes: {
       '0': {
-        node: { type: 'root' },
+        node: {
+          type: 'root',
+          layout_mode: { type: 'continuous', max_width: 600 },
+          // layout_mode: {
+          //   type: 'paginated',
+          //   page_width: 794,
+          //   page_height: 1123,
+          //   page_margin_top: 94,
+          //   page_margin_bottom: 94,
+          //   page_margin_left: 94,
+          //   page_margin_right: 94,
+          // },
+        },
         modifiers: [
           { type: 'font_family', value: 'Pretendard' },
           { type: 'font_weight', value: 400 },
@@ -72,21 +84,6 @@
       '64': { node: { type: 'paragraph' }, parent: '62', children: ['65'] },
       '65': { node: { type: 'text', text: '폴드 내용!' }, parent: '64' },
       '100': { node: { type: 'paragraph' }, parent: '0' },
-    },
-    attrs: {
-      layout_mode: {
-        type: 'continuous',
-        max_width: 600,
-      },
-      // layout_mode: {
-      //   type: 'paginated',
-      //   page_width: 794,
-      //   page_height: 1123,
-      //   page_margin_top: 94,
-      //   page_margin_bottom: 94,
-      //   page_margin_left: 94,
-      //   page_margin_right: 94,
-      // },
     },
   };
 

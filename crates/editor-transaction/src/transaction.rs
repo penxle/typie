@@ -1,5 +1,5 @@
 use editor_common::StrExt;
-use editor_model::{Doc, DocumentAttrs, Modifier, Node, NodeId, Subtree};
+use editor_model::{Doc, Modifier, Node, NodeId, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
 
 use crate::{Effect, Step, StepError, TransactionMeta, Validation, validate};
@@ -310,11 +310,6 @@ impl Transaction {
             old,
             new: composition,
         })
-    }
-
-    pub fn set_document_attrs(&mut self, attrs: DocumentAttrs) -> Result<(), StepError> {
-        let old = self.state.doc.attrs().clone();
-        self.apply_step(Step::SetDocumentAttrs { old, new: attrs })
     }
 
     pub fn batch<F, E>(&mut self, f: F) -> Result<(), E>
@@ -741,29 +736,6 @@ mod tests {
 
         let (_, steps, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
-    }
-
-    #[test]
-    fn set_document_attrs_records_step() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello World") } } }
-            selection: (t1, 0)
-        };
-
-        let mut tr = Transaction::new(&state);
-        let new_attrs = DocumentAttrs {
-            layout_mode: LayoutMode::Continuous { max_width: 800.0 },
-        };
-        tr.set_document_attrs(new_attrs).unwrap();
-
-        assert_eq!(
-            tr.doc().attrs().layout_mode,
-            LayoutMode::Continuous { max_width: 800.0 }
-        );
-
-        let (_, steps, _, _) = tr.commit();
-        assert_eq!(steps.len(), 1);
-        assert!(matches!(&steps[0], Step::SetDocumentAttrs { .. }));
     }
 
     #[test]

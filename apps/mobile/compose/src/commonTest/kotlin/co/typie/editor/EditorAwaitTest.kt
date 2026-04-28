@@ -46,7 +46,7 @@ class EditorAwaitTest {
       assertEquals(null, editor.cursor)
       assertEquals(null, editor.selection)
       assertEquals(emptyList(), editor.pageSizes)
-      assertEquals(null, editor.documentAttrs)
+      assertEquals(null, editor.rootAttrs)
       assertEquals(null, editor.ime)
     }
 

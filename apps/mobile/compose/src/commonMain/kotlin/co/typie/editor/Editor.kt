@@ -9,11 +9,11 @@ import androidx.compose.ui.focus.FocusRequester
 import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Doc
-import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.SystemEvent
@@ -55,7 +55,7 @@ internal constructor(
   val cursor: CursorMetrics? by derivedStateOf { state.cursor }
   val selection: Selection? by derivedStateOf { state.selection }
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
-  val documentAttrs: DocumentAttrs? by derivedStateOf { state.documentAttrs }
+  val rootAttrs: RootNode? by derivedStateOf { state.rootAttrs }
   val ime: Ime? by derivedStateOf { state.ime }
 
   private val mutex: Mutex = Mutex()
@@ -282,7 +282,7 @@ internal constructor(
       cursor = inner.cursor(),
       selection = runCatching { inner.selection() }.getOrNull(),
       pageSizes = inner.pageSizes(),
-      documentAttrs = runCatching { inner.documentAttrs() }.getOrNull(),
+      rootAttrs = runCatching { inner.rootAttrs() }.getOrNull(),
       ime = runCatching { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) }.getOrNull(),
     )
 

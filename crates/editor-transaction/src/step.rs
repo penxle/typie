@@ -1,5 +1,5 @@
 use editor_macros::ffi;
-use editor_model::{DocumentAttrs, Modifier, ModifierType, Node, NodeId, Subtree};
+use editor_model::{Modifier, ModifierType, Node, NodeId, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
@@ -98,10 +98,6 @@ pub enum Step {
         old: Option<Composition>,
         new: Option<Composition>,
     },
-    SetDocumentAttrs {
-        old: DocumentAttrs,
-        new: DocumentAttrs,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,7 +105,6 @@ pub enum StepScope {
     Node(NodeId),
     Children { parent: NodeId },
     Structural(SmallVec<[NodeId; 2]>),
-    Document,
     Local,
 }
 
@@ -121,10 +116,6 @@ impl Step {
                 | Step::SetPendingModifiers { .. }
                 | Step::SetComposition { .. }
         )
-    }
-
-    pub fn is_doc_attr_step(&self) -> bool {
-        matches!(self, Step::SetDocumentAttrs { .. })
     }
 
     pub fn is_selection_step(&self) -> bool {
@@ -167,8 +158,6 @@ impl Step {
                 ..
             } => StepScope::Structural(smallvec![*old_parent, *new_parent]),
 
-            Step::SetDocumentAttrs { .. } => StepScope::Document,
-
             Step::SetSelection { .. }
             | Step::SetPendingModifiers { .. }
             | Step::SetComposition { .. } => StepScope::Local,
@@ -197,8 +186,7 @@ impl Step {
             } => vec![*old_parent, *new_parent],
             Step::SetSelection { .. }
             | Step::SetPendingModifiers { .. }
-            | Step::SetComposition { .. }
-            | Step::SetDocumentAttrs { .. } => vec![],
+            | Step::SetComposition { .. } => vec![],
         }
     }
 
@@ -269,7 +257,6 @@ impl Step {
                 new_modifiers,
             } => steps::set_modifiers::apply(state, *node_id, new_modifiers),
             Step::SetComposition { old: _, new } => steps::set_composition::apply(state, new),
-            Step::SetDocumentAttrs { old: _, new } => steps::set_document_attrs::apply(state, new),
         }
     }
 
@@ -343,9 +330,6 @@ impl Step {
                 new_modifiers.clone(),
             ),
             Step::SetComposition { old, new } => steps::set_composition::inverse(*old, *new),
-            Step::SetDocumentAttrs { old, new } => {
-                steps::set_document_attrs::inverse(old.clone(), new.clone())
-            }
         }
     }
 }
@@ -429,22 +413,11 @@ mod predicate_tests {
     }
 
     #[test]
-    fn is_commitable_true_for_set_document_attrs() {
-        let attrs = editor_model::DocumentAttrs::default();
-        let step = Step::SetDocumentAttrs {
-            old: attrs.clone(),
-            new: attrs,
-        };
-        assert!(step.is_commitable());
-    }
-
-    #[test]
     fn is_commitable_for_all_variants_matches_spec() {
         let node_id = NodeId::new();
         let parent_id = NodeId::new();
         let other_id = NodeId::new();
         let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
-        let attrs = editor_model::DocumentAttrs::default();
         let subtree = editor_model::Subtree::leaf(
             NodeId::new(),
             editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
@@ -463,7 +436,7 @@ mod predicate_tests {
             },
         ];
 
-        // commitable (12)
+        // commitable (11)
         let commitable: Vec<Step> = vec![
             Step::InsertText {
                 node_id,
@@ -520,13 +493,9 @@ mod predicate_tests {
                 old_modifiers: vec![],
                 new_modifiers: vec![Modifier::Bold],
             },
-            Step::SetDocumentAttrs {
-                old: attrs.clone(),
-                new: attrs,
-            },
         ];
 
-        assert_eq!(non_commitable.len() + commitable.len(), 15);
+        assert_eq!(non_commitable.len() + commitable.len(), 14);
 
         for step in &non_commitable {
             assert!(!step.is_commitable(), "{step:?}");
@@ -629,15 +598,5 @@ mod scope_tests {
             new: None,
         };
         assert!(matches!(step.scope(), StepScope::Local));
-    }
-
-    #[test]
-    fn scope_document_for_set_document_attrs() {
-        let attrs = editor_model::DocumentAttrs::default();
-        let step = Step::SetDocumentAttrs {
-            old: attrs.clone(),
-            new: attrs,
-        };
-        assert!(matches!(step.scope(), StepScope::Document));
     }
 }

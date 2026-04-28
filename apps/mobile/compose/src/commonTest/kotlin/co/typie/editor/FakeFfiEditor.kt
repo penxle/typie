@@ -1,11 +1,11 @@
 package co.typie.editor
 
 import co.typie.editor.ffi.CursorMetrics
-import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
 
@@ -13,7 +13,7 @@ internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
   var cursorProvider: () -> CursorMetrics? = { null },
   var selectionProvider: () -> Selection? = { null },
-  var documentAttrsProvider: () -> DocumentAttrs? = { null },
+  var rootAttrsProvider: () -> RootNode? = { null },
   var pageSizesProvider: () -> List<Size> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime? = { _, _ -> null },
 ) : co.typie.editor.ffi.Editor {
@@ -37,8 +37,8 @@ internal class FakeFfiEditor(
   override fun selection(): Selection =
     selectionProvider() ?: error("selection not set in FakeFfiEditor")
 
-  override fun documentAttrs(): DocumentAttrs =
-    documentAttrsProvider() ?: error("documentAttrs not set in FakeFfiEditor")
+  override fun rootAttrs(): RootNode =
+    rootAttrsProvider() ?: error("rootAttrs not set in FakeFfiEditor")
 
   override fun pageSizes(): List<Size> = pageSizesProvider()
 

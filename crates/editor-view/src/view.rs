@@ -55,7 +55,9 @@ impl View {
         new_pending_style: Option<PendingStyle>,
     ) -> bool {
         let nodes_invalidated = self.measurer.invalidate_with_steps(old_doc, new_doc, steps);
-        let attrs_changed = steps.iter().any(|s| s.is_doc_attr_step());
+        let attrs_changed = steps
+            .iter()
+            .any(|s| matches!(s, Step::SetNode { node_id, .. } if *node_id == NodeId::ROOT));
 
         let pending_changed = self.view_state.pending_style != new_pending_style;
         if pending_changed {
@@ -109,7 +111,10 @@ impl View {
     }
 
     fn build_paginator(&self, doc: &Doc) -> (Paginator, LayoutFingerprint) {
-        let layout_mode = doc.attrs().layout_mode;
+        let layout_mode = match &doc.get_entry(NodeId::ROOT).expect("root must exist").node {
+            Node::Root(r) => r.layout_mode,
+            _ => unreachable!("root entry must be Node::Root"),
+        };
         let (paginator, effective_viewport_width) = match layout_mode {
             LayoutMode::Paginated {
                 page_width,
@@ -425,12 +430,11 @@ mod tests {
 
     #[test]
     fn page_width_change_triggers_reflow() {
-        use editor_model::{DocumentAttrs, LayoutMode};
-        use editor_transaction::Step;
+        use editor_model::RootNode;
 
         let (doc,) = doc! { root { paragraph { text("hello") } } };
         let mut view = View::new_test();
-        let initial_attrs = DocumentAttrs {
+        let initial_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 400.0,
                 page_height: 600.0,
@@ -439,12 +443,15 @@ mod tests {
                 page_margin_left: 20.0,
                 page_margin_right: 20.0,
             },
-        };
-        let doc = doc.with_attrs(initial_attrs.clone());
+        });
+        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = initial_root.clone();
+            e
+        });
         view.layout(&doc);
         assert_eq!(view.pages()[0].size.width, 400.0);
 
-        let new_attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 600.0,
                 page_height: 600.0,
@@ -453,11 +460,15 @@ mod tests {
                 page_margin_left: 20.0,
                 page_margin_right: 20.0,
             },
-        };
-        let new_doc = doc.with_attrs(new_attrs.clone());
-        let steps = vec![Step::SetDocumentAttrs {
-            old: initial_attrs,
-            new: new_attrs,
+        });
+        let new_doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root.clone();
+            e
+        });
+        let steps = vec![Step::SetNode {
+            node_id: NodeId::ROOT,
+            old_node: initial_root,
+            new_node: new_root,
         }];
         let changed = view.reconcile(&doc, &new_doc, &steps, None);
         assert!(changed, "reconcile should return true for attrs change");
@@ -466,11 +477,10 @@ mod tests {
 
     #[test]
     fn set_attrs_with_same_layout_mode_produces_same_layout() {
-        use editor_model::{DocumentAttrs, LayoutMode};
-        use editor_transaction::Step;
+        use editor_model::RootNode;
 
         let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let attrs = DocumentAttrs {
+        let root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 400.0,
                 page_height: 600.0,
@@ -479,14 +489,18 @@ mod tests {
                 page_margin_left: 20.0,
                 page_margin_right: 20.0,
             },
-        };
-        let doc = doc.with_attrs(attrs.clone());
+        });
+        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = root.clone();
+            e
+        });
         let mut view = View::new_test();
         view.layout(&doc);
 
-        let steps = vec![Step::SetDocumentAttrs {
-            old: attrs.clone(),
-            new: attrs,
+        let steps = vec![Step::SetNode {
+            node_id: NodeId::ROOT,
+            old_node: root.clone(),
+            new_node: root,
         }];
         let changed = view.reconcile(&doc, &doc, &steps, None);
         assert!(changed, "attrs_changed branch returns true");
@@ -495,10 +509,10 @@ mod tests {
 
     #[test]
     fn paginated_viewport_resize_is_noop() {
-        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_model::RootNode;
 
         let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 400.0,
                 page_height: 600.0,
@@ -507,8 +521,11 @@ mod tests {
                 page_margin_left: 20.0,
                 page_margin_right: 20.0,
             },
-        };
-        let doc = doc.with_attrs(attrs);
+        });
+        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root;
+            e
+        });
         let mut view = View::new_test();
         view.layout(&doc);
 
@@ -523,13 +540,16 @@ mod tests {
 
     #[test]
     fn continuous_viewport_shrink_triggers_reflow() {
-        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_model::RootNode;
 
         let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Continuous { max_width: 800.0 },
-        };
-        let doc = doc.with_attrs(attrs);
+        });
+        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root;
+            e
+        });
         let mut view = View::new_test();
         view.layout(&doc);
 
@@ -543,13 +563,16 @@ mod tests {
 
     #[test]
     fn continuous_viewport_growth_above_max_is_noop() {
-        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_model::RootNode;
 
         let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Continuous { max_width: 400.0 },
-        };
-        let doc = doc.with_attrs(attrs);
+        });
+        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root;
+            e
+        });
         let mut view = View::new_test();
         view.resize(Viewport::new(800.0, 600.0, 1.0), &doc);
         view.layout(&doc);
@@ -560,11 +583,10 @@ mod tests {
 
     #[test]
     fn mode_switch_paginated_to_continuous_triggers_reflow() {
-        use editor_model::{DocumentAttrs, LayoutMode};
-        use editor_transaction::Step;
+        use editor_model::RootNode;
 
         let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let old_attrs = DocumentAttrs {
+        let old_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 400.0,
                 page_height: 600.0,
@@ -573,19 +595,26 @@ mod tests {
                 page_margin_left: 20.0,
                 page_margin_right: 20.0,
             },
-        };
-        let doc_old = doc.clone().with_attrs(old_attrs.clone());
+        });
+        let doc_old = doc.clone().with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = old_root.clone();
+            e
+        });
         let mut view = View::new_test();
         view.layout(&doc_old);
         let old_page_width = view.pages()[0].size.width;
 
-        let new_attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Continuous { max_width: 600.0 },
-        };
-        let doc_new = doc.with_attrs(new_attrs.clone());
-        let steps = vec![Step::SetDocumentAttrs {
-            old: old_attrs,
-            new: new_attrs,
+        });
+        let doc_new = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root.clone();
+            e
+        });
+        let steps = vec![Step::SetNode {
+            node_id: NodeId::ROOT,
+            old_node: old_root,
+            new_node: new_root,
         }];
         let changed = view.reconcile(&doc_old, &doc_new, &steps, None);
         assert!(changed);
@@ -594,18 +623,20 @@ mod tests {
 
     #[test]
     fn mode_switch_continuous_to_paginated_triggers_reflow() {
-        use editor_model::{DocumentAttrs, LayoutMode};
-        use editor_transaction::Step;
+        use editor_model::RootNode;
 
         let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let old_attrs = DocumentAttrs {
+        let old_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Continuous { max_width: 500.0 },
-        };
-        let doc_old = doc.clone().with_attrs(old_attrs.clone());
+        });
+        let doc_old = doc.clone().with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = old_root.clone();
+            e
+        });
         let mut view = View::new_test();
         view.layout(&doc_old);
 
-        let new_attrs = DocumentAttrs {
+        let new_root = Node::Root(RootNode {
             layout_mode: LayoutMode::Paginated {
                 page_width: 700.0,
                 page_height: 900.0,
@@ -614,11 +645,15 @@ mod tests {
                 page_margin_left: 20.0,
                 page_margin_right: 20.0,
             },
-        };
-        let doc_new = doc.with_attrs(new_attrs.clone());
-        let steps = vec![Step::SetDocumentAttrs {
-            old: old_attrs,
-            new: new_attrs,
+        });
+        let doc_new = doc.with_node_updated(NodeId::ROOT, |mut e| {
+            e.node = new_root.clone();
+            e
+        });
+        let steps = vec![Step::SetNode {
+            node_id: NodeId::ROOT,
+            old_node: old_root,
+            new_node: new_root,
         }];
         let changed = view.reconcile(&doc_old, &doc_new, &steps, None);
         assert!(changed);

@@ -1,7 +1,6 @@
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-use crate::document_attrs::DocumentAttrs;
 use crate::entry::NodeEntry;
 use crate::id::NodeId;
 use crate::node_ref::NodeRef;
@@ -11,7 +10,6 @@ use crate::nodes::{Node, RootNode};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Doc {
     pub nodes: imbl::HashMap<NodeId, NodeEntry>,
-    pub attrs: DocumentAttrs,
 }
 
 impl Default for Doc {
@@ -19,13 +17,12 @@ impl Default for Doc {
         Self {
             nodes: imbl::hashmap! {
                 NodeId::ROOT => NodeEntry {
-                    node: Node::Root(RootNode {}),
+                    node: Node::Root(RootNode::default()),
                     parent: None,
                     children: imbl::Vector::new(),
                     modifiers: vec![],
                 }
             },
-            attrs: DocumentAttrs::default(),
         }
     }
 }
@@ -45,10 +42,6 @@ impl Doc {
 
     pub fn get_entry(&self, id: NodeId) -> Option<&NodeEntry> {
         self.nodes.get(&id)
-    }
-
-    pub fn attrs(&self) -> &DocumentAttrs {
-        &self.attrs
     }
 
     pub fn with_node(&self, id: NodeId, entry: NodeEntry) -> Doc {
@@ -76,30 +69,22 @@ impl Doc {
         new.nodes = new.nodes.without(&id);
         new
     }
-
-    pub fn with_attrs(&self, attrs: DocumentAttrs) -> Doc {
-        let mut new = self.clone();
-        new.attrs = attrs;
-        new
-    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
 impl Doc {
     pub fn new_test() -> Self {
         use crate::default_modifiers;
-        use crate::nodes::{Node, RootNode};
 
         Self {
             nodes: imbl::hashmap! {
                 NodeId::ROOT => NodeEntry {
-                    node: Node::Root(RootNode {}),
+                    node: Node::Root(RootNode::default()),
                     parent: None,
                     children: imbl::Vector::new(),
                     modifiers: default_modifiers(),
                 }
             },
-            attrs: DocumentAttrs::default(),
         }
     }
 }
@@ -186,13 +171,13 @@ mod tests {
     }
 
     #[test]
-    fn attrs_and_root_modifiers() {
+    fn root_default_has_continuous_layout_and_default_modifiers() {
         let doc = make_doc();
-        assert!(matches!(
-            doc.attrs().layout_mode,
-            LayoutMode::Continuous { .. }
-        ));
         let root = doc.get_entry(NodeId::ROOT).unwrap();
+        match &root.node {
+            Node::Root(r) => assert!(matches!(r.layout_mode, LayoutMode::Continuous { .. })),
+            _ => panic!("expected Root"),
+        }
         assert!(
             root.modifiers
                 .iter()

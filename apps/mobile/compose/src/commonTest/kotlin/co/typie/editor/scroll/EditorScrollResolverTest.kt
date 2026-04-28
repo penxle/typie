@@ -173,7 +173,7 @@ class EditorScrollResolverTest {
       cursor = cursor,
       selection = null,
       pageSizes = pageSizes,
-      documentAttrs = null,
+      rootAttrs = null,
       ime = null,
     )
 

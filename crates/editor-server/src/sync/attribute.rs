@@ -55,7 +55,9 @@ mod tests {
 
     fn target() -> ConflictTarget {
         ConflictTarget::Attribute {
-            scope: AttributeScope::Document,
+            scope: AttributeScope::Node {
+                node_id: editor_model::NodeId::new(),
+            },
             name: "test".into(),
         }
     }

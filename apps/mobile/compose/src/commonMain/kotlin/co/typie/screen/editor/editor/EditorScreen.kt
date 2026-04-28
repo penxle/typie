@@ -33,8 +33,9 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePagesContentHeight
-import co.typie.editor.ffi.DocOp
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Node
+import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.rememberEditorZoomController
 import co.typie.editor.runtime.EditorRuntime
@@ -113,8 +114,16 @@ fun EditorScreen(entityId: String) {
     )
   }
   fun toggleDebugLayoutMode() {
-    val attrs = model.toggleDebugLayoutMode()
-    scope.launch { runtime.editor?.await { enqueue(Message.Doc(DocOp.SetAttrs(attrs))) } }
+    val rootAttrs = model.toggleDebugLayoutMode()
+    scope.launch {
+      runtime.editor?.await {
+        enqueue(
+          Message.Node(
+            NodeOp.SetAttrs(id = "0", attrs = Node.Root(layoutMode = rootAttrs.layoutMode))
+          )
+        )
+      }
+    }
   }
 
   ProvideTopBar(

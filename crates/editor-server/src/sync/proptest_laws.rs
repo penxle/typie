@@ -80,7 +80,7 @@ struct ParagraphSpec {
 
 fn build_doc(p1: ParagraphSpec, p2: ParagraphSpec) -> Doc {
     let root = NodeEntry {
-        node: Node::Root(RootNode {}),
+        node: Node::Root(RootNode::default()),
         parent: None,
         children: imbl::Vector::from(vec![p1.p_id, p2.p_id]),
         modifiers: vec![],
@@ -117,7 +117,6 @@ fn build_doc(p1: ParagraphSpec, p2: ParagraphSpec) -> Doc {
             p2.p_id => p2_entry,
             p2.t_id => t2_entry,
         },
-        attrs: editor_model::DocumentAttrs::default(),
     }
 }
 

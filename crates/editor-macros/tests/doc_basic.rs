@@ -12,7 +12,7 @@ fn doc_basic_tree() {
     };
 
     let root = doc.get_entry(NodeId::ROOT).unwrap();
-    assert!(matches!(root.node, Node::Root(RootNode {})));
+    assert!(matches!(root.node, Node::Root(_)));
     assert!(root.parent.is_none());
     assert_eq!(root.children.len(), 1);
     assert_eq!(root.children[0], p);
@@ -168,4 +168,27 @@ fn doc_modifier_shorthand_on_block() {
     let p_entry = doc.get_entry(p).unwrap();
     assert_eq!(p_entry.modifiers.len(), 1);
     assert!(matches!(p_entry.modifiers[0], Modifier::Bold));
+}
+
+#[test]
+fn doc_root_with_layout_mode_param() {
+    let (doc, ..) = doc! {
+        root (
+            layout_mode: LayoutMode::Paginated {
+                page_width: 595.0,
+                page_height: 842.0,
+                page_margin_top: 50.0,
+                page_margin_bottom: 50.0,
+                page_margin_left: 50.0,
+                page_margin_right: 50.0,
+            }
+        ) {
+            paragraph { text("hi") }
+        }
+    };
+    let root = doc.get_entry(NodeId::ROOT).unwrap();
+    match &root.node {
+        Node::Root(r) => assert!(matches!(r.layout_mode, LayoutMode::Paginated { .. })),
+        _ => panic!("expected Root"),
+    }
 }

@@ -93,7 +93,7 @@
   const isUserMode = $derived(mode === 'user');
 
   const editor = $derived(ctx.editor);
-  const isPaginated = $derived(editor?.documentAttrs?.layout_mode.type === 'paginated');
+  const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
 
   const y = $derived(
     axisGeometry({

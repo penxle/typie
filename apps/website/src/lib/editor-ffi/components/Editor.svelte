@@ -56,7 +56,7 @@
   let clientWidth = $state<number>();
   let clientHeight = $state<number>();
 
-  const isPaginated = $derived(ctx.editor?.documentAttrs?.layout_mode.type === 'paginated');
+  const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
 
   const init = async (width: number, height: number) => {
     status = 'initializing';

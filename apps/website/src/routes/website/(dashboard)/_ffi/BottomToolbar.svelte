@@ -42,7 +42,7 @@
             page_margin_right: 94,
           }
         : { type: 'continuous', max_width: 600 };
-    enqueue({ type: 'doc', op: { type: 'set_attrs', attrs: { layout_mode } } });
+    enqueue({ type: 'node', op: { type: 'set_attrs', id: '0', attrs: { type: 'root', layout_mode } } });
   };
 
   const selectStyle = css.raw({
@@ -143,7 +143,7 @@
   <select
     class={css(selectStyle)}
     onchange={(e) => setLayoutMode(e.currentTarget.value as LayoutMode['type'])}
-    value={ctx.editor?.documentAttrs?.layout_mode.type ?? 'continuous'}
+    value={ctx.editor?.rootAttrs?.layout_mode.type ?? 'continuous'}
   >
     <option value="paginated">페이지</option>
     <option value="continuous">연속</option>

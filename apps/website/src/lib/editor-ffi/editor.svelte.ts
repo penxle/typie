@@ -7,11 +7,11 @@ import type {
   BlockState,
   CursorMetrics,
   Doc,
-  DocumentAttrs,
   Editor as WasmEditor,
   EditorEvent,
   Message,
   ModifierState,
+  RootNode,
   Selection,
   Size,
   Viewport,
@@ -53,7 +53,7 @@ export class Editor {
   #cursor = $state<CursorMetrics>();
   #selection = $state<Selection>();
   #pageSizes = $state<Size[]>([]);
-  #documentAttrs = $state<DocumentAttrs>();
+  #rootAttrs = $state<RootNode>();
   #modifierState = $state<ModifierState>();
   #blockState = $state<BlockState>();
   #focused = $state(false);
@@ -119,8 +119,8 @@ export class Editor {
     return this.#pageSizes;
   }
 
-  get documentAttrs() {
-    return this.#documentAttrs;
+  get rootAttrs() {
+    return this.#rootAttrs;
   }
 
   get modifierState() {
@@ -287,8 +287,8 @@ export class Editor {
       this.#pageSizes = this.#wasm.page_sizes();
     }
 
-    if (fields.includes('doc_attrs')) {
-      this.#documentAttrs = this.#wasm.document_attrs();
+    if (fields.includes('root_attrs')) {
+      this.#rootAttrs = this.#wasm.root_attrs();
     }
 
     if (fields.includes('modifiers')) {

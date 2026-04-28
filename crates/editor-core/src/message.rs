@@ -1,6 +1,6 @@
 pub use editor_common::{Axis, Direction, Movement};
 use editor_macros::ffi;
-use editor_model::{DocumentAttrs, Fragment, Modifier, ModifierType, Node, NodeId};
+use editor_model::{Fragment, Modifier, ModifierType, Node, NodeId};
 use editor_state::Selection;
 use serde::{Deserialize, Serialize};
 
@@ -133,13 +133,6 @@ pub enum TableOp {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum DocOp {
-    SetAttrs { attrs: DocumentAttrs },
-}
-
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
 pub enum NodeOp {
     Delete { id: NodeId },
     SetAttrs { id: NodeId, attrs: Node },
@@ -245,7 +238,6 @@ pub enum Message {
     Deletion { op: DeletionOp },
     Selection { op: SelectionOp },
     Modifier { op: ModifierOp },
-    Doc { op: DocOp },
     Node { op: NodeOp },
     Clipboard { op: ClipboardOp },
     Composition { op: CompositionOp },

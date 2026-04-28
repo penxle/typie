@@ -2,7 +2,6 @@ editor_macros::preamble!();
 
 mod alignment;
 mod doc;
-mod document_attrs;
 mod entry;
 mod fragment;
 mod id;
@@ -17,7 +16,6 @@ mod test_utils;
 
 pub use alignment::*;
 pub use doc::*;
-pub use document_attrs::*;
 pub use entry::*;
 pub use fragment::*;
 pub use id::*;

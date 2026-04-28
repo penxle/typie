@@ -1,7 +1,6 @@
 mod clipboard;
 mod composition;
 mod deletion;
-mod doc;
 mod history;
 mod insertion;
 mod key;
@@ -15,7 +14,6 @@ mod system;
 pub use clipboard::handle_clipboard_op;
 pub use composition::handle_composition_op;
 pub use deletion::handle_deletion_op;
-pub use doc::handle_doc_op;
 pub use history::handle_history_op;
 pub use insertion::handle_insertion_op;
 pub use key::handle_key_event;

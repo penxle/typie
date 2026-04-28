@@ -170,9 +170,14 @@ impl Editor {
             fields.insert(StateField::Block);
         }
 
-        if steps.iter().any(|s| s.is_doc_attr_step()) {
+        if steps.iter().any(|s| {
+            matches!(
+                s,
+                Step::SetNode { node_id, .. } if *node_id == NodeId::ROOT
+            )
+        }) {
             fields.insert(StateField::Doc);
-            fields.insert(StateField::DocAttrs);
+            fields.insert(StateField::RootAttrs);
         }
 
         if steps.iter().any(|s| s.is_selection_step()) {
@@ -251,7 +256,6 @@ impl Editor {
             Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
-            Message::Doc { op } => handle::handle_doc_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
             Message::Composition { op } => handle::handle_composition_op(self, op)?,

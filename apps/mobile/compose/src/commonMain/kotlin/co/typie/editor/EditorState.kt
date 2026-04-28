@@ -1,8 +1,8 @@
 package co.typie.editor
 
 import co.typie.editor.ffi.CursorMetrics
-import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
 
@@ -11,7 +11,7 @@ data class EditorState(
   val cursor: CursorMetrics?,
   val selection: Selection?,
   val pageSizes: List<Size>,
-  val documentAttrs: DocumentAttrs?,
+  val rootAttrs: RootNode?,
   val ime: Ime?,
 ) {
   companion object {
@@ -21,7 +21,7 @@ data class EditorState(
         cursor = null,
         selection = null,
         pageSizes = emptyList(),
-        documentAttrs = null,
+        rootAttrs = null,
         ime = null,
       )
   }

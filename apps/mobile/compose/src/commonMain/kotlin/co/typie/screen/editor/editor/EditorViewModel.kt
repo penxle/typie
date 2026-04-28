@@ -9,12 +9,12 @@ import co.typie.editor.FontLoader
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.ffi.Doc
-import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Modifier
 import co.typie.editor.ffi.Node
 import co.typie.editor.ffi.NodeEntry
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_Query
@@ -84,7 +84,7 @@ class EditorViewModel(val entityId: String) : ViewModel() {
           mapOf(
             "0" to
               NodeEntry(
-                node = Node.Root,
+                node = Node.Root(layoutMode = resolveDebugLayoutMode(debugDocumentLayoutMode)),
                 modifiers =
                   listOf(
                     Modifier.FontFamily("Pretendard"),
@@ -107,14 +107,17 @@ class EditorViewModel(val entityId: String) : ViewModel() {
             "5" to NodeEntry(node = Node.Paragraph, parent = "10", children = listOf("6")),
             "6" to NodeEntry(node = Node.Text("안녕하세요!"), parent = "5"),
             "7" to NodeEntry(node = Node.Paragraph, parent = "0"),
-          ),
-        attrs = DocumentAttrs(layoutMode = resolveDebugLayoutMode(debugDocumentLayoutMode)),
+          )
       )
 
   val selection = Selection(anchor = Position("4", 0), head = Position("4", 0))
 
   internal val documentLayoutSpec: EditorDocumentLayoutSpec
-    get() = doc.attrs.layoutMode.toEditorDocumentLayoutSpec()
+    get() {
+      val rootEntry = doc.nodes["0"] ?: error("root entry must exist")
+      val root = rootEntry.node as Node.Root
+      return root.layoutMode.toEditorDocumentLayoutSpec()
+    }
 
   internal val isPaginatedDebugLayout: Boolean
     get() = debugDocumentLayoutMode == DebugDocumentLayoutMode.Paginated
@@ -159,13 +162,13 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     scheduleSubtitleSave()
   }
 
-  fun toggleDebugLayoutMode(): DocumentAttrs {
+  fun toggleDebugLayoutMode(): RootNode {
     debugDocumentLayoutMode =
       when (debugDocumentLayoutMode) {
         DebugDocumentLayoutMode.Continuous -> DebugDocumentLayoutMode.Paginated
         DebugDocumentLayoutMode.Paginated -> DebugDocumentLayoutMode.Continuous
       }
-    return doc.attrs
+    return RootNode(layoutMode = resolveDebugLayoutMode(debugDocumentLayoutMode))
   }
 
   fun toggleDebugViewportOverlay() {

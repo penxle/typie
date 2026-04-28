@@ -985,20 +985,11 @@ mod tests {
 
     #[test]
     fn resize_paginated_emits_no_render_invalidated() {
-        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_model::LayoutMode;
 
         let (state, _t1) = state! {
             doc {
-                root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("hello") }
-                }
-            }
-            selection: (t1, 0)
-        };
-        let mut editor = Editor::new_test(state);
-        editor.apply(Message::Doc {
-            op: DocOp::SetAttrs {
-                attrs: DocumentAttrs {
+                root (
                     layout_mode: LayoutMode::Paginated {
                         page_width: 400.0,
                         page_height: 600.0,
@@ -1006,8 +997,21 @@ mod tests {
                         page_margin_bottom: 20.0,
                         page_margin_left: 20.0,
                         page_margin_right: 20.0,
-                    },
-                },
+                    }
+                ) [font_family("TestFont".to_string()), font_weight(400)] {
+                    paragraph { t1: text("hello") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        // Establish initial layout fingerprint so the assertion-target resize is a no-op,
+        // not a first-time layout computation.
+        editor.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 1000.0,
+                height: 700.0,
+                scale_factor: 1.0,
             },
         });
 
@@ -1030,25 +1034,21 @@ mod tests {
 
     #[test]
     fn resize_continuous_width_change_emits_render_invalidated() {
-        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_model::LayoutMode;
 
         let (state, _t1) = state! {
             doc {
-                root [font_family("TestFont".to_string()), font_weight(400)] {
+                root (
+                    layout_mode: LayoutMode::Continuous { max_width: 800.0 }
+                ) [font_family("TestFont".to_string()), font_weight(400)] {
                     paragraph { t1: text("hello") }
                 }
             }
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Doc {
-            op: DocOp::SetAttrs {
-                attrs: DocumentAttrs {
-                    layout_mode: LayoutMode::Continuous { max_width: 800.0 },
-                },
-            },
-        });
-        // First resize matches the fingerprint established by SetAttrs (effective stays 800) — no-op.
+        // Establish initial layout fingerprint at effective_width=800 so the second resize
+        // (shrinking effective_width to 500) is recognized as a real layout-affecting change.
         editor.apply(Message::System {
             event: SystemEvent::Resize {
                 width: 1000.0,
