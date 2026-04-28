@@ -554,6 +554,13 @@
       "when": 1777295020145,
       "tag": "0078_broken_quentin_quire",
       "breakpoints": false
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1777362027453,
+      "tag": "0079_empty_cloak",
+      "breakpoints": false
     }
   ]
 }

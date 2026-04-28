@@ -210,6 +210,14 @@ enum DocumentAvailableAction {
   EDIT
 }
 
+enum DocumentConflictKind {
+  ATTRIBUTE
+  LIFECYCLE
+  ORDER
+  POSITION
+  TEXT
+}
+
 enum DocumentContentRating {
   ALL
   R15

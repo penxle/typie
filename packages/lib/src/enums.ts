@@ -151,6 +151,15 @@ export const DocumentSyncType = {
   RESET: 'RESET',
 } as const;
 
+export type DocumentConflictKind = keyof typeof DocumentConflictKind;
+export const DocumentConflictKind = {
+  ATTRIBUTE: 'ATTRIBUTE',
+  TEXT: 'TEXT',
+  LIFECYCLE: 'LIFECYCLE',
+  POSITION: 'POSITION',
+  ORDER: 'ORDER',
+} as const;
+
 export type DocumentType = keyof typeof DocumentType;
 export const DocumentType = {
   NORMAL: 'NORMAL',

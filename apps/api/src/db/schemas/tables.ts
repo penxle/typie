@@ -35,6 +35,7 @@ export const Documents = pgTable(
     locked: boolean('locked').notNull().default(false),
     thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     type: E._DocumentType('type').notNull().default('NORMAL'),
+    headCommitId: text('head_commit_id').references((): AnyPgColumn => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'set null' }),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
@@ -129,6 +130,113 @@ export const DocumentCharacterCountChanges = pgTable(
   },
   (t) => [uniqueIndex().on(t.userId, t.documentId, t.bucket), index().on(t.userId, t.bucket)],
 );
+
+export const DocumentCommits = pgTable(
+  'document_commits',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_COMMITS)),
+    commitId: text('commit_id').notNull(),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    parentId: text('parent_id').references((): AnyPgColumn => DocumentCommits.id),
+    secondParentId: text('second_parent_id').references((): AnyPgColumn => DocumentCommits.id),
+    steps: jsonb('steps').notNull(),
+    meta: jsonb('meta'),
+    deviceId: text('device_id').notNull(),
+    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    committedAt: datetime('committed_at').notNull(),
+    pushedAt: datetime('pushed_at')
+      .notNull()
+      .default(sql`now()`),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.documentId, t.pushedAt), uniqueIndex().on(t.documentId, t.commitId)],
+);
+
+export const DocumentHeadContents = pgTable('document_head_contents', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.DOCUMENT_HEAD_CONTENTS)),
+  documentId: text('document_id')
+    .notNull()
+    .unique()
+    .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  json: jsonb('json').notNull(),
+  text: text('text').notNull(),
+  characterCount: integer('character_count').notNull().default(0),
+  blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const DocumentConflicts = pgTable(
+  'document_conflicts',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONFLICTS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    mergeCommitId: text('merge_commit_id')
+      .notNull()
+      .references(() => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    kind: E._DocumentConflictKind('kind').notNull(),
+    target: jsonb('target').notNull(),
+    baseValue: jsonb('base_value'),
+    autoResolvedBranchId: text('auto_resolved_branch_id').references((): AnyPgColumn => DocumentConflictBranches.id),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.documentId)],
+);
+
+export const DocumentConflictBranches = pgTable(
+  'document_conflict_branches',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONFLICT_BRANCHES)),
+    conflictId: text('conflict_id')
+      .notNull()
+      .references(() => DocumentConflicts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    commitId: text('commit_id')
+      .notNull()
+      .references(() => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    value: jsonb('value').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.conflictId), index().on(t.commitId)],
+);
+
+export const DocumentConflictResolutions = pgTable('document_conflict_resolutions', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONFLICT_RESOLUTIONS)),
+  conflictId: text('conflict_id')
+    .notNull()
+    .unique()
+    .references(() => DocumentConflicts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  value: jsonb('value').notNull(),
+  commitId: text('commit_id')
+    .notNull()
+    .references(() => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const Coupons = pgTable('coupons', {
   id: text('id')

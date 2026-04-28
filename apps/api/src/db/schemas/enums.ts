@@ -25,6 +25,7 @@ export const _PostLayoutMode = createPgEnum('_post_layout_mode', E.PostLayoutMod
 export const _PostType = createPgEnum('_post_type', E.PostType);
 export const _DocumentContentRating = createPgEnum('_document_content_rating', E.DocumentContentRating);
 export const _DocumentType = createPgEnum('_document_type', E.DocumentType);
+export const _DocumentConflictKind = createPgEnum('_document_conflict_kind', E.DocumentConflictKind);
 export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);
 export const _RedirectType = createPgEnum('_redirect_type', E.RedirectType);
 export const _SiteDateDisplay = createPgEnum('_site_date_display', E.SiteDateDisplay);
