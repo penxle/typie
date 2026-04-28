@@ -353,10 +353,7 @@ const inferPlatformFromUserAgent = (ua: string | undefined): 'IOS' | 'ANDROID' |
 };
 
 const resolveDeviceMetadata = (ctx: UserContext) => {
-  const identifier = ctx.c.req.header('X-Device-Id');
-  if (!identifier) {
-    throw new TypieError({ code: 'device_id_required' });
-  }
+  const identifier = ctx.c.req.header('X-Device-Id') ?? `legacy:${nanoid(32)}`;
 
   const rawName = ctx.c.req.header('X-Device-Name');
   const rawPlatform = ctx.c.req.header('X-Device-Platform');
