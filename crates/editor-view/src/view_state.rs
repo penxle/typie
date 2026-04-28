@@ -35,7 +35,6 @@ mod tests {
     use super::*;
     use editor_model::Modifier;
     use editor_state::PendingModifier;
-    use smallvec::smallvec;
 
     #[test]
     fn pending_style_default_is_none() {
@@ -48,11 +47,15 @@ mod tests {
         let n = NodeId::new();
         let a = PendingStyle {
             node_id: n,
-            modifiers: smallvec![PendingModifier::Set(Modifier::Bold)],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::Bold,
+            }],
         };
         let b = PendingStyle {
             node_id: n,
-            modifiers: smallvec![PendingModifier::Set(Modifier::Bold)],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::Bold,
+            }],
         };
         assert_eq!(a, b);
     }

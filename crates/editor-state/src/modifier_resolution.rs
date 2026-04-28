@@ -78,12 +78,12 @@ fn merge_with_inherited(mut base: Vec<Modifier>, inherited: &[Modifier]) -> Vec<
 fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers) -> Vec<Modifier> {
     for pm in pending {
         match pm {
-            PendingModifier::Set(m) => {
-                modifiers.retain(|existing| existing.as_type() != m.as_type());
-                modifiers.push(m.clone());
+            PendingModifier::Set { modifier } => {
+                modifiers.retain(|existing| existing.as_type() != modifier.as_type());
+                modifiers.push(modifier.clone());
             }
-            PendingModifier::Unset(t) => {
-                modifiers.retain(|existing| existing.as_type() != *t);
+            PendingModifier::Unset { ty } => {
+                modifiers.retain(|existing| existing.as_type() != *ty);
             }
         }
     }

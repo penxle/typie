@@ -45,7 +45,7 @@ pub struct Editor {
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) is_dragging: bool,
     message_queue: Vec<Message>,
-    pending_events: HashSet<EditorEvent>,
+    pending_events: Vec<EditorEvent>,
     pending_steps: Vec<Step>,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>,
@@ -61,7 +61,7 @@ impl Editor {
             resource,
             is_dragging: false,
             message_queue: Vec::new(),
-            pending_events: HashSet::new(),
+            pending_events: Vec::new(),
             pending_steps: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
@@ -194,9 +194,7 @@ impl Editor {
             });
         }
 
-        Ok(std::mem::take(&mut self.pending_events)
-            .into_iter()
-            .collect())
+        Ok(std::mem::take(&mut self.pending_events))
     }
 
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
@@ -273,10 +271,22 @@ impl Editor {
 
         let (state, steps, effects, meta) = tr.commit();
 
+        let commitable: Vec<Step> = steps
+            .iter()
+            .filter(|s| s.is_commitable())
+            .cloned()
+            .collect();
+        if !commitable.is_empty() {
+            self.push_event(EditorEvent::TransactionCommitted {
+                steps: commitable,
+                meta: meta.clone(),
+            });
+        }
+
         if !steps.is_empty() {
             match meta.history {
                 HistoryMeta::Record => self.history.push(&steps),
-                HistoryMeta::Tagged(tag) => self.history.push_tagged(&steps, tag),
+                HistoryMeta::Tagged { tag } => self.history.push_tagged(&steps, tag),
                 HistoryMeta::Skip => {}
             }
         }
@@ -296,7 +306,13 @@ impl Editor {
             }
             other => other,
         };
-        self.pending_events.insert(event);
+        // TransactionCommitted is always pushed; multiple transacts in a single tick
+        // must each emit a distinct event even if their (steps, meta) compare equal.
+        if matches!(event, EditorEvent::TransactionCommitted { .. })
+            || !self.pending_events.contains(&event)
+        {
+            self.pending_events.push(event);
+        }
     }
 
     fn process_effects(&mut self, effects: HashSet<Effect>) {
@@ -408,7 +424,7 @@ impl Editor {
             resource,
             is_dragging: false,
             message_queue: Vec::new(),
-            pending_events: HashSet::new(),
+            pending_events: Vec::new(),
             pending_steps: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
@@ -446,7 +462,9 @@ mod tests {
     fn normalize_non_empty_paragraph_returns_none() {
         let (doc, p1) = doc! { root { p1: paragraph { text("hi") } } };
         let mut pending = PendingModifiers::new();
-        pending.push(PendingModifier::Set(Modifier::Bold));
+        pending.push(PendingModifier::Set {
+            modifier: Modifier::Bold,
+        });
         let s = build_state(doc, Position::new(p1, 0), pending);
         assert!(normalize_pending_style(&s).is_none());
     }
@@ -455,7 +473,9 @@ mod tests {
     fn normalize_empty_paragraph_returns_some_with_container_id() {
         let (doc, p1) = doc! { root { p1: paragraph } };
         let mut pending = PendingModifiers::new();
-        pending.push(PendingModifier::Set(Modifier::FontSize { value: 9600 }));
+        pending.push(PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        });
         let s = build_state(doc, Position::new(p1, 0), pending.clone());
         let ps = normalize_pending_style(&s).expect("Some");
         assert_eq!(ps.node_id, p1);
@@ -466,7 +486,9 @@ mod tests {
     fn normalize_head_on_text_child_ascends_to_textblock() {
         let (doc, _p1, t1) = doc! { root { _p1: paragraph { t1: text("hi") } } };
         let mut pending = PendingModifiers::new();
-        pending.push(PendingModifier::Set(Modifier::Bold));
+        pending.push(PendingModifier::Set {
+            modifier: Modifier::Bold,
+        });
         let s = build_state(doc, Position::new(t1, 0), pending);
         assert!(normalize_pending_style(&s).is_none());
     }
@@ -846,6 +868,47 @@ mod tests {
     }
 
     #[test]
+    fn transact_emits_transaction_committed_with_commitable_steps() {
+        let (mut editor, _) = test_editor();
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "hi".into() },
+        });
+        let committed: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                EditorEvent::TransactionCommitted { steps, .. } => Some(steps.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            committed.len(),
+            1,
+            "expected exactly one TransactionCommitted event"
+        );
+        assert!(!committed[0].is_empty(), "steps should not be empty");
+        assert!(
+            committed[0].iter().all(|s| s.is_commitable()),
+            "all emitted steps should be commitable"
+        );
+    }
+
+    #[test]
+    fn transact_does_not_emit_transaction_committed_for_selection_only() {
+        let (mut editor, t) = test_editor();
+        let target = Selection::collapsed(Position::new(t, 3));
+        let events = editor.apply(Message::Selection {
+            op: SelectionOp::Set { selection: target },
+        });
+        let has_committed = events
+            .iter()
+            .any(|e| matches!(e, EditorEvent::TransactionCommitted { .. }));
+        assert!(
+            !has_committed,
+            "selection-only transaction should not emit TransactionCommitted"
+        );
+    }
+
+    #[test]
     fn state_changed_dedups_regardless_of_fields_order() {
         let (mut editor, _) = test_editor();
         editor.push_event(EditorEvent::StateChanged {
@@ -862,5 +925,42 @@ mod tests {
             .filter(|e| matches!(e, EditorEvent::StateChanged { .. }))
             .count();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn multiple_transacts_in_single_tick_emit_separate_events_when_steps_differ() {
+        let (mut editor, _) = test_editor();
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "a".into() },
+        });
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "b".into() },
+        });
+        let events = editor.tick().unwrap();
+        let committed_count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::TransactionCommitted { .. }))
+            .count();
+        assert_eq!(
+            committed_count, 2,
+            "two distinct transactions should emit two events"
+        );
+    }
+
+    #[test]
+    fn tick_does_not_dedup_transaction_committed() {
+        let (mut editor, _) = test_editor();
+        let event = EditorEvent::TransactionCommitted {
+            steps: vec![],
+            meta: editor_transaction::TransactionMeta::default(),
+        };
+        editor.push_event(event.clone());
+        editor.push_event(event);
+        let events = editor.tick().unwrap();
+        let count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::TransactionCommitted { .. }))
+            .count();
+        assert_eq!(count, 2, "TransactionCommitted must not be deduplicated");
     }
 }

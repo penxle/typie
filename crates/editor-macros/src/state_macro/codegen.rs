@@ -78,11 +78,11 @@ fn gen_pending_modifiers(modifiers: &[PendingModifierDef]) -> TokenStream {
         .map(|def| match def {
             PendingModifierDef::Set(dec) => {
                 let modifier_expr = build_modifier_expr(dec);
-                quote! { __pending.push(PendingModifier::Set(#modifier_expr)); }
+                quote! { __pending.push(PendingModifier::Set { modifier: #modifier_expr }); }
             }
             PendingModifierDef::Unset(name) => {
                 let variant = Ident::new(&name.to_string().to_pascal_case(), Span::call_site());
-                quote! { __pending.push(PendingModifier::Unset(ModifierType::#variant)); }
+                quote! { __pending.push(PendingModifier::Unset { ty: ModifierType::#variant }); }
             }
         })
         .collect();

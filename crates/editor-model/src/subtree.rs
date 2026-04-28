@@ -1,3 +1,4 @@
+use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 use crate::doc::Doc;
@@ -6,6 +7,7 @@ use crate::id::NodeId;
 use crate::modifier::Modifier;
 use crate::nodes::Node;
 
+#[ffi]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Subtree {
     pub id: NodeId,

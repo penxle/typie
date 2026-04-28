@@ -115,7 +115,6 @@ mod tests {
     use editor_macros::doc;
     use editor_model::Modifier;
     use editor_state::PendingModifier;
-    use smallvec::smallvec;
 
     fn measured_line_height(
         measurer: &mut Measurer,
@@ -142,7 +141,9 @@ mod tests {
         let mut vs2 = ViewState::new();
         vs2.pending_style = Some(PendingStyle {
             node_id: p1,
-            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            }],
         });
         let pending_h = measured_line_height(&mut measurer, &doc, p1, &vs2);
 
@@ -164,7 +165,9 @@ mod tests {
         let mut vs = ViewState::new();
         vs.pending_style = Some(PendingStyle {
             node_id: editor_model::NodeId::new(),
-            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            }],
         });
         let h = measured_line_height(&mut measurer, &doc, p1, &vs);
 
@@ -183,7 +186,9 @@ mod tests {
         let mut vs = ViewState::new();
         vs.pending_style = Some(PendingStyle {
             node_id: p1,
-            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            }],
         });
         let h = measured_line_height(&mut measurer, &doc, p1, &vs);
 
@@ -200,7 +205,9 @@ mod tests {
         let mut vs_pending = ViewState::new();
         vs_pending.pending_style = Some(PendingStyle {
             node_id: p1,
-            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            }],
         });
         let empty_pending_h = measured_line_height(&mut measurer, &empty_doc, p1, &vs_pending);
 

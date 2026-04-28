@@ -72,8 +72,8 @@ pub fn resolve_text_style(node: &NodeRef<'_>) -> ResolvedTextStyle {
 
 pub fn apply_pending_to_style(style: &mut ResolvedTextStyle, pending: &PendingModifiers) {
     for p in pending {
-        if let PendingModifier::Set(m) = p {
-            match m {
+        if let PendingModifier::Set { modifier } = p {
+            match modifier {
                 Modifier::FontFamily { value } => style.font_family = value.clone(),
                 Modifier::FontWeight { value } => style.font_weight = *value,
                 Modifier::FontSize { value } => {
@@ -154,7 +154,6 @@ mod tests {
 
     #[test]
     fn apply_pending_font_size_overrides_base() {
-        use smallvec::smallvec;
         let mut style = ResolvedTextStyle {
             font_family: "test".into(),
             font_weight: 400,
@@ -162,8 +161,9 @@ mod tests {
             letter_spacing: 0.0,
             line_height: 1.5,
         };
-        let pending: PendingModifiers =
-            smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })];
+        let pending: PendingModifiers = vec![PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        }];
         apply_pending_to_style(&mut style, &pending);
         // 96pt * (96/72) = 128px
         assert!((style.font_size - 128.0).abs() < 0.01);

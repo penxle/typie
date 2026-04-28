@@ -1,3 +1,4 @@
+use editor_macros::ffi;
 use editor_model::{DocumentAttrs, Modifier, ModifierType, Node, NodeId, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,7 @@ pub struct StepOutput {
     pub validations: Vec<Validation>,
 }
 
+#[ffi]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, EnumDiscriminants)]
 #[strum_discriminants(name(StepType))]
 #[strum_discriminants(derive(Hash, Serialize, Deserialize, IntoStaticStr))]
@@ -133,7 +135,7 @@ impl Step {
         matches!(self, Step::SetPendingModifiers { .. })
     }
 
-    pub fn is_syncable(&self) -> bool {
+    pub fn is_commitable(&self) -> bool {
         !matches!(
             self,
             Step::SetSelection { .. }
@@ -392,48 +394,146 @@ mod predicate_tests {
     use editor_state::Position;
 
     #[test]
-    fn is_syncable_true_for_insert_text() {
+    fn is_commitable_true_for_insert_text() {
         let step = Step::InsertText {
             node_id: NodeId::ROOT,
             offset: 0,
             text: "x".into(),
         };
-        assert!(step.is_syncable());
+        assert!(step.is_commitable());
     }
 
     #[test]
-    fn is_syncable_false_for_set_selection() {
+    fn is_commitable_false_for_set_selection() {
         let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
         let step = Step::SetSelection { old: sel, new: sel };
-        assert!(!step.is_syncable());
+        assert!(!step.is_commitable());
     }
 
     #[test]
-    fn is_syncable_false_for_set_composition() {
+    fn is_commitable_false_for_set_composition() {
         let step = Step::SetComposition {
             old: None,
             new: None,
         };
-        assert!(!step.is_syncable());
+        assert!(!step.is_commitable());
     }
 
     #[test]
-    fn is_syncable_false_for_set_pending_modifiers() {
+    fn is_commitable_false_for_set_pending_modifiers() {
         let step = Step::SetPendingModifiers {
             old: PendingModifiers::new(),
             new: PendingModifiers::new(),
         };
-        assert!(!step.is_syncable());
+        assert!(!step.is_commitable());
     }
 
     #[test]
-    fn is_syncable_true_for_set_document_attrs() {
+    fn is_commitable_true_for_set_document_attrs() {
         let attrs = editor_model::DocumentAttrs::default();
         let step = Step::SetDocumentAttrs {
             old: attrs.clone(),
             new: attrs,
         };
-        assert!(step.is_syncable());
+        assert!(step.is_commitable());
+    }
+
+    #[test]
+    fn is_commitable_for_all_variants_matches_spec() {
+        let node_id = NodeId::new();
+        let parent_id = NodeId::new();
+        let other_id = NodeId::new();
+        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
+        let attrs = editor_model::DocumentAttrs::default();
+        let subtree = editor_model::Subtree::leaf(
+            NodeId::new(),
+            editor_model::Node::Paragraph(editor_model::ParagraphNode::default()),
+        );
+
+        // non-commitable (3)
+        let non_commitable: Vec<Step> = vec![
+            Step::SetSelection { old: sel, new: sel },
+            Step::SetPendingModifiers {
+                old: PendingModifiers::new(),
+                new: PendingModifiers::new(),
+            },
+            Step::SetComposition {
+                old: None,
+                new: None,
+            },
+        ];
+
+        // commitable (12)
+        let commitable: Vec<Step> = vec![
+            Step::InsertText {
+                node_id,
+                offset: 0,
+                text: "x".into(),
+            },
+            Step::RemoveText {
+                node_id,
+                offset: 0,
+                text: "x".into(),
+            },
+            Step::InsertSubtree {
+                parent_id,
+                index: 0,
+                subtree: subtree.clone(),
+            },
+            Step::RemoveSubtree {
+                parent_id,
+                index: 0,
+                subtree: subtree.clone(),
+            },
+            Step::MoveNode {
+                node_id,
+                old_parent: parent_id,
+                old_index: 0,
+                new_parent: other_id,
+                new_index: 0,
+            },
+            Step::SplitNode {
+                node_id,
+                offset: 0,
+                new_node_id: other_id,
+            },
+            Step::MergeNode {
+                node_id,
+                target_id: other_id,
+                offset: 0,
+            },
+            Step::SetNode {
+                node_id,
+                old_node: Node::Paragraph(editor_model::ParagraphNode::default()),
+                new_node: Node::Paragraph(editor_model::ParagraphNode::default()),
+            },
+            Step::AddModifier {
+                node_id,
+                modifier: Modifier::Bold,
+            },
+            Step::RemoveModifier {
+                node_id,
+                modifier: Modifier::Bold,
+            },
+            Step::SetModifiers {
+                node_id,
+                old_modifiers: vec![],
+                new_modifiers: vec![Modifier::Bold],
+            },
+            Step::SetDocumentAttrs {
+                old: attrs.clone(),
+                new: attrs,
+            },
+        ];
+
+        assert_eq!(non_commitable.len() + commitable.len(), 15);
+
+        for step in &non_commitable {
+            assert!(!step.is_commitable(), "{step:?}");
+        }
+        for step in &commitable {
+            assert!(step.is_commitable(), "{step:?}");
+        }
     }
 }
 

@@ -297,23 +297,35 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
 
     if is_bold {
         let unbold = find_unbold_target(current_weight, available);
-        pending.push(PendingModifier::Unset(ModifierType::Bold));
+        pending.push(PendingModifier::Unset {
+            ty: ModifierType::Bold,
+        });
         if unbold != inherited_weight {
-            pending.push(PendingModifier::Set(Modifier::FontWeight { value: unbold }));
+            pending.push(PendingModifier::Set {
+                modifier: Modifier::FontWeight { value: unbold },
+            });
         } else {
-            pending.push(PendingModifier::Unset(ModifierType::FontWeight));
+            pending.push(PendingModifier::Unset {
+                ty: ModifierType::FontWeight,
+            });
         }
     } else {
         match find_bold_target(current_weight, available) {
             Some(target) => {
                 if target != inherited_weight {
-                    pending.push(PendingModifier::Set(Modifier::FontWeight { value: target }));
+                    pending.push(PendingModifier::Set {
+                        modifier: Modifier::FontWeight { value: target },
+                    });
                 } else {
-                    pending.push(PendingModifier::Unset(ModifierType::FontWeight));
+                    pending.push(PendingModifier::Unset {
+                        ty: ModifierType::FontWeight,
+                    });
                 }
             }
             None => {
-                pending.push(PendingModifier::Set(Modifier::Bold));
+                pending.push(PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                });
             }
         }
     }
@@ -423,7 +435,9 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
             actual.pending_modifiers.as_slice(),
-            &[PendingModifier::Set(Modifier::FontWeight { value: 700 })]
+            &[PendingModifier::Set {
+                modifier: Modifier::FontWeight { value: 700 }
+            }]
         );
     }
 
@@ -444,7 +458,9 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
             actual.pending_modifiers.as_slice(),
-            &[PendingModifier::Set(Modifier::Bold)]
+            &[PendingModifier::Set {
+                modifier: Modifier::Bold
+            }]
         );
     }
 
@@ -463,19 +479,19 @@ mod tests {
             selection: (t1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        assert!(
-            actual
-                .pending_modifiers
-                .iter()
-                .any(|pm| matches!(pm, PendingModifier::Unset(ModifierType::Bold)))
-        );
+        assert!(actual.pending_modifiers.iter().any(|pm| matches!(
+            pm,
+            PendingModifier::Unset {
+                ty: ModifierType::Bold
+            }
+        )));
         // unbold target 400 == inherited 400 → no FontWeight set
-        assert!(
-            !actual
-                .pending_modifiers
-                .iter()
-                .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight { .. })))
-        );
+        assert!(!actual.pending_modifiers.iter().any(|pm| matches!(
+            pm,
+            PendingModifier::Set {
+                modifier: Modifier::FontWeight { .. }
+            }
+        )));
     }
 
     #[test]
@@ -493,19 +509,19 @@ mod tests {
             selection: (t1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        assert!(
-            actual
-                .pending_modifiers
-                .iter()
-                .any(|pm| matches!(pm, PendingModifier::Unset(ModifierType::Bold)))
-        );
+        assert!(actual.pending_modifiers.iter().any(|pm| matches!(
+            pm,
+            PendingModifier::Unset {
+                ty: ModifierType::Bold
+            }
+        )));
         // unbold target 400 == inherited 400 → FontWeight unset (not set)
-        assert!(
-            actual
-                .pending_modifiers
-                .iter()
-                .any(|pm| matches!(pm, PendingModifier::Unset(ModifierType::FontWeight)))
-        );
+        assert!(actual.pending_modifiers.iter().any(|pm| matches!(
+            pm,
+            PendingModifier::Unset {
+                ty: ModifierType::FontWeight
+            }
+        )));
     }
 
     #[test]
@@ -525,7 +541,9 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(actual.pending_modifiers.iter().any(|pm| matches!(
             pm,
-            PendingModifier::Set(Modifier::FontWeight { value: 400 })
+            PendingModifier::Set {
+                modifier: Modifier::FontWeight { value: 400 }
+            }
         )));
     }
 
@@ -543,12 +561,12 @@ mod tests {
             selection: (t1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        assert!(
-            !actual
-                .pending_modifiers
-                .iter()
-                .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight { .. })))
-        );
+        assert!(!actual.pending_modifiers.iter().any(|pm| matches!(
+            pm,
+            PendingModifier::Set {
+                modifier: Modifier::FontWeight { .. }
+            }
+        )));
     }
 
     #[test]

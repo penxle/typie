@@ -377,7 +377,6 @@ mod tests {
         use crate::view_state::PendingStyle;
         use editor_model::Modifier;
         use editor_state::PendingModifier;
-        use smallvec::smallvec;
 
         let (doc, p1) = doc! { root { p1: paragraph } };
         let mut view = View::new_test();
@@ -387,7 +386,9 @@ mod tests {
 
         let pending_style = Some(PendingStyle {
             node_id: p1,
-            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            }],
         });
         view.reconcile(&doc, &doc, &[], pending_style);
         let pending = view.cursor_metrics(&doc, &pos).unwrap();
@@ -402,7 +403,6 @@ mod tests {
         use crate::view_state::PendingStyle;
         use editor_model::Modifier;
         use editor_state::PendingModifier;
-        use smallvec::smallvec;
 
         let (doc, p1, t1) = doc! { root { p1: paragraph { t1: text("hi") } } };
         let mut view = View::new_test();
@@ -412,7 +412,9 @@ mod tests {
 
         let pending_style = Some(PendingStyle {
             node_id: p1,
-            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+            modifiers: vec![PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            }],
         });
         view.reconcile(&doc, &doc, &[], pending_style);
         let after = view.cursor_metrics(&doc, &pos).unwrap();

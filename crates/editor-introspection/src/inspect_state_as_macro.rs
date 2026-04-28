@@ -136,9 +136,9 @@ fn write_pending_modifiers(pending: &editor_state::PendingModifiers, output: &mu
             output.push_str(", ");
         }
         match pm {
-            PendingModifier::Set(m) => write_modifier_macro(m, output),
-            PendingModifier::Unset(t) => {
-                let name: &str = (*t).into();
+            PendingModifier::Set { modifier } => write_modifier_macro(modifier, output),
+            PendingModifier::Unset { ty } => {
+                let name: &str = (*ty).into();
                 write!(output, "!{name}").unwrap();
             }
         }

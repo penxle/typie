@@ -21,7 +21,6 @@ mod tests {
     use editor_macros::state;
     use editor_model::*;
     use editor_state::*;
-    use smallvec::smallvec;
 
     use crate::*;
 
@@ -32,9 +31,11 @@ mod tests {
             selection: (t1, 0)
         };
 
-        let modifiers = smallvec![PendingModifier::Set(Modifier::Bold)];
+        let modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::Bold,
+        }];
         let step = Step::SetPendingModifiers {
-            old: smallvec![],
+            old: vec![],
             new: modifiers.clone(),
         };
         let output = step.apply(&state).unwrap();
@@ -49,9 +50,11 @@ mod tests {
             selection: (t1, 0)
         };
 
-        let modifiers = smallvec![PendingModifier::Set(Modifier::Bold)];
+        let modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::Bold,
+        }];
         let step = Step::SetPendingModifiers {
-            old: smallvec![],
+            old: vec![],
             new: modifiers,
         };
 

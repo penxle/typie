@@ -112,6 +112,24 @@ export interface Selection {
 }
 
 /**
+ * An IME composition range, expressed in flat-offset coordinates.
+ *
+ * `start` and `end` are **flat offsets** — absolute positions over the
+ * entire document, not per-node offsets. Flat offsets are defined by
+ * the flat-offset scheme implemented in this crate's `flat` module
+ * (see `FlatClass`, `ResolvedPositionFlatExt`).
+ *
+ * A composition can span multiple nodes. The set of nodes covered by
+ * a composition is computed on demand by walking the document from
+ * the flat range; `Composition` itself stores no node identity and
+ * no caching.
+ */
+export interface Composition {
+    start: number;
+    end: number;
+}
+
+/**
  * The directional bias of a [`Position`](crate::Position) at a boundary.
  *
  * Affinity disambiguates which side of a boundary a position belongs to.
@@ -148,8 +166,30 @@ export type ModifierType = "bold" | "italic" | "underline" | "strikethrough" | "
  */
 export type NodeType = "root" | "paragraph" | "blockquote" | "callout" | "text" | "bullet_list" | "ordered_list" | "list_item" | "fold" | "fold_title" | "fold_content" | "table" | "table_row" | "table_cell" | "image" | "file" | "embed" | "archived" | "hard_break" | "horizontal_rule" | "page_break";
 
+export interface AlignmentValue {
+    value: Alignment;
+}
+
 export interface ArchivedNode {
     id: string | undefined;
+}
+
+export interface BackgroundColorValue {
+    value: string;
+}
+
+export interface Block {
+    id: NodeId;
+    node: Node;
+}
+
+export interface BlockGapValue {
+    value: number;
+}
+
+export interface BlockState {
+    ancestors: Block[];
+    nodes: Block[];
 }
 
 export interface BlockquoteNode {
@@ -207,6 +247,10 @@ export interface FontFamily {
     weights: FontWeight[];
 }
 
+export interface FontFamilyValue {
+    value: string;
+}
+
 export interface FontMetadata {
     weight: number;
     style: string;
@@ -218,6 +262,14 @@ export interface FontName {
     platformId: number;
     languageId: number;
     value: string;
+}
+
+export interface FontSizeValue {
+    value: number;
+}
+
+export interface FontWeightValue {
+    value: number;
 }
 
 export interface Fragment {
@@ -265,7 +317,38 @@ export interface KeyEvent {
     modifiers?: InputModifiers;
 }
 
+export interface LetterSpacingValue {
+    value: number;
+}
+
+export interface LineHeightValue {
+    value: number;
+}
+
+export interface LinkValue {
+    href: string;
+}
+
 export interface ListItemNode {}
+
+export interface ModifierState {
+    bold: Tri<undefined>;
+    italic: Tri<undefined>;
+    underline: Tri<undefined>;
+    strikethrough: Tri<undefined>;
+    font_size: Tri<FontSizeValue>;
+    font_family: Tri<FontFamilyValue>;
+    font_weight: Tri<FontWeightValue>;
+    text_color: Tri<TextColorValue>;
+    background_color: Tri<BackgroundColorValue>;
+    letter_spacing: Tri<LetterSpacingValue>;
+    link: Tri<LinkValue>;
+    ruby: Tri<RubyValue>;
+    line_height: Tri<LineHeightValue>;
+    block_gap: Tri<BlockGapValue>;
+    paragraph_indent: Tri<ParagraphIndentValue>;
+    alignment: Tri<AlignmentValue>;
+}
 
 export interface NodeEntry {
     node: Node;
@@ -283,6 +366,10 @@ export interface PageRect {
     rect: Rect;
 }
 
+export interface ParagraphIndentValue {
+    value: number;
+}
+
 export interface ParagraphNode {}
 
 export interface Rect {
@@ -294,9 +381,20 @@ export interface Rect {
 
 export interface RootNode {}
 
+export interface RubyValue {
+    text: string;
+}
+
 export interface Size {
     width: number;
     height: number;
+}
+
+export interface Subtree {
+    id: NodeId;
+    node: Node;
+    modifiers: Modifier[];
+    children: Subtree[];
 }
 
 export interface TableCellNode {
@@ -310,8 +408,16 @@ export interface TableNode {
 
 export interface TableRowNode {}
 
+export interface TextColorValue {
+    value: string;
+}
+
 export interface TextNode {
     text: string;
+}
+
+export interface TransactionMeta {
+    history: HistoryMeta;
 }
 
 export interface Viewport {
@@ -340,7 +446,7 @@ export type Direction = "forward" | "backward";
 
 export type DocOp = { type: "set_attrs"; attrs: DocumentAttrs };
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; steps: Step[]; meta: TransactionMeta };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -350,7 +456,11 @@ export type FontData = { type: "base" } | { type: "chunk"; id: number };
 
 export type FontFamilySource = "DEFAULT" | "USER" | "FALLBACK";
 
+export type HistoryMeta = { type: "record" } | { type: "tagged"; tag: HistoryTag } | { type: "skip" };
+
 export type HistoryOp = { type: "undo" } | { type: "redo" };
+
+export type HistoryTag = { type: "auto_replacement" } | { type: "paste_html"; plain_text: string };
 
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
 
@@ -376,11 +486,17 @@ export type NodeId = string;
 
 export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: Node } | { type: "table"; id: NodeId; op: TableOp };
 
+export type PendingModifier = { type: "set"; modifier: Modifier } | { type: "unset"; ty: ModifierType };
+
+export type PendingModifiers = PendingModifier[];
+
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" };
 
 export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
-export type StateField = "doc" | "doc_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers";
+export type StateField = "doc" | "doc_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
+
+export type Step = { type: "insert_text"; node_id: NodeId; offset: number; text: string } | { type: "remove_text"; node_id: NodeId; offset: number; text: string } | { type: "insert_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "remove_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "move_node"; node_id: NodeId; old_parent: NodeId; old_index: number; new_parent: NodeId; new_index: number } | { type: "split_node"; node_id: NodeId; offset: number; new_node_id: NodeId } | { type: "merge_node"; node_id: NodeId; target_id: NodeId; offset: number } | { type: "set_node"; node_id: NodeId; old_node: Node; new_node: Node } | { type: "add_modifier"; node_id: NodeId; modifier: Modifier } | { type: "remove_modifier"; node_id: NodeId; modifier: Modifier } | { type: "set_selection"; old: Selection; new: Selection } | { type: "set_pending_modifiers"; old: PendingModifiers; new: PendingModifiers } | { type: "set_modifiers"; node_id: NodeId; old_modifiers: Modifier[]; new_modifiers: Modifier[] } | { type: "set_composition"; old: Composition | undefined; new: Composition | undefined } | { type: "set_document_attrs"; old: DocumentAttrs; new: DocumentAttrs };
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -388,17 +504,21 @@ export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
 export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined } | { type: "set_column_widths"; widths: number[] };
 
+export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
+
 
 declare class Editor {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
+    block_state(): BlockState;
     cursor(): CursorMetrics | undefined;
     document_attrs(): DocumentAttrs;
     enqueue(message: Message): void;
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
+    modifier_state(): ModifierState;
     page_sizes(): Size[];
     render_page_to_buffer(page: number, width: number, height: number): Uint8Array;
     selection(): Selection;

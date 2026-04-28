@@ -1,3 +1,4 @@
+use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 /// An IME composition range, expressed in flat-offset coordinates.
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 /// a composition is computed on demand by walking the document from
 /// the flat range; `Composition` itself stores no node identity and
 /// no caching.
+#[ffi]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Composition {
     pub start: usize,

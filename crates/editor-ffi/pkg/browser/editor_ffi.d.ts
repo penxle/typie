@@ -112,6 +112,24 @@ export interface Selection {
 }
 
 /**
+ * An IME composition range, expressed in flat-offset coordinates.
+ *
+ * `start` and `end` are **flat offsets** — absolute positions over the
+ * entire document, not per-node offsets. Flat offsets are defined by
+ * the flat-offset scheme implemented in this crate's `flat` module
+ * (see `FlatClass`, `ResolvedPositionFlatExt`).
+ *
+ * A composition can span multiple nodes. The set of nodes covered by
+ * a composition is computed on demand by walking the document from
+ * the flat range; `Composition` itself stores no node identity and
+ * no caching.
+ */
+export interface Composition {
+    start: number;
+    end: number;
+}
+
+/**
  * The directional bias of a [`Position`](crate::Position) at a boundary.
  *
  * Affinity disambiguates which side of a boundary a position belongs to.
@@ -349,6 +367,13 @@ export interface Size {
     height: number;
 }
 
+export interface Subtree {
+    id: NodeId;
+    node: Node;
+    modifiers: Modifier[];
+    children: Subtree[];
+}
+
 export interface TableCellNode {
     col_width: number | undefined;
 }
@@ -366,6 +391,10 @@ export interface TextColorValue {
 
 export interface TextNode {
     text: string;
+}
+
+export interface TransactionMeta {
+    history: HistoryMeta;
 }
 
 export interface Viewport {
@@ -394,7 +423,7 @@ export type Direction = "forward" | "backward";
 
 export type DocOp = { type: "set_attrs"; attrs: DocumentAttrs };
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; steps: Step[]; meta: TransactionMeta };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -404,7 +433,11 @@ export type FontData = { type: "base" } | { type: "chunk"; id: number };
 
 export type FontFamilySource = "DEFAULT" | "USER" | "FALLBACK";
 
+export type HistoryMeta = { type: "record" } | { type: "tagged"; tag: HistoryTag } | { type: "skip" };
+
 export type HistoryOp = { type: "undo" } | { type: "redo" };
+
+export type HistoryTag = { type: "auto_replacement" } | { type: "paste_html"; plain_text: string };
 
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
 
@@ -430,11 +463,17 @@ export type NodeId = string;
 
 export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: Node } | { type: "table"; id: NodeId; op: TableOp };
 
+export type PendingModifier = { type: "set"; modifier: Modifier } | { type: "unset"; ty: ModifierType };
+
+export type PendingModifiers = PendingModifier[];
+
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" };
 
 export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
 export type StateField = "doc" | "doc_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
+
+export type Step = { type: "insert_text"; node_id: NodeId; offset: number; text: string } | { type: "remove_text"; node_id: NodeId; offset: number; text: string } | { type: "insert_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "remove_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "move_node"; node_id: NodeId; old_parent: NodeId; old_index: number; new_parent: NodeId; new_index: number } | { type: "split_node"; node_id: NodeId; offset: number; new_node_id: NodeId } | { type: "merge_node"; node_id: NodeId; target_id: NodeId; offset: number } | { type: "set_node"; node_id: NodeId; old_node: Node; new_node: Node } | { type: "add_modifier"; node_id: NodeId; modifier: Modifier } | { type: "remove_modifier"; node_id: NodeId; modifier: Modifier } | { type: "set_selection"; old: Selection; new: Selection } | { type: "set_pending_modifiers"; old: PendingModifiers; new: PendingModifiers } | { type: "set_modifiers"; node_id: NodeId; old_modifiers: Modifier[]; new_modifiers: Modifier[] } | { type: "set_composition"; old: Composition | undefined; new: Composition | undefined } | { type: "set_document_attrs"; old: DocumentAttrs; new: DocumentAttrs };
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 

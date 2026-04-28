@@ -63,9 +63,9 @@ mod tests {
         });
         assert_eq!(
             editor.state().pending_modifiers.as_slice(),
-            &[editor_state::PendingModifier::Set(
-                editor_model::Modifier::Italic
-            )]
+            &[editor_state::PendingModifier::Set {
+                modifier: editor_model::Modifier::Italic
+            }]
         );
     }
 
@@ -87,9 +87,9 @@ mod tests {
         });
         assert_eq!(
             editor.state().pending_modifiers.as_slice(),
-            &[editor_state::PendingModifier::Set(
-                editor_model::Modifier::FontSize { value: 2400 }
-            )]
+            &[editor_state::PendingModifier::Set {
+                modifier: editor_model::Modifier::FontSize { value: 2400 }
+            }]
         );
     }
 }

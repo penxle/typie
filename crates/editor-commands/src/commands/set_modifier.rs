@@ -86,9 +86,11 @@ fn set_modifier_collapsed(tr: &mut Transaction, modifier: &Modifier) -> CommandR
         .collect();
 
     if inherited_value == Some(modifier) {
-        pending.push(PendingModifier::Unset(modifier_type));
+        pending.push(PendingModifier::Unset { ty: modifier_type });
     } else {
-        pending.push(PendingModifier::Set(modifier.clone()));
+        pending.push(PendingModifier::Set {
+            modifier: modifier.clone(),
+        });
     }
 
     tr.set_pending_modifiers(pending)?;
