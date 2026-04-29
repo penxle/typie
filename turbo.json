@@ -1,8 +1,9 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "remoteCache": {
-    "apiUrl": "https://turbo.penxle.io",
-    "teamSlug": "typie"
+    "apiUrl": "https://tdukab2pwvanvnh37p3qpjlgya0fkaes.lambda-url.ap-northeast-2.on.aws",
+    "teamSlug": "typie",
+    "preflight": true
   },
   "globalEnv": ["NODE_ENV"],
   "tasks": {
