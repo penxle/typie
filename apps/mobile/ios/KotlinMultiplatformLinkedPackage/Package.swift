@@ -14,7 +14,7 @@ let package = Package(
   ],
   dependencies: [
     .package(
-      path: "../Bridge",
+      path: "../Bridge"
     )
   ],
   targets: [
@@ -23,7 +23,7 @@ let package = Package(
       dependencies: [
         .product(
           name: "Bridge",
-          package: "Bridge",
+          package: "Bridge"
         )
       ]
     )

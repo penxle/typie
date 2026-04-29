@@ -31,11 +31,11 @@ val aboutLibrariesComposeResourceFile =
   layout.projectDirectory.file("src/commonMain/composeResources/files/aboutlibraries.json")
 
 plugins {
+  alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.kotlin.multiplatform)
   alias(libs.plugins.android.multiplatformLibrary)
   alias(libs.plugins.compose.multiplatform)
   alias(libs.plugins.compose.compiler)
-  alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.apollo)
   alias(libs.plugins.aboutLibraries)
   alias(libs.plugins.buildkonfig)
