@@ -50,30 +50,37 @@ internal enum class ToolbarFixedAction {
   DismissInput,
 }
 
-internal data class KeyboardSpaceAnchor(val inset: Dp)
+internal sealed interface PanelKeyboardSpace {
+  val inset: Dp
 
-internal data class KeyboardRestore(val anchor: KeyboardSpaceAnchor)
+  data class FollowIme(override val inset: Dp) : PanelKeyboardSpace
+
+  data class Fixed(override val inset: Dp, val restoreKeyboardOnClose: Boolean) : PanelKeyboardSpace
+}
 
 internal data class PanelSession(
   val key: EditorToolbarBottomPanelKey,
   val height: Dp,
-  val keyboardSpace: KeyboardSpaceAnchor?,
+  val keyboardSpace: PanelKeyboardSpace?,
 )
+
+internal data class PanelSnapshot(val key: EditorToolbarBottomPanelKey, val height: Dp)
+
+private data class ImeObservation(val visible: Boolean = false, val hideEventVersion: Int = 0)
 
 @Stable
 internal class EditorToolbarInputState {
   var panel by mutableStateOf<PanelSession?>(null)
     private set
 
-  var keyboardRestore by mutableStateOf<KeyboardRestore?>(null)
+  var keyboardRestoreInset by mutableStateOf<Dp?>(null)
     private set
 
   var rememberedKeyboardInset by mutableStateOf(0.dp)
     private set
 
-  private var previousSoftwareKeyboardVisible by mutableStateOf(false)
-  private var lastPanel by mutableStateOf<EditorToolbarBottomPanelKey?>(null)
-  private var lastPanelHeight by mutableStateOf(ToolbarBottomPanelHeight)
+  private var previousIme by mutableStateOf(ImeObservation())
+  private var lastPanelSnapshot by mutableStateOf<PanelSnapshot?>(null)
   private var queuedEffects by mutableStateOf(emptyList<ToolbarEffect>())
   var effectVersion by mutableIntStateOf(0)
     private set
@@ -82,82 +89,99 @@ internal class EditorToolbarInputState {
     get() = panel?.key
 
   val lastBottomPanel: EditorToolbarBottomPanelKey?
-    get() = lastPanel
+    get() = lastPanelSnapshot?.key
 
   val lastBottomPanelHeight: Dp
-    get() = lastPanelHeight
+    get() = lastPanelSnapshot?.height ?: ToolbarBottomPanelHeight
 
   fun retainedKeyboardInset(): Dp =
     maxOf(
       rememberedKeyboardInset,
-      keyboardRestore?.anchor?.inset ?: 0.dp,
+      keyboardRestoreInset ?: 0.dp,
       panel?.keyboardSpace?.inset ?: 0.dp,
     )
 
   fun onEnvironmentChanged(environment: ToolbarInputEnvironment) {
     if (!environment.visible) {
       reset()
-      previousSoftwareKeyboardVisible = false
+      previousIme = ImeObservation(hideEventVersion = environment.keyboardState.imeHideEventVersion)
       return
     }
 
-    if (environment.keyboardType == EditorKeyboardType.Hardware) {
-      keyboardRestore = null
+    val panelRetainsHiddenImeSpace = panel?.keyboardSpace?.retainsPanelSpaceWhenImeHidden == true
+    if (
+      !environment.keyboardState.usesImeInset &&
+        !panelRetainsHiddenImeSpace &&
+        keyboardRestoreInset == null
+    ) {
       rememberedKeyboardInset = 0.dp
     }
 
     val effectiveImeInset = effectiveImeInset(environment)
-    val softwareKeyboardVisible =
-      isSoftwareKeyboardVisible(
-        imeBottom = effectiveImeInset,
-        safeBottomInset = environment.safeBottomInset,
+    val imeVisible =
+      isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = environment.safeBottomInset)
+    val currentIme =
+      ImeObservation(
+        visible = imeVisible,
+        hideEventVersion = environment.keyboardState.imeHideEventVersion,
       )
     val editorInputActive =
       environment.focused || panel != null || retainedKeyboardInset() > environment.safeBottomInset
+    val imeHideEvent = currentIme.hideEventVersion != previousIme.hideEventVersion
 
     if (!editorInputActive) {
-      keyboardRestore = null
+      keyboardRestoreInset = null
       rememberedKeyboardInset = 0.dp
-      previousSoftwareKeyboardVisible = softwareKeyboardVisible
+      previousIme = currentIme
       return
     }
 
-    val currentPanel = panel
-    if (currentPanel != null && !previousSoftwareKeyboardVisible && softwareKeyboardVisible) {
-      lastPanel = currentPanel.key
-      lastPanelHeight = currentPanel.height
-      keyboardRestore = null
+    var currentPanel = panel
+    if (imeHideEvent && !previousIme.visible && !imeVisible && environment.panelTransitionIdle) {
+      val nextPanel = currentPanel?.withoutKeyboardRestoreOnClose()
+      if (nextPanel != currentPanel) {
+        currentPanel = nextPanel
+        panel = nextPanel
+      }
+    }
+
+    if (currentPanel != null && !previousIme.visible && imeVisible) {
+      lastPanelSnapshot = currentPanel.snapshot()
+      keyboardRestoreInset = null
       rememberedKeyboardInset =
         visibleImeInsetOrZero(effectiveImeInset, environment.safeBottomInset)
       panel = null
-      previousSoftwareKeyboardVisible = softwareKeyboardVisible
+      previousIme = currentIme
       return
     }
 
     if (
-      currentPanel?.keyboardSpace != null && environment.keyboardType == EditorKeyboardType.Hardware
+      currentPanel?.keyboardSpace != null &&
+        environment.keyboardType == EditorKeyboardType.Hardware &&
+        !environment.keyboardState.usesImeInset &&
+        !currentPanel.keyboardSpace.retainsPanelSpaceWhenImeHidden
     ) {
       panel = currentPanel.copy(height = ToolbarBottomPanelMinHeight, keyboardSpace = null)
-      lastPanelHeight = ToolbarBottomPanelMinHeight
+      lastPanelSnapshot = PanelSnapshot(currentPanel.key, ToolbarBottomPanelMinHeight)
     }
 
-    if (keyboardRestore != null) {
-      syncKeyboardRestore(environment, effectiveImeInset, softwareKeyboardVisible)
-    } else if (softwareKeyboardVisible) {
+    if (keyboardRestoreInset != null) {
+      syncKeyboardRestore(environment, effectiveImeInset, imeVisible)
+    } else if (imeVisible) {
       rememberKeyboardInset(
         effectiveImeInset = effectiveImeInset,
         safeBottomInset = environment.safeBottomInset,
-        preserveCurrentInset = panel != null,
+        preserveCurrentInset = panel != null || previousIme.visible,
       )
     }
 
-    previousSoftwareKeyboardVisible = softwareKeyboardVisible
+    previousIme = currentIme
   }
 
   fun dispatch(intent: ToolbarIntent, environment: ToolbarInputEnvironment) {
     when (intent) {
       is ToolbarIntent.OpenPanel -> openPanel(intent.panel, environment)
-      ToolbarIntent.RestoreEditorInput -> restoreEditorInput()
+      ToolbarIntent.RestoreEditorInput -> restoreEditorInput(environment)
       ToolbarIntent.DismissInput -> dismissInput(environment)
       ToolbarIntent.Reset -> reset()
     }
@@ -176,41 +200,37 @@ internal class EditorToolbarInputState {
     val currentPanel = panel
     if (currentPanel != null) {
       if (currentPanel.key == panelKey) {
-        restoreEditorInput()
+        restoreEditorInput(environment)
       } else {
         panel = currentPanel.copy(key = panelKey)
-        lastPanel = panelKey
+        lastPanelSnapshot = PanelSnapshot(panelKey, currentPanel.height)
       }
       return
     }
 
-    val currentRestore = keyboardRestore
+    val currentRestoreInset = keyboardRestoreInset
     val effectiveImeInset = effectiveImeInset(environment)
-    val softwareKeyboardVisible =
-      isSoftwareKeyboardVisible(
-        imeBottom = effectiveImeInset,
-        safeBottomInset = environment.safeBottomInset,
-      )
+    val imeVisible =
+      isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = environment.safeBottomInset)
     val observedInset = visibleImeInsetOrZero(effectiveImeInset, environment.safeBottomInset)
+    val keyboardSpaceInset = maxOf(observedInset, rememberedKeyboardInset)
     val keyboardSpace =
       when {
-        currentRestore != null -> currentRestore.anchor
-        softwareKeyboardVisible -> KeyboardSpaceAnchor(inset = observedInset)
+        currentRestoreInset != null -> panelKeyboardSpace(currentRestoreInset, environment)
+        imeVisible -> panelKeyboardSpace(keyboardSpaceInset, environment)
         rememberedKeyboardInset > environment.safeBottomInset + ToolbarBottomPanelGap ->
-          KeyboardSpaceAnchor(inset = rememberedKeyboardInset)
+          PanelKeyboardSpace.FollowIme(inset = rememberedKeyboardInset)
         else -> null
       }
     val panelHeight =
       keyboardSpace?.panelHeight(environment.safeBottomInset)
-        ?: if (
-          environment.keyboardType == EditorKeyboardType.Hardware && !softwareKeyboardVisible
-        ) {
+        ?: if (environment.keyboardType == EditorKeyboardType.Hardware && !imeVisible) {
           ToolbarBottomPanelMinHeight
         } else {
           ToolbarBottomPanelHeight
         }
 
-    keyboardRestore = null
+    keyboardRestoreInset = null
     rememberedKeyboardInset =
       if (keyboardSpace != null) {
         maxOf(rememberedKeyboardInset, keyboardSpace.inset)
@@ -218,15 +238,14 @@ internal class EditorToolbarInputState {
         0.dp
       }
     panel = PanelSession(key = panelKey, height = panelHeight, keyboardSpace = keyboardSpace)
-    lastPanel = panelKey
-    lastPanelHeight = panelHeight
+    lastPanelSnapshot = PanelSnapshot(panelKey, panelHeight)
 
-    if (softwareKeyboardVisible || currentRestore != null) {
+    if (imeVisible || currentRestoreInset != null) {
       emit(ToolbarEffect.HideKeyboard)
     }
   }
 
-  private fun restoreEditorInput() {
+  private fun restoreEditorInput(environment: ToolbarInputEnvironment) {
     val currentPanel = panel
     if (currentPanel == null) {
       emit(ToolbarEffect.RequestFocus)
@@ -234,41 +253,36 @@ internal class EditorToolbarInputState {
     }
 
     val keyboardSpace = currentPanel.keyboardSpace
+    val restoreKeyboard =
+      keyboardSpace != null &&
+        (environment.keyboardState.usesImeInset || keyboardSpace.restoresKeyboardOnClose)
 
-    lastPanel = currentPanel.key
-    lastPanelHeight = currentPanel.height
-    keyboardRestore = keyboardSpace?.let { KeyboardRestore(anchor = it) }
-    if (keyboardSpace == null) {
+    lastPanelSnapshot = currentPanel.snapshot()
+    keyboardRestoreInset = keyboardSpace?.inset?.takeIf { restoreKeyboard }
+    if (!restoreKeyboard) {
       rememberedKeyboardInset = 0.dp
     }
     panel = null
 
     emit(ToolbarEffect.RequestFocus)
-    if (keyboardSpace != null) {
+    if (restoreKeyboard) {
       emit(ToolbarEffect.ShowKeyboard)
     }
   }
 
   private fun dismissInput(environment: ToolbarInputEnvironment) {
     if (panel != null) {
-      restoreEditorInput()
+      restoreEditorInput(environment)
       return
     }
 
     val effectiveImeInset = effectiveImeInset(environment)
-    val softwareKeyboardVisible =
-      isSoftwareKeyboardVisible(
-        imeBottom = effectiveImeInset,
-        safeBottomInset = environment.safeBottomInset,
-      )
+    val imeVisible =
+      isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = environment.safeBottomInset)
     val fixedAction =
-      fixedActionFor(
-        activePanel = null,
-        environment = environment,
-        softwareKeyboardVisible = softwareKeyboardVisible,
-      )
+      fixedActionFor(activePanel = null, environment = environment, imeVisible = imeVisible)
 
-    keyboardRestore = null
+    keyboardRestoreInset = null
     rememberedKeyboardInset = 0.dp
     if (fixedAction == ToolbarFixedAction.DismissInput) {
       emit(ToolbarEffect.HideKeyboard)
@@ -280,29 +294,27 @@ internal class EditorToolbarInputState {
 
   private fun reset() {
     panel = null
-    keyboardRestore = null
+    keyboardRestoreInset = null
     rememberedKeyboardInset = 0.dp
-    lastPanel = null
-    lastPanelHeight = ToolbarBottomPanelHeight
+    lastPanelSnapshot = null
     queuedEffects = emptyList()
+    previousIme = ImeObservation()
   }
 
   private fun syncKeyboardRestore(
     environment: ToolbarInputEnvironment,
     effectiveImeInset: Dp,
-    softwareKeyboardVisible: Boolean,
+    imeVisible: Boolean,
   ) {
-    val restore = keyboardRestore ?: return
+    val restoreInset = keyboardRestoreInset ?: return
     when {
-      softwareKeyboardVisible &&
-        environment.panelTransitionIdle &&
-        effectiveImeInset >= restore.anchor.inset -> {
-        keyboardRestore = null
+      imeVisible && environment.panelTransitionIdle && effectiveImeInset >= restoreInset -> {
+        keyboardRestoreInset = null
         rememberedKeyboardInset =
           visibleImeInsetOrZero(effectiveImeInset, environment.safeBottomInset)
       }
-      !environment.focused && !softwareKeyboardVisible && environment.panelTransitionIdle -> {
-        keyboardRestore = null
+      !environment.focused && !imeVisible && environment.panelTransitionIdle -> {
+        keyboardRestoreInset = null
         rememberedKeyboardInset = 0.dp
       }
     }
@@ -332,33 +344,64 @@ internal fun visibleImeInsetOrZero(effectiveImeInset: Dp, safeBottomInset: Dp): 
   if (effectiveImeInset > safeBottomInset) effectiveImeInset else 0.dp
 
 internal fun effectiveImeInset(environment: ToolbarInputEnvironment): Dp =
-  if (environment.keyboardType == EditorKeyboardType.Software) environment.imeBottom else 0.dp
+  if (environment.keyboardState.usesImeInset) environment.imeBottom else 0.dp
 
-private fun KeyboardSpaceAnchor.panelHeight(safeBottomInset: Dp): Dp =
+private fun PanelKeyboardSpace.panelHeight(safeBottomInset: Dp): Dp =
   (maxOf(inset, safeBottomInset + ToolbarBottomPanelGap + ToolbarBottomPanelMinHeight) -
       safeBottomInset -
       ToolbarBottomPanelGap)
     .coerceAtLeast(0.dp)
 
+private fun panelKeyboardSpace(
+  inset: Dp,
+  environment: ToolbarInputEnvironment,
+): PanelKeyboardSpace =
+  if (environment.keyboardType == EditorKeyboardType.Hardware) {
+    PanelKeyboardSpace.Fixed(inset = inset, restoreKeyboardOnClose = true)
+  } else {
+    PanelKeyboardSpace.FollowIme(inset = inset)
+  }
+
+private fun PanelSession.withoutKeyboardRestoreOnClose(): PanelSession =
+  when (val space = keyboardSpace) {
+    is PanelKeyboardSpace.Fixed -> copy(keyboardSpace = space.copy(restoreKeyboardOnClose = false))
+    is PanelKeyboardSpace.FollowIme,
+    null -> this
+  }
+
+private fun PanelSession.snapshot(): PanelSnapshot = PanelSnapshot(key, height)
+
+private val PanelKeyboardSpace.retainsPanelSpaceWhenImeHidden: Boolean
+  get() =
+    when (this) {
+      is PanelKeyboardSpace.Fixed -> true
+      is PanelKeyboardSpace.FollowIme -> false
+    }
+
+private val PanelKeyboardSpace.restoresKeyboardOnClose: Boolean
+  get() =
+    when (this) {
+      is PanelKeyboardSpace.Fixed -> restoreKeyboardOnClose
+      is PanelKeyboardSpace.FollowIme -> false
+    }
+
 internal fun fixedActionFor(
   activePanel: EditorToolbarBottomPanelKey?,
   environment: ToolbarInputEnvironment,
-  softwareKeyboardVisible: Boolean,
+  imeVisible: Boolean,
 ): ToolbarFixedAction =
   when {
     activePanel != null -> ToolbarFixedAction.ClosePanel
-    environment.keyboardType == EditorKeyboardType.Hardware && !softwareKeyboardVisible ->
+    environment.keyboardType == EditorKeyboardType.Hardware && !imeVisible ->
       ToolbarFixedAction.HideToolbar
     else -> ToolbarFixedAction.DismissInput
   }
 
 internal fun textInputSessionEnabledForBottomPanel(
   environment: ToolbarInputEnvironment,
-  softwareKeyboardVisible: Boolean,
+  imeVisible: Boolean,
   suppressSoftwareKeyboard: Boolean,
 ): Boolean =
-  suppressSoftwareKeyboard ||
-    softwareKeyboardVisible ||
-    (environment.keyboardType == EditorKeyboardType.Hardware && !softwareKeyboardVisible)
+  suppressSoftwareKeyboard || imeVisible || environment.keyboardType == EditorKeyboardType.Hardware
 
 internal fun suppressSoftwareKeyboard(panel: PanelSession): Boolean = panel.keyboardSpace != null

@@ -66,7 +66,7 @@ import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMi
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarInputEnvironment
 import co.typie.screen.editor.editor.toolbar.effectiveImeInset
-import co.typie.screen.editor.editor.toolbar.isSoftwareKeyboardVisible
+import co.typie.screen.editor.editor.toolbar.isImeVisible
 import co.typie.screen.editor.editor.toolbar.rememberEditorKeyboardState
 import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarInputState
 import co.typie.screen.editor.editor.toolbar.rememberToolbarPagerState
@@ -196,14 +196,10 @@ fun EditorScreen(entityId: String) {
       )
     val toolbarPanel = toolbarInputState.panel
     val toolbarEffectiveImeInset = effectiveImeInset(toolbarInputEnvironment)
-    val softwareKeyboardVisible =
-      isSoftwareKeyboardVisible(
-        imeBottom = toolbarEffectiveImeInset,
-        safeBottomInset = bottomSafeInset,
-      )
-    val previousSoftwareKeyboardVisible = remember { mutableStateOf(softwareKeyboardVisible) }
-    val softwareKeyboardAppearing =
-      !previousSoftwareKeyboardVisible.value && softwareKeyboardVisible
+    val imeVisible =
+      isImeVisible(imeBottom = toolbarEffectiveImeInset, safeBottomInset = bottomSafeInset)
+    val previousImeVisible = remember { mutableStateOf(imeVisible) }
+    val imeAppearing = !previousImeVisible.value && imeVisible
     val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
     val toolbarBottomOcclusionTarget =
       if (toolbarPanel != null) {
@@ -217,7 +213,7 @@ fun EditorScreen(entityId: String) {
       animateDpAsState(
         targetValue = toolbarBottomOcclusionTarget,
         animationSpec =
-          if (softwareKeyboardAppearing) {
+          if (imeAppearing) {
             snap()
           } else if (previousBottomPanelOpen.value != bottomPanelOpen) {
             tween(
@@ -244,9 +240,7 @@ fun EditorScreen(entityId: String) {
         rawBottomSafeInset = bottomSafeInset.value,
         rawImeInset = toolbarBottomOcclusion.value.value,
       )
-    LaunchedEffect(softwareKeyboardVisible, bottomPanelOpen) {
-      previousSoftwareKeyboardVisible.value = softwareKeyboardVisible
-    }
+    LaunchedEffect(imeVisible, bottomPanelOpen) { previousImeVisible.value = imeVisible }
     LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
       zoomController.syncLayout(
         layoutSpec = layoutSpec,
@@ -326,7 +320,7 @@ fun EditorScreen(entityId: String) {
       toolbarPanel?.let {
         textInputSessionEnabledForBottomPanel(
           environment = toolbarInputEnvironment,
-          softwareKeyboardVisible = softwareKeyboardVisible,
+          imeVisible = imeVisible,
           suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
         )
       } ?: true

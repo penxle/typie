@@ -57,15 +57,12 @@ internal fun EditorToolbarHost(
   val panelTransitionIdle = bottomPanelTransition.currentState == bottomPanelTransition.targetState
   val hostEnvironment = environment.copy(panelTransitionIdle = panelTransitionIdle)
   val effectiveImeInset = effectiveImeInset(hostEnvironment)
-  val softwareKeyboardVisible =
-    isSoftwareKeyboardVisible(
-      imeBottom = effectiveImeInset,
-      safeBottomInset = hostEnvironment.safeBottomInset,
-    )
+  val imeVisible =
+    isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = hostEnvironment.safeBottomInset)
   val retainedKeyboardInset = inputState.retainedKeyboardInset()
   val inputBottomInset =
     maxOf(effectiveImeInset, retainedKeyboardInset, hostEnvironment.safeBottomInset)
-  val restoringKeyboard = inputState.keyboardRestore != null
+  val restoringKeyboard = inputState.keyboardRestoreInset != null
   val bottomPanelHeight = panel?.height ?: inputState.lastBottomPanelHeight
   val bottomPanelContainerHeight = panel?.let { ToolbarBottomPanelGap + it.height } ?: 0.dp
   val lastBottomPanelContainerHeight = ToolbarBottomPanelGap + inputState.lastBottomPanelHeight
@@ -92,7 +89,7 @@ internal fun EditorToolbarHost(
     fixedActionFor(
       activePanel = activeBottomPanel,
       environment = hostEnvironment,
-      softwareKeyboardVisible = softwareKeyboardVisible,
+      imeVisible = imeVisible,
     )
   val animatePanelHeight =
     if (panel != null) {
@@ -114,8 +111,8 @@ internal fun EditorToolbarHost(
     }
   }
 
-  val previousSoftwareKeyboardVisible = remember { mutableStateOf(softwareKeyboardVisible) }
-  val softwareKeyboardAppearing = !previousSoftwareKeyboardVisible.value && softwareKeyboardVisible
+  val previousImeVisible = remember { mutableStateOf(imeVisible) }
+  val imeAppearing = !previousImeVisible.value && imeVisible
   val panelVisibilityChanged =
     bottomPanelTransition.currentState != bottomPanelTransition.targetState
   val panelAnimationSpec =
@@ -133,7 +130,7 @@ internal fun EditorToolbarHost(
     }
   val spacerAnimationSpec =
     when {
-      softwareKeyboardAppearing -> snap()
+      imeAppearing -> snap()
       !animatePanelHeight -> snap()
       panelVisibilityChanged ->
         tween<Dp>(
@@ -162,7 +159,7 @@ internal fun EditorToolbarHost(
         bottomPanelLayoutHeight)
       .coerceAtLeast(0.dp)
 
-  SideEffect { previousSoftwareKeyboardVisible.value = softwareKeyboardVisible }
+  SideEffect { previousImeVisible.value = imeVisible }
 
   AnimatedVisibility(
     visible = toolbarVisible,

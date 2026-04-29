@@ -18,7 +18,7 @@ class ToolbarInputStateTest {
       PanelSession(
         key = EditorToolbarBottomPanelKey.Insert,
         height = 288.dp,
-        keyboardSpace = KeyboardSpaceAnchor(inset = 320.dp),
+        keyboardSpace = PanelKeyboardSpace.FollowIme(inset = 320.dp),
       ),
       state.panel,
     )
@@ -33,21 +33,27 @@ class ToolbarInputStateTest {
       listOf(ToolbarEffect.RequestFocus, ToolbarEffect.ShowKeyboard),
       state.takeEffects(),
     )
-    assertEquals(320.dp, state.keyboardRestore?.anchor?.inset)
+    assertEquals(320.dp, state.keyboardRestoreInset)
     assertEquals(null, state.panel)
     assertEquals(EditorToolbarBottomPanelKey.Insert, state.lastBottomPanel)
+
+    val hiddenRestoring = keyboardHidden.copy(panelTransitionIdle = false)
+    state.onEnvironmentChanged(hiddenRestoring)
+
+    assertEquals(320.dp, state.keyboardRestoreInset)
+    assertEquals(320.dp, state.retainedKeyboardInset())
 
     val restoring = toolbarInputEnvironment(imeBottom = 95.dp, panelTransitionIdle = false)
     state.onEnvironmentChanged(restoring)
 
-    assertEquals(320.dp, state.keyboardRestore?.anchor?.inset)
+    assertEquals(320.dp, state.keyboardRestoreInset)
     assertEquals(288.dp, state.lastBottomPanelHeight)
 
     val restored = toolbarInputEnvironment(imeBottom = 320.dp, panelTransitionIdle = true)
     state.onEnvironmentChanged(restored)
 
     assertEquals(null, state.panel)
-    assertEquals(null, state.keyboardRestore)
+    assertEquals(null, state.keyboardRestoreInset)
     assertEquals(320.dp, effectiveImeInset(restored))
   }
 
@@ -151,7 +157,7 @@ class ToolbarInputStateTest {
     state.dispatch(ToolbarIntent.RestoreEditorInput, staleHardwareIme)
 
     assertEquals(null, state.panel)
-    assertEquals(null, state.keyboardRestore)
+    assertEquals(null, state.keyboardRestoreInset)
     assertEquals(0.dp, state.retainedKeyboardInset())
     assertEquals(listOf(ToolbarEffect.RequestFocus), state.takeEffects())
   }
@@ -171,6 +177,196 @@ class ToolbarInputStateTest {
     assertEquals(180.dp, state.panel?.height)
     assertEquals(null, state.panel?.keyboardSpace)
     assertEquals(0.dp, effectiveImeInset(environment))
+  }
+
+  @Test
+  fun hardware_keyboard_with_visible_ime_frame_uses_keyboard_space() {
+    val state = EditorToolbarInputState()
+    val environment =
+      toolbarInputEnvironment(
+        imeBottom = 320.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeFrameVisible = true),
+      )
+
+    state.onEnvironmentChanged(environment)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), environment)
+
+    assertEquals(320.dp, effectiveImeInset(environment))
+    assertEquals(288.dp, state.panel?.height)
+    assertEquals(
+      PanelKeyboardSpace.Fixed(inset = 320.dp, restoreKeyboardOnClose = true),
+      state.panel?.keyboardSpace,
+    )
+    assertEquals(listOf(ToolbarEffect.HideKeyboard), state.takeEffects())
+  }
+
+  @Test
+  fun hardware_keyboard_panel_keeps_keyboard_space_after_hide() {
+    val state = EditorToolbarInputState()
+    val visibleIme =
+      toolbarInputEnvironment(
+        imeBottom = 320.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeFrameVisible = true),
+      )
+
+    state.onEnvironmentChanged(visibleIme)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
+    state.takeEffects()
+
+    val hiddenIme =
+      toolbarInputEnvironment(
+        imeBottom = 0.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1),
+        panelTransitionIdle = false,
+      )
+    state.onEnvironmentChanged(hiddenIme)
+
+    assertEquals(288.dp, state.panel?.height)
+    assertEquals(
+      PanelKeyboardSpace.Fixed(inset = 320.dp, restoreKeyboardOnClose = true),
+      state.panel?.keyboardSpace,
+    )
+    assertEquals(true, suppressSoftwareKeyboard(requireNotNull(state.panel)))
+  }
+
+  @Test
+  fun closing_hardware_keyboard_space_panel_after_panel_hides_ime_restores_keyboard() {
+    val state = EditorToolbarInputState()
+    val visibleIme =
+      toolbarInputEnvironment(
+        imeBottom = 320.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeFrameVisible = true),
+      )
+
+    state.onEnvironmentChanged(visibleIme)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
+    state.takeEffects()
+
+    val hiddenIme =
+      toolbarInputEnvironment(
+        imeBottom = 0.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1),
+        panelTransitionIdle = false,
+      )
+    state.onEnvironmentChanged(hiddenIme)
+    state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenIme)
+    state.onEnvironmentChanged(hiddenIme.copy(panelTransitionIdle = false))
+
+    assertEquals(null, state.panel)
+    assertEquals(320.dp, state.keyboardRestoreInset)
+    assertEquals(320.dp, state.retainedKeyboardInset())
+    assertEquals(
+      listOf(ToolbarEffect.RequestFocus, ToolbarEffect.ShowKeyboard),
+      state.takeEffects(),
+    )
+  }
+
+  @Test
+  fun duplicated_panel_hide_event_during_transition_still_restores_keyboard() {
+    val state = EditorToolbarInputState()
+    val visibleIme =
+      toolbarInputEnvironment(
+        imeBottom = 320.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeFrameVisible = true),
+      )
+
+    state.onEnvironmentChanged(visibleIme)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
+    state.takeEffects()
+
+    val hiddenFrame =
+      toolbarInputEnvironment(
+        imeBottom = 0.dp,
+        keyboardState = EditorKeyboardState(type = EditorKeyboardType.Hardware),
+        panelTransitionIdle = false,
+      )
+    state.onEnvironmentChanged(hiddenFrame)
+
+    val hiddenEvent =
+      hiddenFrame.copy(
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1)
+      )
+    state.onEnvironmentChanged(hiddenEvent)
+    state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenEvent)
+
+    assertEquals(320.dp, state.keyboardRestoreInset)
+    assertEquals(
+      listOf(ToolbarEffect.RequestFocus, ToolbarEffect.ShowKeyboard),
+      state.takeEffects(),
+    )
+  }
+
+  @Test
+  fun closing_hardware_keyboard_space_panel_after_user_hides_ime_does_not_restore_keyboard() {
+    val state = EditorToolbarInputState()
+    val visibleIme =
+      toolbarInputEnvironment(
+        imeBottom = 320.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeFrameVisible = true),
+      )
+
+    state.onEnvironmentChanged(visibleIme)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
+    state.takeEffects()
+
+    val panelHiddenIme =
+      toolbarInputEnvironment(
+        imeBottom = 0.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1),
+        panelTransitionIdle = false,
+      )
+    state.onEnvironmentChanged(panelHiddenIme)
+    state.onEnvironmentChanged(panelHiddenIme.copy(panelTransitionIdle = true))
+
+    val userHiddenIme =
+      toolbarInputEnvironment(
+        imeBottom = 0.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 2),
+      )
+    state.onEnvironmentChanged(userHiddenIme)
+    state.dispatch(ToolbarIntent.RestoreEditorInput, userHiddenIme)
+
+    assertEquals(null, state.panel)
+    assertEquals(null, state.keyboardRestoreInset)
+    assertEquals(0.dp, state.rememberedKeyboardInset)
+    assertEquals(0.dp, state.retainedKeyboardInset())
+    assertEquals(listOf(ToolbarEffect.RequestFocus), state.takeEffects())
+  }
+
+  @Test
+  fun hardware_keyboard_panel_closes_when_software_keyboard_reappears() {
+    val state = EditorToolbarInputState()
+    val visibleIme =
+      toolbarInputEnvironment(
+        imeBottom = 320.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeFrameVisible = true),
+      )
+
+    state.onEnvironmentChanged(visibleIme)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
+    state.takeEffects()
+
+    val hiddenIme =
+      toolbarInputEnvironment(
+        imeBottom = 0.dp,
+        keyboardState = EditorKeyboardState(type = EditorKeyboardType.Hardware),
+      )
+    state.onEnvironmentChanged(hiddenIme)
+    state.onEnvironmentChanged(visibleIme)
+
+    assertEquals(null, state.panel)
+    assertEquals(320.dp, state.rememberedKeyboardInset)
   }
 
   @Test

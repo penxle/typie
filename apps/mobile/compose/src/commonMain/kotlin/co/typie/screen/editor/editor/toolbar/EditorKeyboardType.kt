@@ -8,9 +8,15 @@ internal enum class EditorKeyboardType {
   Hardware,
 }
 
-internal data class EditorKeyboardState(val type: EditorKeyboardType)
+internal data class EditorKeyboardState(
+  val type: EditorKeyboardType,
+  val imeFrameVisible: Boolean = false,
+  val imeHideEventVersion: Int = 0,
+) {
+  val usesImeInset: Boolean
+    get() = type == EditorKeyboardType.Software || imeFrameVisible
+}
 
 @Composable internal expect fun rememberEditorKeyboardState(): EditorKeyboardState
 
-internal fun isSoftwareKeyboardVisible(imeBottom: Dp, safeBottomInset: Dp): Boolean =
-  imeBottom > safeBottomInset
+internal fun isImeVisible(imeBottom: Dp, safeBottomInset: Dp): Boolean = imeBottom > safeBottomInset
