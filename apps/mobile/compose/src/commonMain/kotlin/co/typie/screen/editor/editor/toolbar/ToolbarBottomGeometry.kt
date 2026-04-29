@@ -18,6 +18,17 @@ internal fun shouldAnimateEditorToolbarBottomPanelLayoutHeightChange(
     !softwareKeyboardVisible &&
     previousBottomPanelLayoutHeight != bottomPanelLayoutHeight
 
+internal fun shouldAnimateEditorToolbarBottomPanelVisibilityHeightChange(
+  bottomPanelVisible: Boolean,
+  previousSoftwareKeyboardVisible: Boolean,
+  softwareKeyboardReplacingPanel: Boolean = false,
+): Boolean =
+  if (bottomPanelVisible) {
+    !previousSoftwareKeyboardVisible
+  } else {
+    !softwareKeyboardReplacingPanel
+  }
+
 internal fun resolveEditorToolbarBottomSpacerHeight(
   bottomPanelVisible: Boolean,
   bottomPanelLayoutHeight: Dp,

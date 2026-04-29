@@ -101,20 +101,48 @@ internal fun EditorToolbarHost(
     )
   val bottomPanelAnimationPrevious = remember { mutableStateOf(bottomPanelVisible) }
   val previousBottomPanelLayoutHeight = remember { mutableStateOf(bottomPanelLayoutHeightTarget) }
+  val previousVisibleBottomPanelLayoutHeight = remember {
+    mutableStateOf(bottomPanelLayoutHeightTarget)
+  }
   val previousSoftwareKeyboardVisible = remember { mutableStateOf(softwareKeyboardVisible) }
   var rememberedKeyboardInsetRestoreFallbackPending by remember { mutableStateOf(false) }
   val softwareKeyboardAppearing = !previousSoftwareKeyboardVisible.value && softwareKeyboardVisible
   val bottomPanelVisibilityChanged = bottomPanelAnimationPrevious.value != bottomPanelVisible
-  val bottomPanelLayoutHeightChangeAnimating =
-    shouldAnimateEditorToolbarBottomPanelLayoutHeightChange(
-      bottomPanelVisible = bottomPanelVisible,
-      softwareKeyboardVisible = softwareKeyboardVisible,
-      previousBottomPanelLayoutHeight = previousBottomPanelLayoutHeight.value,
-      bottomPanelLayoutHeight = bottomPanelLayoutHeightTarget,
+  val bottomPanelTransitionSettled =
+    bottomPanelTransition.currentState == bottomPanelTransition.targetState
+  val bottomPanelInteractionAccepted =
+    shouldAcceptEditorToolbarBottomPanelInteraction(
+      bottomPanelTransitionSettled = bottomPanelTransitionSettled,
+      softwareKeyboardRestorePending = softwareKeyboardRestorePending,
+      rememberedKeyboardInsetRestoreFallbackPending = rememberedKeyboardInsetRestoreFallbackPending,
     )
+  val softwareKeyboardReplacingHiddenBottomPanel =
+    !bottomPanelVisible &&
+      bottomPanelTransition.currentState &&
+      (softwareKeyboardRestorePending || softwareKeyboardVisible)
+  val bottomPanelVisibilityHeightChangeAnimating =
+    shouldAnimateEditorToolbarBottomPanelVisibilityHeightChange(
+      bottomPanelVisible = bottomPanelVisible,
+      previousSoftwareKeyboardVisible = previousSoftwareKeyboardVisible.value,
+      softwareKeyboardReplacingPanel = softwareKeyboardReplacingHiddenBottomPanel,
+    )
+  val bottomPanelResizeHeightChangeAnimating =
+    !bottomPanelVisibilityChanged &&
+      shouldAnimateEditorToolbarBottomPanelLayoutHeightChange(
+        bottomPanelVisible = bottomPanelVisible,
+        softwareKeyboardVisible = softwareKeyboardVisible,
+        previousBottomPanelLayoutHeight = previousBottomPanelLayoutHeight.value,
+        bottomPanelLayoutHeight = bottomPanelLayoutHeightTarget,
+      )
+  val bottomPanelLayoutHeightAnimationTarget =
+    if (softwareKeyboardReplacingHiddenBottomPanel) {
+      previousVisibleBottomPanelLayoutHeight.value
+    } else {
+      bottomPanelLayoutHeightTarget
+    }
   val bottomPanelAnimationSpec =
     when {
-      bottomPanelVisibilityChanged ->
+      bottomPanelVisibilityChanged && bottomPanelVisibilityHeightChangeAnimating ->
         tween<Dp>(
           if (bottomPanelVisible) {
             ToolbarBottomPanelVisibilityEnterMillis
@@ -122,13 +150,13 @@ internal fun EditorToolbarHost(
             ToolbarBottomPanelVisibilityExitMillis
           }
         )
-      bottomPanelLayoutHeightChangeAnimating -> tween(ToolbarBottomPanelVisibilityEnterMillis)
+      bottomPanelResizeHeightChangeAnimating -> tween(ToolbarBottomPanelVisibilityEnterMillis)
       else -> snap()
     }
   val bottomSpacerHeightAnimationSpec =
     when {
       softwareKeyboardAppearing -> snap()
-      bottomPanelVisibilityChanged ->
+      bottomPanelVisibilityChanged && bottomPanelVisibilityHeightChangeAnimating ->
         tween<Dp>(
           if (bottomPanelVisible) {
             ToolbarBottomPanelVisibilityEnterMillis
@@ -136,7 +164,7 @@ internal fun EditorToolbarHost(
             ToolbarBottomPanelVisibilityExitMillis
           }
         )
-      bottomPanelLayoutHeightChangeAnimating -> tween(ToolbarBottomPanelVisibilityEnterMillis)
+      bottomPanelResizeHeightChangeAnimating -> tween(ToolbarBottomPanelVisibilityEnterMillis)
       else -> snap()
     }
   val bottomSpacerHeight by
@@ -147,7 +175,7 @@ internal fun EditorToolbarHost(
     )
   val bottomPanelLayoutHeight by
     animateDpAsState(
-      targetValue = bottomPanelLayoutHeightTarget,
+      targetValue = bottomPanelLayoutHeightAnimationTarget,
       animationSpec = bottomPanelAnimationSpec,
       label = "EditorToolbarBottomPanelLayoutHeight",
     )
@@ -160,6 +188,9 @@ internal fun EditorToolbarHost(
   SideEffect {
     bottomPanelAnimationPrevious.value = bottomPanelVisible
     previousBottomPanelLayoutHeight.value = bottomPanelLayoutHeightTarget
+    if (bottomPanelVisible) {
+      previousVisibleBottomPanelLayoutHeight.value = bottomPanelLayoutHeightTarget
+    }
     previousSoftwareKeyboardVisible.value = softwareKeyboardVisible
   }
 
@@ -200,6 +231,10 @@ internal fun EditorToolbarHost(
   }
 
   fun restoreEditorInput() {
+    if (!bottomPanelInteractionAccepted) {
+      return
+    }
+
     val shouldRestoreSoftwareKeyboard = closeBottomPanelForEditorInputRestore()
     onEditorFocusRequest()
     if (shouldRestoreSoftwareKeyboard) {
@@ -208,6 +243,10 @@ internal fun EditorToolbarHost(
   }
 
   fun dismissEditorInput() {
+    if (!bottomPanelInteractionAccepted) {
+      return
+    }
+
     if (bottomState.activePanel != null) {
       restoreEditorInput()
       return
@@ -231,6 +270,10 @@ internal fun EditorToolbarHost(
   }
 
   fun toggleBottomPanel(panel: EditorToolbarBottomPanelKey) {
+    if (!bottomPanelInteractionAccepted) {
+      return
+    }
+
     if (bottomState.activePanel == panel) {
       restoreEditorInput()
       return
@@ -262,8 +305,20 @@ internal fun EditorToolbarHost(
     }
   }
 
-  LaunchedEffect(softwareKeyboardVisible, editorFocused) {
-    if (softwareKeyboardVisible || !editorFocused) {
+  LaunchedEffect(
+    softwareKeyboardVisible,
+    editorFocused,
+    bottomPanelVisible,
+    bottomPanelTransitionSettled,
+  ) {
+    if (
+      shouldClearEditorToolbarKeyboardRestoreState(
+        softwareKeyboardVisible = softwareKeyboardVisible,
+        editorFocused = editorFocused,
+        bottomPanelVisible = bottomPanelVisible,
+        bottomPanelTransitionSettled = bottomPanelTransitionSettled,
+      )
+    ) {
       softwareKeyboardRestorePending = false
       rememberedKeyboardInsetRestoreFallbackPending = false
     }
@@ -371,29 +426,31 @@ internal fun EditorToolbarHost(
           modifier = Modifier.fillMaxWidth(),
         )
 
-        AnimatedVisibility(
-          visibleState = bottomPanelTransition,
-          enter =
-            fadeIn(animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis)) +
-              scaleIn(
-                animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis),
-                initialScale = ToolbarBottomPanelHiddenScale,
-                transformOrigin = TransformOrigin(0.5f, 0f),
-              ),
-          exit =
-            fadeOut(animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis)) +
-              scaleOut(
-                animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis),
-                targetScale = ToolbarBottomPanelHiddenScale,
-                transformOrigin = TransformOrigin(0.5f, 0f),
-              ),
-          modifier = Modifier.fillMaxWidth().height(bottomPanelLayoutHeight).clipToBounds(),
-        ) {
-          val panel = activeBottomPanel ?: lastBottomPanel
-          if (panel != null) {
-            Column {
-              Box(Modifier.height(ToolbarBottomPanelGap))
-              EditorToolbarBottomPanel(panel = panel, height = bottomPanelHeight)
+        Box(Modifier.fillMaxWidth().height(bottomPanelLayoutHeight).clipToBounds()) {
+          androidx.compose.animation.AnimatedVisibility(
+            visibleState = bottomPanelTransition,
+            enter =
+              fadeIn(animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis)) +
+                scaleIn(
+                  animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis),
+                  initialScale = ToolbarBottomPanelHiddenScale,
+                  transformOrigin = TransformOrigin(0.5f, 0f),
+                ),
+            exit =
+              fadeOut(animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis)) +
+                scaleOut(
+                  animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis),
+                  targetScale = ToolbarBottomPanelHiddenScale,
+                  transformOrigin = TransformOrigin(0.5f, 0f),
+                ),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            val panel = activeBottomPanel ?: lastBottomPanel
+            if (panel != null) {
+              Column {
+                Box(Modifier.height(ToolbarBottomPanelGap))
+                EditorToolbarBottomPanel(panel = panel, height = bottomPanelHeight)
+              }
             }
           }
         }

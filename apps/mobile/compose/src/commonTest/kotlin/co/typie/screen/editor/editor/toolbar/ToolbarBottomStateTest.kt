@@ -132,6 +132,81 @@ class ToolbarBottomStateTest {
   }
 
   @Test
+  fun bottom_panel_interaction_is_blocked_while_visibility_transition_runs() {
+    assertEquals(
+      false,
+      shouldAcceptEditorToolbarBottomPanelInteraction(
+        bottomPanelTransitionSettled = false,
+        softwareKeyboardRestorePending = false,
+        rememberedKeyboardInsetRestoreFallbackPending = false,
+      ),
+    )
+  }
+
+  @Test
+  fun bottom_panel_interaction_is_blocked_while_software_keyboard_restore_is_pending() {
+    assertEquals(
+      false,
+      shouldAcceptEditorToolbarBottomPanelInteraction(
+        bottomPanelTransitionSettled = true,
+        softwareKeyboardRestorePending = true,
+        rememberedKeyboardInsetRestoreFallbackPending = false,
+      ),
+    )
+  }
+
+  @Test
+  fun bottom_panel_interaction_is_allowed_when_transition_and_keyboard_restore_are_settled() {
+    assertEquals(
+      true,
+      shouldAcceptEditorToolbarBottomPanelInteraction(
+        bottomPanelTransitionSettled = true,
+        softwareKeyboardRestorePending = false,
+        rememberedKeyboardInsetRestoreFallbackPending = false,
+      ),
+    )
+  }
+
+  @Test
+  fun keyboard_restore_state_is_kept_while_bottom_panel_close_transition_runs() {
+    assertEquals(
+      false,
+      shouldClearEditorToolbarKeyboardRestoreState(
+        softwareKeyboardVisible = false,
+        editorFocused = false,
+        bottomPanelVisible = false,
+        bottomPanelTransitionSettled = false,
+      ),
+    )
+  }
+
+  @Test
+  fun keyboard_restore_state_clears_after_bottom_panel_close_transition_settles_without_focus() {
+    assertEquals(
+      true,
+      shouldClearEditorToolbarKeyboardRestoreState(
+        softwareKeyboardVisible = false,
+        editorFocused = false,
+        bottomPanelVisible = false,
+        bottomPanelTransitionSettled = true,
+      ),
+    )
+  }
+
+  @Test
+  fun keyboard_restore_state_clears_when_software_keyboard_becomes_visible() {
+    assertEquals(
+      true,
+      shouldClearEditorToolbarKeyboardRestoreState(
+        softwareKeyboardVisible = true,
+        editorFocused = true,
+        bottomPanelVisible = false,
+        bottomPanelTransitionSettled = false,
+      ),
+    )
+  }
+
+  @Test
   fun panel_input_state_suppresses_and_waits_for_hardware_switch_without_explicit_restore_in_hardware_keyboard_mode() {
     val inputState =
       resolveEditorToolbarPanelInputState(
@@ -471,6 +546,53 @@ class ToolbarBottomStateTest {
   }
 
   @Test
+  fun opening_bottom_panel_from_software_keyboard_does_not_animate_visibility_height() {
+    assertEquals(
+      false,
+      shouldAnimateEditorToolbarBottomPanelVisibilityHeightChange(
+        bottomPanelVisible = true,
+        previousSoftwareKeyboardVisible = true,
+      ),
+    )
+  }
+
+  @Test
+  fun opening_bottom_panel_without_software_keyboard_animates_visibility_height() {
+    assertEquals(
+      true,
+      shouldAnimateEditorToolbarBottomPanelVisibilityHeightChange(
+        bottomPanelVisible = true,
+        previousSoftwareKeyboardVisible = false,
+        softwareKeyboardReplacingPanel = false,
+      ),
+    )
+  }
+
+  @Test
+  fun closing_bottom_panel_to_software_keyboard_does_not_animate_visibility_height() {
+    assertEquals(
+      false,
+      shouldAnimateEditorToolbarBottomPanelVisibilityHeightChange(
+        bottomPanelVisible = false,
+        previousSoftwareKeyboardVisible = false,
+        softwareKeyboardReplacingPanel = true,
+      ),
+    )
+  }
+
+  @Test
+  fun closing_bottom_panel_without_software_keyboard_restore_animates_visibility_height() {
+    assertEquals(
+      true,
+      shouldAnimateEditorToolbarBottomPanelVisibilityHeightChange(
+        bottomPanelVisible = false,
+        previousSoftwareKeyboardVisible = false,
+        softwareKeyboardReplacingPanel = false,
+      ),
+    )
+  }
+
+  @Test
   fun software_keyboard_bottom_panel_keeps_opening_keyboard_height_while_keyboard_hides() {
     val state = EditorToolbarBottomState()
 
@@ -535,6 +657,28 @@ class ToolbarBottomStateTest {
 
     assertEquals(320.dp, state.rememberedKeyboardInset)
     assertEquals(320.dp, state.visibleImeInset(imeBottom = 95.dp, safeBottomInset = 24.dp))
+  }
+
+  @Test
+  fun reopening_bottom_panel_while_software_keyboard_restores_keeps_opening_height() {
+    val state = EditorToolbarBottomState()
+
+    state.openPanel(
+      panel = EditorToolbarBottomPanelKey.Insert,
+      imeBottom = 320.dp,
+      safeBottomInset = 24.dp,
+    )
+    state.closePanel(keepRememberedKeyboardInsetUntilImeRestored = true)
+
+    state.openPanel(
+      panel = EditorToolbarBottomPanelKey.Insert,
+      imeBottom = 95.dp,
+      safeBottomInset = 24.dp,
+    )
+
+    assertEquals(320.dp, state.rememberedKeyboardInset)
+    assertEquals(320.dp, state.visibleImeInset(imeBottom = 95.dp, safeBottomInset = 24.dp))
+    assertEquals(288.dp, state.bottomPanelHeight(imeBottom = 95.dp, safeBottomInset = 24.dp))
   }
 
   @Test

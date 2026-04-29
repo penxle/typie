@@ -78,7 +78,13 @@ internal constructor(
   internal val focusRequester: FocusRequester = FocusRequester()
   internal var focusManager: FocusManager? = null
 
-  fun focus() = focusRequester.requestFocus()
+  fun focus(): Boolean {
+    if (disposed.load()) {
+      return false
+    }
+
+    return focusRequester.requestFocus()
+  }
 
   fun blur() {
     focusManager?.clearFocus()

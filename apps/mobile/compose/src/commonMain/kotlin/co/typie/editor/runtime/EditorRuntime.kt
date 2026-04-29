@@ -30,9 +30,7 @@ class EditorRuntime {
     this.editor = null
   }
 
-  fun focus() {
-    editor?.focus()
-  }
+  fun focus(): Boolean = editor?.focus() == true
 
   fun blur() {
     editor?.blur()

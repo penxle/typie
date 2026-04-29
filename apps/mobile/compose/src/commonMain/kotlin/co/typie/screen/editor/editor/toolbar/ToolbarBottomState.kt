@@ -157,6 +157,12 @@ internal class EditorToolbarBottomState {
         imeBottom = imeBottom,
         safeBottomInset = safeBottomInset,
         keyboardType = keyboardType,
+        preserveCurrentInset =
+          shouldKeepRememberedKeyboardInsetUntilImeRestored(
+            imeBottom = imeBottom,
+            safeBottomInset = safeBottomInset,
+            keyboardType = keyboardType,
+          ),
       )
     }
     activePanel = panel

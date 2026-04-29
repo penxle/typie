@@ -125,6 +125,11 @@ fun EditorScreen(entityId: String) {
       }
     }
   }
+  fun requestEditorFocus() {
+    if (nav.current == Route.Editor(entityId)) {
+      runtime.focus()
+    }
+  }
 
   ProvideTopBar(
     center = {
@@ -425,7 +430,7 @@ fun EditorScreen(entityId: String) {
             onHeightChanged = screenState::updateHeaderHeight,
             onEnterDocument = {
               model.flushDraftsAsync()
-              runtime.focus()
+              requestEditorFocus()
             },
           )
         },
@@ -476,7 +481,7 @@ fun EditorScreen(entityId: String) {
             keyboardType = keyboardType,
             hardwareKeyboardConnected = keyboardState.hardwareKeyboardConnected,
             hardwareKeyboardModeGeneration = keyboardState.hardwareModeGeneration,
-            onEditorFocusRequest = { runtime.focus() },
+            onEditorFocusRequest = ::requestEditorFocus,
             modifier = Modifier,
           )
         },

@@ -93,6 +93,23 @@ internal fun shouldHideSoftwareKeyboardWhenOpeningBottomPanel(
   softwareKeyboardVisible: Boolean
 ): Boolean = softwareKeyboardVisible
 
+internal fun shouldAcceptEditorToolbarBottomPanelInteraction(
+  bottomPanelTransitionSettled: Boolean,
+  softwareKeyboardRestorePending: Boolean,
+  rememberedKeyboardInsetRestoreFallbackPending: Boolean,
+): Boolean =
+  bottomPanelTransitionSettled &&
+    !softwareKeyboardRestorePending &&
+    !rememberedKeyboardInsetRestoreFallbackPending
+
+internal fun shouldClearEditorToolbarKeyboardRestoreState(
+  softwareKeyboardVisible: Boolean,
+  editorFocused: Boolean,
+  bottomPanelVisible: Boolean,
+  bottomPanelTransitionSettled: Boolean,
+): Boolean =
+  softwareKeyboardVisible || (!editorFocused && !bottomPanelVisible && bottomPanelTransitionSettled)
+
 internal fun resolveEditorToolbarShouldRestoreSoftwareKeyboard(
   softwareKeyboardRestorePendingForPanel: Boolean,
   keyboardType: EditorKeyboardType = EditorKeyboardType.Software,

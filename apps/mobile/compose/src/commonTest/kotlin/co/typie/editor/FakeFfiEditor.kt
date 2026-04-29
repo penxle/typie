@@ -1,19 +1,26 @@
 package co.typie.editor
 
+import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.Tri
 
 internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
   var cursorProvider: () -> CursorMetrics? = { null },
   var selectionProvider: () -> Selection? = { null },
   var rootAttrsProvider: () -> RootNode? = { null },
+  var modifierStateProvider: () -> ModifierState = { EmptyModifierState },
+  var blockStateProvider: () -> BlockState = {
+    BlockState(ancestors = emptyList(), nodes = emptyList())
+  },
   var pageSizesProvider: () -> List<Size> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime? = { _, _ -> null },
 ) : co.typie.editor.ffi.Editor {
@@ -39,6 +46,10 @@ internal class FakeFfiEditor(
 
   override fun rootAttrs(): RootNode =
     rootAttrsProvider() ?: error("rootAttrs not set in FakeFfiEditor")
+
+  override fun modifierState(): ModifierState = modifierStateProvider()
+
+  override fun blockState(): BlockState = blockStateProvider()
 
   override fun pageSizes(): List<Size> = pageSizesProvider()
 
@@ -69,4 +80,26 @@ internal class FakeFfiEditor(
   override fun inspectState(options: InspectStateOptions?): String = ""
 
   override fun inspectStateAsMacro(): String = ""
+
+  private companion object {
+    val EmptyModifierState =
+      ModifierState(
+        bold = Tri.Absent,
+        italic = Tri.Absent,
+        underline = Tri.Absent,
+        strikethrough = Tri.Absent,
+        fontSize = Tri.Absent,
+        fontFamily = Tri.Absent,
+        fontWeight = Tri.Absent,
+        textColor = Tri.Absent,
+        backgroundColor = Tri.Absent,
+        letterSpacing = Tri.Absent,
+        link = Tri.Absent,
+        ruby = Tri.Absent,
+        lineHeight = Tri.Absent,
+        blockGap = Tri.Absent,
+        paragraphIndent = Tri.Absent,
+        alignment = Tri.Absent,
+      )
+  }
 }
