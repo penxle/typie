@@ -40,7 +40,9 @@ import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.contextual.editorImageToolbarPage
 import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
+import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -68,6 +70,7 @@ internal fun EditorToolbarPages(
 ) {
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
+  val hazeState = LocalHazeState.current
   val pagerState = rememberToolbarPagerState()
 
   BoxWithConstraints(modifier = modifier.height(ToolbarStackHeight)) {
@@ -364,6 +367,7 @@ internal fun EditorToolbarPages(
     InteractionScope {
       val toolbarInteractionSource =
         LocalInteractionSource.current ?: remember { MutableInteractionSource() }
+      val toolbarSurfaceColor = AppTheme.colors.surfaceDefault
       Box(
         modifier =
           Modifier.align(Alignment.BottomCenter)
@@ -372,6 +376,10 @@ internal fun EditorToolbarPages(
             .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
             .pressScale(ToolbarCapsulePressedScale)
             .clip(ToolbarCapsuleShape)
+            .hazeEffect(hazeState) {
+              backgroundColor = toolbarSurfaceColor
+              blurRadius = ToolbarBackdropBlurRadius
+            }
             .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
       ) {
         EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)

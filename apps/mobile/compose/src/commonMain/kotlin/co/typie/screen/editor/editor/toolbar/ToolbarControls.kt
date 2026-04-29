@@ -42,7 +42,8 @@ internal val ToolbarCapsuleShape = AppShapes.rounded(AppShapes.full)
 internal val ToolbarButtonShape = AppShapes.circle
 internal val ToolbarFixedActionShape = AppShapes.circle
 internal val ToolbarIndicatorShape = AppShapes.circle
-internal val ToolbarBottomPanelShape = AppShapes.rounded(AppShapes.xl)
+internal val ToolbarBottomPanelRadius = AppShapes.xl
+internal val ToolbarBottomPanelShape = AppShapes.rounded(ToolbarBottomPanelRadius)
 
 @Composable
 internal fun EditorToolbarSurfaceBackground(shape: Shape, modifier: Modifier = Modifier) {

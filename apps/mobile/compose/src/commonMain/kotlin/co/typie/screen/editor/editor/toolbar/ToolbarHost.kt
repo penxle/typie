@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import co.typie.screen.editor.editor.toolbar.bottom.EditorToolbarBottomPanel
 import co.typie.ui.component.ResponsiveContainerDefaults
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -220,7 +219,13 @@ internal fun EditorToolbarHost(
             if (visiblePanel != null) {
               Column {
                 Box(Modifier.height(ToolbarBottomPanelGap))
-                EditorToolbarBottomPanel(panel = visiblePanel, height = bottomPanelHeight)
+                BottomToolbar(
+                  panel = visiblePanel,
+                  height = bottomPanelHeight,
+                  onEditorInputRequest = {
+                    inputState.dispatch(ToolbarIntent.RestoreEditorInput, hostEnvironment)
+                  },
+                )
               }
             }
           }

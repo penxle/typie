@@ -61,9 +61,9 @@ class ToolbarInputStateTest {
     state.takeEffects()
 
     val transitioning = environment.copy(panelTransitionIdle = false)
-    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.More), transitioning)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), transitioning)
 
-    assertEquals(EditorToolbarBottomPanelKey.More, state.activeBottomPanel)
+    assertEquals(EditorToolbarBottomPanelKey.Tools, state.activeBottomPanel)
     assertEquals(288.dp, state.panel?.height)
     assertEquals(320.dp, state.panel?.keyboardSpace?.inset)
     assertEquals(emptyList(), state.takeEffects())
@@ -85,9 +85,9 @@ class ToolbarInputStateTest {
 
     val restoring = toolbarInputEnvironment(imeBottom = 120.dp, panelTransitionIdle = false)
     state.onEnvironmentChanged(restoring)
-    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.More), restoring)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), restoring)
 
-    assertEquals(EditorToolbarBottomPanelKey.More, state.activeBottomPanel)
+    assertEquals(EditorToolbarBottomPanelKey.Tools, state.activeBottomPanel)
     assertEquals(288.dp, state.panel?.height)
     assertEquals(320.dp, state.panel?.keyboardSpace?.inset)
     assertEquals(listOf(ToolbarEffect.HideKeyboard), state.takeEffects())

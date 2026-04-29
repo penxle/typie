@@ -29,6 +29,7 @@ internal val ToolbarLastPageReservedEndPadding = ToolbarPageEndPadding + Toolbar
 internal val ToolbarFixedActionPadding = 4.dp
 internal val ToolbarDividerHeight = 20.dp
 internal val ToolbarBorderWidth = 1.dp
+internal val ToolbarBackdropBlurRadius = 4.dp
 internal val ToolbarIndicatorItemSize = 28.dp
 internal val ToolbarIndicatorIconSize = 16.dp
 internal val ToolbarIndicatorPadding = 2.dp
@@ -61,7 +62,7 @@ internal enum class EditorToolbarPageKey {
 
 internal enum class EditorToolbarBottomPanelKey {
   Insert,
-  More,
+  Tools,
 }
 
 internal class EditorToolbarPage(

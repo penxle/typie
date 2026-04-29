@@ -27,7 +27,9 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
+import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -39,6 +41,8 @@ internal fun EditorToolbarIndicatorPill(
   currentPageIndex: Int,
   modifier: Modifier = Modifier,
 ) {
+  val hazeState = LocalHazeState.current
+  val surfaceColor = AppTheme.colors.surfaceDefault
   val animatedPageProgress by
     animateFloatAsState(
       targetValue = pageProgress,
@@ -58,6 +62,10 @@ internal fun EditorToolbarIndicatorPill(
         .height(ToolbarIndicatorHeight)
         .shadow(AppTheme.shadows.sm, ToolbarIndicatorShape)
         .clip(ToolbarIndicatorShape)
+        .hazeEffect(hazeState) {
+          backgroundColor = surfaceColor
+          blurRadius = ToolbarBackdropBlurRadius
+        }
         .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarIndicatorShape)
   ) {
     EditorToolbarSurfaceBackground(shape = ToolbarIndicatorShape)

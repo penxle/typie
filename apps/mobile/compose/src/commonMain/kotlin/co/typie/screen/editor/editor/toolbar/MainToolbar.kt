@@ -23,7 +23,7 @@ internal fun editorMainToolbarPage(): EditorToolbarPage =
 @Composable
 private fun EditorMainToolbar(scope: EditorToolbarPageScope, modifier: Modifier = Modifier) {
   val insertPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanelKey.Insert
-  val morePanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanelKey.More
+  val toolsPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanelKey.Tools
 
   Row(
     modifier =
@@ -55,9 +55,9 @@ private fun EditorMainToolbar(scope: EditorToolbarPageScope, modifier: Modifier 
     EditorToolbarButton(icon = Lucide.Search, contentDescription = "찾기", onClick = {})
     EditorToolbarButton(
       icon = Lucide.Ellipsis,
-      contentDescription = "패널",
-      onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanelKey.More) },
-      selected = morePanelOpen,
+      contentDescription = "도구",
+      onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanelKey.Tools) },
+      selected = toolsPanelOpen,
     )
     if (scope.hasNextPage) {
       EditorToolbarPageIndicator()

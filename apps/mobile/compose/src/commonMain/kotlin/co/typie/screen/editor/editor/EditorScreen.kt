@@ -81,6 +81,8 @@ import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.LocalHazeState
+import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -180,6 +182,7 @@ fun EditorScreen(entityId: String) {
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val toolbarInputState = rememberEditorToolbarInputState()
+    val toolbarBackdropHazeState = remember { HazeState() }
     val keyboardState = rememberEditorKeyboardState()
     val toolbarInputEnvironment =
       ToolbarInputEnvironment(
@@ -380,6 +383,7 @@ fun EditorScreen(entityId: String) {
       LocalEditorUiState provides uiState,
       LocalEditorZoomController provides zoomController,
       LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
+      LocalHazeState provides toolbarBackdropHazeState,
     ) {
       EditorScreenLayout(
         state = screenState,

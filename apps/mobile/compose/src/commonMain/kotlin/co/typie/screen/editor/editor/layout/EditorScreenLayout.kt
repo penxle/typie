@@ -36,6 +36,8 @@ import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarFloatingOverhang
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarHeight
+import co.typie.ui.theme.LocalHazeState
+import dev.chrisbanes.haze.hazeSource
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -62,6 +64,7 @@ internal fun EditorScreenLayout(
 ) {
   val density = LocalDensity.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val toolbarBackdropHazeState = LocalHazeState.current
   val resolveSize: (Int, Int) -> Size =
     remember(density) {
       { width, height -> Size(width = width / density.density, height = height / density.density) }
@@ -99,6 +102,7 @@ internal fun EditorScreenLayout(
             modifier =
               Modifier.fillMaxSize()
                 .clipToBounds()
+                .hazeSource(toolbarBackdropHazeState)
                 .navigationPopNestedScroll()
                 .scrollable2D(state = viewportScrollableState)
                 .editorViewportWheelScroll(state.viewportState),
