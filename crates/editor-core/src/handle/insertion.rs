@@ -34,7 +34,13 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     commands::insert_hard_break(),
                 )?;
             }
-            InsertionOp::Break { kind: Break::Page } => {}
+            InsertionOp::Break { kind: Break::Page } => {
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::delete_selection()),
+                    commands::insert_page_break(),
+                )?;
+            }
             InsertionOp::Fragment { fragment } => {
                 commands::chain!(
                     tr,
@@ -104,6 +110,57 @@ mod tests {
         });
         let (expected, ..) = state! {
             doc { root { paragraph { text("hel") hard_break {} t1: text("lo") } } }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn insert_break_page() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break { kind: Break::Page },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("hello") page_break {} } p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn insert_break_page_moves_to_next_paragraph_when_available() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } paragraph { t2: text("world") } } }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break { kind: Break::Page },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("hello") page_break {} } paragraph { t2: text("world") } } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn insert_break_page_splits_paragraph() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break { kind: Break::Page },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("he") page_break {} } paragraph { t1: text("llo") } } }
             selection: (t1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
