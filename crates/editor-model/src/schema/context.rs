@@ -23,6 +23,31 @@ impl ContextExpr {
         }
     }
 
+    /// Walk a `ContextExpr` to its rightmost-leaf node positions to discover the
+    /// concrete `NodeType`s (e.g. `Bold` → `[Text]`, `Alignment` →
+    /// `[Paragraph, Image, Table]`). Used as a type-level prefilter for modifier
+    /// targets so the aggregator doesn't conflate ancestors with actual targets
+    /// when the context uses `Not(...)` (which is permissive over ancestor paths).
+    ///
+    /// Contract: assumes `Not(...)` wraps a `Child(...)` whose deepest leaf is the
+    /// actual target (e.g. `!FoldTitle > Text` means "Text not under FoldTitle";
+    /// target is `Text`). A bare `Not(Node(X))` would incorrectly return `[X]`, but
+    /// no current modifier uses that shape. The `debug_assert!` at the call site
+    /// catches degenerate cases (e.g. `Any` / `GlobStar` / `SelfRef`) where the
+    /// recursion bottoms out without yielding any concrete type.
+    pub fn rightmost_node_types(&self) -> Vec<NodeType> {
+        match self {
+            ContextExpr::Node(t) => vec![*t],
+            ContextExpr::AnyOf(exprs) => exprs
+                .iter()
+                .flat_map(ContextExpr::rightmost_node_types)
+                .collect(),
+            ContextExpr::Child { child, .. } => child.rightmost_node_types(),
+            ContextExpr::Not(inner) => inner.rightmost_node_types(),
+            ContextExpr::SelfRef | ContextExpr::Any | ContextExpr::GlobStar => Vec::new(),
+        }
+    }
+
     fn matches_exact(&self, path: &[NodeType]) -> bool {
         match self {
             ContextExpr::Any => true,
@@ -136,5 +161,28 @@ mod tests {
         assert!(expr.matches(&[Root, Paragraph, Text]));
         assert!(expr.matches(&[Root, Callout, Text]));
         assert!(!expr.matches(&[Root, Blockquote, Text]));
+    }
+
+    #[test]
+    fn rightmost_node_types_follow_rightmost_leaf() {
+        // (Paragraph | Image | Table)
+        let expr = ContextExpr::AnyOf(vec![
+            ContextExpr::Node(Paragraph),
+            ContextExpr::Node(Image),
+            ContextExpr::Node(Table),
+        ]);
+
+        assert_eq!(expr.rightmost_node_types(), vec![Paragraph, Image, Table]);
+    }
+
+    #[test]
+    fn rightmost_node_types_treat_not_as_path_restriction() {
+        // !FoldTitle > Text
+        let expr = ContextExpr::Not(Box::new(ContextExpr::Child {
+            parent: Box::new(ContextExpr::Node(FoldTitle)),
+            child: Box::new(ContextExpr::Node(Text)),
+        }));
+
+        assert_eq!(expr.rightmost_node_types(), vec![Text]);
     }
 }
