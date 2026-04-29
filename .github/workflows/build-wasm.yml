@@ -48,7 +48,7 @@ jobs:
   merge:
     name: Merge WASM artifacts
     needs: build
-    runs-on: arc-2x
+    runs-on: arc-4x
     steps:
       - name: Merge WASM artifacts
         uses: actions/upload-artifact/merge@v7
