@@ -36,6 +36,7 @@ export const Documents = pgTable(
     thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     type: E._DocumentType('type').notNull().default('NORMAL'),
     headCommitId: text('head_commit_id').references((): AnyPgColumn => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'set null' }),
+    dirtyAt: datetime('dirty_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
@@ -43,7 +44,12 @@ export const Documents = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.entityId)],
+  (t) => [
+    index().on(t.entityId),
+    index()
+      .on(t.dirtyAt)
+      .where(sql`dirty_at IS NOT NULL`),
+  ],
 );
 
 export const DocumentContents = pgTable('document_contents', {
@@ -137,15 +143,19 @@ export const DocumentCommits = pgTable(
     id: text('id')
       .primaryKey()
       .$defaultFn(() => createDbId(TableCode.DOCUMENT_COMMITS)),
+    sequence: bigint('sequence', { mode: 'number' }).notNull().generatedAlwaysAsIdentity(),
     commitId: text('commit_id').notNull(),
     documentId: text('document_id')
       .notNull()
       .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     parentId: text('parent_id').references((): AnyPgColumn => DocumentCommits.id),
     secondParentId: text('second_parent_id').references((): AnyPgColumn => DocumentCommits.id),
-    steps: jsonb('steps').notNull(),
+    steps: jsonb('steps'),
     meta: jsonb('meta'),
-    deviceId: text('device_id').notNull(),
+    objectId: text('object_id')
+      .notNull()
+      .references((): AnyPgColumn => DocumentObjects.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    deviceId: text('device_id').references((): AnyPgColumn => UserDevices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     committedAt: datetime('committed_at').notNull(),
     pushedAt: datetime('pushed_at')
@@ -155,7 +165,22 @@ export const DocumentCommits = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.documentId, t.pushedAt), uniqueIndex().on(t.documentId, t.commitId)],
+  (t) => [index().on(t.documentId, t.pushedAt), index().on(t.documentId, t.sequence), uniqueIndex().on(t.documentId, t.commitId)],
+);
+
+export const DocumentObjects = pgTable(
+  'document_objects',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_OBJECTS)),
+    hash: text('hash').notNull(),
+    content: jsonb('content').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.hash)],
 );
 
 export const DocumentHeadContents = pgTable('document_head_contents', {

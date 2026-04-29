@@ -1,6 +1,10 @@
+use editor_macros::ffi;
 use editor_model::NodeId;
 use serde::{Deserialize, Serialize};
 
+use crate::sync::JsonValue;
+
+#[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictKind {
@@ -11,6 +15,7 @@ pub enum ConflictKind {
     Order,
 }
 
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConflictTarget {
@@ -35,12 +40,14 @@ pub enum ConflictTarget {
     },
 }
 
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "scope", rename_all = "snake_case")]
 pub enum AttributeScope {
     Node { node_id: NodeId },
 }
 
+#[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BranchSide {
@@ -48,17 +55,19 @@ pub enum BranchSide {
     Theirs,
 }
 
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConflictBranch {
     pub side: BranchSide,
-    pub value: serde_json::Value,
+    pub value: JsonValue,
 }
 
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConflictRecord {
     pub kind: ConflictKind,
     pub target: ConflictTarget,
-    pub base_value: Option<serde_json::Value>,
+    pub base_value: Option<JsonValue>,
     pub branches: Vec<ConflictBranch>,
     /// Merge sets a default; caller overrides via LWW (committedAt) since merge has no clock.
     pub auto_resolved: BranchSide,
@@ -79,15 +88,15 @@ mod tests {
                 },
                 name: "page_layout".into(),
             },
-            base_value: Some(json!("portrait")),
+            base_value: Some(json!("portrait").into()),
             branches: vec![
                 ConflictBranch {
                     side: BranchSide::Ours,
-                    value: json!("landscape"),
+                    value: json!("landscape").into(),
                 },
                 ConflictBranch {
                     side: BranchSide::Theirs,
-                    value: json!("portrait_wide"),
+                    value: json!("portrait_wide").into(),
                 },
             ],
             auto_resolved: BranchSide::Theirs,
@@ -110,15 +119,15 @@ mod tests {
                 range_start: 3,
                 range_end: 7,
             },
-            base_value: Some(json!("hello world")),
+            base_value: Some(json!("hello world").into()),
             branches: vec![
                 ConflictBranch {
                     side: BranchSide::Ours,
-                    value: json!("hello rust"),
+                    value: json!("hello rust").into(),
                 },
                 ConflictBranch {
                     side: BranchSide::Theirs,
-                    value: json!("hello swift"),
+                    value: json!("hello swift").into(),
                 },
             ],
             auto_resolved: BranchSide::Ours,
@@ -139,11 +148,11 @@ mod tests {
             branches: vec![
                 ConflictBranch {
                     side: BranchSide::Ours,
-                    value: json!(null),
+                    value: json!(null).into(),
                 },
                 ConflictBranch {
                     side: BranchSide::Theirs,
-                    value: json!("deleted"),
+                    value: json!("deleted").into(),
                 },
             ],
             auto_resolved: BranchSide::Theirs,
@@ -159,15 +168,15 @@ mod tests {
         let r = ConflictRecord {
             kind: ConflictKind::Position,
             target: ConflictTarget::Position { node_id },
-            base_value: Some(json!({"parent": "abc"})),
+            base_value: Some(json!({"parent": "abc"}).into()),
             branches: vec![
                 ConflictBranch {
                     side: BranchSide::Ours,
-                    value: json!({"parent": "def"}),
+                    value: json!({"parent": "def"}).into(),
                 },
                 ConflictBranch {
                     side: BranchSide::Theirs,
-                    value: json!({"parent": "ghi"}),
+                    value: json!({"parent": "ghi"}).into(),
                 },
             ],
             auto_resolved: BranchSide::Ours,
@@ -183,15 +192,15 @@ mod tests {
         let r = ConflictRecord {
             kind: ConflictKind::Order,
             target: ConflictTarget::Order { parent_id },
-            base_value: Some(json!(["a", "b", "c"])),
+            base_value: Some(json!(["a", "b", "c"]).into()),
             branches: vec![
                 ConflictBranch {
                     side: BranchSide::Ours,
-                    value: json!(["b", "a", "c"]),
+                    value: json!(["b", "a", "c"]).into(),
                 },
                 ConflictBranch {
                     side: BranchSide::Theirs,
-                    value: json!(["a", "c", "b"]),
+                    value: json!(["a", "c", "b"]).into(),
                 },
             ],
             auto_resolved: BranchSide::Theirs,

@@ -24,6 +24,9 @@ pub enum EditorError {
     Core(#[from] editor_core::EditorError),
 
     #[error(transparent)]
+    Model(#[from] editor_model::ReconstructError),
+
+    #[error(transparent)]
     Resource(#[from] editor_resource::ResourceError),
 
     #[error(transparent)]

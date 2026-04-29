@@ -148,6 +148,18 @@ export interface Composition {
 export type Affinity = "downstream" | "upstream";
 
 /**
+ * `ObjectContent::hash()` of this struct (via canonical JSON) is its Object hash —
+ * any change to `Serialize` shape changes the hash and breaks CAS dedup.
+ */
+export interface ObjectContent {
+    node_id: NodeId;
+    node: Node;
+    parent?: NodeId;
+    modifiers?: Modifier[];
+    children: ChildRef[];
+}
+
+/**
  * chunk별 flat 정수 배열 `[start0, end0, start1, end1, ...]` (inclusive).
  */
 export interface FontWeight {
@@ -202,10 +214,28 @@ export interface CalloutNode {
     variant?: CalloutVariant;
 }
 
+export interface ChildRef {
+    node_id: NodeId;
+    hash: string;
+}
+
+export interface CommitPayload {
+    rootObjectHash: string;
+    newObjects: DerivedObject[];
+    steps: Step[];
+    meta: TransactionMeta;
+    committedAt: number;
+}
+
 export interface CursorMetrics {
     page_idx: number;
     caret: Rect;
     line: Rect;
+}
+
+export interface DerivedObject {
+    hash: string;
+    content: ObjectContent;
 }
 
 export interface Doc {
@@ -418,7 +448,7 @@ export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movem
 
 export type Direction = "forward" | "backward";
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; steps: Step[]; meta: TransactionMeta };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; commitPayload: CommitPayload };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 

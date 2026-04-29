@@ -281,9 +281,26 @@ impl Editor {
             .cloned()
             .collect();
         if !commitable.is_empty() {
+            let mut affected: Vec<editor_model::NodeId> = commitable
+                .iter()
+                .flat_map(|s| s.affected_node_ids())
+                .collect();
+            affected.sort();
+            affected.dedup();
+
+            let (root_object_hash, new_objects) = state.doc.derive_objects_for_path(&affected);
+
             self.push_event(EditorEvent::TransactionCommitted {
-                steps: commitable,
-                meta: meta.clone(),
+                commit_payload: crate::event::CommitPayload {
+                    root_object_hash,
+                    new_objects,
+                    steps: commitable,
+                    meta: meta.clone(),
+                    committed_at: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as i64,
+                },
             });
         }
 
@@ -880,7 +897,9 @@ mod tests {
         let committed: Vec<_> = events
             .iter()
             .filter_map(|e| match e {
-                EditorEvent::TransactionCommitted { steps, .. } => Some(steps.clone()),
+                EditorEvent::TransactionCommitted { commit_payload } => {
+                    Some(commit_payload.steps.clone())
+                }
                 _ => None,
             })
             .collect();
@@ -893,6 +912,33 @@ mod tests {
         assert!(
             committed[0].iter().all(|s| s.is_commitable()),
             "all emitted steps should be commitable"
+        );
+    }
+
+    #[test]
+    fn transact_emits_commit_payload_with_objects_and_root_hash() {
+        let (mut editor, _) = test_editor();
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "hi".into() },
+        });
+        let payload = events
+            .iter()
+            .find_map(|e| match e {
+                EditorEvent::TransactionCommitted { commit_payload } => Some(commit_payload),
+                _ => None,
+            })
+            .expect("expected one TransactionCommitted event");
+        assert_eq!(payload.root_object_hash.len(), 32, "32-char xxh3 hex");
+        assert!(
+            !payload.new_objects.is_empty(),
+            "InsertText must derive at least one object"
+        );
+        assert!(
+            payload
+                .new_objects
+                .iter()
+                .any(|o| o.hash == payload.root_object_hash),
+            "root_object_hash must match one of the derived objects"
         );
     }
 
@@ -955,8 +1001,13 @@ mod tests {
     fn tick_does_not_dedup_transaction_committed() {
         let (mut editor, _) = test_editor();
         let event = EditorEvent::TransactionCommitted {
-            steps: vec![],
-            meta: editor_transaction::TransactionMeta::default(),
+            commit_payload: crate::event::CommitPayload {
+                root_object_hash: String::new(),
+                new_objects: vec![],
+                steps: vec![],
+                meta: editor_transaction::TransactionMeta::default(),
+                committed_at: 0,
+            },
         };
         editor.push_event(event.clone());
         editor.push_event(event);

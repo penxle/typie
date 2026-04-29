@@ -25,15 +25,15 @@ pub fn merge_attribute(
             let record = ConflictRecord {
                 kind: ConflictKind::Attribute,
                 target,
-                base_value: base.cloned(),
+                base_value: base.cloned().map(Into::into),
                 branches: vec![
                     ConflictBranch {
                         side: BranchSide::Ours,
-                        value: o.clone(),
+                        value: o.clone().into(),
                     },
                     ConflictBranch {
                         side: BranchSide::Theirs,
-                        value: t.clone(),
+                        value: t.clone().into(),
                     },
                 ],
                 auto_resolved: BranchSide::Ours,
@@ -129,6 +129,6 @@ mod tests {
         let c = c.unwrap();
         assert_eq!(c.kind, ConflictKind::Attribute);
         assert_eq!(c.branches.len(), 2);
-        assert_eq!(c.base_value, Some(json!("base")));
+        assert_eq!(c.base_value, Some(json!("base").into()));
     }
 }

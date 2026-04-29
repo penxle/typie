@@ -14,8 +14,6 @@ pub struct TransformScenario {
     pub state: State,
     pub a: Step,
     pub b: Step,
-    pub text_id: NodeId,
-    pub paragraph_id: NodeId,
 }
 
 fn fixed_state() -> (State, NodeId, NodeId) {
@@ -69,19 +67,11 @@ pub fn transform_scenario() -> impl Strategy<Value = TransformScenario> {
         Just(state),
         arb_syncable_step(text_id, paragraph_id),
         arb_syncable_step(text_id, paragraph_id),
-        Just(text_id),
-        Just(paragraph_id),
     )
-        .prop_filter("a and b must apply to state", move |(_, a, b, _, _)| {
+        .prop_filter("a and b must apply to state", move |(_, a, b)| {
             a.apply(&state_for_steps).is_ok() && b.apply(&state_for_steps).is_ok()
         })
-        .prop_map(|(state, a, b, text_id, paragraph_id)| TransformScenario {
-            state,
-            a,
-            b,
-            text_id,
-            paragraph_id,
-        })
+        .prop_map(|(state, a, b)| TransformScenario { state, a, b })
 }
 
 #[cfg(test)]
@@ -93,7 +83,7 @@ mod sanity {
 
         #[test]
         fn generator_produces_applicable_scenarios(scenario in transform_scenario()) {
-            let TransformScenario { state, a, b, .. } = scenario;
+            let TransformScenario { state, a, b } = scenario;
             prop_assert!(a.apply(&state).is_ok(), "step a must apply");
             prop_assert!(b.apply(&state).is_ok(), "step b must apply");
         }

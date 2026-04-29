@@ -157,7 +157,7 @@ fn map_syn_type(
         // so kotlinx.serialization can decode the `null` directly — `Unit` alone has no
         // serializer that accepts null. Consumers carry a `null` value they ignore.
         syn::Type::Tuple(tuple) if tuple.elems.is_empty() => "Unit?".into(),
-        _ => panic!("unsupported type in FFI metadata"),
+        _ => panic!("unsupported type in FFI metadata: {}", quote::quote!(#ty)),
     }
 }
 

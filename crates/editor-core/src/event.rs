@@ -1,4 +1,5 @@
 use editor_macros::ffi;
+use editor_model::DerivedObject;
 use editor_transaction::{Step, TransactionMeta};
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +11,17 @@ use crate::state_field::StateField;
 pub enum FontData {
     Base,
     Chunk { id: u16 },
+}
+
+#[ffi]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitPayload {
+    pub root_object_hash: String,
+    pub new_objects: Vec<DerivedObject>,
+    pub steps: Vec<Step>,
+    pub meta: TransactionMeta,
+    pub committed_at: i64,
 }
 
 #[ffi]
@@ -28,8 +40,8 @@ pub enum EditorEvent {
     },
     CursorExitedDocumentStart,
     TransactionCommitted {
-        steps: Vec<Step>,
-        meta: TransactionMeta,
+        #[serde(rename = "commitPayload")]
+        commit_payload: CommitPayload,
     },
 }
 
@@ -42,16 +54,23 @@ mod tests {
     #[test]
     fn transaction_committed_serializes() {
         let event = EditorEvent::TransactionCommitted {
-            steps: vec![Step::InsertText {
-                node_id: NodeId::new(),
-                offset: 0,
-                text: "hi".into(),
-            }],
-            meta: TransactionMeta::default(),
+            commit_payload: CommitPayload {
+                root_object_hash: "0".repeat(32),
+                new_objects: vec![],
+                steps: vec![Step::InsertText {
+                    node_id: NodeId::new(),
+                    offset: 0,
+                    text: "hi".into(),
+                }],
+                meta: TransactionMeta::default(),
+                committed_at: 0,
+            },
         };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("\"type\":\"transaction_committed\""));
-        assert!(json.contains("\"steps\""));
+        assert!(json.contains("\"commitPayload\""));
+        assert!(json.contains("\"rootObjectHash\""));
+        assert!(json.contains("\"newObjects\""));
         let decoded: EditorEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded, event);
     }

@@ -69,6 +69,33 @@ impl Doc {
         new.nodes = new.nodes.without(&id);
         new
     }
+
+    pub fn extract_text(&self) -> String {
+        let mut out = String::new();
+        self.extract_text_recursive(NodeId::ROOT, &mut out);
+        out
+    }
+
+    fn extract_text_recursive(&self, node_id: NodeId, out: &mut String) {
+        let Some(entry) = self.get_entry(node_id) else {
+            return;
+        };
+        match &entry.node {
+            Node::Text(t) => out.push_str(&t.text),
+            Node::HardBreak(_)
+            | Node::PageBreak(_)
+            | Node::Image(_)
+            | Node::File(_)
+            | Node::Embed(_)
+            | Node::Archived(_) => {}
+            _ => {
+                for &child in entry.children.iter() {
+                    self.extract_text_recursive(child, out);
+                }
+                out.push('\n');
+            }
+        }
+    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -168,6 +195,75 @@ mod tests {
         let doc2 = doc.insert_node(new_id, NodeEntry::new(Node::HardBreak(HardBreakNode {})));
         let doc3 = doc2.remove_node(new_id);
         assert!(doc3.node(new_id).is_none());
+    }
+
+    #[test]
+    fn extract_text_concatenates_text_nodes() {
+        let (doc, ..) = doc! {
+            root {
+                paragraph {
+                    text("hello")
+                    text(" world")
+                }
+            }
+        };
+        let text = doc.extract_text();
+        assert!(text.contains("hello"));
+        assert!(text.contains("world"));
+    }
+
+    #[test]
+    fn extract_text_exact_output() {
+        let (doc, ..) = doc! {
+            root {
+                paragraph {
+                    text("hello world")
+                }
+            }
+        };
+        let text = doc.extract_text();
+        assert_eq!(text, "hello world\n\n");
+    }
+
+    #[test]
+    fn extract_text_hard_break_does_not_add_newline() {
+        let (doc, ..) = doc! {
+            root {
+                paragraph {
+                    text("first")
+                    hard_break
+                    text("second")
+                }
+            }
+        };
+        let text = doc.extract_text();
+        assert_eq!(text, "firstsecond\n\n");
+    }
+
+    #[test]
+    fn extract_text_preserves_block_separation() {
+        let (doc, ..) = doc! {
+            root {
+                paragraph {
+                    text("first")
+                }
+                paragraph {
+                    text("second")
+                }
+            }
+        };
+        let text = doc.extract_text();
+        assert!(text.contains("first"));
+        assert!(text.contains("second"));
+        let pos1 = text.find("first").unwrap();
+        let pos2 = text.find("second").unwrap();
+        assert!(pos2 > pos1);
+        let between = &text[pos1 + 5..pos2];
+        assert!(
+            between.contains('\n'),
+            "expected newline between blocks: {:?}",
+            between
+        );
     }
 
     #[test]

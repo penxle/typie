@@ -62,15 +62,15 @@ pub fn merge_modifiers(
                     conflicts.push(ConflictRecord {
                         kind: ConflictKind::Attribute,
                         target,
-                        base_value: in_base.map(|m| serde_json::to_value(m).unwrap()),
+                        base_value: in_base.map(|m| serde_json::to_value(m).unwrap().into()),
                         branches: vec![
                             ConflictBranch {
                                 side: BranchSide::Ours,
-                                value: serde_json::to_value(o).unwrap(),
+                                value: serde_json::to_value(o).unwrap().into(),
                             },
                             ConflictBranch {
                                 side: BranchSide::Theirs,
-                                value: serde_json::to_value(t).unwrap(),
+                                value: serde_json::to_value(t).unwrap().into(),
                             },
                         ],
                         auto_resolved: BranchSide::Ours,

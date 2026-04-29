@@ -149,8 +149,8 @@ function chunkCodepoints(
 
 export async function processFont(name: string, ttfData: Uint8Array): Promise<ProcessedFont> {
   const [codepoints, strategies] = await Promise.all([wasm.get_font_codepoints(ttfData), loadStrategies()]);
-  const { chunks: chunkCps, strategy } = chunkCodepoints(name, codepoints, strategies);
-  const output = await wasm.build_font(ttfData, chunkCps);
+  const { chunks: chunkCps, strategy } = chunkCodepoints(name, [...codepoints], strategies);
+  const output = await wasm.build_font(ttfData, { chunks: chunkCps });
 
   return {
     hash: output.hash,

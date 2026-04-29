@@ -117,15 +117,15 @@ pub fn merge(
                     all_conflicts.push(ConflictRecord {
                         kind: ConflictKind::Position,
                         target: ConflictTarget::Position { node_id: id },
-                        base_value: serde_json::to_value(base_parent).ok(),
+                        base_value: serde_json::to_value(base_parent).ok().map(Into::into),
                         branches: vec![
                             ConflictBranch {
                                 side: BranchSide::Ours,
-                                value: serde_json::to_value(new_parent).unwrap(),
+                                value: serde_json::to_value(new_parent).unwrap().into(),
                             },
                             ConflictBranch {
                                 side: BranchSide::Theirs,
-                                value: serde_json::to_value(safe_parent).unwrap(),
+                                value: serde_json::to_value(safe_parent).unwrap().into(),
                             },
                         ],
                         auto_resolved: BranchSide::Ours,

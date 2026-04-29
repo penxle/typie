@@ -148,6 +148,18 @@ export interface Composition {
 export type Affinity = "downstream" | "upstream";
 
 /**
+ * `ObjectContent::hash()` of this struct (via canonical JSON) is its Object hash —
+ * any change to `Serialize` shape changes the hash and breaks CAS dedup.
+ */
+export interface ObjectContent {
+    node_id: NodeId;
+    node: Node;
+    parent?: NodeId;
+    modifiers?: Modifier[];
+    children: ChildRef[];
+}
+
+/**
  * chunk별 flat 정수 배열 `[start0, end0, start1, end1, ...]` (inclusive).
  */
 export interface FontWeight {
@@ -212,10 +224,53 @@ export interface CalloutNode {
     variant?: CalloutVariant;
 }
 
+export interface ChildRef {
+    node_id: NodeId;
+    hash: string;
+}
+
+export interface ChunkCodepoints {
+    chunks: number[][];
+}
+
+export interface CommitPayload {
+    rootObjectHash: string;
+    newObjects: DerivedObject[];
+    steps: Step[];
+    meta: TransactionMeta;
+    committedAt: number;
+}
+
+export interface ConflictBranch {
+    side: BranchSide;
+    value: JsonValue;
+}
+
+export interface ConflictRecord {
+    kind: ConflictKind;
+    target: ConflictTarget;
+    base_value: JsonValue | undefined;
+    branches: ConflictBranch[];
+    /**
+     * Merge sets a default; caller overrides via LWW (committedAt) since merge has no clock.
+     */
+    auto_resolved: BranchSide;
+}
+
 export interface CursorMetrics {
     page_idx: number;
     caret: Rect;
     line: Rect;
+}
+
+export interface DeriveAllObjectsResult {
+    rootHash: string;
+    objects: DerivedObject[];
+}
+
+export interface DerivedObject {
+    hash: string;
+    content: ObjectContent;
 }
 
 export interface Doc {
@@ -326,6 +381,11 @@ export interface LinkValue {
 
 export interface ListItemNode {}
 
+export interface MergeResult {
+    merged: Doc;
+    conflicts: ConflictRecord[];
+}
+
 export interface ModifierState {
     bold: Tri<undefined>;
     italic: Tri<undefined>;
@@ -350,6 +410,11 @@ export interface NodeEntry {
     parent?: NodeId;
     children?: NodeId[];
     modifiers?: Modifier[];
+}
+
+export interface ObjectEntry {
+    hash: string;
+    content: ObjectContent;
 }
 
 export interface OrderedListNode {}
@@ -425,9 +490,13 @@ export interface Viewport {
 
 export type Alignment = "left" | "center" | "right" | "justify";
 
+export type AttributeScope = { scope: "node"; node_id: NodeId };
+
 export type Axis = "horizontal" | "vertical";
 
 export type BlockquoteVariant = "left_line" | "left_quote" | "message_sent" | "message_received";
+
+export type BranchSide = "ours" | "theirs";
 
 export type Break = "line" | "paragraph" | "page";
 
@@ -437,11 +506,15 @@ export type ClipboardOp = { type: "paste"; html: string | undefined; text: strin
 
 export type CompositionOp = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" } | { type: "flat"; ops: FlatImeOp[] };
 
+export type ConflictKind = "attribute" | "text" | "lifecycle" | "position" | "order";
+
+export type ConflictTarget = { kind: "attribute"; scope: AttributeScope; name: string } | { kind: "text"; node_id: NodeId; range_start: number; range_end: number } | { kind: "lifecycle"; node_id: NodeId; parent_id: NodeId } | { kind: "position"; node_id: NodeId } | { kind: "order"; parent_id: NodeId };
+
 export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
 
 export type Direction = "forward" | "backward";
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; steps: Step[]; meta: TransactionMeta };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; commitPayload: CommitPayload };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -460,6 +533,8 @@ export type HistoryTag = { type: "auto_replacement" } | { type: "paste_html"; pl
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
 
 export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment };
+
+export type JsonValue = unknown;
 
 export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
@@ -526,11 +601,16 @@ declare class EditorHost {
     [Symbol.dispose](): void;
     add_font_base(family: string, weight: number, data: Uint8Array): void;
     add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): void;
-    build_font(ttf_data: Uint8Array, chunk_codepoints: any): BuiltFont;
+    build_font(ttf_data: Uint8Array, chunk_codepoints: ChunkCodepoints): BuiltFont;
     static create(icu_data: Uint8Array): EditorHost;
     create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
-    get_font_codepoints(ttf_data: Uint8Array): any;
+    derive_all_objects(doc: Doc): DeriveAllObjectsResult;
+    extract_text(doc: Doc): string;
+    get_font_codepoints(ttf_data: Uint8Array): Uint32Array;
     get_font_metadata(data: Uint8Array): FontMetadata;
+    hash_object_content(content: ObjectContent): string;
+    merge_docs(base: Doc, ours: Doc, theirs: Doc): MergeResult;
+    reconstruct_doc_from_objects(root_hash: string, objects: ObjectEntry[]): Doc;
     set_fonts(families: FontFamily[]): void;
 }
 

@@ -23,6 +23,8 @@ thiserror.workspace = true
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
+xxhash-rust = { workspace = true }
 
 [dev-dependencies]
 hashbrown.workspace = true
+proptest = { workspace = true }

@@ -100,7 +100,7 @@ impl EditorHost {
 }
 
 impl EditorHost {
-    fn with_resource<F, R>(&self, f: F) -> EditorResult<R>
+    pub(crate) fn with_resource<F, R>(&self, f: F) -> EditorResult<R>
     where
         F: FnOnce(&mut editor_resource::Resource) -> EditorResult<R>,
     {

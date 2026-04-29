@@ -209,7 +209,7 @@ export const garbageCollectLoroDoc = (doc: LoroDoc): number => {
   return deletedNodes;
 };
 
-export const getLoroDocCharacterCount = (text: string) => {
+export const countCharacters = (text: string) => {
   return [...text.replaceAll('\u200B', '').replaceAll(/\s+/g, ' ').trim()].length;
 };
 
@@ -217,7 +217,7 @@ export const extractLoroDocContents = async (doc: LoroDoc) => {
   const snapshot = new Uint8Array(doc.export({ mode: 'snapshot' }));
   const json = await wasm.snapshotToJson(snapshot);
   const text = extractTextFromLoroDoc(doc);
-  const characterCount = getLoroDocCharacterCount(text);
+  const characterCount = countCharacters(text);
   const { imageIds, fileIds } = extractAssetIdsFromLoroDoc(doc);
   const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
 

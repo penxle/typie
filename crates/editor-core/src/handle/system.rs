@@ -985,8 +985,6 @@ mod tests {
 
     #[test]
     fn resize_paginated_emits_no_render_invalidated() {
-        use editor_model::LayoutMode;
-
         let (state, _t1) = state! {
             doc {
                 root (
@@ -1034,8 +1032,6 @@ mod tests {
 
     #[test]
     fn resize_continuous_width_change_emits_render_invalidated() {
-        use editor_model::LayoutMode;
-
         let (state, _t1) = state! {
             doc {
                 root (

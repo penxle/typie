@@ -312,15 +312,15 @@ fn integrate_hunks(
                             range_start,
                             range_end,
                         },
-                        base_value: Some(serde_json::Value::String(base_slice)),
+                        base_value: Some(serde_json::Value::String(base_slice).into()),
                         branches: vec![
                             ConflictBranch {
                                 side: BranchSide::Ours,
-                                value: serde_json::Value::String(ours_str.clone()),
+                                value: serde_json::Value::String(ours_str.clone()).into(),
                             },
                             ConflictBranch {
                                 side: BranchSide::Theirs,
-                                value: serde_json::Value::String(theirs_str),
+                                value: serde_json::Value::String(theirs_str).into(),
                             },
                         ],
                         auto_resolved: BranchSide::Ours,

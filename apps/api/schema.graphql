@@ -66,6 +66,15 @@ input CheckSpellingDocumentInput {
   text: String!
 }
 
+input ClientCommitInput {
+  commitId: String!
+  committedAt: DateTime!
+  meta: JSON
+  objectHash: String!
+  parentCommitId: String!
+  steps: JSON
+}
+
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -183,6 +192,7 @@ type Document implements IDocument {
   layoutMode: JSON!
   locked: Boolean!
   nullableTitle: String
+  objects(hashes: [String!]!): [DocumentObject!]!
   password: String
   previewUrl: String!
   protectContent: Boolean!
@@ -210,12 +220,57 @@ enum DocumentAvailableAction {
   EDIT
 }
 
+type DocumentCommit {
+  commitId: String!
+  committedAt: DateTime!
+  conflicts: [DocumentConflict!]!
+  device: UserDevice
+  id: ID!
+  meta: JSON
+  object: DocumentObject!
+  objects: [DocumentObject!]!
+  parent: DocumentCommit
+  pushedAt: DateTime!
+  secondParent: DocumentCommit
+  user: User
+}
+
+type DocumentCommitsUpdatedEvent {
+  commits: [DocumentCommit!]!
+  objects: [DocumentObject!]!
+}
+
+type DocumentConflict {
+  autoResolvedBranch: DocumentConflictBranch
+  baseValue: JSON
+  branches: [DocumentConflictBranch!]!
+  createdAt: DateTime!
+  id: ID!
+  kind: DocumentConflictKind!
+  mergeCommit: DocumentCommit!
+  resolution: DocumentConflictResolution
+  target: JSON!
+}
+
+type DocumentConflictBranch {
+  commit: DocumentCommit!
+  id: ID!
+  value: JSON!
+}
+
 enum DocumentConflictKind {
   ATTRIBUTE
   LIFECYCLE
   ORDER
   POSITION
   TEXT
+}
+
+type DocumentConflictResolution {
+  commit: DocumentCommit!
+  createdAt: DateTime!
+  id: ID!
+  value: JSON!
 }
 
 enum DocumentContentRating {
@@ -264,6 +319,18 @@ type DocumentLiteraryFeedbackResult {
   nodeId: String!
   startOffset: Int!
   startText: String!
+}
+
+type DocumentObject {
+  content: JSON!
+  createdAt: DateTime!
+  hash: String!
+  id: ID!
+}
+
+input DocumentObjectInput {
+  content: JSON!
+  hash: String!
 }
 
 type DocumentReaction {
@@ -747,6 +814,7 @@ type Mutation {
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   purchasePaywall(input: PurchasePaywallInput!): Boolean!
   purgeEntities(input: PurgeEntitiesInput!): Site!
+  pushDocumentCommits(input: PushDocumentCommitsInput!): [DocumentCommit!]!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
@@ -1024,6 +1092,12 @@ input PurgeEntitiesInput {
   entityIds: [ID!]!
 }
 
+input PushDocumentCommitsInput {
+  commits: [ClientCommitInput!]!
+  documentId: ID!
+  objects: [DocumentObjectInput!]!
+}
+
 type Query {
   activeWritersCount: Int!
   adminDocument(documentId: String!): Document!
@@ -1241,6 +1315,7 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
+  documentCommitsUpdated(documentId: ID!, sinceCommitId: String!): DocumentCommitsUpdatedEvent!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

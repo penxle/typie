@@ -4,6 +4,7 @@ import './resolvers/admin.ts';
 import './resolvers/auth.ts';
 import './resolvers/blob.ts';
 import './resolvers/document.ts';
+import './resolvers/sync.ts';
 import './resolvers/entity.ts';
 import './resolvers/folder.ts';
 import './resolvers/font.ts';

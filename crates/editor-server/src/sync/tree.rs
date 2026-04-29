@@ -196,11 +196,11 @@ fn position_conflict(
         branches: vec![
             ConflictBranch {
                 side: BranchSide::Ours,
-                value: serde_json::to_value(ours_parent).unwrap(),
+                value: serde_json::to_value(ours_parent).unwrap().into(),
             },
             ConflictBranch {
                 side: BranchSide::Theirs,
-                value: serde_json::to_value(theirs_parent).unwrap(),
+                value: serde_json::to_value(theirs_parent).unwrap().into(),
             },
         ],
         auto_resolved: BranchSide::Ours,
@@ -221,11 +221,11 @@ fn lifecycle_conflict(
         branches: vec![
             ConflictBranch {
                 side: BranchSide::Ours,
-                value: serde_json::Value::String(ours_label.into()),
+                value: serde_json::Value::String(ours_label.into()).into(),
             },
             ConflictBranch {
                 side: BranchSide::Theirs,
-                value: serde_json::Value::String(theirs_label.into()),
+                value: serde_json::Value::String(theirs_label.into()).into(),
             },
         ],
         auto_resolved: BranchSide::Ours,

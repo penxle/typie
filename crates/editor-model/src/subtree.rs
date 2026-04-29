@@ -78,6 +78,19 @@ impl Subtree {
         }
         self.children.iter().any(|c| c.contains_node(id))
     }
+
+    pub fn all_ids(&self) -> Vec<NodeId> {
+        let mut ids = Vec::new();
+        self.collect_ids(&mut ids);
+        ids
+    }
+
+    fn collect_ids(&self, ids: &mut Vec<NodeId>) {
+        ids.push(self.id);
+        for child in &self.children {
+            child.collect_ids(ids);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -182,5 +195,22 @@ mod tests {
         let other = NodeId::new();
         let tree = Subtree::leaf(id, Node::Paragraph(ParagraphNode::default()));
         assert!(!tree.contains_node(other));
+    }
+
+    #[test]
+    fn all_ids_collects_all_nodes() {
+        let root_id = NodeId::new();
+        let child_id = NodeId::new();
+        let grandchild_id = NodeId::new();
+        let tree = Subtree::leaf(root_id, Node::BulletList(BulletListNode {})).with_children(vec![
+            Subtree::leaf(child_id, Node::ListItem(ListItemNode {})).with_children(vec![
+                Subtree::leaf(grandchild_id, Node::Paragraph(ParagraphNode::default())),
+            ]),
+        ]);
+        let ids = tree.all_ids();
+        assert_eq!(ids.len(), 3);
+        assert!(ids.contains(&root_id));
+        assert!(ids.contains(&child_id));
+        assert!(ids.contains(&grandchild_id));
     }
 }

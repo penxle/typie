@@ -172,18 +172,31 @@ impl Step {
             | Step::RemoveModifier { node_id, .. }
             | Step::SetModifiers { node_id, .. }
             | Step::SetNode { node_id, .. } => vec![*node_id],
-            Step::InsertSubtree { parent_id, .. } | Step::RemoveSubtree { parent_id, .. } => {
-                vec![*parent_id]
+            Step::InsertSubtree {
+                parent_id, subtree, ..
+            } => {
+                let mut ids = vec![*parent_id];
+                ids.extend(subtree.all_ids());
+                ids
             }
-            Step::SplitNode { node_id, .. } => vec![*node_id],
-            Step::MergeNode {
-                node_id, target_id, ..
-            } => vec![*node_id, *target_id],
+            // RemoveSubtree affects only the parent (its children list shrinks).
+            // Removed nodes are not in the new doc, so listing them would cause
+            // derive_objects_for_path to panic when looking up missing entries.
+            Step::RemoveSubtree { parent_id, .. } => vec![*parent_id],
+            Step::SplitNode {
+                node_id,
+                new_node_id,
+                ..
+            } => vec![*node_id, *new_node_id],
+            // MergeNode collapses node_id into target_id; node_id is removed from the
+            // new doc, so listing it would cause derive_objects_for_path to panic.
+            Step::MergeNode { target_id, .. } => vec![*target_id],
             Step::MoveNode {
+                node_id,
                 old_parent,
                 new_parent,
                 ..
-            } => vec![*old_parent, *new_parent],
+            } => vec![*node_id, *old_parent, *new_parent],
             Step::SetSelection { .. }
             | Step::SetPendingModifiers { .. }
             | Step::SetComposition { .. } => vec![],
@@ -598,5 +611,82 @@ mod scope_tests {
             new: None,
         };
         assert!(matches!(step.scope(), StepScope::Local));
+    }
+}
+
+#[cfg(test)]
+mod affected_tests {
+    use super::*;
+
+    #[test]
+    fn affected_includes_split_new_node_id() {
+        let old = NodeId::new();
+        let new = NodeId::new();
+        let step = Step::SplitNode {
+            node_id: old,
+            offset: 3,
+            new_node_id: new,
+        };
+        let ids = step.affected_node_ids();
+        assert!(ids.contains(&old));
+        assert!(ids.contains(&new));
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn affected_includes_move_node_id() {
+        let id = NodeId::new();
+        let old_parent = NodeId::new();
+        let new_parent = NodeId::new();
+        let step = Step::MoveNode {
+            node_id: id,
+            old_parent,
+            old_index: 0,
+            new_parent,
+            new_index: 0,
+        };
+        let ids = step.affected_node_ids();
+        assert!(ids.contains(&id));
+        assert!(ids.contains(&old_parent));
+        assert!(ids.contains(&new_parent));
+        assert_eq!(ids.len(), 3);
+    }
+
+    #[test]
+    fn affected_merge_node_excludes_removed_node() {
+        let surviving = NodeId::new();
+        let removed = NodeId::new();
+        let step = Step::MergeNode {
+            node_id: removed,
+            target_id: surviving,
+            offset: 0,
+        };
+        let ids = step.affected_node_ids();
+        assert_eq!(ids, vec![surviving]);
+    }
+
+    #[test]
+    fn affected_includes_subtree_inserted_nodes() {
+        use editor_model::{Node, RootNode, Subtree};
+        let parent = NodeId::new();
+        let n1 = NodeId::new();
+        let n2 = NodeId::new();
+        let n3 = NodeId::new();
+        // 3-level: parent → n1 → n2 → n3
+        let subtree = Subtree::leaf(n1, Node::Root(RootNode::default())).with_children(vec![
+            Subtree::leaf(n2, Node::Root(RootNode::default()))
+                .with_children(vec![Subtree::leaf(n3, Node::Root(RootNode::default()))]),
+        ]);
+        let step = Step::InsertSubtree {
+            parent_id: parent,
+            index: 0,
+            subtree,
+        };
+        let ids = step.affected_node_ids();
+        assert!(ids.contains(&parent));
+        assert!(ids.contains(&n1));
+        assert!(ids.contains(&n2));
+        assert!(ids.contains(&n3));
+        assert_eq!(ids.len(), 4);
     }
 }

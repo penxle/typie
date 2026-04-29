@@ -23,15 +23,15 @@ pub fn merge_children_order(
     let record = ConflictRecord {
         kind: ConflictKind::Order,
         target: ConflictTarget::Order { parent_id },
-        base_value: Some(serde_json::to_value(base).unwrap()),
+        base_value: Some(serde_json::to_value(base).unwrap().into()),
         branches: vec![
             ConflictBranch {
                 side: BranchSide::Ours,
-                value: serde_json::to_value(ours).unwrap(),
+                value: serde_json::to_value(ours).unwrap().into(),
             },
             ConflictBranch {
                 side: BranchSide::Theirs,
-                value: serde_json::to_value(theirs).unwrap(),
+                value: serde_json::to_value(theirs).unwrap().into(),
             },
         ],
         auto_resolved: BranchSide::Ours,
@@ -79,7 +79,10 @@ mod tests {
         assert_eq!(c.kind, ConflictKind::Order);
         assert_eq!(c.target, ConflictTarget::Order { parent_id: parent });
         assert_eq!(c.branches.len(), 2);
-        assert_eq!(c.base_value, Some(serde_json::to_value(&base).unwrap()));
+        assert_eq!(
+            c.base_value,
+            Some(serde_json::to_value(&base).unwrap().into())
+        );
         assert_eq!(c.auto_resolved, BranchSide::Ours);
         assert_eq!(m, ours);
     }

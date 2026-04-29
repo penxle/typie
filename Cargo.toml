@@ -73,6 +73,7 @@ web-sys = "0.3"
 web-time = "1"
 wgpu = "28"
 write-fonts = "0.45"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 zeno = "0.3"
 zune-png = "0.5"
 

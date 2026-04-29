@@ -1,5 +1,6 @@
 mod attribute;
 mod conflict;
+mod json_value;
 mod merge;
 mod modifier;
 mod reorder;
@@ -9,6 +10,7 @@ mod tree;
 pub use conflict::{
     AttributeScope, BranchSide, ConflictBranch, ConflictKind, ConflictRecord, ConflictTarget,
 };
+pub use json_value::JsonValue;
 pub use merge::merge;
 
 #[cfg(test)]
