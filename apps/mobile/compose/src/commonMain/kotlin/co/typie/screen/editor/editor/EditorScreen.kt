@@ -69,6 +69,7 @@ import co.typie.screen.editor.editor.toolbar.effectiveImeInset
 import co.typie.screen.editor.editor.toolbar.isSoftwareKeyboardVisible
 import co.typie.screen.editor.editor.toolbar.rememberEditorKeyboardState
 import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarInputState
+import co.typie.screen.editor.editor.toolbar.rememberToolbarPagerState
 import co.typie.screen.editor.editor.toolbar.suppressSoftwareKeyboard
 import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPanel
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
@@ -184,6 +185,7 @@ fun EditorScreen(entityId: String) {
     val toolbarInputState = rememberEditorToolbarInputState()
     val toolbarBackdropHazeState = remember { HazeState() }
     val keyboardState = rememberEditorKeyboardState()
+    val toolbarPagerState = rememberToolbarPagerState(key = entityId)
     val toolbarInputEnvironment =
       ToolbarInputEnvironment(
         visible = screenState.sceneInForeground,
@@ -460,6 +462,8 @@ fun EditorScreen(entityId: String) {
         },
         toolbar = {
           EditorToolbarHost(
+            editorState = editorState,
+            pagerState = toolbarPagerState,
             editorFocused = uiState.focused,
             inputState = toolbarInputState,
             environment = toolbarInputEnvironment,

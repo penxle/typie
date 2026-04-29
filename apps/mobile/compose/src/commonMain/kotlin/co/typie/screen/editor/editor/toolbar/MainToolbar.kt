@@ -1,54 +1,41 @@
 package co.typie.screen.editor.editor.toolbar
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import co.typie.icons.Lucide
 
-internal fun editorMainToolbarPage(): EditorToolbarPage =
+internal fun editorMainToolbarPage(hasTextPage: Boolean): EditorToolbarPage =
   EditorToolbarPage(
     key = EditorToolbarPageKey.Main,
     icon = Lucide.CircleSmall,
     contentDescription = "메인 툴바",
-    content = { scope -> EditorMainToolbar(scope) },
+    content = { scope -> EditorMainToolbar(scope = scope, hasTextPage = hasTextPage) },
   )
 
 @Composable
-private fun EditorMainToolbar(scope: EditorToolbarPageScope, modifier: Modifier = Modifier) {
+private fun EditorMainToolbar(
+  scope: EditorToolbarPageScope,
+  hasTextPage: Boolean,
+  modifier: Modifier = Modifier,
+) {
   val insertPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanelKey.Insert
   val toolsPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanelKey.Tools
 
-  Row(
-    modifier =
-      modifier
-        .fillMaxSize()
-        .padding(
-          start = ToolbarPageStartPadding,
-          top = ToolbarPageVerticalPadding,
-          end = 0.dp,
-          bottom = ToolbarPageVerticalPadding,
-        ),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(ToolbarItemGap),
-  ) {
+  EditorToolbarRow(scope = scope, modifier = modifier) {
     EditorToolbarButton(
       icon = Lucide.Plus,
       contentDescription = "새 노드 삽입",
       onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanelKey.Insert) },
       selected = insertPanelOpen,
     )
-    EditorToolbarButton(
-      icon = Lucide.Type,
-      contentDescription = "텍스트",
-      onClick = { scope.navigateToPage(EditorToolbarPageKey.Text) },
-    )
+    if (hasTextPage) {
+      EditorToolbarButton(
+        icon = Lucide.Type,
+        contentDescription = "텍스트",
+        onClick = { scope.navigateToPage(EditorToolbarPageKey.Text) },
+      )
+    }
     EditorToolbarButton(icon = Lucide.Undo, contentDescription = "실행 취소", onClick = {})
     EditorToolbarButton(icon = Lucide.Redo, contentDescription = "다시 실행", onClick = {})
     Spacer(Modifier.weight(1f))
@@ -59,10 +46,5 @@ private fun EditorMainToolbar(scope: EditorToolbarPageScope, modifier: Modifier 
       onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanelKey.Tools) },
       selected = toolsPanelOpen,
     )
-    if (scope.hasNextPage) {
-      EditorToolbarPageIndicator()
-    } else {
-      Spacer(Modifier.width(ToolbarLastPageReservedEndPadding))
-    }
   }
 }

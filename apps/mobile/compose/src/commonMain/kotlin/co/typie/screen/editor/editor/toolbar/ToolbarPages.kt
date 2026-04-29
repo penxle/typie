@@ -33,11 +33,21 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import co.typie.editor.ffi.Node
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
+import co.typie.screen.editor.editor.toolbar.contextual.editorArchivedToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorBlockquoteToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorCalloutToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorEmbedToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorFileToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorFoldToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorHorizontalRuleToolbarPage
 import co.typie.screen.editor.editor.toolbar.contextual.editorImageToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorListToolbarPage
+import co.typie.screen.editor.editor.toolbar.contextual.editorTableToolbarPage
 import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
@@ -47,19 +57,42 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun rememberEditorToolbarPages(): List<EditorToolbarPage> {
+internal fun rememberEditorToolbarPages(
+  toolbarContext: EditorToolbarContext
+): List<EditorToolbarPage> {
   val textToolbarPage = rememberTextToolbarPage()
-  return remember(textToolbarPage) {
-    listOf(editorMainToolbarPage(), textToolbarPage, editorImageToolbarPage())
+  return remember(toolbarContext, textToolbarPage) {
+    toolbarContext.pageKeys.map { key ->
+      when (key) {
+        EditorToolbarPageKey.Main ->
+          editorMainToolbarPage(hasTextPage = EditorToolbarPageKey.Text in toolbarContext.pageKeys)
+        EditorToolbarPageKey.Text -> textToolbarPage
+        EditorToolbarPageKey.Image ->
+          editorImageToolbarPage(toolbarContext.selectedNode as? Node.Image)
+        EditorToolbarPageKey.File -> editorFileToolbarPage()
+        EditorToolbarPageKey.Embed -> editorEmbedToolbarPage()
+        EditorToolbarPageKey.Archived -> editorArchivedToolbarPage()
+        EditorToolbarPageKey.HorizontalRule -> editorHorizontalRuleToolbarPage()
+        EditorToolbarPageKey.List -> editorListToolbarPage(toolbarContext.listMode)
+        EditorToolbarPageKey.Blockquote -> editorBlockquoteToolbarPage()
+        EditorToolbarPageKey.Callout -> editorCalloutToolbarPage()
+        EditorToolbarPageKey.Fold -> editorFoldToolbarPage()
+        EditorToolbarPageKey.Table -> editorTableToolbarPage(toolbarContext.tableMode)
+      }
+    }
   }
 }
 
 @Composable
 internal fun EditorToolbarPages(
   pages: List<EditorToolbarPage>,
+  pagerState: ToolbarPagerState = rememberToolbarPagerState(),
+  autoTargetPageKey: EditorToolbarPageKey? = null,
+  autoTargetRevision: Long = 0L,
   editorFocused: Boolean,
   activeBottomPanel: EditorToolbarBottomPanelKey?,
   fixedAction: ToolbarFixedAction,
@@ -71,9 +104,9 @@ internal fun EditorToolbarPages(
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
   val hazeState = LocalHazeState.current
-  val pagerState = rememberToolbarPagerState()
 
   BoxWithConstraints(modifier = modifier.height(ToolbarStackHeight)) {
+    val pageKeys = pages.map { it.key }
     val pageCount = pages.size.coerceAtLeast(1)
     val lastPageIndex = pageCount - 1
     val pageDistance = with(density) { maxWidth.roundToPx().coerceAtLeast(0) }.toFloat()
@@ -84,9 +117,27 @@ internal fun EditorToolbarPages(
       remember(pageDistance, pageScrollRanges) {
         ToolbarPagerMetrics(pageDistance = pageDistance, scrollRanges = pageScrollRanges)
       }
-    val pageProgress = pageMetrics.progressFor(pagerState.scrollPosition)
+    val validAutoTargetPageKey = autoTargetPageKey?.takeIf { target -> target in pageKeys }
+    val pageKeysChangedInFrame =
+      pagerState.previousPageKeys?.let { previousPageKeys -> previousPageKeys != pageKeys } == true
+    val retainedPageIndex = pages.indexOfFirst { page -> page.key == pagerState.settledPageKey }
+    val retainedPagePosition =
+      if (
+        pageKeysChangedInFrame &&
+          retainedPageIndex >= 0 &&
+          (validAutoTargetPageKey == null || validAutoTargetPageKey == pagerState.settledPageKey)
+      ) {
+        val retainedScrollState = pages[retainedPageIndex].scrollState
+        val retainedInternalScroll =
+          retainedScrollState?.value?.coerceIn(0, retainedScrollState.maxValue) ?: 0
+        pageMetrics.positionForPageEntry(pageIndex = retainedPageIndex) + retainedInternalScroll
+      } else {
+        null
+      }
+    val visualScrollPosition = retainedPagePosition ?: pagerState.scrollPosition
+    val pageProgress = pageMetrics.progressFor(visualScrollPosition)
     val indicatorProgress = pagerState.indicatorDragProgress ?: pageProgress
-    val currentPageIndex = pageMetrics.pageIndexForPosition(pagerState.scrollPosition)
+    val currentPageIndex = pageMetrics.pageIndexForPosition(visualScrollPosition)
     val scrollableState = rememberScrollableState { delta ->
       val currentPosition = pagerState.scrollPosition
       val gestureStartPosition =
@@ -158,6 +209,8 @@ internal fun EditorToolbarPages(
       consumed
     }
 
+    LaunchedEffect(Unit) { pagerState.indicatorPulse++ }
+
     LaunchedEffect(scrollableState) {
       snapshotFlow { scrollableState.isScrollInProgress }
         .distinctUntilChanged()
@@ -171,14 +224,12 @@ internal fun EditorToolbarPages(
         }
     }
 
-    LaunchedEffect(pageCount, pageMetrics) {
-      val coercedPage = pagerState.settledPageIndex.coerceIn(0, lastPageIndex)
+    LaunchedEffect(pageMetrics) {
       val coercedPosition = pagerState.scrollPosition.coerceIn(0f, pageMetrics.maxPosition)
       if (coercedPosition != pagerState.scrollPosition) {
         pagerState.scrollPosition = coercedPosition
         pagerState.scrollPositionAnimation.snapTo(coercedPosition)
       }
-      pagerState.settledPageIndex = coercedPage
     }
 
     LaunchedEffect(pages, pageMetrics) {
@@ -251,10 +302,56 @@ internal fun EditorToolbarPages(
       }
     }
 
+    suspend fun snapScrollPositionTo(targetPosition: Float) {
+      pagerState.scrollPositionAnimation.stop()
+      pagerState.scrollPositionAnimation.snapTo(targetPosition)
+      pagerState.scrollPosition = targetPosition
+    }
+
+    suspend fun moveToPageKey(
+      pageKey: EditorToolbarPageKey,
+      animate: Boolean,
+      resetInternalScroll: Boolean,
+    ) {
+      val targetPageIndex = pages.indexOfFirst { it.key == pageKey }
+      if (targetPageIndex < 0) {
+        return
+      }
+      val targetPosition =
+        if (resetInternalScroll) {
+          pageMetrics.positionForPageEntry(pageIndex = targetPageIndex)
+        } else if (pageKey == pagerState.settledPageKey) {
+          val targetScrollState = pages[targetPageIndex].scrollState
+          val targetInternalScroll =
+            targetScrollState?.value?.coerceIn(0, targetScrollState.maxValue)?.toFloat() ?: 0f
+          pageMetrics.positionForPageEntry(pageIndex = targetPageIndex) + targetInternalScroll
+        } else {
+          pageMetrics.positionForPageEntry(
+            pageIndex = targetPageIndex,
+            fromPageIndex = pageMetrics.pageIndexForPosition(pagerState.scrollPosition),
+          )
+        }
+      if (
+        pageKey == pagerState.settledPageKey &&
+          abs(targetPosition - pagerState.scrollPosition) <= ToolbarSnapPositionEpsilon
+      ) {
+        return
+      }
+
+      pagerState.activeHardStop = null
+      pagerState.hardStopVisualOffset.snapTo(0f)
+      if (animate) {
+        animateScrollPositionTo(targetPosition = targetPosition)
+      } else {
+        snapScrollPositionTo(targetPosition)
+      }
+      pagerState.settledPageKey = pageKey
+    }
+
     fun navigateToPageIndex(pageIndex: Int) {
       scope.launch {
         val targetPageIndex = pageIndex.coerceIn(0, lastPageIndex)
-        if (targetPageIndex != pagerState.settledPageIndex) {
+        if (pages[targetPageIndex].key != pagerState.settledPageKey) {
           onEditorInputRequest()
         }
         pagerState.activeHardStop = null
@@ -265,7 +362,8 @@ internal fun EditorToolbarPages(
             fromPageIndex = currentPageIndex,
           )
         animateScrollPositionTo(targetPosition = targetPosition)
-        pagerState.settledPageIndex = targetPageIndex
+        pagerState.settledPageKey = pages[targetPageIndex].key
+        pagerState.recordManualPageKey(pages[targetPageIndex].key)
       }
     }
 
@@ -280,14 +378,55 @@ internal fun EditorToolbarPages(
       val snapPosition =
         pageMetrics.snapPosition(pagerState.scrollPosition, velocity, pagerState.activeHardStop)
       val snapPage = pageMetrics.pageIndexForPosition(snapPosition)
-      if (snapPage != pagerState.settledPageIndex) {
+      val snapPageKey = pages.getOrNull(snapPage)?.key ?: EditorToolbarPageKey.Main
+      if (snapPageKey != pagerState.settledPageKey) {
         onEditorInputRequest()
       }
       animateScrollPositionTo(targetPosition = snapPosition, initialVelocity = -velocity)
-      pagerState.settledPageIndex = snapPage
+      pagerState.settledPageKey = snapPageKey
+      pagerState.recordManualPageKey(pagerState.settledPageKey)
       pagerState.activeHardStop = null
       if (pagerState.hardStopVisualOffset.value != 0f) {
         pagerState.hardStopVisualOffset.animateTo(0f, ToolbarHardStopOverscrollSpring)
+      }
+    }
+
+    LaunchedEffect(pageKeys, validAutoTargetPageKey, autoTargetRevision, pageMetrics) {
+      val previousPageKeys = pagerState.previousPageKeys
+      val initialized = previousPageKeys != null
+      val pageKeysChanged = previousPageKeys != null && previousPageKeys != pageKeys
+      pagerState.previousPageKeys = pageKeys
+      if (pageKeysChanged) {
+        pagerState.indicatorPulse++
+      }
+      val previousAutoReturnPageKey = pagerState.capturedAutoReturnPageKey
+      val policyAutoReturnPageKey =
+        if (validAutoTargetPageKey == null) {
+          previousAutoReturnPageKey
+        } else {
+          null
+        }
+      if (validAutoTargetPageKey != null && previousAutoReturnPageKey == null) {
+        pagerState.capturedAutoReturnPageKey = pagerState.recentManualPageKeys.firstOrNull()
+      }
+      snapshotFlow {
+          scrollableState.isScrollInProgress ||
+            pagerState.pointerScrollGestureActive ||
+            pagerState.decayFlingInProgress
+        }
+        .first { inProgress -> !inProgress }
+      val targetPageKey =
+        validAutoTargetPageKey
+          ?: policyAutoReturnPageKey?.takeIf { target -> target in pageKeys }
+          ?: pagerState.recentManualPageKeys.firstOrNull { key -> key in pageKeys }
+          ?: EditorToolbarPageKey.Main
+      moveToPageKey(
+        pageKey = targetPageKey,
+        animate = initialized && targetPageKey != pagerState.settledPageKey,
+        resetInternalScroll = targetPageKey != pagerState.settledPageKey,
+      )
+      if (validAutoTargetPageKey == null && previousAutoReturnPageKey != null) {
+        pagerState.capturedAutoReturnPageKey = null
       }
     }
 
@@ -423,7 +562,7 @@ internal fun EditorToolbarPages(
               Box(
                 modifier =
                   Modifier.fillMaxSize().offset {
-                    val pageOffset = pageMetrics.pageOffsetFor(index, pagerState.scrollPosition)
+                    val pageOffset = pageMetrics.pageOffsetFor(index, visualScrollPosition)
                     IntOffset(x = pageOffset.roundToInt(), y = 0)
                   }
               ) {

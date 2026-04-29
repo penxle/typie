@@ -32,11 +32,14 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import co.typie.editor.EditorState
 import co.typie.ui.component.ResponsiveContainerDefaults
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun EditorToolbarHost(
+  editorState: EditorState,
+  pagerState: ToolbarPagerState,
   editorFocused: Boolean,
   inputState: EditorToolbarInputState,
   environment: ToolbarInputEnvironment,
@@ -45,7 +48,8 @@ internal fun EditorToolbarHost(
 ) {
   val focusManager = LocalFocusManager.current
   val keyboardController = LocalSoftwareKeyboardController.current
-  val pages = rememberEditorToolbarPages()
+  val toolbarContext = remember(editorState.version) { resolveEditorToolbarContext(editorState) }
+  val pages = rememberEditorToolbarPages(toolbarContext)
   val panel = inputState.panel
   val activeBottomPanel = panel?.key
   val bottomPanelTransition = remember { MutableTransitionState(activeBottomPanel != null) }
@@ -181,6 +185,9 @@ internal fun EditorToolbarHost(
       ) {
         EditorToolbarPages(
           pages = pages,
+          pagerState = pagerState,
+          autoTargetPageKey = toolbarContext.autoTargetPageKey,
+          autoTargetRevision = editorState.version,
           editorFocused = editorFocused,
           activeBottomPanel = activeBottomPanel,
           fixedAction = fixedAction,

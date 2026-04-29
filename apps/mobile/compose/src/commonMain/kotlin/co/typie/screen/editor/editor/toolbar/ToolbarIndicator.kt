@@ -1,7 +1,14 @@
 package co.typie.screen.editor.editor.toolbar
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -26,6 +33,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import co.typie.ui.icon.Icon
+import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
@@ -54,11 +62,24 @@ internal fun EditorToolbarIndicatorPill(
     ToolbarIndicatorPadding * 2 +
       ToolbarIndicatorItemSize * pages.size +
       ToolbarIndicatorItemGap * (pages.size - 1)
+  val animatedIndicatorWidth by
+    animateDpAsState(
+      targetValue = indicatorWidth,
+      animationSpec = tween(ToolbarIndicatorWidthMillis),
+      label = "editor-toolbar-indicator-width",
+    )
+  val indicatorItems = pages.map { page ->
+    ToolbarIndicatorIconItem(
+      key = page.key,
+      icon = page.icon,
+      contentDescription = page.contentDescription,
+    )
+  }
 
   Box(
     modifier =
       modifier
-        .width(indicatorWidth)
+        .width(animatedIndicatorWidth)
         .height(ToolbarIndicatorHeight)
         .shadow(AppTheme.shadows.sm, ToolbarIndicatorShape)
         .clip(ToolbarIndicatorShape)
@@ -82,29 +103,49 @@ internal fun EditorToolbarIndicatorPill(
           .background(AppTheme.colors.surfaceInset, ToolbarIndicatorShape)
     )
 
-    Row(
-      modifier = Modifier.fillMaxSize().padding(ToolbarIndicatorPadding),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(ToolbarIndicatorItemGap),
-    ) {
-      pages.forEachIndexed { index, page ->
-        Box(
-          modifier = Modifier.size(ToolbarIndicatorItemSize).focusProperties { canFocus = false },
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(
-            icon = page.icon,
-            contentDescription = page.contentDescription,
-            modifier = Modifier.size(ToolbarIndicatorIconSize),
-            tint =
-              if (index == currentPageIndex) AppTheme.colors.textDefault
-              else AppTheme.colors.textHint,
+    AnimatedContent(
+      targetState = indicatorItems,
+      transitionSpec = {
+        (fadeIn(tween(ToolbarIndicatorIconsMillis)) +
+            scaleIn(tween(ToolbarIndicatorIconsMillis), initialScale = 0.92f))
+          .togetherWith(
+            fadeOut(tween(ToolbarIndicatorIconsMillis)) +
+              scaleOut(tween(ToolbarIndicatorIconsMillis), targetScale = 0.92f)
           )
+      },
+      modifier = Modifier.fillMaxSize(),
+      label = "editor-toolbar-indicator-icons",
+    ) { targetItems ->
+      Row(
+        modifier = Modifier.fillMaxSize().padding(ToolbarIndicatorPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ToolbarIndicatorItemGap),
+      ) {
+        targetItems.forEachIndexed { index, item ->
+          Box(
+            modifier = Modifier.size(ToolbarIndicatorItemSize).focusProperties { canFocus = false },
+            contentAlignment = Alignment.Center,
+          ) {
+            Icon(
+              icon = item.icon,
+              contentDescription = item.contentDescription,
+              modifier = Modifier.size(ToolbarIndicatorIconSize),
+              tint =
+                if (index == currentPageIndex) AppTheme.colors.textDefault
+                else AppTheme.colors.textHint,
+            )
+          }
         }
       }
     }
   }
 }
+
+private data class ToolbarIndicatorIconItem(
+  val key: EditorToolbarPageKey,
+  val icon: IconData,
+  val contentDescription: String,
+)
 
 @Composable
 internal fun Modifier.toolbarIndicatorGestures(

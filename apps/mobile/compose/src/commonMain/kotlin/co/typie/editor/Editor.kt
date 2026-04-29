@@ -7,12 +7,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import co.touchlab.kermit.Logger
+import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
@@ -56,6 +58,8 @@ internal constructor(
   val selection: Selection? by derivedStateOf { state.selection }
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
   val rootAttrs: RootNode? by derivedStateOf { state.rootAttrs }
+  val modifierState: ModifierState? by derivedStateOf { state.modifierState }
+  val blockState: BlockState? by derivedStateOf { state.blockState }
   val ime: Ime? by derivedStateOf { state.ime }
 
   private val mutex: Mutex = Mutex()
@@ -289,6 +293,8 @@ internal constructor(
       selection = runCatching { inner.selection() }.getOrNull(),
       pageSizes = inner.pageSizes(),
       rootAttrs = runCatching { inner.rootAttrs() }.getOrNull(),
+      modifierState = runCatching { inner.modifierState() }.getOrNull(),
+      blockState = runCatching { inner.blockState() }.getOrNull(),
       ime = runCatching { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) }.getOrNull(),
     )
 

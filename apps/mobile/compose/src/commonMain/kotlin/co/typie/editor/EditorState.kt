@@ -1,7 +1,9 @@
 package co.typie.editor
 
+import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
@@ -12,6 +14,8 @@ data class EditorState(
   val selection: Selection?,
   val pageSizes: List<Size>,
   val rootAttrs: RootNode?,
+  val modifierState: ModifierState? = null,
+  val blockState: BlockState? = null,
   val ime: Ime?,
 ) {
   companion object {
@@ -22,6 +26,8 @@ data class EditorState(
         selection = null,
         pageSizes = emptyList(),
         rootAttrs = null,
+        modifierState = null,
+        blockState = null,
         ime = null,
       )
   }

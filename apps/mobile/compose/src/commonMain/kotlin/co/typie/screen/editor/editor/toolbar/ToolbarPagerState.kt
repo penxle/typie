@@ -16,7 +16,8 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
-internal fun rememberToolbarPagerState(): ToolbarPagerState = remember { ToolbarPagerState() }
+internal fun rememberToolbarPagerState(key: Any? = Unit): ToolbarPagerState =
+  remember(key) { ToolbarPagerState() }
 
 @Stable
 internal class ToolbarPagerState {
@@ -29,12 +30,19 @@ internal class ToolbarPagerState {
   var indicatorPulse by mutableIntStateOf(0)
   var indicatorDragProgress by mutableStateOf<Float?>(null)
   var indicatorPageTransitioning by mutableStateOf(false)
-  var settledPageIndex by mutableIntStateOf(0)
   var activeHardStop by mutableStateOf<ToolbarHardStop?>(null)
   var scrollGestureStartPosition by mutableStateOf<Float?>(null)
   var pointerScrollGestureActive by mutableStateOf(false)
   var decayFlingInProgress by mutableStateOf(false)
   var decayHardStopBounceStarted by mutableStateOf(false)
+  var settledPageKey by mutableStateOf(EditorToolbarPageKey.Main)
+  var recentManualPageKeys by mutableStateOf(listOf(EditorToolbarPageKey.Main))
+  var previousPageKeys by mutableStateOf<List<EditorToolbarPageKey>?>(null)
+  var capturedAutoReturnPageKey by mutableStateOf<EditorToolbarPageKey?>(null)
+
+  fun recordManualPageKey(pageKey: EditorToolbarPageKey) {
+    recentManualPageKeys = listOf(pageKey) + recentManualPageKeys.filterNot { it == pageKey }
+  }
 }
 
 internal data class ToolbarHardStop(val position: Float, val blockedDirection: Int)

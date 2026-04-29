@@ -1,30 +1,19 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import co.typie.ext.horizontalScroll
 import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarDivider
 import co.typie.screen.editor.editor.toolbar.EditorToolbarLabelButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
-import co.typie.screen.editor.editor.toolbar.EditorToolbarPageIndicator
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageScope
-import co.typie.screen.editor.editor.toolbar.ToolbarItemGap
-import co.typie.screen.editor.editor.toolbar.ToolbarLastPageReservedEndPadding
-import co.typie.screen.editor.editor.toolbar.ToolbarPageStartPadding
-import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
+import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 
 @Composable
 internal fun rememberTextToolbarPage(): EditorToolbarPage {
@@ -46,20 +35,7 @@ private fun EditorTextToolbar(
   scrollState: ScrollState,
   modifier: Modifier = Modifier,
 ) {
-  Row(
-    modifier =
-      modifier
-        .fillMaxSize()
-        .horizontalScroll(scrollState, enabled = false)
-        .padding(
-          start = ToolbarPageStartPadding,
-          top = ToolbarPageVerticalPadding,
-          end = if (scope.hasNextPage) 0.dp else ToolbarLastPageReservedEndPadding,
-          bottom = ToolbarPageVerticalPadding,
-        ),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(ToolbarItemGap),
-  ) {
+  EditorToolbarRow(scope = scope, modifier = modifier, scrollState = scrollState) {
     EditorToolbarButton(icon = Lucide.Palette, contentDescription = "글자색", onClick = {})
     EditorToolbarButton(icon = Lucide.PaintBucket, contentDescription = "배경색", onClick = {})
     EditorToolbarLabelButton(text = "Pretendard", contentDescription = "폰트 패밀리", onClick = {})
@@ -79,8 +55,5 @@ private fun EditorTextToolbar(
     EditorToolbarButton(icon = Typie.LetterSpacing, contentDescription = "자간", onClick = {})
     EditorToolbarDivider()
     EditorToolbarButton(icon = Lucide.RemoveFormatting, contentDescription = "서식 지우기", onClick = {})
-    if (scope.hasNextPage) {
-      EditorToolbarPageIndicator()
-    }
   }
 }

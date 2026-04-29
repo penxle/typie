@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -433,11 +435,632 @@ class EditorToolbarPagesDesktopTest {
     assertPageActive(TextPageTag)
   }
 
+  @Test
+  fun autoTargetMovesToTextPage() = runComposeUiTest {
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+
+    autoTarget.value = EditorToolbarPageKey.Text
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun disappearingCurrentPageMovesToMain() = runComposeUiTest {
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToImagePage(textScrollState)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(MainPageTag)
+  }
+
+  @Test
+  fun disappearingAutoTargetPrefersRecentManualPage() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    pageKeys.value = DefaultPageKeys + listOf(EditorToolbarPageKey.File)
+    autoTarget.value = EditorToolbarPageKey.File
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FilePageTag)
+
+    pageKeys.value = DefaultPageKeys
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun disappearingManualContextPageFallsBackToPreviousManualPage() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(TextPageTag)
+
+    goToBlockquotePage(textScrollState)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun returningToManuallySelectedBlockquoteContextRestoresBlockquotePage() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+    goToBlockquotePage(textScrollState)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(TextPageTag)
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(BlockquotePageTag)
+  }
+
+  @Test
+  fun returningToBlockquoteAfterAutoTextRestoresManualBlockquotePage() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+    goToBlockquotePage(textScrollState)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+    autoTarget.value = EditorToolbarPageKey.Text
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(TextPageTag)
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(BlockquotePageTag)
+  }
+
+  @Test
+  fun returningToBlockquoteAfterAutoTextClearsOutsideRestoresManualBlockquotePage() =
+    runComposeUiTest {
+      val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text))
+      val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+      val autoTargetRevision = mutableStateOf(0L)
+      val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+      goToTextPage()
+
+      pageKeys.value =
+        listOf(
+          EditorToolbarPageKey.Main,
+          EditorToolbarPageKey.Text,
+          EditorToolbarPageKey.Blockquote,
+        )
+      autoTargetRevision.value++
+      waitForIdle()
+      goToBlockquotePage(textScrollState)
+
+      pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+      autoTarget.value = EditorToolbarPageKey.Text
+      autoTargetRevision.value++
+      waitForIdle()
+      assertPageActive(TextPageTag)
+
+      autoTarget.value = null
+      autoTargetRevision.value++
+      waitForIdle()
+      assertPageActive(TextPageTag)
+
+      pageKeys.value =
+        listOf(
+          EditorToolbarPageKey.Main,
+          EditorToolbarPageKey.Text,
+          EditorToolbarPageKey.Blockquote,
+        )
+      autoTargetRevision.value++
+      waitForIdle()
+
+      autoTargetRevision.value++
+      waitForIdle()
+
+      assertPageActive(BlockquotePageTag)
+    }
+
+  @Test
+  fun returningToBlockquoteWhileAutoTextActiveRestoresManualBlockquotePage() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+    goToBlockquotePage(textScrollState)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+    autoTarget.value = EditorToolbarPageKey.Text
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(TextPageTag)
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(BlockquotePageTag)
+  }
+
+  @Test
+  fun autoTextAfterContextFallbackDoesNotReplaceLastManualContextPage() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+    goToBlockquotePage(textScrollState)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(TextPageTag)
+
+    autoTarget.value = EditorToolbarPageKey.Text
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(TextPageTag)
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(BlockquotePageTag)
+  }
+
+  @Test
+  fun automaticTransitionToTextResetsTextToolbarScroll() = runComposeUiTest {
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToImagePage(textScrollState)
+
+    autoTarget.value = EditorToolbarPageKey.Text
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertEquals(0, textScrollState.value)
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun retainedTextPageKeepsInternalScrollWhenPageKeysChange() = runComposeUiTest {
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPageAtEnd(textScrollState)
+    val textScroll = textScrollState.value
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Blockquote)
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertEquals(textScroll, textScrollState.value)
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun clearedAutoTargetRestoresRecentManualPageWhenAutoPageStillAvailable() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.File)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    autoTarget.value = EditorToolbarPageKey.File
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FilePageTag)
+
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun clearedAutoTargetKeepsManualPageWhenStillAvailable() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+    goToFoldPage(textScrollState)
+
+    autoTarget.value = EditorToolbarPageKey.Fold
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FoldPageTag)
+
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(FoldPageTag)
+  }
+
+  @Test
+  fun clearedAutoTargetFromFoldRestoresRecentManualTextPage() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    autoTarget.value = EditorToolbarPageKey.Fold
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FoldPageTag)
+
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun returningFromFoldTitleRestoresRecentManualTextPage() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Fold)
+    autoTarget.value = EditorToolbarPageKey.Fold
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FoldPageTag)
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun returningFromFoldTitleFallbackRestoresMostRecentManualTextPage() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+    goToFoldPage(textScrollState)
+    swipeToolbarRight(distanceFraction = 0.82f)
+    assertPageActive(TextPageTag)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Fold)
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FoldPageTag)
+
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FoldPageTag)
+
+    pageKeys.value =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun clearedAutoTargetRestoresRecentManualTextAfterAutoPageSettlesAgain() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+
+    autoTarget.value = EditorToolbarPageKey.Fold
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(FoldPageTag)
+
+    swipeToolbarLeft(distanceFraction = 0.08f)
+    assertPageActive(FoldPageTag)
+
+    autoTarget.value = null
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun interruptedManualTextNavigationIsRememberedAfterAutoFoldClears() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToFoldPage(textScrollState)
+
+    mainClock.autoAdvance = false
+    swipeToolbarRightWithoutIdle(distanceFraction = 0.82f)
+
+    autoTarget.value = EditorToolbarPageKey.Fold
+    autoTargetRevision.value++
+    mainClock.advanceTimeByFrame()
+
+    autoTarget.value = null
+    autoTargetRevision.value++
+    mainClock.autoAdvance = true
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun retainedPageKeySurvivesIndexChange() = runComposeUiTest {
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToImagePage(textScrollState)
+
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Image)
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(ImagePageTag)
+  }
+
+  @Test
+  fun retainedPageKeySnapsWhenItsIndexChanges() = runComposeUiTest {
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState = setDynamicToolbarContent(pageKeys, autoTarget, autoTargetRevision)
+    goToImagePage(textScrollState)
+
+    mainClock.autoAdvance = false
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Image)
+    autoTargetRevision.value++
+    mainClock.advanceTimeByFrame()
+
+    assertPageActive(ImagePageTag)
+
+    mainClock.autoAdvance = true
+    waitForIdle()
+  }
+
+  @Test
+  fun retainedPagerStateRestoresPageAndInternalScrollAfterToolbarRecomposes() = runComposeUiTest {
+    val visible = mutableStateOf(true)
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState =
+      setRetainedDynamicToolbarContent(visible, pageKeys, autoTarget, autoTargetRevision)
+    goToTextPageAtEnd(textScrollState)
+    val textScroll = textScrollState.value
+
+    visible.value = false
+    waitForIdle()
+
+    visible.value = true
+    waitForIdle()
+
+    assertEquals(textScroll, textScrollState.value)
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun manualToolbarHistorySurvivesToolbarRecompose() = runComposeUiTest {
+    val visible = mutableStateOf(true)
+    val pageKeys =
+      mutableStateOf(
+        listOf(
+          EditorToolbarPageKey.Main,
+          EditorToolbarPageKey.Text,
+          EditorToolbarPageKey.Blockquote,
+        )
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textScrollState =
+      setRetainedDynamicToolbarContent(visible, pageKeys, autoTarget, autoTargetRevision)
+    goToTextPage()
+    goToBlockquotePage(textScrollState)
+
+    visible.value = false
+    waitForIdle()
+    pageKeys.value = listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text)
+    visible.value = true
+    autoTargetRevision.value++
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun indicatorPulseIncrementsWhenToolbarComposesAgain() = runComposeUiTest {
+    val visible = mutableStateOf(true)
+    lateinit var pagerState: ToolbarPagerState
+    setContent {
+      val textScrollState = rememberScrollState()
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        visible = visible.value,
+        pagerState = pagerState,
+      )
+    }
+    waitForIdle()
+    val firstPulse = pagerState.indicatorPulse
+    assertTrue(firstPulse > 0, "indicator should pulse when the toolbar first appears")
+
+    visible.value = false
+    waitForIdle()
+    visible.value = true
+    waitForIdle()
+
+    assertTrue(
+      pagerState.indicatorPulse > firstPulse,
+      "indicator should pulse when the toolbar appears again",
+    )
+  }
+
+  @Test
+  fun manualToolbarHistoryKeepsMostRecentUniquePageKeys() {
+    val pagerState = ToolbarPagerState()
+
+    pagerState.recordManualPageKey(EditorToolbarPageKey.Text)
+    pagerState.recordManualPageKey(EditorToolbarPageKey.Image)
+    pagerState.recordManualPageKey(EditorToolbarPageKey.Text)
+
+    assertEquals(
+      listOf(EditorToolbarPageKey.Text, EditorToolbarPageKey.Image, EditorToolbarPageKey.Main),
+      pagerState.recentManualPageKeys,
+    )
+  }
+
   private fun ComposeUiTest.setToolbarContent(): ScrollState {
     lateinit var textScrollState: ScrollState
     setContent {
       textScrollState = rememberScrollState()
       ToolbarTestContent(textScrollState = textScrollState)
+    }
+    waitForIdle()
+    assertPageActive(MainPageTag)
+    return textScrollState
+  }
+
+  private fun ComposeUiTest.setRetainedDynamicToolbarContent(
+    visible: MutableState<Boolean>,
+    pageKeys: MutableState<List<EditorToolbarPageKey>>,
+    autoTarget: MutableState<EditorToolbarPageKey?>,
+    autoTargetRevision: MutableState<Long>,
+  ): ScrollState {
+    lateinit var textScrollState: ScrollState
+    setContent {
+      textScrollState = rememberScrollState()
+      val pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        pageKeys = pageKeys.value,
+        autoTargetPageKey = autoTarget.value,
+        autoTargetRevision = autoTargetRevision.value,
+        visible = visible.value,
+        pagerState = pagerState,
+      )
+    }
+    waitForIdle()
+    assertPageActive(MainPageTag)
+    return textScrollState
+  }
+
+  private fun ComposeUiTest.setDynamicToolbarContent(
+    pageKeys: MutableState<List<EditorToolbarPageKey>>,
+    autoTarget: MutableState<EditorToolbarPageKey?>,
+    autoTargetRevision: MutableState<Long>,
+  ): ScrollState {
+    lateinit var textScrollState: ScrollState
+    setContent {
+      textScrollState = rememberScrollState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        pageKeys = pageKeys.value,
+        autoTargetPageKey = autoTarget.value,
+        autoTargetRevision = autoTargetRevision.value,
+      )
     }
     waitForIdle()
     assertPageActive(MainPageTag)
@@ -454,6 +1077,22 @@ class EditorToolbarPagesDesktopTest {
     swipeToolbarLeft(distanceFraction = 0.82f)
     assertEquals(textScrollState.maxValue, textScrollState.value)
     assertPageActive(ImagePageTag)
+  }
+
+  private fun ComposeUiTest.goToBlockquotePage(textScrollState: ScrollState) {
+    swipeToolbarLeft(distanceFraction = 4.9f, durationMillis = 500)
+    assertEquals(textScrollState.maxValue, textScrollState.value)
+    assertPageActive(TextPageTag)
+    swipeToolbarLeft(distanceFraction = 0.82f)
+    assertPageActive(BlockquotePageTag)
+  }
+
+  private fun ComposeUiTest.goToFoldPage(textScrollState: ScrollState) {
+    swipeToolbarLeft(distanceFraction = 4.9f, durationMillis = 500)
+    assertEquals(textScrollState.maxValue, textScrollState.value)
+    assertPageActive(TextPageTag)
+    swipeToolbarLeft(distanceFraction = 0.82f)
+    assertPageActive(FoldPageTag)
   }
 
   private fun ComposeUiTest.goToTextPageAtEnd(textScrollState: ScrollState) {
@@ -477,6 +1116,19 @@ class EditorToolbarPagesDesktopTest {
       endFraction = 0.18f + distanceFraction,
       durationMillis = durationMillis,
     )
+  }
+
+  private fun ComposeUiTest.swipeToolbarRightWithoutIdle(
+    distanceFraction: Float,
+    durationMillis: Long = 120,
+  ) {
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      swipe(
+        start = Offset(x = width * 0.18f, y = height - 16f),
+        end = Offset(x = width * (0.18f + distanceFraction), y = height - 16f),
+        durationMillis = durationMillis,
+      )
+    }
   }
 
   private fun ComposeUiTest.flingToolbarLeft(distanceFraction: Float) {
@@ -579,20 +1231,32 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Composable
-  private fun ToolbarTestContent(textScrollState: ScrollState) {
-    val pages = rememberToolbarTestPages(textScrollState)
+  private fun ToolbarTestContent(
+    textScrollState: ScrollState,
+    pageKeys: List<EditorToolbarPageKey> = DefaultPageKeys,
+    autoTargetPageKey: EditorToolbarPageKey? = null,
+    autoTargetRevision: Long = 0L,
+    visible: Boolean = true,
+    pagerState: ToolbarPagerState = rememberToolbarPagerState(),
+  ) {
+    val pages = rememberToolbarTestPages(textScrollState = textScrollState, pageKeys = pageKeys)
     ToolbarTestTheme {
       Box(Modifier.width(360.dp).height(ToolbarStackHeight).testTag(ToolbarTag)) {
-        EditorToolbarPages(
-          pages = pages,
-          editorFocused = true,
-          activeBottomPanel = null,
-          fixedAction = ToolbarFixedAction.DismissInput,
-          onEditorInputRequest = {},
-          onKeyboardDismissRequest = {},
-          onBottomPanelToggle = {},
-          modifier = Modifier.fillMaxSize(),
-        )
+        if (visible) {
+          EditorToolbarPages(
+            pages = pages,
+            pagerState = pagerState,
+            autoTargetPageKey = autoTargetPageKey,
+            autoTargetRevision = autoTargetRevision,
+            editorFocused = true,
+            activeBottomPanel = null,
+            fixedAction = ToolbarFixedAction.DismissInput,
+            onEditorInputRequest = {},
+            onKeyboardDismissRequest = {},
+            onBottomPanelToggle = {},
+            modifier = Modifier.fillMaxSize(),
+          )
+        }
       }
     }
   }
@@ -609,48 +1273,84 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Composable
-  private fun rememberToolbarTestPages(textScrollState: ScrollState): List<EditorToolbarPage> =
-    remember(textScrollState) {
-      listOf(
-        EditorToolbarPage(
-          key = EditorToolbarPageKey.Main,
-          icon = Lucide.CircleSmall,
-          contentDescription = "메인 툴바",
-          content = { Box(Modifier.fillMaxSize().testTag(MainPageTag)) },
-        ),
-        EditorToolbarPage(
-          key = EditorToolbarPageKey.Text,
-          icon = Lucide.Type,
-          contentDescription = "텍스트 툴바",
-          scrollState = textScrollState,
-          content = { scope ->
-            Row(
-              modifier =
-                Modifier.fillMaxSize()
-                  .testTag(TextPageTag)
-                  .horizontalScroll(textScrollState, enabled = false),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(ToolbarItemGap),
-            ) {
-              repeat(16) { index ->
-                Box(
-                  Modifier.size(width = 80.dp, height = ToolbarButtonSize)
-                    .testTag("text-item-$index")
-                )
-              }
-              if (scope.hasNextPage) {
-                EditorToolbarPageIndicator()
-              }
-            }
-          },
-        ),
-        EditorToolbarPage(
-          key = EditorToolbarPageKey.Image,
-          icon = Lucide.Image,
-          contentDescription = "이미지 툴바",
-          content = { Box(Modifier.fillMaxSize().testTag(ImagePageTag)) },
-        ),
-      )
+  private fun rememberToolbarTestPages(
+    textScrollState: ScrollState,
+    pageKeys: List<EditorToolbarPageKey>,
+  ): List<EditorToolbarPage> =
+    remember(textScrollState, pageKeys) {
+      pageKeys.map { key ->
+        when (key) {
+          EditorToolbarPageKey.Main ->
+            EditorToolbarPage(
+              key = EditorToolbarPageKey.Main,
+              icon = Lucide.CircleSmall,
+              contentDescription = "메인 툴바",
+              content = { Box(Modifier.fillMaxSize().testTag(MainPageTag)) },
+            )
+          EditorToolbarPageKey.Text ->
+            EditorToolbarPage(
+              key = EditorToolbarPageKey.Text,
+              icon = Lucide.Type,
+              contentDescription = "텍스트 툴바",
+              scrollState = textScrollState,
+              content = { scope ->
+                Row(
+                  modifier =
+                    Modifier.fillMaxSize()
+                      .testTag(TextPageTag)
+                      .horizontalScroll(textScrollState, enabled = false),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(ToolbarItemGap),
+                ) {
+                  repeat(16) { index ->
+                    Box(
+                      Modifier.size(width = 80.dp, height = ToolbarButtonSize)
+                        .testTag("text-item-$index")
+                    )
+                  }
+                  if (scope.hasNextPage) {
+                    EditorToolbarPageIndicator()
+                  }
+                }
+              },
+            )
+          EditorToolbarPageKey.Image ->
+            EditorToolbarPage(
+              key = EditorToolbarPageKey.Image,
+              icon = Lucide.Image,
+              contentDescription = "이미지 툴바",
+              content = { Box(Modifier.fillMaxSize().testTag(ImagePageTag)) },
+            )
+          EditorToolbarPageKey.File ->
+            EditorToolbarPage(
+              key = EditorToolbarPageKey.File,
+              icon = Lucide.Paperclip,
+              contentDescription = "파일 툴바",
+              content = { Box(Modifier.fillMaxSize().testTag(FilePageTag)) },
+            )
+          EditorToolbarPageKey.Blockquote ->
+            EditorToolbarPage(
+              key = EditorToolbarPageKey.Blockquote,
+              icon = Lucide.Quote,
+              contentDescription = "인용구 툴바",
+              content = { Box(Modifier.fillMaxSize().testTag(BlockquotePageTag)) },
+            )
+          EditorToolbarPageKey.Fold ->
+            EditorToolbarPage(
+              key = EditorToolbarPageKey.Fold,
+              icon = Lucide.TextSelect,
+              contentDescription = "접기 툴바",
+              content = { Box(Modifier.fillMaxSize().testTag(FoldPageTag)) },
+            )
+          else ->
+            EditorToolbarPage(
+              key = key,
+              icon = Lucide.CircleSmall,
+              contentDescription = key.name,
+              content = { Box(Modifier.fillMaxSize()) },
+            )
+        }
+      }
     }
 
   private companion object {
@@ -658,5 +1358,10 @@ class EditorToolbarPagesDesktopTest {
     const val MainPageTag = "main-page"
     const val TextPageTag = "text-page"
     const val ImagePageTag = "image-page"
+    const val FilePageTag = "file-page"
+    const val BlockquotePageTag = "blockquote-page"
+    const val FoldPageTag = "fold-page"
+    val DefaultPageKeys =
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Image)
   }
 }

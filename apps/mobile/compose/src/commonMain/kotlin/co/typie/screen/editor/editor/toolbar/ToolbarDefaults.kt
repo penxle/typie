@@ -48,6 +48,8 @@ internal const val ToolbarBottomPanelVisibilityEnterMillis = 180
 internal const val ToolbarBottomPanelVisibilityExitMillis = 140
 internal const val ToolbarBottomPanelHiddenScale = 0.96f
 internal const val ToolbarIndicatorBackgroundMillis = 120
+internal const val ToolbarIndicatorWidthMillis = 180
+internal const val ToolbarIndicatorIconsMillis = 140
 internal const val ToolbarIndicatorFadeMillis = 220
 internal const val ToolbarIndicatorVisibleMillis = 1200L
 internal const val ToolbarScrollGestureIdleResetMillis = 180L
@@ -58,6 +60,15 @@ internal enum class EditorToolbarPageKey {
   Main,
   Text,
   Image,
+  File,
+  Embed,
+  Archived,
+  HorizontalRule,
+  List,
+  Blockquote,
+  Callout,
+  Fold,
+  Table,
 }
 
 internal enum class EditorToolbarBottomPanelKey {
