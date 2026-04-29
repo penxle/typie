@@ -106,7 +106,7 @@ class ToolbarPageMetricsTest {
   fun internalOverflowFlingDecaysInsideTextRange() {
     assertEquals(
       true,
-      metrics.shouldDecayFlingWithinInternalScroll(position = TextStart + 12f, velocity = -800f),
+      metrics.decaysFlingWithinInternalScroll(position = TextStart + 12f, velocity = -800f),
     )
   }
 
@@ -114,7 +114,7 @@ class ToolbarPageMetricsTest {
   fun pageTransitionFlingDoesNotDecayBeforeSnap() {
     assertEquals(
       false,
-      metrics.shouldDecayFlingWithinInternalScroll(position = TextStart - 12f, velocity = -800f),
+      metrics.decaysFlingWithinInternalScroll(position = TextStart - 12f, velocity = -800f),
     )
   }
 
@@ -122,7 +122,7 @@ class ToolbarPageMetricsTest {
   fun overflowStartFlingDecaysWhenVelocityMovesIntoOverflow() {
     assertEquals(
       true,
-      metrics.shouldDecayFlingWithinInternalScroll(position = TextStart, velocity = -800f),
+      metrics.decaysFlingWithinInternalScroll(position = TextStart, velocity = -800f),
     )
   }
 
@@ -134,7 +134,7 @@ class ToolbarPageMetricsTest {
     const val Epsilon = 10f
 
     val metrics =
-      ToolbarPageMetrics(
+      ToolbarPagerMetrics(
         pageDistance = PageDistance,
         scrollRanges = listOf(0, TextRange.toInt(), 0),
       )

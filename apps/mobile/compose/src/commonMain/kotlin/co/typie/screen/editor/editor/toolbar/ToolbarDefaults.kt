@@ -45,11 +45,6 @@ internal const val ToolbarVisibilityExitMillis = 160
 internal const val ToolbarFixedActionIconCrossfadeMillis = 150
 internal const val ToolbarBottomPanelVisibilityEnterMillis = 180
 internal const val ToolbarBottomPanelVisibilityExitMillis = 140
-
-// iOS can report a focus-driven software keyboard restore after the panel exit finishes.
-// Keep the remembered keyboard inset through this fallback window so the toolbar does not drop
-// first.
-internal const val ToolbarImplicitSoftwareKeyboardRestoreGraceMillis = 260L
 internal const val ToolbarBottomPanelHiddenScale = 0.96f
 internal const val ToolbarIndicatorBackgroundMillis = 120
 internal const val ToolbarIndicatorFadeMillis = 220

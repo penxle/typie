@@ -15,15 +15,9 @@ import platform.GameController.GCKeyboardDidDisconnectNotification
 @Composable
 internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
   var hardwareKeyboardConnected by remember { mutableStateOf(isEditorHardwareKeyboardConnected()) }
-  var hardwareModeGeneration by remember { mutableStateOf(0) }
 
   fun syncKeyboardState() {
-    val previous = hardwareKeyboardConnected
-    val next = isEditorHardwareKeyboardConnected()
-    if (!previous && next) {
-      hardwareModeGeneration += 1
-    }
-    hardwareKeyboardConnected = next
+    hardwareKeyboardConnected = isEditorHardwareKeyboardConnected()
   }
 
   DisposableEffect(Unit) {
@@ -57,8 +51,7 @@ internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
         EditorKeyboardType.Hardware
       } else {
         EditorKeyboardType.Software
-      },
-    hardwareModeGeneration = hardwareModeGeneration,
+      }
   )
 }
 

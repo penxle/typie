@@ -61,12 +61,16 @@ import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
+import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelGap
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMillis
+import co.typie.screen.editor.editor.toolbar.ToolbarInputEnvironment
+import co.typie.screen.editor.editor.toolbar.effectiveImeInset
+import co.typie.screen.editor.editor.toolbar.isSoftwareKeyboardVisible
 import co.typie.screen.editor.editor.toolbar.rememberEditorKeyboardState
-import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarBottomState
-import co.typie.screen.editor.editor.toolbar.resolveEffectiveEditorKeyboardType
-import co.typie.screen.editor.editor.toolbar.shouldCloseOpenEditorToolbarPanelWhenSoftwareKeyboardAppears
+import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarInputState
+import co.typie.screen.editor.editor.toolbar.suppressSoftwareKeyboard
+import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPanel
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
 import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
 import co.typie.screen.editor.editor.viewport.rememberEditorTouchPinchZoomModifier
@@ -175,35 +179,38 @@ fun EditorScreen(entityId: String) {
     val topInset = contentPadding.calculateTopPadding()
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val toolbarBottomState = rememberEditorToolbarBottomState()
+    val toolbarInputState = rememberEditorToolbarInputState()
     val keyboardState = rememberEditorKeyboardState()
-    val keyboardType = keyboardState.type
-    val softwareKeyboardVisible =
-      toolbarBottomState.softwareKeyboardVisible(
-        keyboardType = keyboardType,
+    val toolbarInputEnvironment =
+      ToolbarInputEnvironment(
+        visible = screenState.sceneInForeground,
+        focused = uiState.focused,
         imeBottom = imeBottom,
         safeBottomInset = bottomSafeInset,
+        keyboardState = keyboardState,
       )
-    val effectiveKeyboardType =
-      resolveEffectiveEditorKeyboardType(
-        keyboardType = keyboardType,
-        softwareKeyboardVisible = softwareKeyboardVisible,
+    val toolbarPanel = toolbarInputState.panel
+    val toolbarEffectiveImeInset = effectiveImeInset(toolbarInputEnvironment)
+    val softwareKeyboardVisible =
+      isSoftwareKeyboardVisible(
+        imeBottom = toolbarEffectiveImeInset,
+        safeBottomInset = bottomSafeInset,
       )
     val previousSoftwareKeyboardVisible = remember { mutableStateOf(softwareKeyboardVisible) }
     val softwareKeyboardAppearing =
       !previousSoftwareKeyboardVisible.value && softwareKeyboardVisible
-    val toolbarVisibleImeBottomTarget =
-      toolbarBottomState.visibleImeInset(
-        imeBottom = imeBottom,
-        safeBottomInset = bottomSafeInset,
-        keyboardType = keyboardType,
-      )
-    val bottomPanelOpen = toolbarBottomState.activePanel != null
-    val editorInputActive = uiState.focused || bottomPanelOpen
+    val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
+    val toolbarBottomOcclusionTarget =
+      if (toolbarPanel != null) {
+        bottomSafeInset + ToolbarBottomPanelGap + toolbarPanel.height
+      } else {
+        maxOf(toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
+      }
+    val bottomPanelOpen = toolbarPanel != null
     val previousBottomPanelOpen = remember { mutableStateOf(bottomPanelOpen) }
-    val toolbarVisibleImeBottom =
+    val toolbarBottomOcclusion =
       animateDpAsState(
-        targetValue = toolbarVisibleImeBottomTarget,
+        targetValue = toolbarBottomOcclusionTarget,
         animationSpec =
           if (softwareKeyboardAppearing) {
             snap()
@@ -218,7 +225,7 @@ fun EditorScreen(entityId: String) {
           } else {
             snap()
           },
-        label = "EditorToolbarVisibleImeBottom",
+        label = "EditorToolbarBottomOcclusion",
       )
     SideEffect { previousBottomPanelOpen.value = bottomPanelOpen }
     val typewriterEnabled = Preference.typewriterEnabled
@@ -230,38 +237,9 @@ fun EditorScreen(entityId: String) {
       screenState.resolveVisibleArea(
         topInset = topInset.value,
         rawBottomSafeInset = bottomSafeInset.value,
-        rawImeInset = toolbarVisibleImeBottom.value.value,
+        rawImeInset = toolbarBottomOcclusion.value.value,
       )
-    LaunchedEffect(
-      toolbarBottomState.activePanel,
-      imeBottom,
-      toolbarBottomState.rememberedKeyboardInset,
-    ) {
-      toolbarBottomState.clearRememberedKeyboardInsetIfRestored(imeBottom)
-    }
-    LaunchedEffect(keyboardType, imeBottom, bottomSafeInset, editorInputActive) {
-      toolbarBottomState.syncKeyboardEnvironment(
-        keyboardType = keyboardType,
-        imeBottom = imeBottom,
-        safeBottomInset = bottomSafeInset,
-        editorInputActive = editorInputActive,
-      )
-    }
     LaunchedEffect(softwareKeyboardVisible, bottomPanelOpen) {
-      val shouldClosePanelForSoftwareKeyboard =
-        shouldCloseOpenEditorToolbarPanelWhenSoftwareKeyboardAppears(
-          bottomPanelVisible = bottomPanelOpen,
-          previousSoftwareKeyboardVisible = previousSoftwareKeyboardVisible.value,
-          softwareKeyboardVisible = softwareKeyboardVisible,
-        )
-      if (shouldClosePanelForSoftwareKeyboard) {
-        toolbarBottomState.syncOpenPanelWithSoftwareKeyboardAppearance(
-          previousSoftwareKeyboardVisible = previousSoftwareKeyboardVisible.value,
-          softwareKeyboardVisible = softwareKeyboardVisible,
-          imeBottom = imeBottom,
-          safeBottomInset = bottomSafeInset,
-        )
-      }
       previousSoftwareKeyboardVisible.value = softwareKeyboardVisible
     }
     LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
@@ -338,6 +316,15 @@ fun EditorScreen(entityId: String) {
         editorBounds = uiState.editorBoundsInContainer,
       )
     val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+    val toolbarSuppressesSoftwareKeyboard = toolbarPanel?.let(::suppressSoftwareKeyboard) ?: false
+    val toolbarTextInputSessionEnabled =
+      toolbarPanel?.let {
+        textInputSessionEnabledForBottomPanel(
+          environment = toolbarInputEnvironment,
+          softwareKeyboardVisible = softwareKeyboardVisible,
+          suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
+        )
+      } ?: true
     val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
     val touchPinchZoomModifier =
       if (paginatedLayout != null && density > 0f) {
@@ -461,13 +448,8 @@ fun EditorScreen(entityId: String) {
             layoutSpec = layoutSpec,
             autoScrollPolicy = autoScrollPolicy,
             modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
-            textInputSessionEnabled =
-              toolbarBottomState.textInputSessionEnabled(
-                keyboardType = effectiveKeyboardType,
-                softwareKeyboardVisible = softwareKeyboardVisible,
-                softwareKeyboardAppearing = softwareKeyboardAppearing,
-              ),
-            suppressSoftwareKeyboard = toolbarBottomState.softwareKeyboardSuppressedForPanel,
+            textInputSessionEnabled = toolbarTextInputSessionEnabled,
+            suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
             showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
             showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
           )
@@ -475,12 +457,8 @@ fun EditorScreen(entityId: String) {
         toolbar = {
           EditorToolbarHost(
             editorFocused = uiState.focused,
-            visible = screenState.sceneInForeground,
-            safeBottomInset = bottomSafeInset,
-            bottomState = toolbarBottomState,
-            keyboardType = keyboardType,
-            hardwareKeyboardConnected = keyboardState.hardwareKeyboardConnected,
-            hardwareKeyboardModeGeneration = keyboardState.hardwareModeGeneration,
+            inputState = toolbarInputState,
+            environment = toolbarInputEnvironment,
             onEditorFocusRequest = ::requestEditorFocus,
             modifier = Modifier,
           )

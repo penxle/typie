@@ -8,13 +8,7 @@ internal enum class EditorKeyboardType {
   Hardware,
 }
 
-internal data class EditorKeyboardState(
-  val type: EditorKeyboardType,
-  val hardwareModeGeneration: Int = 0,
-) {
-  val hardwareKeyboardConnected: Boolean
-    get() = type == EditorKeyboardType.Hardware
-}
+internal data class EditorKeyboardState(val type: EditorKeyboardType)
 
 @Composable internal expect fun rememberEditorKeyboardState(): EditorKeyboardState
 
