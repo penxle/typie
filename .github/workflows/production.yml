@@ -15,7 +15,7 @@ permissions:
 jobs:
   get-version:
     name: Get deployment version
-    runs-on: arc-2x
+    runs-on: arc-4x
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:

@@ -21,7 +21,7 @@ env:
 jobs:
   lint:
     name: Lint
-    runs-on: arc-2x
+    runs-on: arc-4x
     strategy:
       fail-fast: false
       matrix:
