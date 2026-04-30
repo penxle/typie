@@ -41,18 +41,32 @@ jobs:
         with:
           repository: penxle/kube
           token: ${{ steps.app-token.outputs.token }}
+          path: kube
+
+      - name: Checkout kube2 repository
+        uses: actions/checkout@v6
+        with:
+          repository: penxle/kube2
+          token: ${{ steps.app-token.outputs.token }}
+          path: kube2
 
       - name: Update version
         run: |
-          cat > apps/base/version.${{ inputs.stack }}.yaml << EOF
+          for repo in kube kube2; do
+            cat > "$repo/apps/base/version.${{ inputs.stack }}.yaml" << EOF
           image:
             version: ${{ inputs.version }}
           EOF
+          done
 
       - name: Commit and push changes
         run: |
           git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-          git add apps/base/version.${{ inputs.stack }}.yaml
-          git commit -m "Deploy to ${{ inputs.stack }}: ${{ inputs.version }}"
-          git push
+          for repo in kube kube2; do
+            cd "$repo"
+            git add apps/base/version.${{ inputs.stack }}.yaml
+            git commit -m "Deploy to ${{ inputs.stack }}: ${{ inputs.version }}"
+            git push
+            cd ..
+          done
