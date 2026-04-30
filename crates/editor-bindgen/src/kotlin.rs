@@ -96,6 +96,13 @@ fn apply_rename(name: &str, strategy: Option<&str>) -> String {
     }
 }
 
+fn apply_field_rename(field: &FfiField, strategy: Option<&str>) -> String {
+    field
+        .serde_rename
+        .clone()
+        .unwrap_or_else(|| apply_rename(&field.name, strategy))
+}
+
 fn resolve_default(field: &FfiField, kt_type: &str, ctx: &CodegenContext) -> String {
     if let Some(override_val) = &field.ffi_default_override {
         return override_val.clone();
@@ -331,7 +338,7 @@ fn generate_data_class(meta: &FfiMeta, fields: &[FfiField], ctx: &CodegenContext
         for field in fields {
             let kt_name = field.name.to_lower_camel_case();
             let kt_type = map_type(&field.ty, &ctx.custom_types, &ctx.known_types);
-            let serial_name = apply_rename(&field.name, meta.serde_rename_all.as_deref());
+            let serial_name = apply_field_rename(field, meta.serde_rename_all.as_deref());
             let default_part = if field.has_serde_default {
                 format!(" = {}", resolve_default(field, &kt_type, ctx))
             } else {
@@ -452,7 +459,7 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                                         let kt_name = f.name.to_lower_camel_case();
                                         let kt_type =
                                             map_type(&f.ty, &ctx.custom_types, &ctx.known_types);
-                                        let sn = apply_rename(&f.name, rename_all);
+                                        let sn = apply_field_rename(f, rename_all);
                                         let default_part = if f.has_serde_default {
                                             format!(" = {}", resolve_default(f, &kt_type, ctx))
                                         } else {
@@ -514,7 +521,7 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                     .map(|f| {
                         let kt_name = f.name.to_lower_camel_case();
                         let kt_type = map_type(&f.ty, &ctx.custom_types, &ctx.known_types);
-                        let sn = apply_rename(&f.name, field_rename);
+                        let sn = apply_field_rename(f, field_rename);
                         let default_part = if f.has_serde_default {
                             format!(" = {}", resolve_default(f, &kt_type, ctx))
                         } else {
@@ -675,12 +682,14 @@ mod tests {
                 fields: vec![
                     FfiField {
                         name: "width".into(),
+                        serde_rename: None,
                         ty: "f32".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "height".into(),
+                        serde_rename: None,
                         ty: "f32".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
@@ -718,18 +727,21 @@ mod tests {
                 fields: vec![
                     FfiField {
                         name: "node_id".into(),
+                        serde_rename: None,
                         ty: "NodeId".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "offset".into(),
+                        serde_rename: None,
                         ty: "usize".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "affinity".into(),
+                        serde_rename: None,
                         ty: "Affinity".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
@@ -797,6 +809,7 @@ mod tests {
                         name: "StateChanged".into(),
                         fields: vec![FfiField {
                             name: "fields".into(),
+                            serde_rename: None,
                             ty: "Vec<StateField>".into(),
                             has_serde_default: false,
                             ffi_default_override: None,
@@ -829,6 +842,44 @@ mod tests {
         ));
         assert!(output.contains("@Serializable @SerialName(\"render_invalidated\")"));
         assert!(output.contains("data object RenderInvalidated : EditorEvent()"));
+    }
+
+    #[test]
+    fn explicit_serde_rename_overrides_field_rename_all() {
+        let meta = FfiMeta {
+            name: "EditorEvent".into(),
+            serde_rename_all: Some("snake_case".into()),
+            kind: FfiKind::Enum {
+                variants: vec![FfiVariant::Struct {
+                    name: "TransactionCommitted".into(),
+                    fields: vec![FfiField {
+                        name: "commit_payload".into(),
+                        serde_rename: Some("commitPayload".into()),
+                        ty: "CommitPayload".into(),
+                        has_serde_default: false,
+                        ffi_default_override: None,
+                    }],
+                    serde_rename_all: None,
+                }],
+                serde_tag: Some("type".into()),
+                default_variant: None,
+            },
+            generics: Vec::new(),
+        };
+        let ctx = test_context(&[]);
+        let output = generate_sealed_class(
+            &meta,
+            match &meta.kind {
+                FfiKind::Enum { variants, .. } => variants,
+                _ => unreachable!(),
+            },
+            &ctx,
+        );
+        assert!(output.contains("@SerialName(\"transaction_committed\")"));
+        assert!(output.contains(
+            "data class TransactionCommitted(@SerialName(\"commitPayload\") val commitPayload: CommitPayload) : EditorEvent()"
+        ));
+        assert!(!output.contains("@SerialName(\"commit_payload\")"));
     }
 
     #[test]
@@ -883,6 +934,7 @@ mod tests {
                         name: "Link".into(),
                         fields: vec![FfiField {
                             name: "href".into(),
+                            serde_rename: None,
                             ty: "String".into(),
                             has_serde_default: false,
                             ffi_default_override: None,
@@ -966,18 +1018,21 @@ mod tests {
                 fields: vec![
                     FfiField {
                         name: "node_id".into(),
+                        serde_rename: None,
                         ty: "String".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "offset".into(),
+                        serde_rename: None,
                         ty: "usize".into(),
                         has_serde_default: true,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "affinity".into(),
+                        serde_rename: None,
                         ty: "Affinity".into(),
                         has_serde_default: true,
                         ffi_default_override: None,
@@ -1012,6 +1067,7 @@ mod tests {
             kind: FfiKind::Struct {
                 fields: vec![FfiField {
                     name: "proportion".into(),
+                    serde_rename: None,
                     ty: "f32".into(),
                     has_serde_default: true,
                     ffi_default_override: Some("1.0f".into()),
@@ -1039,12 +1095,14 @@ mod tests {
                 fields: vec![
                     FfiField {
                         name: "doc_version".into(),
+                        serde_rename: None,
                         ty: "u64".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "fields".into(),
+                        serde_rename: None,
                         ty: "Vec<String>".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
@@ -1144,6 +1202,7 @@ mod tests {
                         name: "Uniform".into(),
                         fields: vec![FfiField {
                             name: "value".into(),
+                            serde_rename: None,
                             ty: "T".into(),
                             has_serde_default: false,
                             ffi_default_override: None,

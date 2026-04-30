@@ -28,6 +28,7 @@ pub enum FfiKind {
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct FfiField {
     pub name: String,
+    pub serde_rename: Option<String>,
     pub ty: String,
     pub has_serde_default: bool,
     pub ffi_default_override: Option<String>,
@@ -114,18 +115,21 @@ mod tests {
                 fields: vec![
                     FfiField {
                         name: "node_id".into(),
+                        serde_rename: None,
                         ty: "NodeId".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "offset".into(),
+                        serde_rename: None,
                         ty: "usize".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
                     FfiField {
                         name: "affinity".into(),
+                        serde_rename: None,
                         ty: "Affinity".into(),
                         has_serde_default: true,
                         ffi_default_override: None,
@@ -195,6 +199,7 @@ mod tests {
                     name: "StateChanged".into(),
                     fields: vec![FfiField {
                         name: "fields".into(),
+                        serde_rename: None,
                         ty: "Vec<StateField>".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
@@ -242,6 +247,7 @@ mod tests {
             kind: FfiKind::Struct {
                 fields: vec![FfiField {
                     name: "proportion".into(),
+                    serde_rename: None,
                     ty: "f32".into(),
                     has_serde_default: true,
                     ffi_default_override: Some("1.0f".into()),

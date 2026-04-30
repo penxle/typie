@@ -66,10 +66,12 @@ pub fn extract(input: &DeriveInput, custom: Option<&syn::Type>) -> FfiMeta {
 }
 
 fn extract_field(f: &syn::Field) -> FfiField {
+    let serde_rename = parse_serde_rename(&f.attrs);
     let has_serde_default = has_serde_default_attr(&f.attrs);
     let ffi_default_override = parse_ffi_default(&f.attrs);
     FfiField {
         name: f.ident.as_ref().expect("named field").to_string(),
+        serde_rename,
         ty: type_to_string(&f.ty),
         has_serde_default,
         ffi_default_override,
@@ -97,6 +99,31 @@ fn extract_variant(v: &syn::Variant) -> FfiVariant {
             }
         }
     }
+}
+
+/// Parse `#[serde(rename = "...")]` from attributes.
+fn parse_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
+    for attr in attrs {
+        if !attr.path().is_ident("serde") {
+            continue;
+        }
+        let mut result = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("rename") {
+                let value = meta.value()?;
+                let lit: syn::LitStr = value.parse()?;
+                result = Some(lit.value());
+            } else if meta.input.peek(syn::Token![=]) {
+                let _value = meta.value()?;
+                let _lit: syn::LitStr = _value.parse()?;
+            }
+            Ok(())
+        });
+        if result.is_some() {
+            return result;
+        }
+    }
+    None
 }
 
 /// Parse `#[serde(rename_all = "...")]` from attributes.
