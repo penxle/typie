@@ -57,9 +57,10 @@ internal fun EditorToolbarHost(
   val imeVisible =
     isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = environment.safeBottomInset)
   val retainedKeyboardInset = inputState.retainedKeyboardInset()
-  val inputBottomInset =
-    maxOf(effectiveImeInset, retainedKeyboardInset, environment.safeBottomInset)
   val restoringKeyboard = inputState.keyboardRestoreInset != null
+  val inputBottomInset =
+    inputState.keyboardRestoreInset?.let { maxOf(it, environment.safeBottomInset) }
+      ?: maxOf(effectiveImeInset, retainedKeyboardInset, environment.safeBottomInset)
   val bottomPanelHeight = panel?.height ?: inputState.lastBottomPanelHeight
   val bottomPanelContainerHeight = panel?.let { ToolbarBottomPanelGap + it.height } ?: 0.dp
   val lastBottomPanelContainerHeight = ToolbarBottomPanelGap + inputState.lastBottomPanelHeight
@@ -77,11 +78,11 @@ internal fun EditorToolbarHost(
     } else {
       inputBottomInset
     }
-  val toolbarVisible =
-    isEditorToolbarVisible(
+  val toolbarPresented =
+    isEditorToolbarPresented(
       environment = environment,
       activeBottomPanel = activeBottomPanel,
-      retainedKeyboardInset = retainedKeyboardInset,
+      restoringEditorInput = restoringKeyboard,
     )
   val fixedAction =
     fixedActionFor(
@@ -162,7 +163,7 @@ internal fun EditorToolbarHost(
   SideEffect { previousImeVisible.value = imeVisible }
 
   AnimatedVisibility(
-    visible = toolbarVisible,
+    visible = toolbarPresented,
     enter = fadeIn(animationSpec = tween(ToolbarVisibilityEnterMillis)),
     exit = fadeOut(animationSpec = tween(ToolbarVisibilityExitMillis)),
     modifier =

@@ -69,7 +69,7 @@ import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMil
 import co.typie.screen.editor.editor.toolbar.ToolbarHeight
 import co.typie.screen.editor.editor.toolbar.ToolbarInputEnvironment
 import co.typie.screen.editor.editor.toolbar.effectiveImeInset
-import co.typie.screen.editor.editor.toolbar.isEditorToolbarVisible
+import co.typie.screen.editor.editor.toolbar.isEditorToolbarPresented
 import co.typie.screen.editor.editor.toolbar.isImeVisible
 import co.typie.screen.editor.editor.toolbar.rememberEditorKeyboardState
 import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarInputState
@@ -219,14 +219,15 @@ fun EditorScreen(entityId: String) {
     val previousImeVisible = remember { mutableStateOf(imeVisible) }
     val imeAppearing = !previousImeVisible.value && imeVisible
     val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
-    val toolbarVisible =
-      isEditorToolbarVisible(
+    val toolbarRestoreInset = toolbarInputState.keyboardRestoreInset
+    val toolbarPresented =
+      isEditorToolbarPresented(
         environment = toolbarInputEnvironment,
         activeBottomPanel = toolbarPanel?.key,
-        retainedKeyboardInset = toolbarRetainedKeyboardInset,
+        restoringEditorInput = toolbarRestoreInset != null,
       )
     val toolbarControlsOcclusion =
-      if (toolbarVisible) {
+      if (toolbarPresented) {
         ToolbarHeight + ToolbarBottomPadding
       } else {
         0.dp
@@ -235,7 +236,8 @@ fun EditorScreen(entityId: String) {
       if (toolbarPanel != null) {
         bottomSafeInset + ToolbarBottomPanelGap + toolbarPanel.height
       } else {
-        maxOf(bottomSafeInset, toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
+        toolbarRestoreInset?.let { maxOf(bottomSafeInset, it) }
+          ?: maxOf(bottomSafeInset, toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
       }
     val toolbarBottomOcclusionTarget = toolbarControlsOcclusion + bottomPanelOrKeyboardOcclusion
     val inputSpaceOwnsOcclusion = !bottomPanelOpen && (imeVisible || !panelTransitionRunning)

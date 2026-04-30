@@ -2,7 +2,6 @@ package co.typie.shell
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -11,8 +10,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.preferredFrameRate
 import co.typie.domain.auth.AuthService
 import co.typie.domain.auth.AuthState
@@ -67,8 +64,6 @@ fun RootShell() {
   val dialog = remember { Dialog() }
   val popover = remember { PopoverOverlayState() }
 
-  val focusManager = LocalFocusManager.current
-
   val screen =
     when {
       BootstrapService.state !is BootstrapState.Ready -> RootScreen.Splash
@@ -90,7 +85,6 @@ fun RootShell() {
         .safeDrawingHorizontalPadding()
         .preferredFrameRate(FrameRateCategory.High)
         .popoverOutsideTapHost(state = popover)
-        .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
     ) {
       Crossfade(
         screen,

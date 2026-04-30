@@ -22,6 +22,17 @@ import UIKit
     return keyboardVisibleHeight(from: keyboardFrame) > 0
   }
 
+  public static func imeVisibleHeight(notification: Notification) -> Double {
+    guard
+      let keyboardFrame =
+        notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+    else {
+      return 0
+    }
+
+    return keyboardVisibleHeight(from: keyboardFrame)
+  }
+
   private static func detectHardwareKeyboardModeFromUIKeyboardImpl() -> Bool? {
     guard
       let cls = NSClassFromString("UIKeyboardImpl") as? NSObject.Type,

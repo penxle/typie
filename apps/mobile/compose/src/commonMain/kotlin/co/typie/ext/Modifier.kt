@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalFocusManager
 import kotlinx.coroutines.launch
 
 val LocalInteractionSource = compositionLocalOf<MutableInteractionSource?> { null }
@@ -60,16 +59,12 @@ fun Modifier.clickable(onClick: suspend () -> Unit): Modifier =
 fun Modifier.clickable(enabled: Boolean = true, onClick: suspend () -> Unit): Modifier {
   val scope = rememberCoroutineScope()
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
-  val focusManager = LocalFocusManager.current
   return this.focusProperties { canFocus = false }
     .foundationClickable(
       enabled = enabled,
       interactionSource = interactionSource,
       indication = null,
-      onClick = {
-        focusManager.clearFocus()
-        scope.launch { onClick() }
-      },
+      onClick = { scope.launch { onClick() } },
     )
 }
 
@@ -82,7 +77,6 @@ fun Modifier.combinedClickable(
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
   var handling by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
-  val focusManager = LocalFocusManager.current
   return this.focusProperties { canFocus = false }
     .foundationCombinedClickable(
       enabled = enabled,
@@ -91,7 +85,6 @@ fun Modifier.combinedClickable(
       onClick = {
         if (!handling) {
           handling = true
-          focusManager.clearFocus()
           scope.launch {
             try {
               onClick()
@@ -104,7 +97,6 @@ fun Modifier.combinedClickable(
       onLongClick = {
         if (!handling) {
           handling = true
-          focusManager.clearFocus()
           scope.launch {
             try {
               onLongClick()

@@ -31,6 +31,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
@@ -60,6 +61,7 @@ fun Popover(
   collapsedCornerRadius: Dp? = null,
 ) {
   val density = LocalDensity.current
+  val focusManager = LocalFocusManager.current
   val layoutDirection = LocalLayoutDirection.current
   val safeDrawing = WindowInsets.safeDrawing
   val resolvedScreenPadding =
@@ -228,6 +230,7 @@ fun Popover(
             }
             is PopoverOpenTrigger.Tap -> {
               anchorInteractionSource.tryEmit(PressInteraction.Release(pressInteraction))
+              focusManager.clearFocus()
               openTrigger.upChange.consume()
               isExpanded = true
               return@awaitEachGesture
@@ -240,6 +243,7 @@ fun Popover(
 
           try {
             scrollLockHandle = scrollGestureLockState.acquire()
+            focusManager.clearFocus()
             isExpanded = true
             released =
               trackPressGestureSession(

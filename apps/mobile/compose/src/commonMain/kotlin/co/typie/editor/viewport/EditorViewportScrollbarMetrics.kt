@@ -12,7 +12,18 @@ internal fun shouldShowEditorViewportScrollbarThumb(
   viewportLength: Float,
   contentLength: Float,
   trackLength: Float = resolveEditorViewportScrollbarTrackLength(viewportLength),
-): Boolean = viewportLength > 0f && contentLength > viewportLength && trackLength > 0f
+  minThumbSize: Float = 0f,
+): Boolean {
+  val effectiveMinThumbSize = minThumbSize.coerceAtLeast(0f)
+  val hasUsableTrack =
+    if (effectiveMinThumbSize > 0f) {
+      trackLength >= effectiveMinThumbSize
+    } else {
+      trackLength > 0f
+    }
+
+  return viewportLength > 0f && contentLength > viewportLength && hasUsableTrack
+}
 
 internal fun resolveEditorViewportScrollbarTrackLength(
   viewportLength: Float,
@@ -31,12 +42,18 @@ internal fun resolveEditorViewportScrollbarThumbSize(
   contentLength: Float,
   minThumbSize: Float,
 ): Float {
-  if (trackLength <= 0f || viewportLength <= 0f || contentLength <= viewportLength) {
+  val effectiveMinThumbSize = minThumbSize.coerceAtLeast(0f)
+  if (
+    trackLength <= 0f ||
+      viewportLength <= 0f ||
+      contentLength <= viewportLength ||
+      trackLength < effectiveMinThumbSize
+  ) {
     return 0f
   }
 
   val rawThumbSize = trackLength * viewportLength / contentLength
-  return rawThumbSize.coerceIn(minThumbSize.coerceAtLeast(0f), trackLength)
+  return rawThumbSize.coerceIn(effectiveMinThumbSize, trackLength)
 }
 
 internal fun resolveEditorViewportScrollbarThumbOffset(
@@ -92,7 +109,13 @@ internal fun resolveEditorViewportScrollbarMetrics(
       leadingPadding = leadingPadding,
       trailingPadding = trailingPadding,
     )
-  val isVisible = shouldShowEditorViewportScrollbarThumb(viewportLength, contentLength, trackLength)
+  val isVisible =
+    shouldShowEditorViewportScrollbarThumb(
+      viewportLength = viewportLength,
+      contentLength = contentLength,
+      trackLength = trackLength,
+      minThumbSize = minThumbSize,
+    )
   val thumbSize =
     if (isVisible) {
       resolveEditorViewportScrollbarThumbSize(

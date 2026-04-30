@@ -1,6 +1,8 @@
 package co.typie.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -17,9 +19,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import co.typie.contract.Loadable
 import co.typie.contract.LoadableState
@@ -51,6 +57,7 @@ fun Screen(
   refetchOnMount: Boolean = true,
   background: Color = AppTheme.colors.surfaceCanvas,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
+  dismissFocusOnTapOutsideInput: Boolean = true,
   overlay: (@Composable BoxScope.() -> Unit)? = null,
   content: @Composable BoxScope.(contentPadding: PaddingValues) -> Unit,
 ) {
@@ -61,6 +68,7 @@ fun Screen(
 
   val nav = Nav.current
   val dialog = LocalDialog.current
+  val focusManager = LocalFocusManager.current
 
   val contentPadding =
     if (hasTopBar) {
@@ -91,7 +99,14 @@ fun Screen(
     }
   }
 
-  Box(Modifier.fillMaxSize().background(background)) {
+  Box(
+    Modifier.fillMaxSize()
+      .background(background)
+      .clearFocusOnUnhandledTap(
+        enabled = dismissFocusOnTapOutsideInput,
+        focusManager = focusManager,
+      )
+  ) {
     Box(
       modifier = Modifier.fillMaxSize().hazeSource(hazeState).widthIn(max = MaxContentWidth),
       contentAlignment = Alignment.TopCenter,
@@ -170,6 +185,44 @@ fun Screen(
     overlay?.invoke(this)
   }
 }
+
+private fun Modifier.clearFocusOnUnhandledTap(
+  enabled: Boolean,
+  focusManager: FocusManager,
+): Modifier =
+  if (!enabled) {
+    this
+  } else {
+    pointerInput(focusManager) {
+      awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+        if (down.isConsumed) {
+          return@awaitEachGesture
+        }
+
+        val origin = down.position
+        var isTapCandidate = true
+        var pressed = true
+        while (pressed) {
+          val event = awaitPointerEvent(pass = PointerEventPass.Final)
+          val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+          if (change.isConsumed) {
+            return@awaitEachGesture
+          }
+          if ((change.position - origin).getDistance() > viewConfiguration.touchSlop) {
+            isTapCandidate = false
+          }
+          if (!change.pressed) {
+            pressed = false
+          }
+        }
+
+        if (isTapCandidate) {
+          focusManager.clearFocus()
+        }
+      }
+    }
+  }
 
 private fun overlayFadeBrush(color: Color, reverse: Boolean): Brush {
   val stops =
