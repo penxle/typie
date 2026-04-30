@@ -41,15 +41,15 @@ import {
 DocumentCommit.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
-    commitId: t.exposeString('commitId'),
+    hash: t.exposeString('hash'),
 
     parent: t.expose('parentId', { type: DocumentCommit, nullable: true }),
     secondParent: t.expose('secondParentId', { type: DocumentCommit, nullable: true }),
 
-    object: t.expose('objectId', { type: DocumentObject }),
+    rootObject: t.expose('rootObjectId', { type: DocumentObject }),
     objects: t.field({
       type: [DocumentObject],
-      resolve: async (commit) => walkReachableObjects(db, commit.objectId),
+      resolve: async (commit) => walkReachableObjects(db, commit.rootObjectId),
     }),
 
     device: t.expose('deviceId', { type: UserDevice, nullable: true }),
@@ -142,9 +142,9 @@ builder.mutationFields((t) => ({
         type: [
           builder.inputType('ClientCommitInput', {
             fields: (t) => ({
-              commitId: t.string(),
-              parentCommitId: t.string(),
-              objectHash: t.string(),
+              commitHash: t.string(),
+              parentCommitHash: t.string(),
+              rootObjectHash: t.string(),
               steps: t.field({ type: 'JSON', required: false }),
               meta: t.field({ type: 'JSON', required: false }),
               committedAt: t.field({ type: 'DateTime' }),
@@ -180,24 +180,34 @@ builder.mutationFields((t) => ({
         }
       }
 
+      for (const c of input.commits) {
+        const computed = await wasm.hash_commit_content({
+          parent_hash: c.parentCommitHash,
+          object_hash: c.rootObjectHash,
+        });
+        if (computed !== c.commitHash) {
+          throw new TypieError({ code: 'commit_hash_mismatch' });
+        }
+      }
+
       const result = await db.transaction(async (tx) => {
         let baseHashes = new Set<string>();
         if (input.commits.length > 0) {
           const baseParent = await tx
-            .select({ objectId: DocumentCommits.objectId })
+            .select({ rootObjectId: DocumentCommits.rootObjectId })
             .from(DocumentCommits)
-            .where(and(eq(DocumentCommits.documentId, input.documentId), eq(DocumentCommits.commitId, input.commits[0].parentCommitId)))
+            .where(and(eq(DocumentCommits.documentId, input.documentId), eq(DocumentCommits.hash, input.commits[0].parentCommitHash)))
             .then(first);
           if (!baseParent) {
             throw new TypieError({ code: 'invalid_parent_commit' });
           }
-          baseHashes = await walkReachableHashes(tx, baseParent.objectId);
+          baseHashes = await walkReachableHashes(tx, baseParent.rootObjectId);
         }
 
         const validHashes = new Set<string>([...baseHashes, ...input.objects.map((o) => o.hash)]);
 
         for (const c of input.commits) {
-          if (!validHashes.has(c.objectHash)) {
+          if (!validHashes.has(c.rootObjectHash)) {
             throw new TypieError({ code: 'object_not_authorized' });
           }
         }
@@ -219,27 +229,27 @@ builder.mutationFields((t) => ({
         }
 
         if (input.commits.length > 0) {
-          const referencedHashes = [...new Set(input.commits.map((c) => c.objectHash))];
+          const referencedHashes = [...new Set(input.commits.map((c) => c.rootObjectHash))];
           const objectRows = await tx
             .select({ id: DocumentObjects.id, hash: DocumentObjects.hash })
             .from(DocumentObjects)
             .where(inArray(DocumentObjects.hash, referencedHashes));
           const hashToObjectId = new Map(objectRows.map((o) => [o.hash, o.id]));
 
-          const parentExternalIds = [...new Set(input.commits.map((c) => c.parentCommitId))];
+          const parentCommitHashes = [...new Set(input.commits.map((c) => c.parentCommitHash))];
           const parentRows = await tx
-            .select({ id: DocumentCommits.id, commitId: DocumentCommits.commitId })
+            .select({ id: DocumentCommits.id, hash: DocumentCommits.hash })
             .from(DocumentCommits)
-            .where(and(eq(DocumentCommits.documentId, input.documentId), inArray(DocumentCommits.commitId, parentExternalIds)));
-          const externalToInternalId = new Map(parentRows.map((r) => [r.commitId, r.id]));
+            .where(and(eq(DocumentCommits.documentId, input.documentId), inArray(DocumentCommits.hash, parentCommitHashes)));
+          const hashToInternalId = new Map(parentRows.map((r) => [r.hash, r.id]));
 
           for (const c of input.commits) {
-            const parentDbId = externalToInternalId.get(c.parentCommitId);
+            const parentDbId = hashToInternalId.get(c.parentCommitHash);
             if (!parentDbId) {
               throw new TypieError({ code: 'invalid_parent_commit' });
             }
 
-            const objId = hashToObjectId.get(c.objectHash);
+            const objId = hashToObjectId.get(c.rootObjectHash);
             if (!objId) {
               throw new TypieError({ code: 'missing_root_object' });
             }
@@ -247,17 +257,17 @@ builder.mutationFields((t) => ({
             const inserted = await tx
               .insert(DocumentCommits)
               .values({
-                commitId: c.commitId,
+                hash: c.commitHash,
                 documentId: input.documentId,
                 parentId: parentDbId,
-                objectId: objId,
+                rootObjectId: objId,
                 steps: c.steps ?? null,
                 meta: c.meta ?? null,
                 deviceId: ctx.session.deviceId,
                 userId: ctx.session.userId,
                 committedAt: c.committedAt,
               })
-              .onConflictDoNothing({ target: [DocumentCommits.documentId, DocumentCommits.commitId] })
+              .onConflictDoNothing({ target: [DocumentCommits.documentId, DocumentCommits.hash] })
               .returning({ id: DocumentCommits.id })
               .then(first);
 
@@ -266,12 +276,12 @@ builder.mutationFields((t) => ({
               const existing = await tx
                 .select({ id: DocumentCommits.id })
                 .from(DocumentCommits)
-                .where(and(eq(DocumentCommits.documentId, input.documentId), eq(DocumentCommits.commitId, c.commitId)))
+                .where(and(eq(DocumentCommits.documentId, input.documentId), eq(DocumentCommits.hash, c.commitHash)))
                 .then(firstOrThrow);
               insertedId = existing.id;
             }
 
-            externalToInternalId.set(c.commitId, insertedId);
+            hashToInternalId.set(c.commitHash, insertedId);
           }
         }
 
@@ -284,14 +294,14 @@ builder.mutationFields((t) => ({
             and(
               eq(DocumentCommits.documentId, input.documentId),
               inArray(
-                DocumentCommits.commitId,
-                input.commits.map((c) => c.commitId),
+                DocumentCommits.hash,
+                input.commits.map((c) => c.commitHash),
               ),
             ),
           );
-        const byCommitId = new Map(rows.map((r) => [r.commitId, r]));
+        const byHash = new Map(rows.map((r) => [r.hash, r]));
         return input.commits.map((c) => {
-          const row = byCommitId.get(c.commitId);
+          const row = byHash.get(c.commitHash);
           if (!row) throw new Error('commit not persisted after insert');
           return row;
         });
@@ -318,7 +328,7 @@ builder.subscriptionFields((t) => ({
     }),
     args: {
       documentId: t.arg.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-      sinceCommitId: t.arg.string(),
+      sinceCommitHash: t.arg.string(),
     },
     subscribe: async (_, args, ctx) => {
       const docEntity = await db
@@ -332,7 +342,7 @@ builder.subscriptionFields((t) => ({
       const since = await db
         .select()
         .from(DocumentCommits)
-        .where(and(eq(DocumentCommits.documentId, args.documentId), eq(DocumentCommits.commitId, args.sinceCommitId)))
+        .where(and(eq(DocumentCommits.documentId, args.documentId), eq(DocumentCommits.hash, args.sinceCommitHash)))
         .then(first);
       if (!since) throw new TypieError({ code: 'commit_not_found' });
 
@@ -354,18 +364,18 @@ builder.subscriptionFields((t) => ({
               .where(eq(Documents.id, args.documentId))
               .then(firstOrThrow);
 
-            let catchUpNewObjectIds: { id: string }[] = [];
+            let catchUpObjectIds: { id: string }[] = [];
             if (document.headCommitId && document.headCommitId !== since.id) {
-              const sinceHashes = await walkReachableHashes(tx, since.objectId);
+              const sinceHashes = await walkReachableHashes(tx, since.rootObjectId);
               const headRow = await tx
-                .select({ objectId: DocumentCommits.objectId })
+                .select({ rootObjectId: DocumentCommits.rootObjectId })
                 .from(DocumentCommits)
                 .where(eq(DocumentCommits.id, document.headCommitId))
                 .then(firstOrThrow);
-              const headHashes = await walkReachableHashes(tx, headRow.objectId);
+              const headHashes = await walkReachableHashes(tx, headRow.rootObjectId);
               const newHashes = [...headHashes].filter((h) => !sinceHashes.has(h));
               if (newHashes.length > 0) {
-                catchUpNewObjectIds = await tx
+                catchUpObjectIds = await tx
                   .select({ id: DocumentObjects.id })
                   .from(DocumentObjects)
                   .where(inArray(DocumentObjects.hash, newHashes));
@@ -374,7 +384,7 @@ builder.subscriptionFields((t) => ({
 
             return {
               commitIds: catchUpCommits.map((c) => c.id),
-              objectIds: catchUpNewObjectIds.map((o) => o.id),
+              objectIds: catchUpObjectIds.map((o) => o.id),
             };
           });
 

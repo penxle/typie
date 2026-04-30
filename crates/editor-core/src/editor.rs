@@ -288,12 +288,12 @@ impl Editor {
             affected.sort();
             affected.dedup();
 
-            let (root_object_hash, new_objects) = state.doc.derive_objects_for_path(&affected);
+            let (root_object_hash, objects) = state.doc.derive_objects_for_path(&affected);
 
             self.push_event(EditorEvent::TransactionCommitted {
-                commit_payload: crate::event::CommitPayload {
+                commit: crate::event::Commit {
                     root_object_hash,
-                    new_objects,
+                    objects,
                     steps: commitable,
                     meta: meta.clone(),
                     committed_at: std::time::SystemTime::now()
@@ -897,9 +897,7 @@ mod tests {
         let committed: Vec<_> = events
             .iter()
             .filter_map(|e| match e {
-                EditorEvent::TransactionCommitted { commit_payload } => {
-                    Some(commit_payload.steps.clone())
-                }
+                EditorEvent::TransactionCommitted { commit } => Some(commit.steps.clone()),
                 _ => None,
             })
             .collect();
@@ -916,28 +914,28 @@ mod tests {
     }
 
     #[test]
-    fn transact_emits_commit_payload_with_objects_and_root_hash() {
+    fn transact_emits_commit_with_objects_and_root_hash() {
         let (mut editor, _) = test_editor();
         let events = editor.apply(Message::Insertion {
             op: InsertionOp::Text { text: "hi".into() },
         });
-        let payload = events
+        let commit = events
             .iter()
             .find_map(|e| match e {
-                EditorEvent::TransactionCommitted { commit_payload } => Some(commit_payload),
+                EditorEvent::TransactionCommitted { commit } => Some(commit),
                 _ => None,
             })
             .expect("expected one TransactionCommitted event");
-        assert_eq!(payload.root_object_hash.len(), 32, "32-char xxh3 hex");
+        assert_eq!(commit.root_object_hash.len(), 32, "32-char xxh3 hex");
         assert!(
-            !payload.new_objects.is_empty(),
+            !commit.objects.is_empty(),
             "InsertText must derive at least one object"
         );
         assert!(
-            payload
-                .new_objects
+            commit
+                .objects
                 .iter()
-                .any(|o| o.hash == payload.root_object_hash),
+                .any(|o| o.hash == commit.root_object_hash),
             "root_object_hash must match one of the derived objects"
         );
     }
@@ -1001,9 +999,9 @@ mod tests {
     fn tick_does_not_dedup_transaction_committed() {
         let (mut editor, _) = test_editor();
         let event = EditorEvent::TransactionCommitted {
-            commit_payload: crate::event::CommitPayload {
+            commit: crate::event::Commit {
                 root_object_hash: String::new(),
-                new_objects: vec![],
+                objects: vec![],
                 steps: vec![],
                 meta: editor_transaction::TransactionMeta::default(),
                 committed_at: 0,

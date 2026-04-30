@@ -71,6 +71,7 @@ import { assertSitePermission } from '#/utils/permission.ts';
 import { assertPlanRule } from '#/utils/plan.ts';
 import { buildInitialDocFromPreset } from '#/utils/sync.ts';
 import { wasm } from '#/utils/wasm.ts';
+import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
 import {
   CharacterCountChange,
@@ -869,16 +870,20 @@ builder.mutationFields((t) => ({
             .where(eq(DocumentObjects.hash, initialV2.rootHash))
             .then(firstOrThrow);
 
+          const initialCommitHash = await wasmFfi.hash_commit_content({
+            object_hash: initialV2.rootHash,
+          });
+
           const initialCommit = await tx
             .insert(DocumentCommits)
             .values({
-              commitId: crypto.randomUUID(),
+              hash: initialCommitHash,
               documentId: document.id,
               parentId: null,
               secondParentId: null,
               steps: null,
               meta: { initial: true },
-              objectId: rootObj.id,
+              rootObjectId: rootObj.id,
               deviceId: null,
               userId: null,
               committedAt: dayjs(),

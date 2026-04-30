@@ -2,7 +2,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { DocumentCommits, DocumentObjects, firstOrThrow } from '#/db/index.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters, resolvePreset } from '#/utils/entity.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
-import type { DerivedObject, Doc, Modifier, ObjectContent, RootNode } from '@typie/editor-ffi/server';
+import type { CommitObject, Doc, Modifier, ObjectContent, RootNode } from '@typie/editor-ffi/server';
 import type { Database, Transaction } from '#/db/index.ts';
 import type { TemplatePreset } from '#/utils/entity.ts';
 
@@ -50,9 +50,9 @@ export async function walkReachableHashes(tx: Database | Transaction, rootObject
   return new Set(rows.map((r) => r.hash));
 }
 
-export async function loadDocFromObjectId(tx: Database | Transaction, objectId: string): Promise<{ rootHash: string; doc: Doc }> {
-  const root = await tx.select().from(DocumentObjects).where(eq(DocumentObjects.id, objectId)).then(firstOrThrow);
-  const allHashes = await walkReachableHashes(tx, objectId);
+export async function loadDocFromRootObjectId(tx: Database | Transaction, rootObjectId: string): Promise<{ rootHash: string; doc: Doc }> {
+  const root = await tx.select().from(DocumentObjects).where(eq(DocumentObjects.id, rootObjectId)).then(firstOrThrow);
+  const allHashes = await walkReachableHashes(tx, rootObjectId);
   const allObjects = await tx
     .select({ hash: DocumentObjects.hash, content: DocumentObjects.content })
     .from(DocumentObjects)
@@ -67,7 +67,7 @@ export async function loadDocFromObjectId(tx: Database | Transaction, objectId: 
 export type InitialDocBundle = {
   doc: Doc;
   rootHash: string;
-  objects: DerivedObject[];
+  objects: CommitObject[];
   text: string;
   characterCount: number;
   blobSize: number;

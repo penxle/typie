@@ -558,15 +558,8 @@
     {
       "idx": 79,
       "version": "7",
-      "when": 1777362027453,
-      "tag": "0079_empty_cloak",
-      "breakpoints": false
-    },
-    {
-      "idx": 80,
-      "version": "7",
-      "when": 1777484535752,
-      "tag": "0080_hard_hiroim",
+      "when": 1777539132750,
+      "tag": "0079_stale_sunspot",
       "breakpoints": false
     }
   ]

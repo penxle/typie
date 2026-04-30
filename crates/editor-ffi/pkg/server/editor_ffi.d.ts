@@ -148,6 +148,16 @@ export interface Composition {
 export type Affinity = "downstream" | "upstream";
 
 /**
+ * `CommitContent::hash()` of this struct (via canonical JSON) is its commit hash —
+ * any change to `Serialize` shape changes the hash and breaks CAS dedup.
+ */
+export interface CommitContent {
+    parent_hash?: string;
+    second_parent_hash?: string;
+    object_hash: string;
+}
+
+/**
  * `ObjectContent::hash()` of this struct (via canonical JSON) is its Object hash —
  * any change to `Serialize` shape changes the hash and breaks CAS dedup.
  */
@@ -233,12 +243,17 @@ export interface ChunkCodepoints {
     chunks: number[][];
 }
 
-export interface CommitPayload {
+export interface Commit {
     rootObjectHash: string;
-    newObjects: DerivedObject[];
+    objects: CommitObject[];
     steps: Step[];
     meta: TransactionMeta;
     committedAt: number;
+}
+
+export interface CommitObject {
+    hash: string;
+    content: ObjectContent;
 }
 
 export interface ConflictBranch {
@@ -265,12 +280,7 @@ export interface CursorMetrics {
 
 export interface DeriveAllObjectsResult {
     rootHash: string;
-    objects: DerivedObject[];
-}
-
-export interface DerivedObject {
-    hash: string;
-    content: ObjectContent;
+    objects: CommitObject[];
 }
 
 export interface Doc {
@@ -514,7 +524,7 @@ export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movem
 
 export type Direction = "forward" | "backward";
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; commitPayload: CommitPayload };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; commit: Commit };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -609,6 +619,7 @@ declare class EditorHost {
     extract_text(doc: Doc): string;
     get_font_codepoints(ttf_data: Uint8Array): Uint32Array;
     get_font_metadata(data: Uint8Array): FontMetadata;
+    hash_commit_content(content: CommitContent): string;
     hash_object_content(content: ObjectContent): string;
     merge_docs(base: Doc, ours: Doc, theirs: Doc): MergeResult;
     reconstruct_doc_from_objects(root_hash: string, objects: ObjectEntry[]): Doc;

@@ -67,11 +67,11 @@ input CheckSpellingDocumentInput {
 }
 
 input ClientCommitInput {
-  commitId: String!
+  commitHash: String!
   committedAt: DateTime!
   meta: JSON
-  objectHash: String!
-  parentCommitId: String!
+  parentCommitHash: String!
+  rootObjectHash: String!
   steps: JSON
 }
 
@@ -222,16 +222,16 @@ enum DocumentAvailableAction {
 }
 
 type DocumentCommit {
-  commitId: String!
   committedAt: DateTime!
   conflicts: [DocumentConflict!]!
   device: UserDevice
+  hash: String!
   id: ID!
   meta: JSON
-  object: DocumentObject!
   objects: [DocumentObject!]!
   parent: DocumentCommit
   pushedAt: DateTime!
+  rootObject: DocumentObject!
   secondParent: DocumentCommit
   user: User
 }
@@ -1316,7 +1316,7 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
-  documentCommitsUpdated(documentId: ID!, sinceCommitId: String!): DocumentCommitsUpdatedEvent!
+  documentCommitsUpdated(documentId: ID!, sinceCommitHash: String!): DocumentCommitsUpdatedEvent!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

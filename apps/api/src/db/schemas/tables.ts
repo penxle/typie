@@ -143,20 +143,20 @@ export const DocumentCommits = pgTable(
     id: text('id')
       .primaryKey()
       .$defaultFn(() => createDbId(TableCode.DOCUMENT_COMMITS)),
-    sequence: bigint('sequence', { mode: 'number' }).notNull().generatedAlwaysAsIdentity(),
-    commitId: text('commit_id').notNull(),
     documentId: text('document_id')
       .notNull()
       .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    deviceId: text('device_id').references((): AnyPgColumn => UserDevices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     parentId: text('parent_id').references((): AnyPgColumn => DocumentCommits.id),
     secondParentId: text('second_parent_id').references((): AnyPgColumn => DocumentCommits.id),
-    steps: jsonb('steps'),
-    meta: jsonb('meta'),
-    objectId: text('object_id')
+    rootObjectId: text('root_object_id')
       .notNull()
       .references((): AnyPgColumn => DocumentObjects.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    deviceId: text('device_id').references((): AnyPgColumn => UserDevices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    steps: jsonb('steps'),
+    meta: jsonb('meta'),
+    hash: text('hash').notNull(),
+    sequence: bigint('sequence', { mode: 'number' }).notNull().generatedAlwaysAsIdentity(),
     committedAt: datetime('committed_at').notNull(),
     pushedAt: datetime('pushed_at')
       .notNull()
@@ -165,7 +165,7 @@ export const DocumentCommits = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.documentId, t.pushedAt), index().on(t.documentId, t.sequence), uniqueIndex().on(t.documentId, t.commitId)],
+  (t) => [index().on(t.documentId, t.pushedAt), index().on(t.documentId, t.sequence), uniqueIndex().on(t.documentId, t.hash)],
 );
 
 export const DocumentObjects = pgTable(

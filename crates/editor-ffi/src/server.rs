@@ -17,7 +17,7 @@ pub struct MergeResult {
 #[serde(rename_all = "camelCase")]
 pub struct DeriveAllObjectsResult {
     pub root_hash: String,
-    pub objects: Vec<editor_model::DerivedObject>,
+    pub objects: Vec<editor_model::CommitObject>,
 }
 
 #[ffi]
@@ -119,6 +119,14 @@ impl EditorHost {
     pub fn hash_object_content(
         &self,
         content: Complex<editor_model::ObjectContent>,
+    ) -> EditorResult<String> {
+        let content = content.from_ffi()?;
+        Ok(content.hash())
+    }
+
+    pub fn hash_commit_content(
+        &self,
+        content: Complex<editor_model::CommitContent>,
     ) -> EditorResult<String> {
         let content = content.from_ffi()?;
         Ok(content.hash())

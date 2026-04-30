@@ -219,23 +219,23 @@ export interface ChildRef {
     hash: string;
 }
 
-export interface CommitPayload {
+export interface Commit {
     rootObjectHash: string;
-    newObjects: DerivedObject[];
+    objects: CommitObject[];
     steps: Step[];
     meta: TransactionMeta;
     committedAt: number;
+}
+
+export interface CommitObject {
+    hash: string;
+    content: ObjectContent;
 }
 
 export interface CursorMetrics {
     page_idx: number;
     caret: Rect;
     line: Rect;
-}
-
-export interface DerivedObject {
-    hash: string;
-    content: ObjectContent;
 }
 
 export interface Doc {
@@ -448,7 +448,7 @@ export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movem
 
 export type Direction = "forward" | "backward";
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; commitPayload: CommitPayload };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; commit: Commit };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 

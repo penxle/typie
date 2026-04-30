@@ -10,12 +10,13 @@ import {
   DocumentHeadContents,
   DocumentObjects,
   Documents,
+  first,
   firstOrThrow,
 } from '#/db/index.ts';
 import { Lock } from '#/lock.ts';
 import { pubsub } from '#/pubsub.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters } from '#/utils/entity.ts';
-import { loadDocFromObjectId, walkReachableHashes, walkReachableObjects } from '#/utils/sync.ts';
+import { loadDocFromRootObjectId, walkReachableHashes, walkReachableObjects } from '#/utils/sync.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
 import { enqueueJob } from '../index.ts';
 import { defineCron, defineJob } from '../types.ts';
@@ -178,9 +179,9 @@ async function performMerge(tx: Transaction, documentId: string, baseId: string,
   const oursCommit = await tx.select().from(DocumentCommits).where(eq(DocumentCommits.id, oursId)).then(firstOrThrow);
   const theirsCommit = await tx.select().from(DocumentCommits).where(eq(DocumentCommits.id, theirsId)).then(firstOrThrow);
 
-  const { doc: baseDoc } = await loadDocFromObjectId(tx, baseCommit.objectId);
-  const { doc: oursDoc } = await loadDocFromObjectId(tx, oursCommit.objectId);
-  const { doc: theirsDoc } = await loadDocFromObjectId(tx, theirsCommit.objectId);
+  const { doc: baseDoc } = await loadDocFromRootObjectId(tx, baseCommit.rootObjectId);
+  const { doc: oursDoc } = await loadDocFromRootObjectId(tx, oursCommit.rootObjectId);
+  const { doc: theirsDoc } = await loadDocFromRootObjectId(tx, theirsCommit.rootObjectId);
 
   const mergeResult = await wasm.merge_docs(baseDoc, oursDoc, theirsDoc);
   const { rootHash: mergedRootHash, objects: mergedAllObjects } = await wasm.derive_all_objects(mergeResult.merged);
@@ -199,24 +200,42 @@ async function performMerge(tx: Transaction, documentId: string, baseId: string,
     .then(firstOrThrow);
 
   // Server-issued merge commit: deviceId/userId null, distinguished by meta.merge=true.
-  const mergeCommit = await tx
+  const mergeHash = await wasm.hash_commit_content({
+    parent_hash: oursCommit.hash,
+    second_parent_hash: theirsCommit.hash,
+    object_hash: mergedRootHash,
+  });
+
+  const inserted = await tx
     .insert(DocumentCommits)
     .values({
-      commitId: crypto.randomUUID(),
+      hash: mergeHash,
       documentId,
       parentId: oursId,
       secondParentId: theirsId,
-      objectId: mergedRootObj.id,
+      rootObjectId: mergedRootObj.id,
       steps: null,
       meta: { merge: true },
       deviceId: null,
       userId: null,
       committedAt: dayjs(),
     })
+    .onConflictDoNothing({ target: [DocumentCommits.documentId, DocumentCommits.hash] })
     .returning()
-    .then(firstOrThrow);
+    .then(first);
 
-  await persistConflicts(tx, documentId, mergeCommit.id, oursId, theirsId, mergeResult.conflicts);
+  let mergeCommit: typeof DocumentCommits.$inferSelect;
+  if (inserted) {
+    mergeCommit = inserted;
+    await persistConflicts(tx, documentId, mergeCommit.id, oursId, theirsId, mergeResult.conflicts);
+  } else {
+    // 같은 머지가 이미 처리됐다면 conflicts도 이미 기록됐으므로 중복 호출 회피
+    mergeCommit = await tx
+      .select()
+      .from(DocumentCommits)
+      .where(and(eq(DocumentCommits.documentId, documentId), eq(DocumentCommits.hash, mergeHash)))
+      .then(firstOrThrow);
+  }
 
   return mergeCommit.id;
 }
@@ -268,13 +287,13 @@ async function updateHead(tx: Transaction, documentId: string, newHeadDbId: stri
   await tx.update(Documents).set({ headCommitId: newHeadDbId }).where(eq(Documents.id, documentId));
 
   const newHead = await tx
-    .select({ objectId: DocumentCommits.objectId })
+    .select({ rootObjectId: DocumentCommits.rootObjectId })
     .from(DocumentCommits)
     .where(eq(DocumentCommits.id, newHeadDbId))
     .then(firstOrThrow);
 
-  const allObjects = await walkReachableObjects(tx, newHead.objectId);
-  const rootObj = allObjects.find((o) => o.id === newHead.objectId);
+  const allObjects = await walkReachableObjects(tx, newHead.rootObjectId);
+  const rootObj = allObjects.find((o) => o.id === newHead.rootObjectId);
   if (!rootObj) throw new Error('root object missing after walk');
 
   const doc = await wasm.reconstruct_doc_from_objects(
@@ -319,20 +338,20 @@ async function collectDelta(
       : [];
 
   const newRow = await tx
-    .select({ objectId: DocumentCommits.objectId })
+    .select({ rootObjectId: DocumentCommits.rootObjectId })
     .from(DocumentCommits)
     .where(eq(DocumentCommits.id, newHeadId))
     .then(firstOrThrow);
-  const newHashes = await walkReachableHashes(tx, newRow.objectId);
+  const newHashes = await walkReachableHashes(tx, newRow.rootObjectId);
 
   let oldHashes = new Set<string>();
   if (oldHeadId) {
     const oldRow = await tx
-      .select({ objectId: DocumentCommits.objectId })
+      .select({ rootObjectId: DocumentCommits.rootObjectId })
       .from(DocumentCommits)
       .where(eq(DocumentCommits.id, oldHeadId))
       .then(firstOrThrow);
-    oldHashes = await walkReachableHashes(tx, oldRow.objectId);
+    oldHashes = await walkReachableHashes(tx, oldRow.rootObjectId);
   }
 
   const deltaHashes = [...newHashes].filter((h) => !oldHashes.has(h));

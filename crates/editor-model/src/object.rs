@@ -46,9 +46,28 @@ impl ObjectContent {
     }
 }
 
+/// `CommitContent::hash()` of this struct (via canonical JSON) is its commit hash —
+/// any change to `Serialize` shape changes the hash and breaks CAS dedup.
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DerivedObject {
+pub struct CommitContent {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub parent_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub second_parent_hash: Option<String>,
+    pub object_hash: String,
+}
+
+impl CommitContent {
+    pub fn hash(&self) -> String {
+        let bytes = crate::canonical::canonical_serialize(self);
+        format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&bytes))
+    }
+}
+
+#[ffi]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CommitObject {
     pub hash: String,
     pub content: ObjectContent,
 }
@@ -58,7 +77,7 @@ impl Doc {
     pub fn derive_objects_for_path(
         &self,
         affected_node_ids: &[NodeId],
-    ) -> (String, Vec<DerivedObject>) {
+    ) -> (String, Vec<CommitObject>) {
         if affected_node_ids.is_empty() {
             return (self.compute_subtree_hash(NodeId::ROOT), vec![]);
         }
@@ -74,7 +93,7 @@ impl Doc {
             }
         }
 
-        let mut all_objects: Vec<DerivedObject> = Vec::new();
+        let mut all_objects: Vec<CommitObject> = Vec::new();
         let root_hash = self.derive_post_order(NodeId::ROOT, &path, &mut all_objects);
         (root_hash, all_objects)
     }
@@ -83,7 +102,7 @@ impl Doc {
         &self,
         node_id: NodeId,
         path: &HashSet<NodeId>,
-        all_objects: &mut Vec<DerivedObject>,
+        all_objects: &mut Vec<CommitObject>,
     ) -> String {
         let entry = self.get_entry(node_id).expect("node must exist");
         let mut children_hashes: Vec<ChildRef> = Vec::new();
@@ -107,7 +126,7 @@ impl Doc {
             children: children_hashes,
         };
         let hash = content.hash();
-        all_objects.push(DerivedObject {
+        all_objects.push(CommitObject {
             hash: hash.clone(),
             content,
         });
@@ -134,7 +153,7 @@ impl Doc {
         content.hash()
     }
 
-    pub fn derive_all_objects(&self) -> (String, Vec<DerivedObject>) {
+    pub fn derive_all_objects(&self) -> (String, Vec<CommitObject>) {
         let all_ids: Vec<NodeId> = self.nodes.keys().copied().collect();
         self.derive_objects_for_path(&all_ids)
     }
@@ -345,6 +364,81 @@ mod tests {
             })
         ));
     }
+
+    #[test]
+    fn commit_hash_is_32_char_hex() {
+        let c = CommitContent {
+            parent_hash: None,
+            second_parent_hash: None,
+            object_hash: "deadbeef".to_string(),
+        };
+        let h = c.hash();
+        assert_eq!(h.len(), 32);
+        assert!(
+            h.chars()
+                .all(|ch| ch.is_ascii_digit() || ch.is_ascii_lowercase())
+        );
+    }
+
+    #[test]
+    fn root_commit_differs_from_child_with_same_object() {
+        let root = CommitContent {
+            parent_hash: None,
+            second_parent_hash: None,
+            object_hash: "obj1".to_string(),
+        };
+        let child = CommitContent {
+            parent_hash: Some("p1".to_string()),
+            second_parent_hash: None,
+            object_hash: "obj1".to_string(),
+        };
+        assert_ne!(root.hash(), child.hash());
+    }
+
+    #[test]
+    fn merge_commit_differs_from_linear_commit() {
+        let linear = CommitContent {
+            parent_hash: Some("p1".to_string()),
+            second_parent_hash: None,
+            object_hash: "obj1".to_string(),
+        };
+        let merge = CommitContent {
+            parent_hash: Some("p1".to_string()),
+            second_parent_hash: Some("p2".to_string()),
+            object_hash: "obj1".to_string(),
+        };
+        assert_ne!(linear.hash(), merge.hash());
+    }
+
+    #[test]
+    fn parent_order_matters() {
+        let a_b = CommitContent {
+            parent_hash: Some("a".to_string()),
+            second_parent_hash: Some("b".to_string()),
+            object_hash: "obj".to_string(),
+        };
+        let b_a = CommitContent {
+            parent_hash: Some("b".to_string()),
+            second_parent_hash: Some("a".to_string()),
+            object_hash: "obj".to_string(),
+        };
+        assert_ne!(a_b.hash(), b_a.hash());
+    }
+
+    #[test]
+    fn same_input_produces_same_hash() {
+        let c1 = CommitContent {
+            parent_hash: Some("p".to_string()),
+            second_parent_hash: None,
+            object_hash: "obj".to_string(),
+        };
+        let c2 = CommitContent {
+            parent_hash: Some("p".to_string()),
+            second_parent_hash: None,
+            object_hash: "obj".to_string(),
+        };
+        assert_eq!(c1.hash(), c2.hash());
+    }
 }
 
 #[cfg(test)]
@@ -438,6 +532,23 @@ mod proptest_laws {
                 prop_assert_eq!(&restored_entry.children, &original_entry.children);
                 prop_assert_eq!(&restored_entry.modifiers, &original_entry.modifiers);
             }
+        }
+
+        #[test]
+        fn commit_hash_determinism(
+            parent in proptest::option::of("[a-f0-9]{32}"),
+            second_parent in proptest::option::of("[a-f0-9]{32}"),
+            object in "[a-f0-9]{32}",
+        ) {
+            let c = CommitContent {
+                parent_hash: parent,
+                second_parent_hash: second_parent,
+                object_hash: object,
+            };
+            let h1 = c.hash();
+            let h2 = c.hash();
+            prop_assert_eq!(h1.len(), 32);
+            prop_assert_eq!(h1, h2);
         }
     }
 }
