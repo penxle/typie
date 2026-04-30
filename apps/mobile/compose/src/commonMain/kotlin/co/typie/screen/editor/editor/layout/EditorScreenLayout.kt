@@ -25,8 +25,13 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.runtime.EditorBoundsInContainer
+import co.typie.editor.scroll.EditorAutoScrollPolicy
+import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorScrollIntentResult
+import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
@@ -51,6 +56,7 @@ internal fun EditorScreenLayout(
   scrollFrame: EditorScrollFrame,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
+  viewportScrollReconcileEnabled: Boolean,
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
@@ -62,6 +68,7 @@ internal fun EditorScreenLayout(
   val density = LocalDensity.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val toolbarBackdropHazeState = LocalHazeState.current
+  val scrollReconcileState = remember { EditorViewportScrollReconcileState() }
   val resolveSize: (Int, Int) -> Size =
     remember(density) {
       { width, height -> Size(width = width / density.density, height = height / density.density) }
@@ -166,6 +173,12 @@ internal fun EditorScreenLayout(
                   }
                 }
               }
+            } else {
+              scrollReconcileState.reconcile(
+                enabled = viewportScrollReconcileEnabled && scrollFrame.state.cursor != null,
+                viewportState = state.viewportState,
+                scrollFrame = scrollFrame,
+              )
             }
 
             layout(width = viewportConstraints.maxWidth, height = viewportConstraints.maxHeight) {
@@ -199,6 +212,82 @@ internal fun EditorScreenLayout(
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
     }
   }
+}
+
+internal class EditorViewportScrollReconcileState {
+  private var lastObservedFrame: EditorViewportScrollReconcileFrame? = null
+
+  fun reset() {
+    lastObservedFrame = null
+  }
+
+  fun reconcile(
+    enabled: Boolean,
+    viewportState: EditorViewportState,
+    scrollFrame: EditorScrollFrame,
+  ): Boolean {
+    if (!enabled) {
+      reset()
+      return false
+    }
+    if (viewportState.isTransforming || viewportState.isDirectManipulationInProgress) {
+      return false
+    }
+
+    val frame = EditorViewportScrollReconcileFrame(scrollFrame)
+    val previousFrame = lastObservedFrame
+    if (previousFrame == null) {
+      lastObservedFrame = frame
+      return false
+    }
+    if (previousFrame == frame) {
+      return false
+    }
+
+    return when (
+      val scrollIntentResult =
+        resolveEditorScrollIntent(
+          frame = scrollFrame,
+          target = EditorBringIntoViewTarget.CurrentSelectionHead,
+          currentScroll = viewportState.scrollOffset.y,
+        )
+    ) {
+      EditorScrollIntentResult.Unresolved -> false
+      EditorScrollIntentResult.ConsumedWithoutScroll -> {
+        lastObservedFrame = frame
+        false
+      }
+      is EditorScrollIntentResult.ScrollTo -> {
+        lastObservedFrame = frame
+        viewportState.scrollToY(targetY = scrollIntentResult.y, isAutoScroll = true)
+        true
+      }
+    }
+  }
+}
+
+private data class EditorViewportScrollReconcileFrame(
+  val version: Long,
+  val layoutSpec: EditorDocumentLayoutSpec,
+  val displayZoom: Float,
+  val visibleArea: EditorVisibleArea,
+  val autoScrollPolicy: EditorAutoScrollPolicy,
+  val headerHeight: Float,
+  val density: Float,
+  val editorBounds: EditorBoundsInContainer,
+) {
+  constructor(
+    frame: EditorScrollFrame
+  ) : this(
+    version = frame.state.version,
+    layoutSpec = frame.layoutSpec,
+    displayZoom = frame.displayZoom,
+    visibleArea = frame.visibleArea,
+    autoScrollPolicy = frame.autoScrollPolicy,
+    headerHeight = frame.headerHeight,
+    density = frame.density,
+    editorBounds = frame.editorBounds,
+  )
 }
 
 internal fun resolveEditorViewportContentWidth(

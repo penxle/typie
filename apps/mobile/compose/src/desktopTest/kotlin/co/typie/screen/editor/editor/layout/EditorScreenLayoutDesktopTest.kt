@@ -54,6 +54,7 @@ class EditorScreenLayoutDesktopTest {
           scrollFrame = scrollFrame,
           viewportScrollableState = rememberScrollable2DState { Offset.Zero },
           viewportContentWidth = 320f,
+          viewportScrollReconcileEnabled = false,
           onMeasuredViewportSizeChange = { measuredViewportSize = it },
           header = {},
           body = { Box(Modifier.fillMaxWidth().height(800.dp)) },

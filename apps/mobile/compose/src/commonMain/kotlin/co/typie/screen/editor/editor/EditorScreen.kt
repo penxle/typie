@@ -419,6 +419,8 @@ fun EditorScreen(entityId: String) {
         scrollFrame = scrollFrame,
         viewportScrollableState = viewportScrollableState,
         viewportContentWidth = bodyTrackWidth,
+        viewportScrollReconcileEnabled =
+          uiState.focused && screenState.sceneInForeground && editor != null,
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {
