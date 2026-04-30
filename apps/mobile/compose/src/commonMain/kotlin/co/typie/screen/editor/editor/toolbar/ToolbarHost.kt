@@ -81,10 +81,11 @@ internal fun EditorToolbarHost(
       inputBottomInset
     }
   val toolbarVisible =
-    hostEnvironment.visible &&
-      (hostEnvironment.focused ||
-        activeBottomPanel != null ||
-        retainedKeyboardInset > hostEnvironment.safeBottomInset)
+    isEditorToolbarVisible(
+      environment = hostEnvironment,
+      activeBottomPanel = activeBottomPanel,
+      retainedKeyboardInset = retainedKeyboardInset,
+    )
   val fixedAction =
     fixedActionFor(
       activePanel = activeBottomPanel,

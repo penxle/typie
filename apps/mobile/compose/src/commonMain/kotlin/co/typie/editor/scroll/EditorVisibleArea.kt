@@ -10,8 +10,6 @@ internal data class EditorVisibleArea(
   val safeBottomInset: Float = 0f,
   val imeInset: Float = 0f,
 ) {
-  // viewport 자체가 이미 toolbar를 제외한 scroll viewport이므로, 여기서는
-  // top/bottom system occlusion만 반영한다.
   val topOcclusion: Float
     get() = topInset
 

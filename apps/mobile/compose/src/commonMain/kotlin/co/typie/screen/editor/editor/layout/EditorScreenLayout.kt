@@ -33,9 +33,6 @@ import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportWheelPan
 import co.typie.navigation.navigationPopNestedScroll
 import co.typie.screen.editor.editor.state.EditorScreenState
-import co.typie.screen.editor.editor.toolbar.EditorToolbarFloatingOverhang
-import co.typie.screen.editor.editor.toolbar.ToolbarBottomPadding
-import co.typie.screen.editor.editor.toolbar.ToolbarHeight
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlin.math.max
@@ -81,14 +78,7 @@ internal fun EditorScreenLayout(
       subcompose(EditorScreenLayoutSlot.Toolbar, toolbar).map {
         it.measure(constraints.copy(minWidth = 0, minHeight = 0))
       }
-    val toolbarHeight = toolbarPlaceables.maxOfOrNull { it.height } ?: 0
-    val toolbarViewportInsetHeight =
-      resolveEditorToolbarViewportInsetHeight(
-        toolbarHeightPx = toolbarHeight,
-        floatingOverhangPx = EditorToolbarFloatingOverhang.roundToPx(),
-        maxToolbarViewportInsetPx = ToolbarHeight.roundToPx() + ToolbarBottomPadding.roundToPx(),
-      )
-    val viewportHeight = (constraints.maxHeight - toolbarViewportInsetHeight).coerceAtLeast(0)
+    val viewportHeight = constraints.maxHeight
     val viewportConstraints =
       constraints.copy(
         minWidth = constraints.maxWidth,
@@ -227,15 +217,6 @@ internal fun resolveEditorViewportContentConstraints(
     minHeight = 0,
     maxHeight = Constraints.Infinity,
   )
-}
-
-internal fun resolveEditorToolbarViewportInsetHeight(
-  toolbarHeightPx: Int,
-  floatingOverhangPx: Int,
-  maxToolbarViewportInsetPx: Int,
-): Int {
-  val maxInset = maxToolbarViewportInsetPx.coerceAtLeast(0)
-  return (toolbarHeightPx - floatingOverhangPx).coerceIn(0, maxInset)
 }
 
 private fun Modifier.editorViewportWheelScroll(viewportState: EditorViewportState): Modifier =

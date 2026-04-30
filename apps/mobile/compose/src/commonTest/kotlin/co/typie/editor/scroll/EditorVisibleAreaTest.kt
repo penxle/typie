@@ -20,7 +20,7 @@ class EditorVisibleAreaTest {
   }
 
   @Test
-  fun `toolbar top does not affect visible area because viewport already excludes the toolbar`() {
+  fun `visible viewport bottom follows explicit bottom occlusion`() {
     val visibleArea =
       EditorVisibleArea(
         viewport = Size(width = 720f, height = 900f),

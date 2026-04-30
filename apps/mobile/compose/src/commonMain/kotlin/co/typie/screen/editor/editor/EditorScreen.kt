@@ -61,11 +61,14 @@ import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
+import co.typie.screen.editor.editor.toolbar.ToolbarBottomPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelGap
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMillis
+import co.typie.screen.editor.editor.toolbar.ToolbarHeight
 import co.typie.screen.editor.editor.toolbar.ToolbarInputEnvironment
 import co.typie.screen.editor.editor.toolbar.effectiveImeInset
+import co.typie.screen.editor.editor.toolbar.isEditorToolbarVisible
 import co.typie.screen.editor.editor.toolbar.isImeVisible
 import co.typie.screen.editor.editor.toolbar.rememberEditorKeyboardState
 import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarInputState
@@ -201,12 +204,25 @@ fun EditorScreen(entityId: String) {
     val previousImeVisible = remember { mutableStateOf(imeVisible) }
     val imeAppearing = !previousImeVisible.value && imeVisible
     val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
-    val toolbarBottomOcclusionTarget =
+    val toolbarVisible =
+      isEditorToolbarVisible(
+        environment = toolbarInputEnvironment,
+        activeBottomPanel = toolbarPanel?.key,
+        retainedKeyboardInset = toolbarRetainedKeyboardInset,
+      )
+    val toolbarControlsOcclusion =
+      if (toolbarVisible) {
+        ToolbarHeight + ToolbarBottomPadding
+      } else {
+        0.dp
+      }
+    val bottomPanelOrKeyboardOcclusion =
       if (toolbarPanel != null) {
         bottomSafeInset + ToolbarBottomPanelGap + toolbarPanel.height
       } else {
-        maxOf(toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
+        maxOf(bottomSafeInset, toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
       }
+    val toolbarBottomOcclusionTarget = toolbarControlsOcclusion + bottomPanelOrKeyboardOcclusion
     val bottomPanelOpen = toolbarPanel != null
     val previousBottomPanelOpen = remember { mutableStateOf(bottomPanelOpen) }
     val toolbarBottomOcclusion =

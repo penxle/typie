@@ -50,6 +50,16 @@ internal enum class ToolbarFixedAction {
   DismissInput,
 }
 
+internal fun isEditorToolbarVisible(
+  environment: ToolbarInputEnvironment,
+  activeBottomPanel: EditorToolbarBottomPanelKey?,
+  retainedKeyboardInset: Dp,
+): Boolean =
+  environment.visible &&
+    (environment.focused ||
+      activeBottomPanel != null ||
+      retainedKeyboardInset > environment.safeBottomInset)
+
 internal sealed interface PanelKeyboardSpace {
   val inset: Dp
 
