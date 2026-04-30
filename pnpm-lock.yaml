@@ -750,6 +750,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
         version: 7.0.0(svelte@5.55.5(@typescript-eslint/types@8.59.1))(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.4.2)(tsx@4.21.0)(yaml@2.8.3))
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
       '@types/textarea-caret':
         specifier: ^3.0.4
         version: 3.0.4

@@ -27,6 +27,7 @@
     "@mearie/svelte": "^0.4.7",
     "@sveltejs/kit": "^2.58.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/node": "^25.6.0",
     "@types/textarea-caret": "^3.0.4",
     "@typie/lib": "workspace:*",
     "@typie/styled-system": "workspace:*",
