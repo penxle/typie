@@ -3,18 +3,20 @@ import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
-import { dev, env, stack } from '#/env.ts';
+import { dev, env, production, stack } from '#/env.ts';
 import { crons, jobs } from './tasks/index.ts';
+import type { RedisOptions } from 'ioredis';
 
 const log = logger.getChild('mq');
 const lane = dev ? os.hostname() : stack;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
 const cronNames = new Set(crons.map((c) => c.name));
 
+const options: RedisOptions = production ? { name: 'primary', sentinels: [{ host: env.REDIS_URL }] } : { host: env.REDIS_URL, tls: {} };
+
 export const queue = new Queue(lane, {
   connection: new Redis({
-    name: 'primary',
-    sentinels: [{ host: env.REDIS_URL }],
+    ...options,
     maxRetriesPerRequest: null,
   }),
 
@@ -42,8 +44,7 @@ export const worker = new Worker(
   },
   {
     connection: new Redis({
-      name: 'primary',
-      sentinels: [{ host: env.REDIS_URL }],
+      ...options,
       maxRetriesPerRequest: null,
     }),
 
