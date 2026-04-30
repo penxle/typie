@@ -11,6 +11,7 @@ export const pg = postgres(env.DATABASE_URL, {
   connect_timeout: 5,
   idle_timeout: 30,
   prepare: false,
+  ssl: dev ? 'prefer' : false,
 });
 
 export const db = drizzle(pg, {
@@ -23,6 +24,7 @@ export const pgr = postgres(env.DATABASE_RO_URL ?? env.DATABASE_URL, {
   connect_timeout: 5,
   idle_timeout: 30,
   prepare: false,
+  ssl: dev ? 'prefer' : false,
 });
 
 export const dbr = drizzle(pgr, {
