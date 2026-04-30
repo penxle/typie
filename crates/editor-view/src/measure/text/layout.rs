@@ -64,7 +64,7 @@ pub fn build_layout(
         Alignment::Right => ParleyAlignment::End,
         Alignment::Justify => ParleyAlignment::Justify,
     };
-    layout.align(Some(width), alignment, AlignmentOptions::default());
+    layout.align(alignment, AlignmentOptions::default());
 
     layout
 }

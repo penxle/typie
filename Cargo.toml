@@ -18,9 +18,9 @@ console_log = "1"
 enum-map = "2"
 env_filter = "0.1"
 env_logger = "0.11"
-fontique = { version = "0.8", default-features = false }
+fontique = { version = "0.9", default-features = false }
 getrandom = { version = "0.4", features = ["wasm_js"] }
-hashbrown = "0.16"
+hashbrown = "0.17"
 heck = "0.5"
 hex = "0.4"
 itertools = "0.14"
@@ -40,8 +40,8 @@ objc2-metal = { version = "0.3", features = [
   "MTLDrawable",
   "MTLTypes",
 ] }
-object = { version = "0.36", default-features = false, features = ["read"] }
-parley = { version = "0.8", default-features = false, features = ["std"] }
+object = { version = "0.39", default-features = false, features = ["read"] }
+parley = { version = "0.9", default-features = false, features = ["std"] }
 peniko = "0.6"
 phf = "0.13"
 phf_codegen = "0.13"
@@ -55,12 +55,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde-wasm-bindgen = "0.6"
 serde_bytes = "0.11"
-skrifa = "0.40"
+skrifa = "0.42"
 smallvec = { version = "1", features = ["serde"] }
 strum = { version = "0.28", features = ["derive"] }
 syn = { version = "2", features = ["full", "extra-traits"] }
 thiserror = "2"
-toml = "0.8"
+toml = "1.1"
 tsify = { version = "0.5", features = ["js"] }
 unicode-segmentation = "1"
 uniffi = "0.31"
@@ -71,8 +71,8 @@ wasm-bindgen-cli = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3"
 web-time = "1"
-wgpu = "28"
-write-fonts = "0.45"
+wgpu = "29"
+write-fonts = "0.48"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 zeno = "0.3"
 zune-png = "0.5"
@@ -100,6 +100,4 @@ panic = "abort"
 
 [patch.crates-io]
 bytecount = { git = "https://github.com/devunt/bytecount.git", branch = "master" }
-parley = { git = "https://github.com/devunt/parley.git", branch = "main" }
-fontique = { git = "https://github.com/devunt/parley.git", branch = "main" }
 tsify = { git = "https://github.com/madonoharu/tsify.git", branch = "main" }

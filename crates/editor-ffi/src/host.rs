@@ -104,7 +104,7 @@ impl EditorHost {
         &self,
         content: Complex<editor_model::CommitContent>,
     ) -> EditorResult<String> {
-        let content = content.from_ffi()?;
+        let content: editor_model::CommitContent = content.from_ffi()?;
         Ok(content.hash())
     }
 

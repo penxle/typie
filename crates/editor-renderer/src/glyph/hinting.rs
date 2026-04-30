@@ -40,6 +40,7 @@ impl HintingCache {
         let entries = match outlines.format()? {
             OutlineGlyphFormat::Glyf => &mut self.glyf_entries,
             OutlineGlyphFormat::Cff | OutlineGlyphFormat::Cff2 => &mut self.cff_entries,
+            OutlineGlyphFormat::Varc => return None,
         };
 
         let (entry_ix, is_current) = find_entry(entries, id, outlines, size, coords)?;
