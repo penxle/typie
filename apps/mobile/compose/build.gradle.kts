@@ -43,6 +43,36 @@ plugins {
   alias(libs.plugins.sentry)
 }
 
+val isAndroidStudioXcodeFrameworkBuild =
+  providers
+    .gradleProperty("android.injected.invoked.from.ide")
+    .map { it.toBoolean() }
+    .orElse(false)
+    .get() &&
+    gradle.startParameter.taskNames.any {
+      it.substringAfterLast(":") == "embedAndSignAppleFrameworkForXcode"
+    }
+
+if (isAndroidStudioXcodeFrameworkBuild) {
+  // Android Studio does not reliably propagate the selected Apple run configuration
+  // into the Kotlin artifact prebuild, so keep Debug runs from linking Release frameworks.
+  extensions.extraProperties["kotlin.envOverride.CONFIGURATION"] = "Debug"
+  extensions.extraProperties["kotlin.envOverride.KOTLIN_FRAMEWORK_BUILD_TYPE"] = "debug"
+
+  gradle.projectsEvaluated {
+    tasks
+      .matching {
+        it.name.startsWith("linkReleaseFramework") ||
+          it.name.startsWith("assembleReleaseAppleFrameworkForXcode") ||
+          it.name.startsWith("symbolicLinkToAssembleReleaseAppleFrameworkForXcode")
+      }
+      .configureEach {
+        enabled = false
+        onlyIf("Android Studio Debug iOS run does not link Release frameworks") { false }
+      }
+  }
+}
+
 kotlin {
   applyDefaultHierarchyTemplate {
     common {
