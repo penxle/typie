@@ -105,6 +105,17 @@ impl EditorHost {
         Ok(doc.into_ffi()?)
     }
 
+    pub fn default_doc_with_preset(
+        &self,
+        root: Complex<editor_model::RootNode>,
+        modifiers: Vec<Complex<editor_model::Modifier>>,
+    ) -> EditorResult<Complex<editor_model::Doc>> {
+        let root = root.from_ffi()?;
+        let modifiers: Vec<editor_model::Modifier> = modifiers.from_ffi()?;
+        let doc = editor_model::Doc::with_preset(root, modifiers);
+        Ok(doc.into_ffi()?)
+    }
+
     pub fn hash_object_content(
         &self,
         content: Complex<editor_model::ObjectContent>,

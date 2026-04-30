@@ -93,6 +93,7 @@ input CreateDocumentInput {
   parentEntityId: ID
   siteId: ID!
   upperOrder: String
+  v2: Boolean = false
 }
 
 input CreateDocumentReactionInput {

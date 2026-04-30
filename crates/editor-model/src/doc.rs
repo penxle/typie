@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::entry::NodeEntry;
 use crate::id::NodeId;
+use crate::modifier::Modifier;
 use crate::node_ref::NodeRef;
-use crate::nodes::{Node, RootNode};
+use crate::nodes::{Node, ParagraphNode, RootNode};
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -68,6 +69,26 @@ impl Doc {
         let mut new = self.clone();
         new.nodes = new.nodes.without(&id);
         new
+    }
+
+    pub fn with_preset(root: RootNode, modifiers: Vec<Modifier>) -> Doc {
+        let paragraph_id = NodeId::new();
+        Self {
+            nodes: imbl::hashmap! {
+                NodeId::ROOT => NodeEntry {
+                    node: Node::Root(root),
+                    parent: None,
+                    children: imbl::vector![paragraph_id],
+                    modifiers,
+                },
+                paragraph_id => NodeEntry {
+                    node: Node::Paragraph(ParagraphNode::default()),
+                    parent: Some(NodeId::ROOT),
+                    children: imbl::Vector::new(),
+                    modifiers: vec![],
+                },
+            },
+        }
     }
 
     pub fn extract_text(&self) -> String {
@@ -279,5 +300,67 @@ mod tests {
                 .iter()
                 .any(|m| matches!(m, Modifier::FontFamily { value } if value == "Pretendard"))
         );
+    }
+
+    #[test]
+    fn with_preset_builds_root_with_paragraph() {
+        let doc = Doc::with_preset(RootNode::default(), vec![]);
+        let root = doc.get_entry(NodeId::ROOT).expect("root must exist");
+        assert!(matches!(root.node, Node::Root(_)));
+        assert!(root.parent.is_none());
+        assert_eq!(root.children.len(), 1, "root must have exactly one child");
+
+        let paragraph_id = root.children[0];
+        let paragraph = doc.get_entry(paragraph_id).expect("paragraph must exist");
+        assert!(matches!(paragraph.node, Node::Paragraph(_)));
+        assert_eq!(paragraph.parent, Some(NodeId::ROOT));
+        assert!(paragraph.children.is_empty());
+        assert!(paragraph.modifiers.is_empty());
+        assert_eq!(doc.nodes.len(), 2, "doc must have exactly root + paragraph");
+    }
+
+    #[test]
+    fn with_preset_applies_modifiers_to_root() {
+        let mods = vec![
+            Modifier::FontFamily {
+                value: "MyFont".into(),
+            },
+            Modifier::FontSize { value: 1800 },
+            Modifier::LineHeight { value: 200 },
+        ];
+        let doc = Doc::with_preset(RootNode::default(), mods.clone());
+        let root = doc.get_entry(NodeId::ROOT).unwrap();
+        assert_eq!(root.modifiers, mods);
+    }
+
+    #[test]
+    fn with_preset_applies_layout_mode() {
+        let root_node = RootNode {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 794.0,
+                page_height: 1123.0,
+                page_margin_top: 50.0,
+                page_margin_bottom: 50.0,
+                page_margin_left: 50.0,
+                page_margin_right: 50.0,
+            },
+        };
+        let doc = Doc::with_preset(root_node.clone(), vec![]);
+        let root_entry = doc.get_entry(NodeId::ROOT).unwrap();
+        match &root_entry.node {
+            Node::Root(r) => assert_eq!(r, &root_node),
+            _ => panic!("expected Root"),
+        }
+    }
+
+    #[test]
+    fn with_preset_round_trip_via_objects() {
+        let mods = vec![Modifier::FontSize { value: 1500 }];
+        let original = Doc::with_preset(RootNode::default(), mods);
+        let (root_hash, derived) = original.derive_all_objects();
+        let pairs: Vec<(String, ObjectContent)> =
+            derived.into_iter().map(|d| (d.hash, d.content)).collect();
+        let reconstructed = Doc::reconstruct_from_objects(&root_hash, &pairs).unwrap();
+        assert_doc_eq!(original, reconstructed);
     }
 }

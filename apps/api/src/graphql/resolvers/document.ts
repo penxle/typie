@@ -27,7 +27,10 @@ import {
   decodeDbId,
   DocumentArchivedNodes,
   DocumentCharacterCountChanges,
+  DocumentCommits,
   DocumentContents,
+  DocumentHeadContents,
+  DocumentObjects,
   DocumentReactions,
   Documents,
   DocumentVersionContributors,
@@ -66,6 +69,7 @@ import {
 } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertPlanRule } from '#/utils/plan.ts';
+import { buildInitialDocFromPreset } from '#/utils/sync.ts';
 import { wasm } from '#/utils/wasm.ts';
 import { builder } from '../builder.ts';
 import {
@@ -85,6 +89,7 @@ import {
   isTypeOf,
 } from '../objects.ts';
 import type { Context } from '#/context.ts';
+import type { TemplatePreset } from '#/utils/entity.ts';
 
 const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   types: [Image, File, Embed, DocumentArchivedNode],
@@ -740,6 +745,7 @@ builder.mutationFields((t) => ({
       parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
       lowerOrder: t.input.string({ required: false }),
       upperOrder: t.input.string({ required: false }),
+      v2: t.input.boolean({ required: false, defaultValue: false }),
     },
     resolve: async (_, { input }, ctx) => {
       await assertSitePermission({
@@ -790,7 +796,9 @@ builder.mutationFields((t) => ({
         .where(eq(UserPreferences.userId, ctx.session.userId))
         .then(first);
 
-      const template = (preference?.value as Record<string, unknown> | undefined)?.template as Record<string, unknown> | undefined;
+      const preset = (preference?.value as Record<string, unknown> | undefined)?.template as TemplatePreset | undefined;
+
+      const initialV2 = input.v2 ? await buildInitialDocFromPreset(preset) : null;
 
       const document = await db.transaction(async (tx) => {
         const entity = await tx
@@ -818,7 +826,7 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
-        const emptyDoc = makeLoroDoc(template);
+        const emptyDoc = makeLoroDoc(preset);
         const snapshot = emptyDoc.export({ mode: 'snapshot' });
         const version = emptyDoc.version().encode();
         const { json, text, characterCount, blobSize } = await extractLoroDocContents(emptyDoc);
@@ -846,6 +854,48 @@ builder.mutationFields((t) => ({
           versionId: documentVersion.id,
           userId: ctx.session.userId,
         });
+
+        if (initialV2) {
+          if (initialV2.objects.length > 0) {
+            await tx
+              .insert(DocumentObjects)
+              .values(initialV2.objects.map((o) => ({ hash: o.hash, content: o.content })))
+              .onConflictDoNothing({ target: DocumentObjects.hash });
+          }
+
+          const rootObj = await tx
+            .select({ id: DocumentObjects.id })
+            .from(DocumentObjects)
+            .where(eq(DocumentObjects.hash, initialV2.rootHash))
+            .then(firstOrThrow);
+
+          const initialCommit = await tx
+            .insert(DocumentCommits)
+            .values({
+              commitId: crypto.randomUUID(),
+              documentId: document.id,
+              parentId: null,
+              secondParentId: null,
+              steps: null,
+              meta: { initial: true },
+              objectId: rootObj.id,
+              deviceId: null,
+              userId: null,
+              committedAt: dayjs(),
+            })
+            .returning({ id: DocumentCommits.id })
+            .then(firstOrThrow);
+
+          await tx.update(Documents).set({ headCommitId: initialCommit.id }).where(eq(Documents.id, document.id));
+
+          await tx.insert(DocumentHeadContents).values({
+            documentId: document.id,
+            json: initialV2.doc,
+            text: initialV2.text,
+            characterCount: initialV2.characterCount,
+            blobSize: initialV2.blobSize,
+          });
+        }
 
         return document;
       });

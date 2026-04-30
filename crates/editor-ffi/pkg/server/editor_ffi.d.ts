@@ -604,6 +604,7 @@ declare class EditorHost {
     build_font(ttf_data: Uint8Array, chunk_codepoints: ChunkCodepoints): BuiltFont;
     static create(icu_data: Uint8Array): EditorHost;
     create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
+    default_doc_with_preset(root: RootNode, modifiers: Modifier[]): Doc;
     derive_all_objects(doc: Doc): DeriveAllObjectsResult;
     extract_text(doc: Doc): string;
     get_font_codepoints(ttf_data: Uint8Array): Uint32Array;

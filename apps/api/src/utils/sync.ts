@@ -1,8 +1,10 @@
 import { eq, inArray, sql } from 'drizzle-orm';
 import { DocumentCommits, DocumentObjects, firstOrThrow } from '#/db/index.ts';
+import { calculateBlobSizeFromAssetIds, countCharacters, resolvePreset } from '#/utils/entity.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
-import type { Doc, ObjectContent } from '@typie/editor-ffi/server';
+import type { DerivedObject, Doc, Modifier, ObjectContent, RootNode } from '@typie/editor-ffi/server';
 import type { Database, Transaction } from '#/db/index.ts';
+import type { TemplatePreset } from '#/utils/entity.ts';
 
 export async function walkReachableObjects(
   tx: Database | Transaction,
@@ -61,6 +63,62 @@ export async function loadDocFromObjectId(tx: Database | Transaction, objectId: 
   );
   return { rootHash: root.hash, doc };
 }
+
+export type InitialDocBundle = {
+  doc: Doc;
+  rootHash: string;
+  objects: DerivedObject[];
+  text: string;
+  characterCount: number;
+  blobSize: number;
+};
+
+export const buildInitialDocFromPreset = async (preset?: TemplatePreset): Promise<InitialDocBundle> => {
+  const r = resolvePreset(preset);
+
+  const root: RootNode = {
+    layout_mode:
+      r.layout.type === 'paginated'
+        ? {
+            type: 'paginated',
+            page_width: r.layout.pageWidth,
+            page_height: r.layout.pageHeight,
+            page_margin_top: r.layout.pageMarginTop,
+            page_margin_bottom: r.layout.pageMarginBottom,
+            page_margin_left: r.layout.pageMarginLeft,
+            page_margin_right: r.layout.pageMarginRight,
+          }
+        : { type: 'continuous', max_width: r.layout.maxWidth },
+  };
+
+  const modifiers: Modifier[] = [
+    { type: 'font_family', value: r.fontFamily },
+    { type: 'font_size', value: r.fontSize },
+    { type: 'font_weight', value: r.fontWeight },
+    { type: 'text_color', value: r.textColor },
+    { type: 'background_color', value: r.backgroundColor },
+    { type: 'letter_spacing', value: r.letterSpacing },
+    { type: 'line_height', value: r.lineHeight },
+    { type: 'paragraph_indent', value: r.paragraphIndent },
+    { type: 'block_gap', value: r.blockGap },
+  ];
+
+  const doc = await wasm.default_doc_with_preset(root, modifiers);
+  const { rootHash, objects } = await wasm.derive_all_objects(doc);
+  const text = await wasm.extract_text(doc);
+  const characterCount = countCharacters(text);
+
+  const imageIds: string[] = [];
+  const fileIds: string[] = [];
+  for (const obj of objects) {
+    const node = obj.content.node;
+    if (node.type === 'image' && node.id) imageIds.push(node.id);
+    else if (node.type === 'file' && node.id) fileIds.push(node.id);
+  }
+  const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
+
+  return { doc, rootHash, objects, text, characterCount, blobSize };
+};
 
 export async function isAncestor(tx: Database | Transaction, ancestorCommitId: string, descendantCommitId: string): Promise<boolean> {
   if (ancestorCommitId === descendantCommitId) return true;

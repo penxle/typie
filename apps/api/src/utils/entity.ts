@@ -42,7 +42,7 @@ const collectReachableNodeIds = (nodes: Record<string, { children?: string[] }>)
   return reachable;
 };
 
-type TemplatePreset = {
+export type TemplatePreset = {
   fontFamily?: string;
   fontSize?: number;
   fontWeight?: number;
@@ -65,46 +65,102 @@ type TemplatePreset = {
   blockGap?: number;
 };
 
+type ResolvedPreset = {
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: number;
+  textColor: string;
+  backgroundColor: string;
+  letterSpacing: number;
+  lineHeight: number;
+  paragraphIndent: number;
+  blockGap: number;
+  layout:
+    | { type: 'continuous'; maxWidth: number }
+    | {
+        type: 'paginated';
+        pageWidth: number;
+        pageHeight: number;
+        pageMarginTop: number;
+        pageMarginBottom: number;
+        pageMarginLeft: number;
+        pageMarginRight: number;
+      };
+};
+
+export const resolvePreset = (preset?: TemplatePreset): ResolvedPreset => {
+  const blockGap =
+    preset?.blockGap != null && preset.blockGap < 10 && preset.blockGap !== 0
+      ? Math.round(preset.blockGap * 100)
+      : (preset?.blockGap ?? defaultValues.blockGap);
+  const paragraphIndent =
+    preset?.paragraphIndent != null && preset.paragraphIndent < 10 && preset.paragraphIndent !== 0
+      ? Math.round(preset.paragraphIndent * 100)
+      : (preset?.paragraphIndent ?? defaultValues.paragraphIndent);
+  const fontSize =
+    preset?.fontSize != null && preset.fontSize < 500 && preset.fontSize > 0
+      ? Math.round(preset.fontSize * 100)
+      : (preset?.fontSize ?? defaultValues.fontSize);
+  const letterSpacing =
+    preset?.letterSpacing != null && Math.abs(preset.letterSpacing) < 5 && preset.letterSpacing !== 0
+      ? Math.round(preset.letterSpacing * 100)
+      : (preset?.letterSpacing ?? defaultValues.letterSpacing);
+  const lineHeight =
+    preset?.lineHeight != null && preset.lineHeight < 10 && preset.lineHeight !== 0
+      ? Math.round(preset.lineHeight * 100)
+      : (preset?.lineHeight ?? defaultValues.lineHeight);
+
+  const layout =
+    preset?.layout?.type === 'paginated'
+      ? {
+          type: 'paginated' as const,
+          pageWidth: preset.layout.pageWidth,
+          pageHeight: preset.layout.pageHeight,
+          pageMarginTop: preset.layout.pageMarginTop,
+          pageMarginBottom: preset.layout.pageMarginBottom,
+          pageMarginLeft: preset.layout.pageMarginLeft,
+          pageMarginRight: preset.layout.pageMarginRight,
+        }
+      : {
+          type: 'continuous' as const,
+          maxWidth: preset?.layout?.type === 'continuous' ? preset.layout.maxWidth : defaultValues.maxWidth,
+        };
+
+  return {
+    fontFamily: preset?.fontFamily ?? defaultValues.fontFamily,
+    fontSize,
+    fontWeight: preset?.fontWeight ?? defaultValues.fontWeight,
+    textColor: preset?.textColor ?? defaultValues.textColor,
+    backgroundColor: preset?.backgroundColor ?? defaultValues.backgroundColor,
+    letterSpacing,
+    lineHeight,
+    paragraphIndent,
+    blockGap,
+    layout,
+  };
+};
+
 export const makeLoroDoc = (template?: TemplatePreset) => {
   const doc = new LoroDoc();
 
-  const blockGap =
-    template?.blockGap != null && template.blockGap < 10 && template.blockGap !== 0
-      ? Math.round(template.blockGap * 100)
-      : (template?.blockGap ?? defaultValues.blockGap);
-  const paragraphIndent =
-    template?.paragraphIndent != null && template.paragraphIndent < 10 && template.paragraphIndent !== 0
-      ? Math.round(template.paragraphIndent * 100)
-      : (template?.paragraphIndent ?? defaultValues.paragraphIndent);
-  const fontSize =
-    template?.fontSize != null && template.fontSize < 500 && template.fontSize > 0
-      ? Math.round(template.fontSize * 100)
-      : (template?.fontSize ?? defaultValues.fontSize);
-  const letterSpacing =
-    template?.letterSpacing != null && Math.abs(template.letterSpacing) < 5 && template.letterSpacing !== 0
-      ? Math.round(template.letterSpacing * 100)
-      : (template?.letterSpacing ?? defaultValues.letterSpacing);
-  const lineHeight =
-    template?.lineHeight != null && template.lineHeight < 10 && template.lineHeight !== 0
-      ? Math.round(template.lineHeight * 100)
-      : (template?.lineHeight ?? defaultValues.lineHeight);
+  const r = resolvePreset(template);
 
   const settings = doc.getMap('settings');
-  settings.set('block_gap', blockGap);
-  settings.set('paragraph_indent', paragraphIndent);
+  settings.set('block_gap', r.blockGap);
+  settings.set('paragraph_indent', r.paragraphIndent);
 
   const loroLayout = settings.setContainer('layout_mode', new LoroMap());
-  if (template?.layout?.type === 'paginated') {
+  if (r.layout.type === 'paginated') {
     loroLayout.set('type', 'paginated');
-    loroLayout.set('page_width', template.layout.pageWidth);
-    loroLayout.set('page_height', template.layout.pageHeight);
-    loroLayout.set('page_margin_top', template.layout.pageMarginTop);
-    loroLayout.set('page_margin_bottom', template.layout.pageMarginBottom);
-    loroLayout.set('page_margin_left', template.layout.pageMarginLeft);
-    loroLayout.set('page_margin_right', template.layout.pageMarginRight);
+    loroLayout.set('page_width', r.layout.pageWidth);
+    loroLayout.set('page_height', r.layout.pageHeight);
+    loroLayout.set('page_margin_top', r.layout.pageMarginTop);
+    loroLayout.set('page_margin_bottom', r.layout.pageMarginBottom);
+    loroLayout.set('page_margin_left', r.layout.pageMarginLeft);
+    loroLayout.set('page_margin_right', r.layout.pageMarginRight);
   } else {
     loroLayout.set('type', 'continuous');
-    loroLayout.set('max_width', template?.layout?.type === 'continuous' ? template.layout.maxWidth : defaultValues.maxWidth);
+    loroLayout.set('max_width', r.layout.maxWidth);
   }
 
   const paragraphId = faker.string.uuid().replaceAll('-', '');
@@ -117,18 +173,18 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
   rootChildren.insert(0, paragraphId);
 
   const cascadeAttrs = rootNode.setContainer('cascade_attrs', new LoroMap());
-  cascadeAttrs.set('style:font_family', template?.fontFamily ?? defaultValues.fontFamily);
-  cascadeAttrs.set('style:font_size', fontSize);
-  cascadeAttrs.set('style:font_weight', template?.fontWeight ?? defaultValues.fontWeight);
-  cascadeAttrs.set('style:text_color', template?.textColor ?? defaultValues.textColor);
-  cascadeAttrs.set('style:background_color', template?.backgroundColor ?? defaultValues.backgroundColor);
-  cascadeAttrs.set('style:letter_spacing', letterSpacing);
-  cascadeAttrs.set('paragraph:line_height', lineHeight);
+  cascadeAttrs.set('style:font_family', r.fontFamily);
+  cascadeAttrs.set('style:font_size', r.fontSize);
+  cascadeAttrs.set('style:font_weight', r.fontWeight);
+  cascadeAttrs.set('style:text_color', r.textColor);
+  cascadeAttrs.set('style:background_color', r.backgroundColor);
+  cascadeAttrs.set('style:letter_spacing', r.letterSpacing);
+  cascadeAttrs.set('paragraph:line_height', r.lineHeight);
 
   const paragraphNode = nodes.setContainer(paragraphId, new LoroMap());
   paragraphNode.set('type', 'paragraph');
   paragraphNode.set('align', defaultValues.textAlign);
-  paragraphNode.set('line_height', lineHeight);
+  paragraphNode.set('line_height', r.lineHeight);
   paragraphNode.set('parent', ROOT_ID);
   paragraphNode.setContainer('children', new LoroList());
 
