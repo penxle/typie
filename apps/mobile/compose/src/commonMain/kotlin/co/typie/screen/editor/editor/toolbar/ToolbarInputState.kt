@@ -21,7 +21,7 @@ internal data class ToolbarInputEnvironment(
   val imeBottom: Dp,
   val safeBottomInset: Dp,
   val keyboardState: EditorKeyboardState,
-  val panelTransitionIdle: Boolean = true,
+  val panelTransitionRunning: Boolean = false,
 ) {
   val keyboardType: EditorKeyboardType
     get() = keyboardState.type
@@ -147,7 +147,9 @@ internal class EditorToolbarInputState {
     }
 
     var currentPanel = panel
-    if (imeHideEvent && !previousIme.visible && !imeVisible && environment.panelTransitionIdle) {
+    if (
+      imeHideEvent && !previousIme.visible && !imeVisible && !environment.panelTransitionRunning
+    ) {
       val nextPanel = currentPanel?.withoutKeyboardRestoreOnClose()
       if (nextPanel != currentPanel) {
         currentPanel = nextPanel
@@ -318,12 +320,12 @@ internal class EditorToolbarInputState {
   ) {
     val restoreInset = keyboardRestoreInset ?: return
     when {
-      imeVisible && environment.panelTransitionIdle && effectiveImeInset >= restoreInset -> {
+      imeVisible && !environment.panelTransitionRunning && effectiveImeInset >= restoreInset -> {
         keyboardRestoreInset = null
         rememberedKeyboardInset =
           visibleImeInsetOrZero(effectiveImeInset, environment.safeBottomInset)
       }
-      !environment.focused && !imeVisible && environment.panelTransitionIdle -> {
+      !environment.focused && !imeVisible && !environment.panelTransitionRunning -> {
         keyboardRestoreInset = null
         rememberedKeyboardInset = 0.dp
       }

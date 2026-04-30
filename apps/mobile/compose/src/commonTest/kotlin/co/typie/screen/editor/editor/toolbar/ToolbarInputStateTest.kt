@@ -37,19 +37,19 @@ class ToolbarInputStateTest {
     assertEquals(null, state.panel)
     assertEquals(EditorToolbarBottomPanelKey.Insert, state.lastBottomPanel)
 
-    val hiddenRestoring = keyboardHidden.copy(panelTransitionIdle = false)
+    val hiddenRestoring = keyboardHidden.copy(panelTransitionRunning = true)
     state.onEnvironmentChanged(hiddenRestoring)
 
     assertEquals(320.dp, state.keyboardRestoreInset)
     assertEquals(320.dp, state.retainedKeyboardInset())
 
-    val restoring = toolbarInputEnvironment(imeBottom = 95.dp, panelTransitionIdle = false)
+    val restoring = toolbarInputEnvironment(imeBottom = 95.dp, panelTransitionRunning = true)
     state.onEnvironmentChanged(restoring)
 
     assertEquals(320.dp, state.keyboardRestoreInset)
     assertEquals(288.dp, state.lastBottomPanelHeight)
 
-    val restored = toolbarInputEnvironment(imeBottom = 320.dp, panelTransitionIdle = true)
+    val restored = toolbarInputEnvironment(imeBottom = 320.dp)
     state.onEnvironmentChanged(restored)
 
     assertEquals(null, state.panel)
@@ -66,7 +66,7 @@ class ToolbarInputStateTest {
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), environment)
     state.takeEffects()
 
-    val transitioning = environment.copy(panelTransitionIdle = false)
+    val transitioning = environment.copy(panelTransitionRunning = true)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), transitioning)
 
     assertEquals(EditorToolbarBottomPanelKey.Tools, state.activeBottomPanel)
@@ -89,7 +89,7 @@ class ToolbarInputStateTest {
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
     state.takeEffects()
 
-    val restoring = toolbarInputEnvironment(imeBottom = 120.dp, panelTransitionIdle = false)
+    val restoring = toolbarInputEnvironment(imeBottom = 120.dp, panelTransitionRunning = true)
     state.onEnvironmentChanged(restoring)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), restoring)
 
@@ -220,7 +220,7 @@ class ToolbarInputStateTest {
         imeBottom = 0.dp,
         keyboardState =
           EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1),
-        panelTransitionIdle = false,
+        panelTransitionRunning = true,
       )
     state.onEnvironmentChanged(hiddenIme)
 
@@ -251,11 +251,11 @@ class ToolbarInputStateTest {
         imeBottom = 0.dp,
         keyboardState =
           EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1),
-        panelTransitionIdle = false,
+        panelTransitionRunning = true,
       )
     state.onEnvironmentChanged(hiddenIme)
     state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenIme)
-    state.onEnvironmentChanged(hiddenIme.copy(panelTransitionIdle = false))
+    state.onEnvironmentChanged(hiddenIme.copy(panelTransitionRunning = true))
 
     assertEquals(null, state.panel)
     assertEquals(320.dp, state.keyboardRestoreInset)
@@ -284,7 +284,7 @@ class ToolbarInputStateTest {
       toolbarInputEnvironment(
         imeBottom = 0.dp,
         keyboardState = EditorKeyboardState(type = EditorKeyboardType.Hardware),
-        panelTransitionIdle = false,
+        panelTransitionRunning = true,
       )
     state.onEnvironmentChanged(hiddenFrame)
 
@@ -322,10 +322,10 @@ class ToolbarInputStateTest {
         imeBottom = 0.dp,
         keyboardState =
           EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1),
-        panelTransitionIdle = false,
+        panelTransitionRunning = true,
       )
     state.onEnvironmentChanged(panelHiddenIme)
-    state.onEnvironmentChanged(panelHiddenIme.copy(panelTransitionIdle = true))
+    state.onEnvironmentChanged(panelHiddenIme.copy(panelTransitionRunning = false))
 
     val userHiddenIme =
       toolbarInputEnvironment(
@@ -429,7 +429,7 @@ private fun toolbarInputEnvironment(
   imeBottom: androidx.compose.ui.unit.Dp = 0.dp,
   safeBottomInset: androidx.compose.ui.unit.Dp = 24.dp,
   keyboardState: EditorKeyboardState = EditorKeyboardState(EditorKeyboardType.Software),
-  panelTransitionIdle: Boolean = true,
+  panelTransitionRunning: Boolean = false,
 ): ToolbarInputEnvironment =
   ToolbarInputEnvironment(
     visible = visible,
@@ -437,5 +437,5 @@ private fun toolbarInputEnvironment(
     imeBottom = imeBottom,
     safeBottomInset = safeBottomInset,
     keyboardState = keyboardState,
-    panelTransitionIdle = panelTransitionIdle,
+    panelTransitionRunning = panelTransitionRunning,
   )

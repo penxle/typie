@@ -40,6 +40,7 @@ import co.typie.ui.component.ResponsiveContainerDefaults
 internal fun EditorToolbarHost(
   editorState: EditorState,
   pagerState: ToolbarPagerState,
+  bottomPanelTransition: MutableTransitionState<Boolean>,
   editorFocused: Boolean,
   inputState: EditorToolbarInputState,
   environment: ToolbarInputEnvironment,
@@ -52,16 +53,12 @@ internal fun EditorToolbarHost(
   val pages = rememberEditorToolbarPages(toolbarContext)
   val panel = inputState.panel
   val activeBottomPanel = panel?.key
-  val bottomPanelTransition = remember { MutableTransitionState(activeBottomPanel != null) }
-  bottomPanelTransition.targetState = activeBottomPanel != null
-  val panelTransitionIdle = bottomPanelTransition.currentState == bottomPanelTransition.targetState
-  val hostEnvironment = environment.copy(panelTransitionIdle = panelTransitionIdle)
-  val effectiveImeInset = effectiveImeInset(hostEnvironment)
+  val effectiveImeInset = effectiveImeInset(environment)
   val imeVisible =
-    isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = hostEnvironment.safeBottomInset)
+    isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = environment.safeBottomInset)
   val retainedKeyboardInset = inputState.retainedKeyboardInset()
   val inputBottomInset =
-    maxOf(effectiveImeInset, retainedKeyboardInset, hostEnvironment.safeBottomInset)
+    maxOf(effectiveImeInset, retainedKeyboardInset, environment.safeBottomInset)
   val restoringKeyboard = inputState.keyboardRestoreInset != null
   val bottomPanelHeight = panel?.height ?: inputState.lastBottomPanelHeight
   val bottomPanelContainerHeight = panel?.let { ToolbarBottomPanelGap + it.height } ?: 0.dp
@@ -76,20 +73,20 @@ internal fun EditorToolbarHost(
     }
   val bottomSpacerTargetHeight =
     if (panel != null) {
-      bottomPanelContainerHeight + hostEnvironment.safeBottomInset
+      bottomPanelContainerHeight + environment.safeBottomInset
     } else {
       inputBottomInset
     }
   val toolbarVisible =
     isEditorToolbarVisible(
-      environment = hostEnvironment,
+      environment = environment,
       activeBottomPanel = activeBottomPanel,
       retainedKeyboardInset = retainedKeyboardInset,
     )
   val fixedAction =
     fixedActionFor(
       activePanel = activeBottomPanel,
-      environment = hostEnvironment,
+      environment = environment,
       imeVisible = imeVisible,
     )
   val animatePanelHeight =
@@ -99,7 +96,7 @@ internal fun EditorToolbarHost(
       !restoringKeyboard
     }
 
-  LaunchedEffect(hostEnvironment) { inputState.onEnvironmentChanged(hostEnvironment) }
+  LaunchedEffect(environment) { inputState.onEnvironmentChanged(environment) }
 
   LaunchedEffect(inputState.effectVersion) {
     inputState.takeEffects().forEach { effect ->
@@ -114,12 +111,13 @@ internal fun EditorToolbarHost(
 
   val previousImeVisible = remember { mutableStateOf(imeVisible) }
   val imeAppearing = !previousImeVisible.value && imeVisible
-  val panelVisibilityChanged =
+  val panelTransitionRunning =
     bottomPanelTransition.currentState != bottomPanelTransition.targetState
+  val inputSpaceOwnsSpacer = activeBottomPanel == null && (imeVisible || !panelTransitionRunning)
   val panelAnimationSpec =
     when {
       !animatePanelHeight -> snap()
-      panelVisibilityChanged ->
+      panelTransitionRunning ->
         tween<Dp>(
           if (bottomPanelTransition.targetState) {
             ToolbarBottomPanelVisibilityEnterMillis
@@ -132,8 +130,9 @@ internal fun EditorToolbarHost(
   val spacerAnimationSpec =
     when {
       imeAppearing -> snap()
+      inputSpaceOwnsSpacer -> snap()
       !animatePanelHeight -> snap()
-      panelVisibilityChanged ->
+      panelTransitionRunning ->
         tween<Dp>(
           if (bottomPanelTransition.targetState) {
             ToolbarBottomPanelVisibilityEnterMillis
@@ -156,7 +155,7 @@ internal fun EditorToolbarHost(
       label = "EditorToolbarBottomPanelLayoutHeight",
     )
   val bottomInset =
-    (maxOf(bottomSpacerHeight, bottomPanelLayoutHeight + hostEnvironment.safeBottomInset) -
+    (maxOf(bottomSpacerHeight, bottomPanelLayoutHeight + environment.safeBottomInset) -
         bottomPanelLayoutHeight)
       .coerceAtLeast(0.dp)
 
@@ -190,13 +189,13 @@ internal fun EditorToolbarHost(
           activeBottomPanel = activeBottomPanel,
           fixedAction = fixedAction,
           onEditorInputRequest = {
-            inputState.dispatch(ToolbarIntent.RestoreEditorInput, hostEnvironment)
+            inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment)
           },
           onKeyboardDismissRequest = {
-            inputState.dispatch(ToolbarIntent.DismissInput, hostEnvironment)
+            inputState.dispatch(ToolbarIntent.DismissInput, environment)
           },
           onBottomPanelToggle = { panel ->
-            inputState.dispatch(ToolbarIntent.OpenPanel(panel), hostEnvironment)
+            inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment)
           },
           modifier = Modifier.fillMaxWidth(),
         )
@@ -228,7 +227,7 @@ internal fun EditorToolbarHost(
                   panel = visiblePanel,
                   height = bottomPanelHeight,
                   onEditorInputRequest = {
-                    inputState.dispatch(ToolbarIntent.RestoreEditorInput, hostEnvironment)
+                    inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment)
                   },
                 )
               }

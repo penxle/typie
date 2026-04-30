@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor
 
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -189,6 +190,12 @@ fun EditorScreen(entityId: String) {
     val toolbarBackdropHazeState = remember { HazeState() }
     val keyboardState = rememberEditorKeyboardState()
     val toolbarPagerState = rememberToolbarPagerState(key = entityId)
+    val toolbarPanel = toolbarInputState.panel
+    val bottomPanelOpen = toolbarPanel != null
+    val bottomPanelTransition = remember { MutableTransitionState(bottomPanelOpen) }
+    bottomPanelTransition.targetState = bottomPanelOpen
+    val panelTransitionRunning =
+      bottomPanelTransition.currentState != bottomPanelTransition.targetState
     val toolbarInputEnvironment =
       ToolbarInputEnvironment(
         visible = screenState.sceneInForeground,
@@ -196,8 +203,8 @@ fun EditorScreen(entityId: String) {
         imeBottom = imeBottom,
         safeBottomInset = bottomSafeInset,
         keyboardState = keyboardState,
+        panelTransitionRunning = panelTransitionRunning,
       )
-    val toolbarPanel = toolbarInputState.panel
     val toolbarEffectiveImeInset = effectiveImeInset(toolbarInputEnvironment)
     val imeVisible =
       isImeVisible(imeBottom = toolbarEffectiveImeInset, safeBottomInset = bottomSafeInset)
@@ -223,15 +230,16 @@ fun EditorScreen(entityId: String) {
         maxOf(bottomSafeInset, toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
       }
     val toolbarBottomOcclusionTarget = toolbarControlsOcclusion + bottomPanelOrKeyboardOcclusion
-    val bottomPanelOpen = toolbarPanel != null
-    val previousBottomPanelOpen = remember { mutableStateOf(bottomPanelOpen) }
+    val inputSpaceOwnsOcclusion = !bottomPanelOpen && (imeVisible || !panelTransitionRunning)
     val toolbarBottomOcclusion =
       animateDpAsState(
         targetValue = toolbarBottomOcclusionTarget,
         animationSpec =
           if (imeAppearing) {
             snap()
-          } else if (previousBottomPanelOpen.value != bottomPanelOpen) {
+          } else if (inputSpaceOwnsOcclusion) {
+            snap()
+          } else if (panelTransitionRunning) {
             tween(
               if (bottomPanelOpen) {
                 ToolbarBottomPanelVisibilityEnterMillis
@@ -244,7 +252,6 @@ fun EditorScreen(entityId: String) {
           },
         label = "EditorToolbarBottomOcclusion",
       )
-    SideEffect { previousBottomPanelOpen.value = bottomPanelOpen }
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val devMode = Preference.devMode
@@ -474,6 +481,7 @@ fun EditorScreen(entityId: String) {
           EditorToolbarHost(
             editorState = editorState,
             pagerState = toolbarPagerState,
+            bottomPanelTransition = bottomPanelTransition,
             editorFocused = uiState.focused,
             inputState = toolbarInputState,
             environment = toolbarInputEnvironment,
