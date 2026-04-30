@@ -2,7 +2,7 @@ import Foundation
 import GameController
 import UIKit
 
-@objcMembers public final class EditorKeyboardBridge: NSObject {
+@MainActor @objcMembers public final class EditorKeyboardBridge: NSObject {
   public static func isInHardwareKeyboardMode() -> Bool {
     if let isInHardwareKeyboardMode = detectHardwareKeyboardModeFromUIKeyboardImpl() {
       return isInHardwareKeyboardMode
