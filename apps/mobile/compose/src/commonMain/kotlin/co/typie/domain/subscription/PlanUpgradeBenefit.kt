@@ -4,6 +4,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.icon.IconData
 
 enum class PlanUpgradeBenefit(val icon: IconData, val title: String, val description: String) {
+  MultipleSpaces(Lucide.FolderPlus, "여러 스페이스 생성", "주제와 목적별로 공간을 분리해요"),
   CustomSpaceAddress(Lucide.Globe, "나만의 스페이스 주소", "기억하기 쉬운 주소로 공유해요"),
   CustomFontUpload(Lucide.Type, "커스텀 폰트 업로드", "나만의 글꼴로 공간에 개성을 입혀요"),
   UnlimitedCharacters(Lucide.BookOpenText, "무제한 글자 수", "길어도 얼마든지 쓸 수 있어요"),

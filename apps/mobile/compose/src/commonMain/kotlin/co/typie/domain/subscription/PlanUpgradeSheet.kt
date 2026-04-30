@@ -173,9 +173,10 @@ fun PlanUpgradeSheet(
     },
   ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-      preview?.invoke()
-
-      Spacer(Modifier.height(12.dp))
+      if (preview != null) {
+        preview()
+        Spacer(Modifier.height(12.dp))
+      }
 
       PlanUpgradeBenefitList(benefits = benefits)
     }

@@ -44,6 +44,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.subscription.PlanUpgradeBenefit
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.SubscriptionServiceState
+import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
@@ -113,6 +117,27 @@ internal fun MainDrawerContent() {
   val dismissAndRun: (suspend () -> Unit) -> Unit = { action ->
     scope.launch { drawer.close() }
     scope.launch { action() }
+  }
+
+  suspend fun openCreateSpaceSheet() {
+    if (SubscriptionService.state is SubscriptionServiceState.Unknown) return
+
+    val passed =
+      SubscriptionService.gate(
+        sheet,
+        nav,
+        title = "주제마다\n어울리는 공간을 만들어요.",
+        benefits =
+          listOf(
+            PlanUpgradeBenefit.MultipleSpaces,
+            PlanUpgradeBenefit.CustomSpaceAddress,
+            PlanUpgradeBenefit.UnlimitedCharacters,
+          ),
+      )
+
+    if (passed) {
+      sheet.present<Unit> { CreateSpaceSheet(model) }
+    }
   }
 
   Skeleton(enabled = model.query.state !is QueryState.Success) {
@@ -224,34 +249,36 @@ internal fun MainDrawerContent() {
             }
           }
 
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier =
-              Modifier.fillMaxWidth()
-                .clickable { dismissAndRun { sheet.present { CreateSpaceSheet(model) } } }
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-          ) {
-            Box(
+          Skeleton(enabled = SubscriptionService.state is SubscriptionServiceState.Unknown) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
               modifier =
-                Modifier.padding(start = 4.dp)
-                  .size(36.dp)
-                  .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md)),
-              contentAlignment = Alignment.Center,
+                Modifier.fillMaxWidth()
+                  .clickable { dismissAndRun { openCreateSpaceSheet() } }
+                  .padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
-              Icon(
-                icon = Lucide.Plus,
-                tint = AppTheme.colors.textMuted,
-                modifier = Modifier.size(20.dp),
+              Box(
+                modifier =
+                  Modifier.padding(start = 4.dp)
+                    .size(36.dp)
+                    .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md)),
+                contentAlignment = Alignment.Center,
+              ) {
+                Icon(
+                  icon = Lucide.Plus,
+                  tint = AppTheme.colors.textMuted,
+                  modifier = Modifier.size(20.dp),
+                )
+              }
+
+              Spacer(Modifier.width(12.dp))
+
+              Text(
+                text = "새 스페이스 생성",
+                style = AppTheme.typography.action,
+                color = AppTheme.colors.textMuted,
               )
             }
-
-            Spacer(Modifier.width(12.dp))
-
-            Text(
-              text = "새 스페이스 생성",
-              style = AppTheme.typography.action,
-              color = AppTheme.colors.textMuted,
-            )
           }
         }
       }
