@@ -18,7 +18,7 @@ class EditorScreenStateTest {
   @Test
   fun `prepareToLeaveEditorScene waits for header flush before returning`() = runTest {
     val state = EditorScreenState(viewportState = EditorViewportState())
-    val runtime = EditorRuntime()
+    val runtime = EditorRuntime(uiScope = this)
     val uiState = EditorUiState()
     val events = mutableListOf<String>()
     val frameClock = BroadcastFrameClock()

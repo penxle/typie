@@ -33,6 +33,7 @@ import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.platform.PlatformModule
 import co.typie.storage.Preference
+import kotlinx.coroutines.CancellationException
 
 @Composable
 internal fun EditorView(
@@ -54,9 +55,13 @@ internal fun EditorView(
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val zoomController = LocalEditorZoomController.current
   val displayZoom = zoomController.displayZoom
+  val canCreateEditor = runtime.canCreateEditor
 
-  LaunchedEffect(runtime.editor, viewportWidth, viewportHeight, density.density) {
+  LaunchedEffect(canCreateEditor, viewportWidth, viewportHeight, density.density) {
     if (viewportWidth <= 0f || viewportHeight <= 0f) {
+      return@LaunchedEffect
+    }
+    if (!canCreateEditor) {
       return@LaunchedEffect
     }
 
@@ -65,7 +70,21 @@ internal fun EditorView(
       Viewport(width = viewportWidth, height = viewportHeight, scaleFactor = scaleFactor)
     if (runtime.editor == null) {
       uiState.clear()
-      runtime.attach(Editor.create(doc, initialSelection, viewport, scope))
+      try {
+        val editor =
+          Editor.create(
+            doc = doc,
+            selection = initialSelection,
+            viewport = viewport,
+            scope = scope,
+            onError = { editor, error -> runtime.reportError(editor, error) },
+          )
+        runtime.attach(editor)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Throwable) {
+        runtime.reportError(e)
+      }
     }
   }
 

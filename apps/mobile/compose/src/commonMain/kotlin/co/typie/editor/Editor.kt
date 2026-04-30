@@ -21,7 +21,6 @@ import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.platform.PlatformModule
-import io.sentry.kotlin.multiplatform.Sentry
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
@@ -50,6 +49,7 @@ internal constructor(
   private val inner: co.typie.editor.ffi.Editor,
   val scope: CoroutineScope,
   private val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+  private val onError: (Editor, Throwable) -> Unit = { _, _ -> },
 ) {
   var state: EditorState by mutableStateOf(EditorState.Initial)
     private set
@@ -99,6 +99,13 @@ internal constructor(
   }
 
   suspend fun await(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
+    withSuspendFailureNotification { awaitOrThrow(beforeCommit = beforeCommit, block = block) }
+  }
+
+  private suspend fun awaitOrThrow(
+    beforeCommit: ((EditorState) -> Unit)? = null,
+    block: EditorScope.() -> Unit,
+  ) {
     val messages = mutableListOf<Message>()
     val collector =
       object : EditorScope {
@@ -151,27 +158,30 @@ internal constructor(
 
   fun sync(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
     if (!syncInProgress.compareAndSet(expectedValue = false, newValue = true)) {
-      error("nested sync is not supported")
+      notifyFailure(IllegalStateException("nested sync is not supported"))
+      return
     }
     try {
-      runBlocking {
-        val events: List<EditorEvent>
-        mutex.withLock {
-          if (disposed.load()) error("Editor disposed")
-          val collector =
-            object : EditorScope {
-              override fun enqueue(message: Message) {
-                inner.enqueue(message)
+      withFailureNotification {
+        runBlocking {
+          val events: List<EditorEvent>
+          mutex.withLock {
+            if (disposed.load()) error("Editor disposed")
+            val collector =
+              object : EditorScope {
+                override fun enqueue(message: Message) {
+                  inner.enqueue(message)
+                }
               }
-            }
-          block(collector)
-          events = inner.tick()
-          val version = versionCounter.addAndFetch(1L)
-          val snapshot = readSnapshot(version)
-          beforeCommit?.invoke(snapshot)
-          commit(snapshot)
+            block(collector)
+            events = inner.tick()
+            val version = versionCounter.addAndFetch(1L)
+            val snapshot = readSnapshot(version)
+            beforeCommit?.invoke(snapshot)
+            commit(snapshot)
+          }
+          emit(events)
         }
-        emit(events)
       }
     } finally {
       syncInProgress.store(false)
@@ -187,18 +197,20 @@ internal constructor(
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
     scope.launch(dispatcher) {
-      val events =
-        withContext(dispatcher) {
-          mutex.withLock {
-            queued.store(false)
-            if (disposed.load()) return@withLock emptyList()
-            val e = inner.tick()
-            val version = versionCounter.addAndFetch(1L)
-            commit(readSnapshot(version))
-            e
+      withSuspendFailureNotification {
+        val events =
+          withContext(dispatcher) {
+            mutex.withLock {
+              queued.store(false)
+              if (disposed.load()) return@withLock emptyList()
+              val e = inner.tick()
+              val version = versionCounter.addAndFetch(1L)
+              commit(readSnapshot(version))
+              e
+            }
           }
-        }
-      emit(events)
+        emit(events)
+      }
     }
   }
 
@@ -240,7 +252,7 @@ internal constructor(
             throw e
           } catch (e: Throwable) {
             Logger.e(e) { "Editor listener threw for ${event::class.simpleName}" }
-            Sentry.captureException(e)
+            notifyFailure(e)
           }
         }
       }
@@ -249,22 +261,33 @@ internal constructor(
 
   fun attachSurface(page: Int, handle: Long, width: Double, height: Double, scaleFactor: Double) {
     attachedPages.updatePersistent { it.add(page) }
-    inner.attachSurface(page, handle, width, height, scaleFactor)
+    try {
+      inner.attachSurface(page, handle, width, height, scaleFactor)
+    } catch (e: Throwable) {
+      attachedPages.updatePersistent { it.remove(page) }
+      notifyFailure(e)
+    }
   }
 
   fun detachSurface(page: Int) {
     attachedPages.updatePersistent { it.remove(page) }
-    inner.detachSurface(page)
-    pendingSettles.load().forEach { it.markDetached(page) }
+    withFailureNotification {
+      inner.detachSurface(page)
+      pendingSettles.load().forEach { it.markDetached(page) }
+    }
   }
 
   fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) =
-    inner.resizeSurface(page, width, height, scaleFactor)
+    withFailureNotification {
+      inner.resizeSurface(page, width, height, scaleFactor)
+    }
 
   fun renderSurface(page: Int): Long = runBlocking {
-    mutex.withLock {
-      inner.renderSurface(page)
-      versionCounter.load()
+    withSuspendFailureNotification(defaultValue = { versionCounter.load() }) {
+      mutex.withLock {
+        inner.renderSurface(page)
+        versionCounter.load()
+      }
     }
   }
 
@@ -290,13 +313,47 @@ internal constructor(
     EditorState(
       version = version,
       cursor = inner.cursor(),
-      selection = runCatching { inner.selection() }.getOrNull(),
+      selection = inner.selection(),
       pageSizes = inner.pageSizes(),
-      rootAttrs = runCatching { inner.rootAttrs() }.getOrNull(),
-      modifierState = runCatching { inner.modifierState() }.getOrNull(),
-      blockState = runCatching { inner.blockState() }.getOrNull(),
-      ime = runCatching { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) }.getOrNull(),
+      rootAttrs = inner.rootAttrs(),
+      modifierState = inner.modifierState(),
+      blockState = inner.blockState(),
+      ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE),
     )
+
+  private fun notifyFailure(error: Throwable) {
+    if (error is CancellationException) {
+      throw error
+    }
+    onError(this, error)
+  }
+
+  private fun withFailureNotification(block: () -> Unit) {
+    try {
+      block()
+    } catch (e: Throwable) {
+      notifyFailure(e)
+    }
+  }
+
+  private suspend fun withSuspendFailureNotification(block: suspend () -> Unit) {
+    try {
+      block()
+    } catch (e: Throwable) {
+      notifyFailure(e)
+    }
+  }
+
+  private suspend fun <T> withSuspendFailureNotification(
+    defaultValue: () -> T,
+    block: suspend () -> T,
+  ): T =
+    try {
+      block()
+    } catch (e: Throwable) {
+      notifyFailure(e)
+      defaultValue()
+    }
 
   private fun commit(snapshot: EditorState) {
     if (snapshot.version <= state.version) return
@@ -310,15 +367,16 @@ internal constructor(
       viewport: Viewport,
       scope: CoroutineScope,
       dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+      onError: (Editor, Throwable) -> Unit = { _, _ -> },
     ): Editor =
       withContext(Dispatchers.Default) {
         val inner = PlatformModule.editorHost.createEditor(doc, selection, viewport)
-        val editor = Editor(inner, scope, dispatcher)
+        val editor = Editor(inner, scope, dispatcher, onError)
 
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
 
         try {
-          editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+          editor.awaitOrThrow { enqueue(Message.System(SystemEvent.Initialize)) }
         } catch (e: Throwable) {
           editor.dispose()
           throw e

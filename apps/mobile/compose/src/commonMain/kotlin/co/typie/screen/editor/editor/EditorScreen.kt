@@ -82,6 +82,8 @@ import co.typie.screen.editor.editor.viewport.rememberEditorTouchPinchZoomModifi
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
@@ -94,9 +96,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
+  val dialog = LocalDialog.current
   val model = viewModel { EditorViewModel(entityId) }
-  val runtime = remember(entityId) { EditorRuntime() }
   val scope = rememberCoroutineScope()
+  val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
   val uiState = remember(entityId) { EditorUiState() }
   val zoomController = rememberEditorZoomController(key = entityId)
   val screenState = rememberEditorScreenState(key = entityId)
@@ -124,10 +127,15 @@ fun EditorScreen(entityId: String) {
       loading = loading,
     )
   }
+  LaunchedEffect(runtime.error) {
+    runtime.error ?: return@LaunchedEffect
+    dialog.error(nav) { runtime.clearError() }
+  }
   fun toggleDebugLayoutMode() {
     val rootAttrs = model.toggleDebugLayoutMode()
+    val editor = runtime.editor ?: return
     scope.launch {
-      runtime.editor?.await {
+      editor.await {
         enqueue(
           Message.Node(
             NodeOp.SetAttrs(id = "0", attrs = Node.Root(layoutMode = rootAttrs.layoutMode))
@@ -410,10 +418,10 @@ fun EditorScreen(entityId: String) {
         viewportScrollableState = viewportScrollableState,
         viewportContentWidth = bodyTrackWidth,
         onMeasuredViewportSizeChange = { viewport ->
-          val currentEditor = runtime.editor
-          if (currentEditor != null && viewport.width > 0f && viewport.height > 0f) {
+          val editor = runtime.editor
+          if (editor != null && viewport.width > 0f && viewport.height > 0f) {
             scope.launch {
-              currentEditor.await {
+              editor.await {
                 enqueue(
                   Message.System(
                     SystemEvent.Resize(
