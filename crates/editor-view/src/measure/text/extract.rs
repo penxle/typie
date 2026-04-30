@@ -58,7 +58,7 @@ fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
 
     let background_color = doc.node(node_id).and_then(|node_ref| {
         resolve_inherited(&node_ref, ModifierType::BackgroundColor).and_then(|m| match m {
-            Modifier::BackgroundColor { value } => Some(value.clone()),
+            Modifier::BackgroundColor { value } if value != "none" => Some(value.clone()),
             _ => None,
         })
     });

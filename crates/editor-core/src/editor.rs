@@ -1,4 +1,4 @@
-use editor_common::time::Duration;
+use editor_common::time::{Duration, SystemTime, UNIX_EPOCH};
 use editor_model::{Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
@@ -270,6 +270,7 @@ impl Editor {
         &mut self,
         f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
     ) -> Result<(), EditorError> {
+        let old_doc = self.state.doc.clone();
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
 
@@ -283,7 +284,7 @@ impl Editor {
         if !commitable.is_empty() {
             let mut affected: Vec<editor_model::NodeId> = commitable
                 .iter()
-                .flat_map(|s| s.affected_node_ids())
+                .flat_map(|s| s.affected_node_ids(&old_doc, &state.doc))
                 .collect();
             affected.sort();
             affected.dedup();
@@ -296,8 +297,8 @@ impl Editor {
                     objects,
                     steps: commitable,
                     meta: meta.clone(),
-                    committed_at: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
+                    committed_at: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_millis() as i64,
                 },

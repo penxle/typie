@@ -37,7 +37,7 @@ impl Measurer {
     pub fn invalidate_with_steps(&mut self, old_doc: &Doc, new_doc: &Doc, steps: &[Step]) -> bool {
         let mut invalidated = false;
         for step in steps {
-            for id in step.affected_node_ids() {
+            for id in step.affected_node_ids(old_doc, new_doc) {
                 invalidated = self.invalidate_with_ancestors(new_doc, id) || invalidated;
                 if new_doc.node(id).is_none() {
                     invalidated = self.invalidate_with_ancestors(old_doc, id) || invalidated;

@@ -4,8 +4,6 @@
   import Editor from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
-  import BottomToolbar from './BottomToolbar.svelte';
-  import TopToolbar from './TopToolbar.svelte';
   import type { Doc, Selection } from '@typie/editor-ffi/browser';
 
   const ctx = setupEditorContext();
@@ -100,9 +98,6 @@
 </script>
 
 <div class={css({ display: 'flex', flexDirection: 'column', size: 'full' })}>
-  <TopToolbar />
-  <BottomToolbar />
-
   {#if document$key}
     <Editor style={css.raw({ flex: '1' })} {doc} {document$key} {selection} />
   {/if}

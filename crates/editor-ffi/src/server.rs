@@ -27,14 +27,6 @@ pub struct ChunkCodepoints {
     pub chunks: Vec<Vec<u32>>,
 }
 
-#[ffi]
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ObjectEntry {
-    pub hash: String,
-    pub content: editor_model::ObjectContent,
-}
-
 #[ffi_export(wasm)]
 impl EditorHost {
     pub fn merge_docs(
@@ -93,18 +85,6 @@ impl EditorHost {
         Ok(DeriveAllObjectsResult { root_hash, objects }.into_ffi()?)
     }
 
-    pub fn reconstruct_doc_from_objects(
-        &self,
-        root_hash: String,
-        objects: Vec<Complex<ObjectEntry>>,
-    ) -> EditorResult<Complex<editor_model::Doc>> {
-        let objects: Vec<ObjectEntry> = objects.from_ffi()?;
-        let pairs: Vec<(String, editor_model::ObjectContent)> =
-            objects.into_iter().map(|o| (o.hash, o.content)).collect();
-        let doc = editor_model::Doc::reconstruct_from_objects(&root_hash, &pairs)?;
-        Ok(doc.into_ffi()?)
-    }
-
     pub fn default_doc_with_preset(
         &self,
         root: Complex<editor_model::RootNode>,
@@ -119,14 +99,6 @@ impl EditorHost {
     pub fn hash_object_content(
         &self,
         content: Complex<editor_model::ObjectContent>,
-    ) -> EditorResult<String> {
-        let content = content.from_ffi()?;
-        Ok(content.hash())
-    }
-
-    pub fn hash_commit_content(
-        &self,
-        content: Complex<editor_model::CommitContent>,
     ) -> EditorResult<String> {
         let content = content.from_ffi()?;
         Ok(content.hash())

@@ -120,6 +120,14 @@ DocumentObject.implement({
 });
 
 builder.objectFields(Document, (t) => ({
+  head: t.field({
+    type: DocumentCommit,
+    nullable: true,
+    resolve: async (document) => {
+      if (!document.headCommitId) return null;
+      return db.select().from(DocumentCommits).where(eq(DocumentCommits.id, document.headCommitId)).then(firstOrThrow);
+    },
+  }),
   objects: t.field({
     type: [DocumentObject],
     args: { hashes: t.arg.stringList() },

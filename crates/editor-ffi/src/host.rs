@@ -1,4 +1,6 @@
 use cfg_if::cfg_if;
+use editor_macros::ffi;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
 use crate::prelude::*;
@@ -97,6 +99,26 @@ impl EditorHost {
             Ok(())
         })
     }
+
+    pub fn hash_commit_content(
+        &self,
+        content: Complex<editor_model::CommitContent>,
+    ) -> EditorResult<String> {
+        let content = content.from_ffi()?;
+        Ok(content.hash())
+    }
+
+    pub fn reconstruct_doc_from_objects(
+        &self,
+        root_hash: String,
+        objects: Vec<Complex<ObjectEntry>>,
+    ) -> EditorResult<Complex<editor_model::Doc>> {
+        let objects: Vec<ObjectEntry> = objects.from_ffi()?;
+        let pairs: Vec<(String, editor_model::ObjectContent)> =
+            objects.into_iter().map(|o| (o.hash, o.content)).collect();
+        let doc = editor_model::Doc::reconstruct_from_objects(&root_hash, &pairs)?;
+        Ok(doc.into_ffi()?)
+    }
 }
 
 impl EditorHost {
@@ -107,4 +129,12 @@ impl EditorHost {
         let mut resource = self.resource.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut resource)
     }
+}
+
+#[ffi]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectEntry {
+    pub hash: String,
+    pub content: editor_model::ObjectContent,
 }

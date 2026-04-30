@@ -1,1 +1,1 @@
-pub use web_time::{Duration, Instant};
+pub use web_time::*;

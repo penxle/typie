@@ -10,7 +10,6 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 default = []
 uniffi = [
   "dep:uniffi",
-  "dep:serde",
   "dep:android_logger",
   "dep:env_filter",
   "dep:env_logger",
@@ -30,7 +29,6 @@ wasm = [
   "dep:wasm-bindgen",
   "dep:wasm-bindgen-futures",
   "dep:serde-wasm-bindgen",
-  "dep:serde",
   "dep:tsify",
   "editor-common/wasm",
   "editor-core/wasm",
@@ -65,7 +63,7 @@ env_filter = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 hashbrown.workspace = true
 log.workspace = true
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde-wasm-bindgen = { workspace = true, optional = true }
 serde_json.workspace = true
 thiserror.workspace = true

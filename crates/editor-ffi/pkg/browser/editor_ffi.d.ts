@@ -369,6 +369,11 @@ export interface NodeEntry {
     modifiers?: Modifier[];
 }
 
+export interface ObjectEntry {
+    hash: string;
+    content: ObjectContent;
+}
+
 export interface OrderedListNode {}
 
 export interface PageBreakNode {}
@@ -548,6 +553,8 @@ declare class EditorHost {
     add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): void;
     static create(icu_data: Uint8Array): EditorHost;
     create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
+    hash_commit_content(content: CommitContent): string;
+    reconstruct_doc_from_objects(root_hash: string, objects: ObjectEntry[]): Doc;
     set_fonts(families: FontFamily[]): void;
 }
 

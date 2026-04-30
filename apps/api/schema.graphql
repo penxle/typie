@@ -189,6 +189,7 @@ type Document implements IDocument {
   excerpt: String!
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   generation: Int!
+  head: DocumentCommit
   id: ID!
   layoutMode: JSON!
   locked: Boolean!

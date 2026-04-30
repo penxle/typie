@@ -1,5 +1,5 @@
 use editor_macros::ffi;
-use editor_model::{Modifier, ModifierType, Node, NodeId, Subtree};
+use editor_model::{Doc, Modifier, ModifierType, Node, NodeId, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
@@ -164,7 +164,7 @@ impl Step {
         }
     }
 
-    pub fn affected_node_ids(&self) -> Vec<NodeId> {
+    pub fn affected_node_ids(&self, old_doc: &Doc, new_doc: &Doc) -> Vec<NodeId> {
         match self {
             Step::InsertText { node_id, .. }
             | Step::RemoveText { node_id, .. }
@@ -180,17 +180,46 @@ impl Step {
                 ids
             }
             // RemoveSubtree affects only the parent (its children list shrinks).
-            // Removed nodes are not in the new doc, so listing them would cause
+            // Removed nodes are not in the new doc, so listing it would cause
             // derive_objects_for_path to panic when looking up missing entries.
             Step::RemoveSubtree { parent_id, .. } => vec![*parent_id],
             Step::SplitNode {
                 node_id,
                 new_node_id,
                 ..
-            } => vec![*node_id, *new_node_id],
-            // MergeNode collapses node_id into target_id; node_id is removed from the
-            // new doc, so listing it would cause derive_objects_for_path to panic.
-            Step::MergeNode { target_id, .. } => vec![*target_id],
+            } => {
+                let mut ids = vec![*node_id, *new_node_id];
+                // Element split moves children to new_node_id, updating their
+                // parent field. Their hash changes, so include them.
+                if let Some(entry) = new_doc.get_entry(*new_node_id) {
+                    ids.extend(entry.children.iter().copied());
+                }
+                ids
+            }
+            // MergeNode collapses node_id into target_id; node_id is removed
+            // from new_doc, so listing it would cause derive_objects_for_path
+            // to panic.
+            Step::MergeNode {
+                node_id, target_id, ..
+            } => {
+                let mut ids = vec![*target_id];
+                // source's old parent loses source from its children, so its
+                // hash and layout change. Pulled from old_doc since source is
+                // gone in new_doc.
+                if let Some(entry) = old_doc.get_entry(*node_id)
+                    && let Some(parent) = entry.parent
+                {
+                    ids.push(parent);
+                }
+                // Element merge reparents source's children under target,
+                // updating their parent field. Include target's post-state
+                // children to cover the moved ones (unchanged ones are
+                // re-emitted but CAS dedup makes this idempotent).
+                if let Some(entry) = new_doc.get_entry(*target_id) {
+                    ids.extend(entry.children.iter().copied());
+                }
+                ids
+            }
             Step::MoveNode {
                 node_id,
                 old_parent,
@@ -627,10 +656,85 @@ mod affected_tests {
             offset: 3,
             new_node_id: new,
         };
-        let ids = step.affected_node_ids();
+        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
         assert!(ids.contains(&old));
         assert!(ids.contains(&new));
         assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn affected_split_includes_reparented_children() {
+        use editor_macros::state;
+
+        let (state, p1, t1) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        t1: text("Hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let p2 = NodeId::new();
+        let step = Step::SplitNode {
+            node_id: p1,
+            offset: 0,
+            new_node_id: p2,
+        };
+        let new_state = step.apply(&state).unwrap().state;
+        let ids = step.affected_node_ids(&state.doc, &new_state.doc);
+
+        // The reparented text node must be in affected so its post-state hash
+        // (with parent=p2) gets emitted as a new object.
+        assert!(ids.contains(&t1));
+    }
+
+    #[test]
+    fn split_at_offset_zero_emits_reparented_child_object() {
+        // Regression: pressing Enter at the start of the first paragraph used
+        // to push a commit that referenced a child hash with no matching
+        // object, producing `object_not_authorized` on the server.
+        use editor_macros::state;
+
+        let (state, p1, _t1) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        t1: text("Hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let p2 = NodeId::new();
+        let step = Step::SplitNode {
+            node_id: p1,
+            offset: 0,
+            new_node_id: p2,
+        };
+        let new_state = step.apply(&state).unwrap().state;
+        let affected = step.affected_node_ids(&state.doc, &new_state.doc);
+        let (_root_hash, objects) = new_state.doc.derive_objects_for_path(&affected);
+
+        let by_hash: std::collections::HashSet<&str> =
+            objects.iter().map(|o| o.hash.as_str()).collect();
+
+        // Every child hash referenced in any emitted object must itself be
+        // present in the emitted set (the server enforces this reachability).
+        for o in &objects {
+            for child in &o.content.children {
+                assert!(
+                    by_hash.contains(child.hash.as_str()),
+                    "missing object for child {:?} (hash={}) referenced by {:?}",
+                    child.node_id,
+                    child.hash,
+                    o.content.node_id,
+                );
+            }
+        }
     }
 
     #[test]
@@ -645,7 +749,7 @@ mod affected_tests {
             new_parent,
             new_index: 0,
         };
-        let ids = step.affected_node_ids();
+        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
         assert!(ids.contains(&id));
         assert!(ids.contains(&old_parent));
         assert!(ids.contains(&new_parent));
@@ -661,8 +765,55 @@ mod affected_tests {
             target_id: surviving,
             offset: 0,
         };
-        let ids = step.affected_node_ids();
+        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
         assert_eq!(ids, vec![surviving]);
+    }
+
+    #[test]
+    fn affected_merge_includes_source_old_parent() {
+        // After merge, source is gone but source's old parent has its children
+        // list shrunk. Its hash and layout change, so it must be in affected.
+        use editor_model::{NodeEntry, ParagraphNode};
+
+        let target_id = NodeId::new();
+        let wrapper_id = NodeId::new();
+        let source_id = NodeId::new();
+
+        let old_doc = Doc::default()
+            .insert_node(
+                target_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
+            )
+            .insert_node(
+                wrapper_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
+            )
+            .insert_node(
+                source_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(wrapper_id),
+            );
+
+        let new_doc = Doc::default()
+            .insert_node(
+                target_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
+            )
+            .insert_node(
+                wrapper_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
+            );
+
+        let step = Step::MergeNode {
+            node_id: source_id,
+            target_id,
+            offset: 0,
+        };
+        let ids = step.affected_node_ids(&old_doc, &new_doc);
+        assert!(ids.contains(&target_id));
+        assert!(
+            ids.contains(&wrapper_id),
+            "source's old parent must be in affected"
+        );
     }
 
     #[test]
@@ -682,7 +833,7 @@ mod affected_tests {
             index: 0,
             subtree,
         };
-        let ids = step.affected_node_ids();
+        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
         assert!(ids.contains(&parent));
         assert!(ids.contains(&n1));
         assert!(ids.contains(&n2));
