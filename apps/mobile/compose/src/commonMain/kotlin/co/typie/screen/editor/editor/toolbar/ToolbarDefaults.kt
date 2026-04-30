@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ui.icon.IconData
 
 internal val ToolbarHorizontalPadding = 16.dp
-internal val ToolbarBottomPadding = 12.dp
+internal val ToolbarBottomPadding = 6.dp
 internal val ToolbarHeight = 44.dp
 internal val ToolbarIndicatorHeight = 32.dp
 internal val ToolbarIndicatorGap = 8.dp

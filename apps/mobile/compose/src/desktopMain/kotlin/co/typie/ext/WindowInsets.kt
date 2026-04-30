@@ -33,4 +33,5 @@ actual val WindowInsets.Companion.safeDrawing: WindowInsets
     )
 
 actual val WindowInsets.Companion.ime: WindowInsets
-  @Composable get() = DesktopDebugKeyboard.asWindowInsets(foundationIme)
+  @Composable
+  get() = DesktopDebugKeyboard.asWindowInsets(foundationIme, bottomOffset = BezelThickness)

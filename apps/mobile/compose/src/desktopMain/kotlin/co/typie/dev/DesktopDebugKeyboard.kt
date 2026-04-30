@@ -229,9 +229,11 @@ internal object DesktopDebugKeyboard {
   }
 
   @Composable
-  fun asWindowInsets(baseInsets: WindowInsets): WindowInsets {
+  fun asWindowInsets(baseInsets: WindowInsets, bottomOffset: Dp = 0.dp): WindowInsets {
     val animatedHeight = animatedHeight()
-    return baseInsets.union(WindowInsets(bottom = animatedHeight))
+    return baseInsets.union(
+      WindowInsets(bottom = resolveDesktopDebugKeyboardInsetHeight(animatedHeight, bottomOffset))
+    )
   }
 
   @Composable
@@ -656,6 +658,13 @@ internal object DesktopDebugKeyboard {
     }
   }
 }
+
+internal fun resolveDesktopDebugKeyboardInsetHeight(surfaceHeight: Dp, bottomOffset: Dp): Dp =
+  if (surfaceHeight > 0.dp) {
+    surfaceHeight + bottomOffset
+  } else {
+    0.dp
+  }
 
 private data class ActionKeySpec(
   val label: String,
