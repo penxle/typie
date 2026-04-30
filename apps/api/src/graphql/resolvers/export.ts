@@ -17,6 +17,7 @@ import {
   validateDbId,
 } from '#/db/index.ts';
 import { generateDocument } from '#/export/index.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import type { ExportFontFamily, ExportFormat } from '#/export/index.ts';
 
@@ -82,6 +83,9 @@ builder.mutationFields((t) => ({
       layout: t.input.field({ type: ExportDocumentPageLayoutInput, required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      const format = input.format.toLowerCase() as ExportFormat;
+      const meta = FORMAT_META[format];
+
       const document = await db
         .select()
         .from(Documents)
@@ -94,6 +98,10 @@ builder.mutationFields((t) => ({
         throw new NotFoundError();
       }
 
+      if (format !== 'pdf') {
+        await assertActiveSubscription({ userId: ctx.session.userId });
+      }
+
       const content = await db
         .select()
         .from(DocumentContents)
@@ -102,9 +110,6 @@ builder.mutationFields((t) => ({
 
       const title = document.title || '(제목 없음)';
       const filename = `${title}${document.subtitle ? ` - ${document.subtitle}` : ''}`;
-
-      const format = input.format.toLowerCase() as ExportFormat;
-      const meta = FORMAT_META[format];
 
       if (format !== 'epub' && !input.layout) {
         throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });

@@ -68,7 +68,7 @@ import {
   makeLoroDoc,
 } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
-import { assertPlanRule } from '#/utils/plan.ts';
+import { assertActiveSubscription, assertPlanRule } from '#/utils/plan.ts';
 import { buildInitialDocFromPreset } from '#/utils/sync.ts';
 import { wasm } from '#/utils/wasm.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
@@ -1428,6 +1428,8 @@ builder.mutationFields((t) => ({
           siteId: document.siteId,
         });
       }
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       const { text, mappings } = input;
       if (!text.trim()) {

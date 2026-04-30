@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/node';
 import dedent from 'dedent';
 import { Repeater } from 'graphql-yoga';
 import { env } from '#/env.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 
 const anthropic = new Anthropic({
@@ -321,7 +322,9 @@ builder.subscriptionFields((t) => ({
       text: t.arg.string(),
       mappings: t.arg({ type: [DocumentTextMappingInput] }),
     },
-    subscribe: (_, args, ctx) => {
+    subscribe: async (_, args, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const text = args.text;
       const mappings = args.mappings;
 

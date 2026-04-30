@@ -16,6 +16,7 @@ import * as aws from '#/external/aws.ts';
 import { compressZstd } from '#/utils/compression.ts';
 import { processFont } from '#/utils/font.ts';
 import { processFont as processFontLegacy } from '#/utils/font-legacy.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { wasm } from '#/utils/wasm.ts';
 import { builder } from '../builder.ts';
 import { Blob, File, Font, Image, isTypeOf } from '../objects.ts';
@@ -414,6 +415,8 @@ builder.mutationFields((t) => ({
     type: Font,
     input: { path: t.input.string() },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const object = await aws.s3.send(
         new GetObjectCommand({
           Bucket: 'typie-uploads',
@@ -558,6 +561,8 @@ builder.mutationFields((t) => ({
     type: Font,
     input: { path: t.input.string() },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const object = await aws.s3.send(
         new GetObjectCommand({
           Bucket: 'typie-uploads',

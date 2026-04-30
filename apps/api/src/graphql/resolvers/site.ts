@@ -13,6 +13,7 @@ import { env } from '#/env.ts';
 import { pubsub } from '#/pubsub.ts';
 import { generateRandomAvatar, persistBlobAsImage } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import { Document, Entity, EntityView, Image, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects.ts';
 
@@ -316,6 +317,8 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const slugExistSite = await db
         .select({ id: Sites.id })
         .from(Sites)
@@ -336,6 +339,8 @@ builder.mutationFields((t) => ({
       name: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const logoFile = await generateRandomAvatar();
       const logo = await persistBlobAsImage({ file: logoFile });
 
