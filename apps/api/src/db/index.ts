@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { dev, env } from '#/env.ts';
+import { dev, env, production } from '#/env.ts';
 import { DrizzleLogger } from './logger.ts';
 import * as enums from './schemas/enums.ts';
 import * as tables from './schemas/tables.ts';
@@ -11,7 +11,7 @@ export const pg = postgres(env.DATABASE_URL, {
   connect_timeout: 5,
   idle_timeout: 30,
   prepare: false,
-  ssl: dev ? 'prefer' : false,
+  ssl: production ? false : 'prefer',
 });
 
 export const db = drizzle(pg, {
@@ -24,7 +24,7 @@ export const pgr = postgres(env.DATABASE_RO_URL ?? env.DATABASE_URL, {
   connect_timeout: 5,
   idle_timeout: 30,
   prepare: false,
-  ssl: dev ? 'prefer' : false,
+  ssl: production ? false : 'prefer',
 });
 
 export const dbr = drizzle(pgr, {
