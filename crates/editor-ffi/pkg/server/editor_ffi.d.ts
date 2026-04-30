@@ -244,11 +244,11 @@ export interface ChunkCodepoints {
 }
 
 export interface Commit {
-    rootObjectHash: string;
+    root_object_hash: string;
     objects: CommitObject[];
     steps: Step[];
     meta: TransactionMeta;
-    committedAt: number;
+    committed_at: number;
 }
 
 export interface CommitObject {

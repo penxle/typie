@@ -15,7 +15,7 @@ pub enum FontData {
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct Commit {
     pub root_object_hash: String,
     pub objects: Vec<CommitObject>,

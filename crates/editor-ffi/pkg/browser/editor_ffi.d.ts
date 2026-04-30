@@ -148,6 +148,16 @@ export interface Composition {
 export type Affinity = "downstream" | "upstream";
 
 /**
+ * `CommitContent::hash()` of this struct (via canonical JSON) is its commit hash —
+ * any change to `Serialize` shape changes the hash and breaks CAS dedup.
+ */
+export interface CommitContent {
+    parent_hash?: string;
+    second_parent_hash?: string;
+    object_hash: string;
+}
+
+/**
  * `ObjectContent::hash()` of this struct (via canonical JSON) is its Object hash —
  * any change to `Serialize` shape changes the hash and breaks CAS dedup.
  */
@@ -220,11 +230,11 @@ export interface ChildRef {
 }
 
 export interface Commit {
-    rootObjectHash: string;
+    root_object_hash: string;
     objects: CommitObject[];
     steps: Step[];
     meta: TransactionMeta;
-    committedAt: number;
+    committed_at: number;
 }
 
 export interface CommitObject {
