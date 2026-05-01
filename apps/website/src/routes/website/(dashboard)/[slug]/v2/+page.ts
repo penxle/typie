@@ -24,5 +24,5 @@ export const load: PageLoad = async (event) => {
     { slug },
   );
 
-  return { query };
+  return { query, slug };
 };

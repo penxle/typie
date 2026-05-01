@@ -10,5 +10,5 @@
 </script>
 
 {#if document$key}
-  <DocumentEditorV2 {document$key} />
+  <DocumentEditorV2 {document$key} slug={data.slug} />
 {/if}

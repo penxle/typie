@@ -1,7 +1,7 @@
 import { DocumentConflictKind } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lt } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import {
   db,
@@ -56,6 +56,7 @@ DocumentCommit.implement({
     user: t.expose('userId', { type: User, nullable: true }),
 
     meta: t.expose('meta', { type: 'JSON', nullable: true }),
+    steps: t.expose('steps', { type: 'JSON', nullable: true }),
 
     committedAt: t.expose('committedAt', { type: 'DateTime' }),
     pushedAt: t.expose('pushedAt', { type: 'DateTime' }),
@@ -133,6 +134,54 @@ builder.objectFields(Document, (t) => ({
     args: { hashes: t.arg.stringList() },
     resolve: async (_, { hashes }) => {
       return db.select().from(DocumentObjects).where(inArray(DocumentObjects.hash, hashes));
+    },
+  }),
+  commits: t.field({
+    type: [DocumentCommit],
+    args: {
+      after: t.arg.id({ required: false }),
+      limit: t.arg.int({ defaultValue: 50 }),
+    },
+    resolve: async (document, { after, limit }) => {
+      const cap = Math.min(Math.max(limit ?? 50, 1), 200);
+
+      let cursorSequence: number | null = null;
+      if (after) {
+        const cursor = await db
+          .select({ sequence: DocumentCommits.sequence })
+          .from(DocumentCommits)
+          .where(and(eq(DocumentCommits.documentId, document.id), eq(DocumentCommits.id, after)))
+          .then(first);
+        if (!cursor) return [];
+        cursorSequence = cursor.sequence;
+      }
+
+      return db
+        .select()
+        .from(DocumentCommits)
+        .where(
+          and(
+            eq(DocumentCommits.documentId, document.id),
+            cursorSequence === null ? undefined : lt(DocumentCommits.sequence, cursorSequence),
+          ),
+        )
+        .orderBy(desc(DocumentCommits.sequence))
+        .limit(cap);
+    },
+  }),
+  commit: t.field({
+    type: DocumentCommit,
+    nullable: true,
+    args: {
+      id: t.arg.id(),
+    },
+    resolve: async (document, { id }) => {
+      const row = await db
+        .select()
+        .from(DocumentCommits)
+        .where(and(eq(DocumentCommits.id, id), eq(DocumentCommits.documentId, document.id)))
+        .then(first);
+      return row ?? null;
     },
   }),
 }));

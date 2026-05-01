@@ -183,6 +183,8 @@ type Document implements IDocument {
   assets: [DocumentAsset!]!
   characterCount: Int!
   characterCountChange: CharacterCountChange!
+  commit(id: ID!): DocumentCommit
+  commits(after: ID, limit: Int! = 50): [DocumentCommit!]!
   contentRating: DocumentContentRating!
   createdAt: DateTime!
   entity: Entity!
@@ -234,6 +236,7 @@ type DocumentCommit {
   pushedAt: DateTime!
   rootObject: DocumentObject!
   secondParent: DocumentCommit
+  steps: JSON
   user: User
 }
 
