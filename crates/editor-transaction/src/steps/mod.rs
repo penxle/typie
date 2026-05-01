@@ -7,7 +7,6 @@ pub(crate) mod remove_modifier;
 pub(crate) mod remove_subtree;
 pub(crate) mod remove_text;
 pub(crate) mod set_composition;
-pub(crate) mod set_modifiers;
 pub(crate) mod set_node;
 pub(crate) mod set_pending_modifiers;
 pub(crate) mod set_selection;

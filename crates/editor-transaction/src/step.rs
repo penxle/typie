@@ -89,11 +89,6 @@ pub enum Step {
         old: PendingModifiers,
         new: PendingModifiers,
     },
-    SetModifiers {
-        node_id: NodeId,
-        old_modifiers: Vec<Modifier>,
-        new_modifiers: Vec<Modifier>,
-    },
     SetComposition {
         old: Option<Composition>,
         new: Option<Composition>,
@@ -141,8 +136,7 @@ impl Step {
             | Step::RemoveText { node_id, .. }
             | Step::SetNode { node_id, .. }
             | Step::AddModifier { node_id, .. }
-            | Step::RemoveModifier { node_id, .. }
-            | Step::SetModifiers { node_id, .. } => StepScope::Node(*node_id),
+            | Step::RemoveModifier { node_id, .. } => StepScope::Node(*node_id),
 
             Step::InsertSubtree { parent_id, .. } | Step::RemoveSubtree { parent_id, .. } => {
                 StepScope::Children { parent: *parent_id }
@@ -170,7 +164,6 @@ impl Step {
             | Step::RemoveText { node_id, .. }
             | Step::AddModifier { node_id, .. }
             | Step::RemoveModifier { node_id, .. }
-            | Step::SetModifiers { node_id, .. }
             | Step::SetNode { node_id, .. } => vec![*node_id],
             Step::InsertSubtree {
                 parent_id, subtree, ..
@@ -179,9 +172,6 @@ impl Step {
                 ids.extend(subtree.all_ids());
                 ids
             }
-            // RemoveSubtree affects only the parent (its children list shrinks).
-            // Removed nodes are not in the new doc, so listing it would cause
-            // derive_objects_for_path to panic when looking up missing entries.
             Step::RemoveSubtree { parent_id, .. } => vec![*parent_id],
             Step::SplitNode {
                 node_id,
@@ -189,32 +179,20 @@ impl Step {
                 ..
             } => {
                 let mut ids = vec![*node_id, *new_node_id];
-                // Element split moves children to new_node_id, updating their
-                // parent field. Their hash changes, so include them.
                 if let Some(entry) = new_doc.get_entry(*new_node_id) {
                     ids.extend(entry.children.iter().copied());
                 }
                 ids
             }
-            // MergeNode collapses node_id into target_id; node_id is removed
-            // from new_doc, so listing it would cause derive_objects_for_path
-            // to panic.
             Step::MergeNode {
                 node_id, target_id, ..
             } => {
                 let mut ids = vec![*target_id];
-                // source's old parent loses source from its children, so its
-                // hash and layout change. Pulled from old_doc since source is
-                // gone in new_doc.
                 if let Some(entry) = old_doc.get_entry(*node_id)
                     && let Some(parent) = entry.parent
                 {
                     ids.push(parent);
                 }
-                // Element merge reparents source's children under target,
-                // updating their parent field. Include target's post-state
-                // children to cover the moved ones (unchanged ones are
-                // re-emitted but CAS dedup makes this idempotent).
                 if let Some(entry) = new_doc.get_entry(*target_id) {
                     ids.extend(entry.children.iter().copied());
                 }
@@ -293,11 +271,6 @@ impl Step {
             Step::SetPendingModifiers { old: _, new } => {
                 steps::set_pending_modifiers::apply(state, new)
             }
-            Step::SetModifiers {
-                node_id,
-                old_modifiers: _,
-                new_modifiers,
-            } => steps::set_modifiers::apply(state, *node_id, new_modifiers),
             Step::SetComposition { old: _, new } => steps::set_composition::apply(state, new),
         }
     }
@@ -362,15 +335,6 @@ impl Step {
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::inverse(old.clone(), new.clone())
             }
-            Step::SetModifiers {
-                node_id,
-                old_modifiers,
-                new_modifiers,
-            } => steps::set_modifiers::inverse(
-                *node_id,
-                old_modifiers.clone(),
-                new_modifiers.clone(),
-            ),
             Step::SetComposition { old, new } => steps::set_composition::inverse(*old, *new),
         }
     }
@@ -529,11 +493,6 @@ mod predicate_tests {
             Step::RemoveModifier {
                 node_id,
                 modifier: Modifier::Bold,
-            },
-            Step::SetModifiers {
-                node_id,
-                old_modifiers: vec![],
-                new_modifiers: vec![Modifier::Bold],
             },
         ];
 

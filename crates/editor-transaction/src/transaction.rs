@@ -284,26 +284,6 @@ impl Transaction {
         })
     }
 
-    pub fn set_modifiers(
-        &mut self,
-        node_id: NodeId,
-        modifiers: Vec<Modifier>,
-    ) -> Result<(), StepError> {
-        let old_modifiers = self
-            .state
-            .doc
-            .get_entry(node_id)
-            .ok_or(StepError::NodeNotFound(node_id))?
-            .modifiers
-            .clone();
-
-        self.apply_step(Step::SetModifiers {
-            node_id,
-            old_modifiers,
-            new_modifiers: modifiers,
-        })
-    }
-
     pub fn set_composition(&mut self, composition: Option<Composition>) -> Result<(), StepError> {
         let old = self.state.composition;
         self.apply_step(Step::SetComposition {
