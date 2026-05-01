@@ -1,7 +1,8 @@
 import { DocumentConflictKind } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, lte, sql } from 'drizzle-orm';
+import { redis } from '#/cache.ts';
 import {
   db,
   DocumentCommits,
@@ -23,11 +24,14 @@ import { defineCron, defineJob } from '../types.ts';
 import type { ConflictRecord, ObjectContent } from '@typie/editor-ffi/server';
 import type { Transaction } from '#/db/index.ts';
 
-export const DocumentAdvanceHeadJob = defineJob('document:advance-head', async (documentId: string) => {
+type AdvanceHeadPayload = { documentId: string; leafCandidateId?: string };
+
+export const DocumentAdvanceHeadJob = defineJob('document:advance-head', async (payload: AdvanceHeadPayload) => {
+  const { documentId, leafCandidateId } = payload;
   const lock = new Lock(`document:${documentId}`);
   if (!(await lock.tryAcquire())) return;
   try {
-    await processDocument(documentId, lock.signal);
+    await processDocument(documentId, leafCandidateId, lock.signal);
   } finally {
     await lock.release();
   }
@@ -35,10 +39,10 @@ export const DocumentAdvanceHeadJob = defineJob('document:advance-head', async (
 
 export const DocumentAdvanceHeadScanCron = defineCron('document:advance-head:scan', '* * * * *', async () => {
   const docs = await db.select({ id: Documents.id }).from(Documents).where(isNotNull(Documents.dirtyAt));
-  await Promise.all(docs.map((d) => enqueueJob('document:advance-head', d.id)));
+  await Promise.all(docs.map((d) => enqueueJob('document:advance-head', { documentId: d.id })));
 });
 
-async function processDocument(documentId: string, signal: AbortSignal): Promise<void> {
+async function processDocument(documentId: string, leafCandidateId: string | undefined, signal: AbortSignal): Promise<void> {
   const initial = await db.select({ dirtyAt: Documents.dirtyAt }).from(Documents).where(eq(Documents.id, documentId)).then(firstOrThrow);
   const dirtyAtSnapshot = initial.dirtyAt;
   if (dirtyAtSnapshot === null) return;
@@ -46,16 +50,41 @@ async function processDocument(documentId: string, signal: AbortSignal): Promise
   signal.throwIfAborted();
 
   const { newHead, oldHead, deltaCommits, deltaObjects, cleared } = await db.transaction(async (tx) => {
-    const { headCommitId } = await tx
-      .select({ headCommitId: Documents.headCommitId })
+    const docInfo = await tx
+      .select({
+        headCommitId: Documents.headCommitId,
+        headSequence: DocumentCommits.sequence,
+        headRootObjectId: DocumentCommits.rootObjectId,
+      })
       .from(Documents)
+      .leftJoin(DocumentCommits, eq(DocumentCommits.id, Documents.headCommitId))
       .where(eq(Documents.id, documentId))
       .then(firstOrThrow);
 
-    const candidates = await findCandidateLeaves(tx, documentId, headCommitId);
+    const oldHead =
+      docInfo.headCommitId && docInfo.headSequence !== null && docInfo.headRootObjectId !== null
+        ? { commitId: docInfo.headCommitId, sequence: docInfo.headSequence, rootObjectId: docInfo.headRootObjectId }
+        : null;
+    const oldHeadCommitId = oldHead?.commitId ?? null;
 
-    let head: string | null = headCommitId;
-    if (candidates.length > 0) {
+    let head: string | null = oldHeadCommitId;
+    let fastForward: Awaited<ReturnType<typeof tryFastForward>> = null;
+
+    if (leafCandidateId) {
+      fastForward = await tryFastForward(tx, documentId, oldHead, leafCandidateId);
+    }
+
+    let candidates: (typeof DocumentCommits.$inferSelect)[] | null = null;
+    if (!fastForward) {
+      candidates = await findCandidateLeaves(tx, documentId, oldHeadCommitId);
+      if (!leafCandidateId && candidates.length === 1 && candidates[0].secondParentId === null) {
+        fastForward = await tryFastForward(tx, documentId, oldHead, candidates[0].id);
+      }
+    }
+
+    if (fastForward) {
+      head = fastForward.leaf.id;
+    } else if (candidates && candidates.length > 0) {
       const ordered = candidates.toSorted((a, b) => a.sequence - b.sequence);
 
       for (const leaf of ordered) {
@@ -78,9 +107,17 @@ async function processDocument(documentId: string, signal: AbortSignal): Promise
     let deltaCommits: (typeof DocumentCommits.$inferSelect)[] = [];
     let deltaObjects: (typeof DocumentObjects.$inferSelect)[] = [];
 
-    if (head !== null && head !== headCommitId) {
-      await updateHead(tx, documentId, head);
-      ({ deltaCommits, deltaObjects } = await collectDelta(tx, documentId, headCommitId, head));
+    if (head !== null && head !== oldHeadCommitId) {
+      const newHashes = await updateHead(tx, documentId, head, fastForward?.leaf.rootObjectId);
+      if (fastForward) {
+        deltaCommits = fastForward.chainCommits;
+        const oldHashes = oldHead ? await walkReachableHashes(tx, oldHead.rootObjectId) : new Set<string>();
+        const deltaHashes = [...newHashes].filter((h) => !oldHashes.has(h));
+        deltaObjects =
+          deltaHashes.length > 0 ? await tx.select().from(DocumentObjects).where(inArray(DocumentObjects.hash, deltaHashes)) : [];
+      } else {
+        ({ deltaCommits, deltaObjects } = await collectDelta(tx, documentId, oldHeadCommitId, head));
+      }
     }
 
     const clearResult = await tx
@@ -91,7 +128,7 @@ async function processDocument(documentId: string, signal: AbortSignal): Promise
 
     return {
       newHead: head,
-      oldHead: headCommitId,
+      oldHead: oldHeadCommitId,
       deltaCommits,
       deltaObjects,
       cleared: clearResult.length > 0,
@@ -106,8 +143,60 @@ async function processDocument(documentId: string, signal: AbortSignal): Promise
   }
 
   if (!cleared) {
-    await enqueueJob('document:advance-head', documentId);
+    await enqueueJob('document:advance-head', { documentId });
   }
+}
+
+async function tryFastForward(
+  tx: Transaction,
+  documentId: string,
+  oldHead: { commitId: string; sequence: number; rootObjectId: string } | null,
+  leafCandidateId: string,
+): Promise<{
+  leaf: typeof DocumentCommits.$inferSelect;
+  chainCommits: (typeof DocumentCommits.$inferSelect)[];
+} | null> {
+  const oldHeadSequence = oldHead?.sequence ?? -1;
+  const oldHeadCommitId = oldHead?.commitId ?? null;
+
+  const leafSeqRow = await tx
+    .select({ sequence: DocumentCommits.sequence, secondParentId: DocumentCommits.secondParentId })
+    .from(DocumentCommits)
+    .where(and(eq(DocumentCommits.documentId, documentId), eq(DocumentCommits.id, leafCandidateId)))
+    .then(first);
+  if (!leafSeqRow) return null;
+  if (leafSeqRow.secondParentId !== null) return null;
+  if (leafSeqRow.sequence <= oldHeadSequence) return null;
+
+  const rangeCommits = await tx
+    .select()
+    .from(DocumentCommits)
+    .where(
+      and(
+        eq(DocumentCommits.documentId, documentId),
+        gt(DocumentCommits.sequence, oldHeadSequence),
+        lte(DocumentCommits.sequence, leafSeqRow.sequence),
+      ),
+    )
+    .orderBy(asc(DocumentCommits.sequence));
+
+  const leaf = rangeCommits.find((c) => c.id === leafCandidateId);
+  if (!leaf) return null;
+
+  const byId = new Map(rangeCommits.map((c) => [c.id, c]));
+  const chainCommits: (typeof DocumentCommits.$inferSelect)[] = [];
+  let cursor: typeof DocumentCommits.$inferSelect | undefined = leaf;
+  while (cursor) {
+    if (cursor.secondParentId !== null) return null;
+    chainCommits.push(cursor);
+    if (cursor.parentId === oldHeadCommitId) {
+      chainCommits.reverse();
+      return { leaf, chainCommits };
+    }
+    if (cursor.parentId === null) return null;
+    cursor = byId.get(cursor.parentId);
+  }
+  return null;
 }
 
 async function findCandidateLeaves(
@@ -283,17 +372,21 @@ async function persistConflicts(
   }
 }
 
-async function updateHead(tx: Transaction, documentId: string, newHeadDbId: string): Promise<void> {
+async function updateHead(tx: Transaction, documentId: string, newHeadDbId: string, newHeadRootObjectId?: string): Promise<Set<string>> {
   await tx.update(Documents).set({ headCommitId: newHeadDbId }).where(eq(Documents.id, documentId));
 
-  const newHead = await tx
-    .select({ rootObjectId: DocumentCommits.rootObjectId })
-    .from(DocumentCommits)
-    .where(eq(DocumentCommits.id, newHeadDbId))
-    .then(firstOrThrow);
+  let rootObjectId = newHeadRootObjectId;
+  if (rootObjectId === undefined) {
+    const newHead = await tx
+      .select({ rootObjectId: DocumentCommits.rootObjectId })
+      .from(DocumentCommits)
+      .where(eq(DocumentCommits.id, newHeadDbId))
+      .then(firstOrThrow);
+    rootObjectId = newHead.rootObjectId;
+  }
 
-  const allObjects = await walkReachableObjects(tx, newHead.rootObjectId);
-  const rootObj = allObjects.find((o) => o.id === newHead.rootObjectId);
+  const allObjects = await walkReachableObjects(tx, rootObjectId);
+  const rootObj = allObjects.find((o) => o.id === rootObjectId);
   if (!rootObj) throw new Error('root object missing after walk');
 
   const doc = await wasm.reconstruct_doc_from_objects(
@@ -316,6 +409,10 @@ async function updateHead(tx: Transaction, documentId: string, newHeadDbId: stri
     .update(DocumentHeadContents)
     .set({ json: doc, text, characterCount, blobSize, updatedAt: dayjs() })
     .where(eq(DocumentHeadContents.documentId, documentId));
+
+  const hashes = allObjects.map((o) => o.hash);
+  await redis.set(`sync:walk-hashes:${rootObjectId}`, JSON.stringify(hashes), 'EX', 60 * 60 * 24 * 7);
+  return new Set(hashes);
 }
 
 async function collectDelta(

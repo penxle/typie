@@ -165,7 +165,13 @@ export const DocumentCommits = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.documentId, t.pushedAt), index().on(t.documentId, t.sequence), uniqueIndex().on(t.documentId, t.hash)],
+  (t) => [
+    index().on(t.documentId, t.pushedAt),
+    index().on(t.documentId, t.sequence),
+    index().on(t.documentId, t.parentId),
+    index().on(t.documentId, t.secondParentId),
+    uniqueIndex().on(t.documentId, t.hash),
+  ],
 );
 
 export const DocumentObjects = pgTable(

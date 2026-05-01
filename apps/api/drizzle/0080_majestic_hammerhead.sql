@@ -1,0 +1,2 @@
+CREATE INDEX "document_commits_document_id_parent_id_index" ON "document_commits" USING btree ("document_id","parent_id");
+CREATE INDEX "document_commits_document_id_second_parent_id_index" ON "document_commits" USING btree ("document_id","second_parent_id");

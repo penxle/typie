@@ -364,7 +364,8 @@ builder.mutationFields((t) => ({
         });
       });
 
-      await enqueueJob('document:advance-head', input.documentId);
+      const leafCandidateId = result.length > 0 ? result.at(-1)?.id : undefined;
+      await enqueueJob('document:advance-head', { documentId: input.documentId, leafCandidateId });
 
       return result;
     },

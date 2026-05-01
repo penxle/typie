@@ -1,4 +1,5 @@
 import { eq, inArray, sql } from 'drizzle-orm';
+import { redis } from '#/cache.ts';
 import { DocumentCommits, DocumentObjects, firstOrThrow } from '#/db/index.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters, resolvePreset } from '#/utils/entity.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
@@ -35,6 +36,12 @@ export async function walkReachableObjects(
 }
 
 export async function walkReachableHashes(tx: Database | Transaction, rootObjectId: string): Promise<Set<string>> {
+  const cacheKey = `sync:walk-hashes:${rootObjectId}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return new Set(JSON.parse(cached) as string[]);
+  }
+
   const rows = await tx.execute<{ hash: string }>(sql`
     WITH RECURSIVE reachable AS (
       SELECT id, hash, content FROM ${DocumentObjects} WHERE id = ${rootObjectId}
@@ -47,7 +54,9 @@ export async function walkReachableHashes(tx: Database | Transaction, rootObject
     )
     SELECT hash FROM reachable
   `);
-  return new Set(rows.map((r) => r.hash));
+  const hashes = rows.map((r) => r.hash);
+  await redis.set(cacheKey, JSON.stringify(hashes), 'EX', 60 * 60 * 24 * 7);
+  return new Set(hashes);
 }
 
 export async function loadDocFromRootObjectId(tx: Database | Transaction, rootObjectId: string): Promise<{ rootHash: string; doc: Doc }> {

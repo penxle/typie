@@ -561,6 +561,13 @@
       "when": 1777539132750,
       "tag": "0079_stale_sunspot",
       "breakpoints": false
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1777629361901,
+      "tag": "0080_majestic_hammerhead",
+      "breakpoints": false
     }
   ]
 }
