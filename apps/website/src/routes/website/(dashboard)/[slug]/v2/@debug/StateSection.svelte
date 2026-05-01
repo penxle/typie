@@ -11,16 +11,11 @@
 
   const trunc = (h: string) => (h ? h.slice(0, 8) : '—');
 
-  const ahead = $derived(snapshot.chainTip && snapshot.chainTip !== snapshot.serverHeadHash ? snapshot.pendingPushSet.size : 0);
+  const ahead = $derived(snapshot.chainTip && snapshot.chainTip !== snapshot.serverHeadHash ? snapshot.outbox.length : 0);
 
   const lost = $derived(
     Boolean(
-      snapshot.chainTip &&
-      snapshot.serverHeadHash &&
-      snapshot.chainTip !== snapshot.serverHeadHash &&
-      snapshot.localCommitChain.length === 0 &&
-      !snapshot.inflight &&
-      snapshot.pendingPushSet.size === 0,
+      snapshot.chainTip && snapshot.serverHeadHash && snapshot.chainTip !== snapshot.serverHeadHash && snapshot.pushStatus === 'error',
     ),
   );
 </script>
@@ -56,10 +51,10 @@
           height: '6px',
           borderRadius: 'full',
           backgroundColor:
-            snapshot.syncStatus === 'idle' ? 'palette.green' : snapshot.syncStatus === 'pushing' ? 'palette.orange' : 'palette.red',
+            snapshot.pushStatus === 'idle' ? 'palette.green' : snapshot.pushStatus === 'pushing' ? 'palette.orange' : 'palette.red',
         })}
       ></span>
-      {snapshot.syncStatus}
+      {snapshot.pushStatus}
     </span>
 
     <span class={css({ color: 'text.muted' })}>server head</span>

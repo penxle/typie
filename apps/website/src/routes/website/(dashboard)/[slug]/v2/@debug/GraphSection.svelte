@@ -197,13 +197,12 @@
   let inflights = $state<readonly ClientCommitInput[]>([]);
 
   $effect(() => {
-    const cur = snapshot.localCommitChain;
-    const inflight = snapshot.inflight;
+    const cur = snapshot.outbox.map((e) => e.commit);
     const present: Record<string, true> = {};
     for (const c of cur) present[c.commitHash] = true;
     const departed = prevLocalChain.filter((c) => !present[c.commitHash]);
     prevLocalChain = [...cur];
-    if (departed.length > 0 && inflight) {
+    if (departed.length > 0) {
       inflights = [...inflights, ...departed];
     }
   });
@@ -218,7 +217,7 @@
     }
   });
 
-  const localChainReversed = $derived([...snapshot.localCommitChain.toReversed(), ...inflights.toReversed()]);
+  const localChainReversed = $derived([...snapshot.outbox.map((e) => e.commit).toReversed(), ...inflights.toReversed()]);
 
   function fmtTime(iso: string): string {
     return dayjs(iso).format('HH:mm:ss');

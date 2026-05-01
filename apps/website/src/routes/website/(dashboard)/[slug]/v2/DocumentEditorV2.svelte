@@ -2,7 +2,6 @@
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { onDestroy, onMount } from 'svelte';
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import Editor from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
@@ -10,10 +9,13 @@
   import { DebugBus } from './@debug/debug-bus.svelte';
   import DebugPanel from './@debug/DebugPanel.svelte';
   import BottomToolbar from './BottomToolbar.svelte';
+  import { Outbox } from './sync/outbox.svelte';
+  import { Pusher } from './sync/pusher.svelte';
   import TopToolbar from './TopToolbar.svelte';
   import type { Doc, ObjectContent, Selection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_document$key } from '$mearie';
-  import type { ClientCommitInput, DebugSnapshot, DocumentObjectInput } from './@debug/types';
+  import type { DebugSnapshot } from './@debug/types';
+  import type { ClientCommitInput, DocumentObjectInput } from './sync/types';
 
   type Props = {
     document$key: DocumentEditorV2_document$key;
@@ -53,38 +55,31 @@
 
   const ctx = setupEditorContext();
 
-  const cacheObjects = new SvelteMap<string, ObjectContent>();
+  // 디버그 스냅샷에 노출되지만 반응적으로 읽히지 않으므로 plain Map.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const cacheObjects = new Map<string, ObjectContent>();
 
   let serverHeadHash = $state<string>('');
-  let sinceCommitHash = '';
+  let sinceCommitHash = $state<string>('');
   let chainTip = $state<string>('');
 
   let docState = $state<{ doc: Doc; selection: Selection } | null>(null);
 
-  let localCommitChain: ClientCommitInput[] = $state([]);
-  let pendingNewObjects: DocumentObjectInput[] = $state([]);
-  const pendingPushSet = new SvelteSet<string>(); // 자기 발급 + server head 미흡수 commit hash
-  let inflight = $state(false);
-  let pushError = $state(false);
+  let outbox = $state<Outbox | null>(null);
+  let pusher = $state<Pusher | null>(null);
 
   const bus = new DebugBus();
   let debugOpen = $state(true);
 
-  const syncStatus = $derived<'idle' | 'pushing' | 'error'>(pushError ? 'error' : inflight ? 'pushing' : 'idle');
-
   const snapshot = $derived<DebugSnapshot>({
     serverHeadHash,
     chainTip,
-    localCommitChain,
-    pendingPushSet,
-    inflight,
-    syncStatus,
+    outbox: outbox?.entries ?? [],
+    cacheObjects,
+    pushStatus: pusher?.status ?? 'idle',
+    retryAttempt: pusher?.retryAttempt ?? 0,
+    hasDocState: docState !== null,
   });
-
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-  let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
-  const IDLE_MS = 500;
-  const MAX_WAIT_MS = 3000;
 
   const [pushDocumentCommits] = createMutation(
     graphql(`
@@ -97,64 +92,8 @@
     `),
   );
 
-  function clearTimers() {
-    if (idleTimer) {
-      clearTimeout(idleTimer);
-      idleTimer = null;
-    }
-
-    if (maxWaitTimer) {
-      clearTimeout(maxWaitTimer);
-      maxWaitTimer = null;
-    }
-  }
-
-  function schedulePush() {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(firePush, IDLE_MS);
-
-    if (!maxWaitTimer && localCommitChain.length > 0) {
-      maxWaitTimer = setTimeout(firePush, MAX_WAIT_MS);
-    }
-  }
-
-  async function firePush() {
-    clearTimers();
-    if (inflight || localCommitChain.length === 0) return;
-
-    const commits = localCommitChain;
-    const objects = pendingNewObjects;
-
-    inflight = true;
-    localCommitChain = [];
-    pendingNewObjects = [];
-    pushError = false;
-
-    bus.emit({ kind: 'push.fired', commits: commits.length, objects: objects.length });
-    const startedAt = performance.now();
-
-    try {
-      await pushDocumentCommits({
-        input: {
-          documentId: document.data.id,
-          commits,
-          objects,
-        },
-      });
-    } catch (err) {
-      console.error('pushDocumentCommits failed', err);
-      for (const c of commits) pendingPushSet.delete(c.commitHash);
-      pushError = true;
-      inflight = false;
-      bus.emit({ kind: 'push.error', message: String(err) });
-      return;
-    }
-
-    const durationMs = performance.now() - startedAt;
-    bus.emit({ kind: 'push.success', durationMs });
-
-    inflight = false;
-    if (localCommitChain.length > 0) schedulePush();
+  async function pushFn(input: { documentId: string; commits: ClientCommitInput[]; objects: DocumentObjectInput[] }): Promise<void> {
+    await pushDocumentCommits({ input });
   }
 
   createSubscription(
@@ -182,21 +121,24 @@
     `),
     () => ({ documentId: document.data.id, sinceCommitHash }),
     () => ({
-      skip: docState === null,
-      onData: (data) => applyEvent(data.documentCommitsUpdated),
+      skip: docState === null || outbox === null,
+      onData: (data) => {
+        void applyEvent(data.documentCommitsUpdated);
+      },
     }),
   );
 
-  function applyEvent(event: {
+  async function applyEvent(event: {
     commits: readonly { id: string; hash: string; rootObject: { hash: string; content: unknown }; committedAt: string; pushedAt: string }[];
     objects: readonly { id: string; hash: string; content: unknown }[];
   }) {
     if (event.commits.length === 0) return;
+    if (!outbox) return;
 
     const newHead = event.commits.at(-1);
     if (!newHead) return;
 
-    const isOwnHead = pendingPushSet.has(newHead.hash);
+    const isOwnHead = outbox.hasPending(newHead.hash);
 
     bus.emit({
       kind: 'subscription.received',
@@ -210,22 +152,19 @@
       cacheObjects.set(o.hash, o.content as ObjectContent);
     }
 
-    for (const c of event.commits) {
-      pendingPushSet.delete(c.hash);
-    }
+    await outbox.prune(event.commits.map((c) => c.hash));
+    pusher?.notifyEcho(event.commits.map((c) => c.hash));
 
     serverHeadHash = newHead.hash;
 
     if (isOwnHead) {
+      pusher?.schedule();
       return;
     }
 
+    await outbox.clear();
+    pusher?.notifyClear();
     chainTip = newHead.hash;
-    localCommitChain = [];
-    pendingNewObjects = [];
-    pendingPushSet.clear();
-    inflight = false;
-
     docState = buildDocState(newHead.rootObject.hash);
   }
 
@@ -250,21 +189,43 @@
     for (const o of head.objects) {
       cacheObjects.set(o.hash, o.content as ObjectContent);
     }
-
     serverHeadHash = head.hash;
-    sinceCommitHash = head.hash;
-    chainTip = head.hash;
 
     await initWasm();
-    docState = buildDocState(head.rootObject.hash);
+
+    const ob = await Outbox.open(document.data.id);
+
+    for (const e of ob.entries) {
+      for (const o of e.objects) {
+        cacheObjects.set(o.hash, o.content as ObjectContent);
+      }
+    }
+
+    const lastEntry = ob.entries.at(-1);
+    chainTip = lastEntry?.commit.commitHash ?? head.hash;
+    const ownDocRootHash = lastEntry?.commit.rootObjectHash ?? head.rootObject.hash;
+
+    sinceCommitHash = ob.firstParentCommitHash() ?? head.hash;
+
+    const ps = new Pusher({
+      documentId: document.data.id,
+      outbox: ob,
+      push: pushFn,
+      onEvent: (e) => bus.emit(e),
+    });
+
+    outbox = ob;
+    pusher = ps;
+    docState = buildDocState(ownDocRootHash);
+    ps.flushNow();
   });
 
   $effect(() => {
-    if (!ctx.editor) return;
+    if (!ctx.editor || !pusher) return;
+    const ps = pusher;
 
-    const off = ctx.editor.on('transaction_committed', (_, { commit }) => {
+    const off = ctx.editor.on('transaction_committed', async (_, { commit }) => {
       const parentCommitHash = chainTip;
-
       const commitHash = wasm.hash_commit_content({
         parent_hash: parentCommitHash,
         object_hash: commit.root_object_hash,
@@ -272,32 +233,31 @@
 
       chainTip = commitHash;
 
-      localCommitChain.push({
-        commitHash,
-        parentCommitHash,
-        rootObjectHash: commit.root_object_hash,
-        steps: commit.steps,
-        meta: commit.meta,
-        committedAt: new Date(commit.committed_at).toISOString(),
-      });
+      try {
+        await ps.append({
+          commit: {
+            commitHash,
+            parentCommitHash,
+            rootObjectHash: commit.root_object_hash,
+            steps: commit.steps,
+            meta: commit.meta,
+            committedAt: new Date(commit.committed_at).toISOString(),
+          },
+          objects: commit.objects.map((o) => ({ hash: o.hash, content: o.content })),
+        });
+      } catch {
+        // Pusher already set status to 'error'; swallow to avoid unhandled rejection from editor handler.
+      }
 
-      bus.emit({
-        kind: 'commit.created',
-        hash: commitHash,
-        chainSize: localCommitChain.length,
-      });
-
-      pendingNewObjects.push(...commit.objects.map((o) => ({ hash: o.hash, content: o.content })));
-
-      pendingPushSet.add(commitHash);
-      schedulePush();
+      bus.emit({ kind: 'commit.created', hash: commitHash, chainSize: outbox?.pendingSize ?? 0 });
     });
 
     return off;
   });
 
   onDestroy(() => {
-    clearTimers();
+    pusher?.stop();
+    outbox?.close();
   });
 </script>
 
@@ -336,9 +296,15 @@
             {serverHeadHash.slice(0, 8)}
           </span>
         {/if}
-        {#if syncStatus !== 'idle'}
-          <span class={css({ fontSize: '11px', color: syncStatus === 'error' ? 'text.danger' : 'text.muted', fontWeight: 'normal' })}>
-            {syncStatus}
+        {#if snapshot.pushStatus !== 'idle'}
+          <span
+            class={css({
+              fontSize: '11px',
+              color: snapshot.pushStatus === 'error' ? 'text.danger' : 'text.muted',
+              fontWeight: 'normal',
+            })}
+          >
+            {snapshot.pushStatus}
           </span>
         {/if}
       </h1>

@@ -1,24 +1,16 @@
-export type ClientCommitInput = {
-  commitHash: string;
-  parentCommitHash: string;
-  rootObjectHash: string;
-  steps: unknown;
-  meta: unknown;
-  committedAt: string;
-};
+import type { ObjectContent } from '@typie/editor-ffi/browser';
+import type { OutboxEntry, PushStatus } from '../sync/types';
 
-export type DocumentObjectInput = {
-  hash: string;
-  content: unknown;
-};
+export type { ClientCommitInput, DocumentObjectInput, OutboxEntry, PushStatus } from '../sync/types';
 
 export type DebugSnapshot = {
   serverHeadHash: string;
   chainTip: string;
-  localCommitChain: readonly ClientCommitInput[];
-  pendingPushSet: ReadonlySet<string>;
-  inflight: boolean;
-  syncStatus: 'idle' | 'pushing' | 'error';
+  outbox: readonly OutboxEntry[];
+  cacheObjects: ReadonlyMap<string, ObjectContent>;
+  pushStatus: PushStatus;
+  retryAttempt: number;
+  hasDocState: boolean;
 };
 
 export type DebugEvent =
