@@ -64,7 +64,7 @@ wasm-browser: (ensure "wasm-opt")
         --profile {{profile}}-wasm --features wasm-browser --target wasm32-unknown-unknown
     {{bindgen}} wasm-bindgen-cli -- --target module --out-dir {{justfile_directory()}}/pkg/browser \
         {{target_dir}}/wasm32-unknown-unknown/{{profile}}-wasm/{{crate}}.wasm
-    cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/browser/{{crate}}
+    {{bindgen}} editor-bindgen-js -- {{justfile_directory()}}/pkg/browser/{{crate}}
     if [ "{{mode}}" = "release" ]; then
         wasm-opt -Os --all-features -o {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm \
             {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm
@@ -80,7 +80,7 @@ wasm-server: (ensure "wasm-opt")
         --profile {{profile}}-wasm --features wasm-server --target wasm32-unknown-unknown
     {{bindgen}} wasm-bindgen-cli -- --target module --out-dir {{justfile_directory()}}/pkg/server \
         {{target_dir}}/wasm32-unknown-unknown/{{profile}}-wasm/{{crate}}.wasm
-    cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/server/{{crate}}
+    {{bindgen}} editor-bindgen-js -- {{justfile_directory()}}/pkg/server/{{crate}}
     if [ "{{mode}}" = "release" ]; then
         wasm-opt -Os --all-features -o {{justfile_directory()}}/pkg/server/{{crate}}_bg.wasm \
             {{justfile_directory()}}/pkg/server/{{crate}}_bg.wasm

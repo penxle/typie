@@ -1,10 +1,3 @@
-#!/usr/bin/env -S cargo -Zscript
-
----
-[package]
-edition = "2024"
----
-
 use std::env;
 use std::fs;
 use std::process;
@@ -14,7 +7,7 @@ fn main() {
     let base = match args.as_slice() {
         [base] => base.as_str(),
         _ => {
-            eprintln!("Usage: wbg.rs <name>");
+            eprintln!("Usage: editor-bindgen-js <name>");
             process::exit(1);
         }
     };

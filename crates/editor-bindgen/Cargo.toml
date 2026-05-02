@@ -41,3 +41,8 @@ required-features = ["bin"]
 name = "editor-bindgen-swift"
 path = "src/bin/editor-bindgen-swift.rs"
 required-features = ["bin"]
+
+[[bin]]
+name = "editor-bindgen-js"
+path = "src/bin/editor-bindgen-js.rs"
+required-features = ["bin"]
