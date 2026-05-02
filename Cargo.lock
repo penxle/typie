@@ -637,9 +637,14 @@ dependencies = [
 name = "editor-crdt"
 version = "0.0.1"
 dependencies = [
+ "editor-macros",
  "imbl",
  "proptest",
  "serde",
+ "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]

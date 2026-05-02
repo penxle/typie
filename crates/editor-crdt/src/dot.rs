@@ -21,6 +21,12 @@ pub struct Dot {
     pub clock: u64,
 }
 
+impl Dot {
+    pub fn new(actor: u64, clock: u64) -> Self {
+        Self { actor, clock }
+    }
+}
+
 impl Ord for Dot {
     fn cmp(&self, other: &Self) -> Ordering {
         self.clock
@@ -41,25 +47,22 @@ mod tests {
 
     #[test]
     fn ord_clock_primary() {
-        let lo_actor_high_clock = Dot {
-            actor: 1,
-            clock: 10,
-        };
-        let hi_actor_low_clock = Dot { actor: 5, clock: 2 };
+        let lo_actor_high_clock = Dot::new(1, 10);
+        let hi_actor_low_clock = Dot::new(5, 2);
         assert!(hi_actor_low_clock < lo_actor_high_clock);
     }
 
     #[test]
     fn ord_actor_tie_break_on_equal_clock() {
-        let x = Dot { actor: 1, clock: 3 };
-        let y = Dot { actor: 2, clock: 3 };
+        let x = Dot::new(1, 3);
+        let y = Dot::new(2, 3);
         assert!(x < y);
     }
 
     #[test]
     fn ord_same_actor_by_clock() {
-        let a = Dot { actor: 5, clock: 1 };
-        let b = Dot { actor: 5, clock: 7 };
+        let a = Dot::new(5, 1);
+        let b = Dot::new(5, 7);
         assert!(a < b);
     }
 }
