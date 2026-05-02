@@ -8,7 +8,12 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import co.typie.editor.ffi.Axis
+import co.typie.editor.ffi.Break
+import co.typie.editor.ffi.ClipboardOp
+import co.typie.editor.ffi.DeletionOp
 import co.typie.editor.ffi.Direction
+import co.typie.editor.ffi.HistoryOp
+import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
@@ -16,12 +21,9 @@ import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
-import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.platform.Platform
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 internal enum class KeyModifier {
   Shift,
@@ -44,6 +46,8 @@ private fun move(movement: Movement, extend: Boolean): Message =
   Message.Navigation(NavigationOp.Move(movement, extend))
 
 private fun toggleModifier(type: ModifierType): Message = Message.Modifier(ModifierOp.Toggle(type))
+
+private fun delete(movement: Movement): Message = Message.Deletion(DeletionOp.Move(movement))
 
 internal fun createBindings(platform: Platform): List<KeyBinding> {
   val isMac = platform != Platform.Android
@@ -68,6 +72,60 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       action = { listOf(move(Movement.Grapheme(Direction.Forward), true)) },
     ),
     KeyBinding(
+      ComposeKey.DirectionLeft,
+      setOf(KeyModifier.Alt),
+      action = { listOf(move(Movement.Word(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      setOf(KeyModifier.Alt),
+      action = { listOf(move(Movement.Word(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionLeft,
+      setOf(KeyModifier.Alt, KeyModifier.Shift),
+      action = { listOf(move(Movement.Word(Direction.Backward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      setOf(KeyModifier.Alt, KeyModifier.Shift),
+      action = { listOf(move(Movement.Word(Direction.Forward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionLeft,
+      setOf(KeyModifier.Ctrl),
+      action = { listOf(move(Movement.Word(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      setOf(KeyModifier.Ctrl),
+      action = { listOf(move(Movement.Word(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionLeft,
+      setOf(KeyModifier.Mod),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Line(Direction.Backward, Axis.Horizontal), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      setOf(KeyModifier.Mod),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Line(Direction.Forward, Axis.Horizontal), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionLeft,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Line(Direction.Backward, Axis.Horizontal), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Line(Direction.Forward, Axis.Horizontal), true)) },
+    ),
+    KeyBinding(
       ComposeKey.DirectionUp,
       action = { listOf(move(Movement.Line(Direction.Backward, Axis.Vertical), false)) },
     ),
@@ -85,10 +143,96 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       setOf(KeyModifier.Shift),
       action = { listOf(move(Movement.Line(Direction.Forward, Axis.Vertical), true)) },
     ),
+    KeyBinding(
+      ComposeKey.DirectionUp,
+      setOf(KeyModifier.Mod),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Document(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionDown,
+      setOf(KeyModifier.Mod),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Document(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionUp,
+      setOf(KeyModifier.Alt),
+      action = { listOf(move(Movement.Sentence(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionDown,
+      setOf(KeyModifier.Alt),
+      action = { listOf(move(Movement.Sentence(Direction.Forward), false)) },
+    ),
     KeyBinding(ComposeKey.Enter, action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Enter))) }),
+    KeyBinding(
+      ComposeKey.Enter,
+      setOf(KeyModifier.Shift),
+      action = { listOf(Message.Insertion(InsertionOp.Break(Break.Line))) },
+    ),
+    KeyBinding(
+      ComposeKey.Enter,
+      setOf(KeyModifier.Mod),
+      action = { listOf(Message.Insertion(InsertionOp.Break(Break.Page))) },
+    ),
     KeyBinding(
       ComposeKey.Backspace,
       action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Backspace))) },
+    ),
+    KeyBinding(
+      ComposeKey.Backspace,
+      setOf(KeyModifier.Alt),
+      action = { listOf(delete(Movement.Word(Direction.Backward))) },
+    ),
+    KeyBinding(
+      ComposeKey.Backspace,
+      setOf(KeyModifier.Ctrl),
+      action = { listOf(delete(Movement.Word(Direction.Backward))) },
+    ),
+    KeyBinding(
+      ComposeKey.Backspace,
+      setOf(KeyModifier.Mod),
+      predicate = { isMac },
+      action = { listOf(delete(Movement.Line(Direction.Backward, Axis.Horizontal))) },
+    ),
+    KeyBinding(ComposeKey.Delete, action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Delete))) }),
+    KeyBinding(
+      ComposeKey.Delete,
+      setOf(KeyModifier.Alt),
+      action = { listOf(delete(Movement.Word(Direction.Forward))) },
+    ),
+    KeyBinding(ComposeKey.Tab, action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Tab))) }),
+    KeyBinding(
+      ComposeKey.Escape,
+      bringIntoViewTarget = null,
+      action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Escape))) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveHome,
+      action = { listOf(move(Movement.Line(Direction.Backward, Axis.Horizontal), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveHome,
+      setOf(KeyModifier.Ctrl),
+      action = { listOf(move(Movement.Document(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveEnd,
+      action = { listOf(move(Movement.Line(Direction.Forward, Axis.Horizontal), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveEnd,
+      setOf(KeyModifier.Ctrl),
+      action = { listOf(move(Movement.Document(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.PageUp,
+      action = { listOf(move(Movement.Page(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.PageDown,
+      action = { listOf(move(Movement.Page(Direction.Forward), false)) },
     ),
     KeyBinding(
       ComposeKey.B,
@@ -110,9 +254,45 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     ),
     KeyBinding(
       ComposeKey.U,
-      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      setOf(KeyModifier.Mod),
       bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Underline)) },
+    ),
+    KeyBinding(
+      ComposeKey.Backslash,
+      setOf(KeyModifier.Mod),
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
+      action = { listOf(Message.Modifier(ModifierOp.ClearAll)) },
+    ),
+    KeyBinding(
+      ComposeKey.Z,
+      setOf(KeyModifier.Mod),
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
+      action = { listOf(Message.History(HistoryOp.Undo)) },
+    ),
+    KeyBinding(
+      ComposeKey.Z,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
+      action = { listOf(Message.History(HistoryOp.Redo)) },
+    ),
+    KeyBinding(
+      ComposeKey.C,
+      setOf(KeyModifier.Mod),
+      bringIntoViewTarget = null,
+      action = { listOf(Message.Clipboard(ClipboardOp.Copy)) },
+    ),
+    KeyBinding(
+      ComposeKey.X,
+      setOf(KeyModifier.Mod),
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
+      action = { listOf(Message.Clipboard(ClipboardOp.Cut)) },
+    ),
+    KeyBinding(
+      ComposeKey.A,
+      setOf(KeyModifier.Mod),
+      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
+      action = { listOf(Message.Selection(SelectionOp.All)) },
     ),
     KeyBinding(
       ComposeKey.Q,
@@ -135,7 +315,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
   )
 }
 
-private fun matchBinding(binding: KeyBinding, platform: Platform, event: KeyEvent): Boolean {
+internal fun matchesKeyBinding(binding: KeyBinding, platform: Platform, event: KeyEvent): Boolean {
   if (binding.key != event.key) return false
 
   val mods = binding.modifiers
@@ -153,26 +333,5 @@ private fun matchBinding(binding: KeyBinding, platform: Platform, event: KeyEven
 
   if (binding.predicate != null && !binding.predicate.invoke()) return false
 
-  return true
-}
-
-internal fun handleKeyDown(
-  editor: Editor,
-  platform: Platform,
-  bindings: List<KeyBinding>,
-  bringIntoViewRequests: EditorBringIntoViewRequests,
-  coroutineScope: CoroutineScope,
-  event: KeyEvent,
-): Boolean {
-  val binding = bindings.find { matchBinding(it, platform, event) } ?: return false
-  val messages = binding.action(editor)
-  if (messages.isNotEmpty()) {
-    coroutineScope.launch {
-      editor.awaitWithBringIntoView(bringIntoViewRequests) {
-        messages.forEach(::enqueue)
-        beforeCommit { binding.bringIntoViewTarget?.let { target -> bringIntoView(target) } }
-      }
-    }
-  }
   return true
 }

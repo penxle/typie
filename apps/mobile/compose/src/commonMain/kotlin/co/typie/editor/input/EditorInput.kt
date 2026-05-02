@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
+import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.Editor
 import co.typie.editor.createBindings
 import co.typie.editor.ffi.CompositionOp
@@ -22,10 +23,12 @@ import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
-import co.typie.editor.handleKeyDown
+import co.typie.editor.matchesKeyBinding
+import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.editor.scroll.syncWithBringIntoView
 import co.typie.ext.TextInputClient
 import co.typie.ext.TextInputKey
 import co.typie.ext.notifyTextInputFocusChanged
@@ -38,6 +41,7 @@ import kotlinx.coroutines.launch
 
 internal fun Modifier.editorInput(
   editor: Editor,
+  uiState: EditorUiState,
   platform: Platform,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   textInputSessionEnabled: Boolean,
@@ -46,6 +50,7 @@ internal fun Modifier.editorInput(
   this then
     EditorInputElement(
       editor = editor,
+      uiState = uiState,
       platform = platform,
       bringIntoViewRequests = bringIntoViewRequests,
       textInputSessionEnabled = textInputSessionEnabled,
@@ -56,6 +61,7 @@ internal fun Modifier.editorInput(
 internal expect suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  onEditCommand: (List<EditCommand>) -> Unit,
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest
 
@@ -78,6 +84,7 @@ internal fun requiresRawKeyTextFallback(platform: Platform): Boolean =
 
 private data class EditorInputElement(
   private val editor: Editor,
+  private val uiState: EditorUiState,
   private val platform: Platform,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val textInputSessionEnabled: Boolean,
@@ -86,6 +93,7 @@ private data class EditorInputElement(
   override fun create(): EditorInputNode =
     EditorInputNode(
       editor = editor,
+      uiState = uiState,
       platform = platform,
       bringIntoViewRequests = bringIntoViewRequests,
       textInputSessionEnabled = textInputSessionEnabled,
@@ -94,7 +102,8 @@ private data class EditorInputElement(
 
   override fun update(node: EditorInputNode) {
     node.editor = editor
-    node.platform = platform
+    node.uiState = uiState
+    node.updatePlatform(platform)
     node.bringIntoViewRequests = bringIntoViewRequests
     node.updateInputSessionPolicy(
       textInputSessionEnabled = textInputSessionEnabled,
@@ -106,6 +115,7 @@ private data class EditorInputElement(
 @OptIn(ExperimentalComposeUiApi::class)
 internal class EditorInputNode(
   var editor: Editor,
+  var uiState: EditorUiState,
   var platform: Platform,
   var bringIntoViewRequests: EditorBringIntoViewRequests,
   textInputSessionEnabled: Boolean,
@@ -113,9 +123,20 @@ internal class EditorInputNode(
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private var focused = false
-  private val bindings by lazy { createBindings(platform) }
+  private var bindings = createBindings(platform)
+    private set
+
   private var textInputSessionEnabled = textInputSessionEnabled
   private var suppressSoftwareKeyboard = suppressSoftwareKeyboard
+  private val platformInputBridge = EditorPlatformInputBridge()
+
+  fun updatePlatform(platform: Platform) {
+    if (this.platform == platform) return
+
+    this.platform = platform
+    bindings = createBindings(platform)
+    platformInputBridge.reset()
+  }
 
   fun updateInputSessionPolicy(
     textInputSessionEnabled: Boolean,
@@ -142,12 +163,27 @@ internal class EditorInputNode(
     }
   }
 
-  private fun dispatchAndScrollToCurrentCursorLine(vararg messages: Message) {
+  private fun dispatch(
+    messages: List<Message>,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
+  ) {
+    if (messages.isEmpty()) return
     coroutineScope.launch {
       editor.awaitWithBringIntoView(bringIntoViewRequests) {
         messages.forEach(::enqueue)
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+        beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
       }
+    }
+  }
+
+  private fun dispatchSync(
+    messages: List<Message>,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
+  ) {
+    if (messages.isEmpty()) return
+    editor.syncWithBringIntoView(bringIntoViewRequests) {
+      messages.forEach(::enqueue)
+      beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
     }
   }
 
@@ -161,24 +197,24 @@ internal class EditorInputNode(
       }
 
       override fun insertText(text: String): Boolean {
-        dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text(text)))
+        dispatch(listOf(Message.Insertion(InsertionOp.Text(text))))
         return true
       }
 
       override fun commitText(text: String) {
         if (text == "\n") {
-          dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text("\n")))
+          dispatch(listOf(Message.Insertion(InsertionOp.Text("\n"))))
         } else {
-          dispatchAndScrollToCurrentCursorLine(Message.Composition(CompositionOp.Commit(text)))
+          dispatch(listOf(Message.Composition(CompositionOp.Commit(text))))
         }
       }
 
       override fun setComposingText(text: String) {
-        dispatchAndScrollToCurrentCursorLine(Message.Composition(CompositionOp.Update(text, null)))
+        dispatch(listOf(Message.Composition(CompositionOp.Update(text, null))))
       }
 
       override fun finishComposition() {
-        dispatchAndScrollToCurrentCursorLine(Message.Composition(CompositionOp.CommitAsIs))
+        dispatch(listOf(Message.Composition(CompositionOp.CommitAsIs)))
       }
 
       override fun pressKey(key: TextInputKey): Boolean {
@@ -187,7 +223,7 @@ internal class EditorInputNode(
             TextInputKey.Enter -> FfiKey.Enter
             TextInputKey.Backspace -> FfiKey.Backspace
           }
-        dispatchAndScrollToCurrentCursorLine(Message.Key(FfiKeyEvent(ffiKey)))
+        dispatch(listOf(Message.Key(FfiKeyEvent(ffiKey))))
         return true
       }
 
@@ -198,7 +234,12 @@ internal class EditorInputNode(
 
   override fun onKeyEvent(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
-    if (handleKeyDown(editor, platform, bindings, bringIntoViewRequests, coroutineScope, event)) {
+    val binding = bindings.find { matchesKeyBinding(it, platform, event) }
+    if (binding != null) {
+      if (platformInputBridge.shouldConsumeKeyEvent(event)) {
+        return true
+      }
+      dispatch(messages = binding.action(editor), bringIntoViewTarget = binding.bringIntoViewTarget)
       return true
     }
     if (!requiresRawKeyTextFallback(platform)) {
@@ -213,18 +254,32 @@ internal class EditorInputNode(
             (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
           )
           .concatToString()
-      dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text(text)))
+      dispatch(listOf(Message.Insertion(InsertionOp.Text(text))))
       return true
     }
 
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
-    dispatchAndScrollToCurrentCursorLine(Message.Insertion(InsertionOp.Text(ch.toString())))
+    dispatch(listOf(Message.Insertion(InsertionOp.Text(ch.toString()))))
     return true
   }
 
-  override fun onPreKeyEvent(event: KeyEvent) = false
+  override fun onPreKeyEvent(event: KeyEvent): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
+    return platformInputBridge.onPreKeyEvent(
+      event = event,
+      selection = editor.ime?.selection,
+      inputCoroutineScope = coroutineScope,
+      dispatch = {
+        dispatch(
+          messages = binding.action(editor),
+          bringIntoViewTarget = binding.bringIntoViewTarget,
+        )
+      },
+    )
+  }
 
   override fun onFocusEvent(focusState: FocusState) {
     focused = focusState.isFocused
@@ -235,27 +290,45 @@ internal class EditorInputNode(
     val sessionEnabled = focused && textInputSessionEnabled
     focusedJob?.cancel()
     focusedJob = null
+    platformInputBridge.reset()
     notifyTextInputFocusChanged(this, sessionEnabled)
     registerTextInputClient(this, if (sessionEnabled) textInputClient else null)
     focusedJob =
       if (sessionEnabled) {
         coroutineScope.launch {
-          establishTextInputSession {
-            val request =
-              createEditorInputRequest(
-                editor = editor,
-                bringIntoViewRequests = bringIntoViewRequests,
-                suppressSoftwareKeyboard = suppressSoftwareKeyboard,
-              )
-            launch {
-              notifyImeSelectionChanged(editor)
-              snapshotFlow { editor.selection to editor.cursor }
-                .distinctUntilChanged()
-                .drop(1) // initial emission already handled above
-                .collect { notifyImeSelectionChanged(editor) }
-            }
+          val uninstallPlatformSessionEffects =
+            platformInputBridge.installSessionEffects(
+              cursor = { editor.cursor },
+              viewportTransform = { uiState.resolveViewportTransform(editor.pageSizes) },
+              dispatch = { messages -> dispatch(messages) },
+            )
+          try {
+            establishTextInputSession {
+              val request =
+                createEditorInputRequest(
+                  editor = editor,
+                  bringIntoViewRequests = bringIntoViewRequests,
+                  onEditCommand = { commands ->
+                    dispatchSync(
+                      platformInputBridge.interceptImeMessages(
+                        EditorImeCommandNormalizer.normalize(commands = commands, ime = editor.ime)
+                      )
+                    )
+                  },
+                  suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+                )
+              launch {
+                notifyImeSelectionChanged(editor)
+                snapshotFlow { editor.selection to editor.cursor }
+                  .distinctUntilChanged()
+                  .drop(1) // initial emission already handled above
+                  .collect { notifyImeSelectionChanged(editor) }
+              }
 
-            startInputMethod(request)
+              startInputMethod(request)
+            }
+          } finally {
+            uninstallPlatformSessionEffects()
           }
         }
       } else {
@@ -265,6 +338,7 @@ internal class EditorInputNode(
 
   override fun onDetach() {
     focused = false
+    platformInputBridge.reset()
     notifyTextInputFocusChanged(this, false)
     registerTextInputClient(this, null)
     focusedJob?.cancel()

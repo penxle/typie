@@ -105,6 +105,7 @@ internal fun EditorView(
         .onFocusChanged { uiState.updateFocus(it.isFocused) }
         .editorInput(
           editor = editor,
+          uiState = uiState,
           platform = platform,
           bringIntoViewRequests = bringIntoViewRequests,
           textInputSessionEnabled = textInputSessionEnabled,

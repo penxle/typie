@@ -9,6 +9,7 @@ import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
+import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.Editor
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 
@@ -16,6 +17,7 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  onEditCommand: (List<EditCommand>) -> Unit,
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   val androidView = view
@@ -28,7 +30,12 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     val ctx = editor.ime(0, 0)
     outAttrs.initialSelStart = ctx.selection.start
     outAttrs.initialSelEnd = ctx.selection.end
-    val connection = EditorInputConnection(editor, androidView, bringIntoViewRequests)
+    val connection =
+      EditorInputConnection(
+        editor = editor,
+        view = androidView,
+        bringIntoViewRequests = bringIntoViewRequests,
+      )
     if (suppressSoftwareKeyboard) {
       androidView.post { hideEditorSoftwareKeyboard(androidView) }
     }

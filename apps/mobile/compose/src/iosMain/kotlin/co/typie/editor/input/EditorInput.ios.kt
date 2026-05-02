@@ -18,7 +18,6 @@ import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
-import co.typie.editor.InputEditCommandHandler
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.CoreGraphics.CGRectMake
@@ -27,6 +26,7 @@ import platform.UIKit.UIView
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  onEditCommand: (List<EditCommand>) -> Unit,
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
@@ -50,7 +50,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       )
 
     override val onEditCommand: (List<EditCommand>) -> Unit = { commands ->
-      InputEditCommandHandler.handle(editor, bringIntoViewRequests, commands)
+      onEditCommand(commands)
     }
 
     override val onImeAction: ((ImeAction) -> Unit)? = null
