@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ime
 import co.typie.ext.navigationBars
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.ui.component.Text
@@ -161,6 +162,7 @@ private fun AnimatedToast(
           this.alpha = alpha.value
           translationY = offset + slideOffset.value * 4.dp.toPx()
         }
+        .safeDrawingHorizontalPadding()
         .padding(horizontal = 16.dp)
         .fillMaxWidth()
         .clip(AppShapes.rounded(AppShapes.lg))

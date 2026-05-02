@@ -18,13 +18,11 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -40,7 +38,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import co.typie.ext.statusBars
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.toDp
 import co.typie.ext.toPx
 
@@ -81,7 +79,8 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
           this.alpha = alpha
           translationY = translateY * size.height
         }
-        .windowInsetsPadding(WindowInsets.statusBars)
+        .padding(top = TopBarDefaults.topPadding())
+        .safeDrawingHorizontalPadding()
         .then(
           if (onTap != null) Modifier.pointerInput(onTap) { detectTapGestures { onTap() } }
           else Modifier

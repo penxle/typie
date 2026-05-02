@@ -32,6 +32,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.toast.ToastAnchor
@@ -142,6 +143,7 @@ fun EntityContainerBottomOverlayStack(
     Column(
       modifier =
         Modifier.navigationBarsPadding()
+          .safeDrawingHorizontalPadding()
           .padding(
             start = EntityContainerBottomOverlayHorizontalPadding,
             end = EntityContainerBottomOverlayHorizontalPadding,

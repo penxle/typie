@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.ext.pointerIgnore
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.toPx
 
 @Composable
@@ -36,6 +37,7 @@ fun BottomBar(state: BottomBarState, modifier: Modifier = Modifier) {
   Box(
     modifier
       .fillMaxSize()
+      .safeDrawingHorizontalPadding()
       .graphicsLayer {
         this.alpha = alpha
         this.translationY = translationY

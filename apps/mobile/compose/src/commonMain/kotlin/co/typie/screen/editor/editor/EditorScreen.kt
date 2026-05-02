@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,6 +27,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.EditorState
@@ -191,7 +194,10 @@ fun EditorScreen(entityId: String) {
     val editorState = editor?.state ?: EditorState.Initial
     val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
+    val layoutDirection = LocalLayoutDirection.current
     val topInset = contentPadding.calculateTopPadding()
+    val startInset = contentPadding.calculateStartPadding(layoutDirection)
+    val endInset = contentPadding.calculateEndPadding(layoutDirection)
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val toolbarInputState = rememberEditorToolbarInputState()
@@ -501,7 +507,7 @@ fun EditorScreen(entityId: String) {
             modifier = Modifier,
           )
         },
-        modifier = Modifier,
+        modifier = Modifier.padding(start = startInset, end = endInset),
       )
     }
   }

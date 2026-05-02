@@ -30,8 +30,8 @@ import co.typie.domain.entity.formatFolderRowSummary
 import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.excludeBottom
 import co.typie.ext.imePadding
-import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.separated
 import co.typie.ext.truncate
@@ -66,12 +66,12 @@ fun SearchScreen() {
 
   ProvideTopBar()
 
-  Screen { contentPadding ->
+  Screen(contentPadding = PaddingValues.Zero) { contentPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
           .imePadding()
-          .padding(contentPadding.onlyTop())
+          .padding(contentPadding.excludeBottom())
           .padding(horizontal = 16.dp)
     ) {
       SearchInputField(

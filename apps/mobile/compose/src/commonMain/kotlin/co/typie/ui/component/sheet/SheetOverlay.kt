@@ -43,6 +43,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.ext.clickable
 import co.typie.ext.safeDrawing
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.thenIf
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppShapes
@@ -325,6 +326,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
               }
             }
           }
+          .safeDrawingHorizontalPadding()
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
     ) {
       CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {

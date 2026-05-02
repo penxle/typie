@@ -46,6 +46,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsOrImePadding
 import co.typie.ext.pressScale
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
 import co.typie.graphql.fragment.Img_image
@@ -455,6 +456,7 @@ private fun PaperPane(modifier: Modifier = Modifier, content: @Composable Column
       modifier
         .fillMaxSize()
         .background(AppTheme.colors.surfaceCanvas, shape)
+        .safeDrawingHorizontalPadding()
         .padding(horizontal = 16.dp, vertical = 24.dp),
     verticalArrangement = Arrangement.spacedBy(24.dp),
     content = content,

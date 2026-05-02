@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import co.typie.ext.navigationBarsOrImePadding
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ui.theme.AppTheme
 
 context(boxScope: BoxScope)
@@ -32,6 +33,10 @@ fun BottomFade(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) 
         .background(Brush.verticalGradient(colors = listOf(fadeColor.copy(alpha = 0f), fadeColor)))
     )
 
-    Column(modifier = modifier.fillMaxWidth().background(fadeColor)) { content() }
+    Column(Modifier.fillMaxWidth().background(fadeColor)) {
+      Column(modifier = Modifier.safeDrawingHorizontalPadding().then(modifier).fillMaxWidth()) {
+        content()
+      }
+    }
   }
 }

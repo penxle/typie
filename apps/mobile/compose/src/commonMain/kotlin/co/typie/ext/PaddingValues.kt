@@ -20,6 +20,16 @@ operator fun PaddingValues.plus(other: PaddingValues): PaddingValues {
 fun PaddingValues.onlyTop(): PaddingValues = PaddingValues(top = calculateTopPadding())
 
 @Composable
+fun PaddingValues.excludeBottom(): PaddingValues {
+  val layoutDirection = LocalLayoutDirection.current
+  return PaddingValues(
+    start = calculateStartPadding(layoutDirection),
+    top = calculateTopPadding(),
+    end = calculateEndPadding(layoutDirection),
+  )
+}
+
+@Composable
 fun PaddingValues.excludeTop(): PaddingValues {
   val layoutDirection = LocalLayoutDirection.current
   return PaddingValues(

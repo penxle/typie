@@ -56,3 +56,10 @@ fun Modifier.safeDrawingHorizontalPadding(): Modifier {
     )
   )
 }
+
+@Composable
+fun Modifier.safeDrawingStartPadding(): Modifier {
+  val direction = LocalLayoutDirection.current
+  val values = WindowInsets.safeDrawing.asPaddingValues()
+  return windowInsetsPadding(WindowInsets(left = values.calculateLeftPadding(direction)))
+}

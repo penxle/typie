@@ -53,6 +53,7 @@ import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pointerIgnore
 import co.typie.ext.pressScale
+import co.typie.ext.safeDrawingStartPadding
 import co.typie.ext.statusBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
@@ -479,6 +480,7 @@ fun MainDrawerOverlay(drawer: Drawer) {
           .background(AppTheme.colors.surfaceDefault, panelShape)
           .statusBarsPadding()
           .navigationBarsPadding()
+          .safeDrawingStartPadding()
     ) {
       MainDrawerContent()
     }

@@ -68,6 +68,7 @@ import co.typie.ext.comma
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
 import co.typie.ext.pressScale
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.separated
 import co.typie.ext.truncate
 import co.typie.ext.verticalScroll
@@ -179,6 +180,7 @@ fun HomeScreen() {
             modifier =
               Modifier.align(Alignment.BottomCenter)
                 .navigationBarsPadding()
+                .safeDrawingHorizontalPadding()
                 .padding(bottom = BottomBarDefaults.BarAreaHeight + ContinueWritingPinGap)
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

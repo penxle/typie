@@ -32,8 +32,7 @@ import co.typie.contract.LoadableState
 import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
-import co.typie.ext.statusBars
-import co.typie.ext.statusBarsPadding
+import co.typie.ext.safeDrawingHorizontal
 import co.typie.navigation.Nav
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
@@ -70,17 +69,18 @@ fun Screen(
   val dialog = LocalDialog.current
   val focusManager = LocalFocusManager.current
 
+  val topBarPadding = TopBarDefaults.topPaddingValues()
+  val horizontalSafePadding = WindowInsets.safeDrawingHorizontal.asPaddingValues()
+  val navigationBarPadding =
+    PaddingValues(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
   val contentPadding =
     if (hasTopBar) {
       PaddingValues(
         top =
           TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing
-      ) +
-        contentPadding +
-        WindowInsets.statusBars.asPaddingValues() +
-        WindowInsets.navigationBars.asPaddingValues()
+      ) + contentPadding + topBarPadding + horizontalSafePadding + navigationBarPadding
     } else {
-      contentPadding + WindowInsets.navigationBars.asPaddingValues()
+      contentPadding + horizontalSafePadding + navigationBarPadding
     }
   val shouldRefetchOnMount =
     remember(loadable) { loadable != null && loadable.state !is LoadableState.Loading }
@@ -135,7 +135,7 @@ fun Screen(
             progressive = TopBarDefaults.hazeProgressive()
           }
       ) {
-        Spacer(Modifier.fillMaxWidth().statusBarsPadding().height(TopBarDefaults.Height))
+        Spacer(Modifier.fillMaxWidth().height(TopBarDefaults.topPadding() + TopBarDefaults.Height))
         Spacer(Modifier.height(TopBarDefaults.BlurFadeHeight))
       }
 
@@ -144,8 +144,7 @@ fun Screen(
         Spacer(
           Modifier.fillMaxWidth()
             .background(fadeColor)
-            .statusBarsPadding()
-            .height(topBarSolidHeight)
+            .height(TopBarDefaults.topPadding() + topBarSolidHeight)
         )
         Spacer(
           Modifier.fillMaxWidth()
