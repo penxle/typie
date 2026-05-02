@@ -634,6 +634,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "editor-crdt"
+version = "0.0.1"
+dependencies = [
+ "imbl",
+ "proptest",
+ "serde",
+]
+
+[[package]]
 name = "editor-ffi"
 version = "0.0.1"
 dependencies = [

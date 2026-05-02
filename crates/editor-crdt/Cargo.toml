@@ -1,0 +1,11 @@
+[package]
+name = "editor-crdt"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+imbl = { workspace = true, features = ["serde"] }
+serde.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }
