@@ -123,14 +123,18 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun await_propagates_tick_exception() =
+  fun await_reports_tick_exception_without_committing() =
     runTest(dispatcher) {
       val boom = RuntimeException("boom")
       val fake = FakeFfiEditor(onTick = { throw boom })
-      val editor = Editor(fake, this, dispatcher)
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
 
-      val thrown = assertFailsWith<RuntimeException> { editor.await { enqueue(sampleMessage) } }
-      assertEquals(boom.message, thrown.message)
+      editor.await { enqueue(sampleMessage) }
+
+      assertEquals(1, reported.size)
+      assertTrue(reported.single() is RuntimeException)
+      assertEquals(boom.message, reported.single().message)
       assertEquals(EditorState.Initial, editor.state)
     }
 
@@ -155,13 +159,18 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun sync_propagates_tick_exception() =
+  fun sync_reports_tick_exception_without_committing() =
     runTest(dispatcher) {
       val boom = IllegalStateException("boom")
       val fake = FakeFfiEditor(onTick = { throw boom })
-      val editor = Editor(fake, this, dispatcher)
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
 
-      assertFailsWith<IllegalStateException> { editor.sync { enqueue(sampleMessage) } }
+      editor.sync { enqueue(sampleMessage) }
+
+      assertEquals(1, reported.size)
+      assertTrue(reported.single() is IllegalStateException)
+      assertEquals(boom.message, reported.single().message)
       assertEquals(EditorState.Initial, editor.state)
     }
 
@@ -449,25 +458,33 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun sync_after_dispose_throws_illegal_state() =
+  fun sync_after_dispose_reports_illegal_state() =
     runTest(dispatcher) {
-      val editor = Editor(FakeFfiEditor(), this, dispatcher)
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(FakeFfiEditor(), this, dispatcher, onError = { _, error -> reported += error })
       editor.dispose()
-      assertFailsWith<IllegalStateException> { editor.sync { enqueue(sampleMessage) } }
+
+      editor.sync { enqueue(sampleMessage) }
+
+      assertEquals(listOf("Editor disposed"), reported.map { it.message })
     }
 
   @Test
-  fun reentrant_sync_throws_illegal_state() =
+  fun reentrant_sync_reports_illegal_state() =
     runTest(dispatcher) {
       val fake = FakeFfiEditor()
-      val editor = Editor(fake, this, dispatcher)
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
 
-      assertFailsWith<IllegalStateException> {
-        editor.sync {
-          enqueue(sampleMessage)
-          editor.sync { enqueue(sampleMessage) }
-        }
+      editor.sync {
+        enqueue(sampleMessage)
+        editor.sync { enqueue(sampleMessage) }
       }
+
+      assertEquals(listOf("nested sync is not supported"), reported.map { it.message })
+      assertEquals(listOf(sampleMessage), fake.enqueued)
+      assertEquals(1, fake.tickCount)
     }
 
   @Test

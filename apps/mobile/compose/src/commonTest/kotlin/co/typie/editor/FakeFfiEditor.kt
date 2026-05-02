@@ -4,9 +4,12 @@ import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.InspectStateOptions
+import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ModifierState
+import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.RootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
@@ -15,14 +18,14 @@ import co.typie.editor.ffi.Tri
 internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
   var cursorProvider: () -> CursorMetrics? = { null },
-  var selectionProvider: () -> Selection? = { null },
-  var rootAttrsProvider: () -> RootNode? = { null },
+  var selectionProvider: () -> Selection = { EmptySelection },
+  var rootAttrsProvider: () -> RootNode = { EmptyRootAttrs },
   var modifierStateProvider: () -> ModifierState = { EmptyModifierState },
   var blockStateProvider: () -> BlockState = {
     BlockState(ancestors = emptyList(), nodes = emptyList())
   },
   var pageSizesProvider: () -> List<Size> = { emptyList() },
-  var imeProvider: (Int, Int) -> Ime? = { _, _ -> null },
+  var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
 ) : co.typie.editor.ffi.Editor {
   val enqueued = mutableListOf<Message>()
   var tickCount: Int = 0
@@ -41,11 +44,9 @@ internal class FakeFfiEditor(
 
   override fun cursor(): CursorMetrics? = cursorProvider()
 
-  override fun selection(): Selection =
-    selectionProvider() ?: error("selection not set in FakeFfiEditor")
+  override fun selection(): Selection = selectionProvider()
 
-  override fun rootAttrs(): RootNode =
-    rootAttrsProvider() ?: error("rootAttrs not set in FakeFfiEditor")
+  override fun rootAttrs(): RootNode = rootAttrsProvider()
 
   override fun modifierState(): ModifierState = modifierStateProvider()
 
@@ -53,8 +54,7 @@ internal class FakeFfiEditor(
 
   override fun pageSizes(): List<Size> = pageSizesProvider()
 
-  override fun ime(beforeLimit: Int, afterLimit: Int): Ime =
-    imeProvider(beforeLimit, afterLimit) ?: error("ime not set in FakeFfiEditor")
+  override fun ime(beforeLimit: Int, afterLimit: Int): Ime = imeProvider(beforeLimit, afterLimit)
 
   override fun attachSurface(
     page: Int,
@@ -82,6 +82,10 @@ internal class FakeFfiEditor(
   override fun inspectStateAsMacro(): String = ""
 
   private companion object {
+    val EmptyPosition = Position(nodeId = "", offset = 0)
+    val EmptySelection = Selection(anchor = EmptyPosition, head = EmptyPosition)
+    val EmptyRootAttrs = RootNode(layoutMode = LayoutMode.Continuous(maxWidth = 0f))
+    val EmptyIme = Ime(text = "", windowStart = 0, selection = ImeRange(0, 0), composing = null)
     val EmptyModifierState =
       ModifierState(
         bold = Tri.Absent,
