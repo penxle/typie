@@ -108,18 +108,22 @@ private constructor(
               val error =
                 response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
               if (error != null) {
-                Logger.e(error) { "GraphQL error (${query.name()})" }
-                Sentry.captureException(error)
                 state = QueryState.Error(error)
+                runCatching {
+                  Logger.e {
+                    "GraphQL error (${query.name()}): ${error.message ?: "unknown error"}"
+                  }
+                }
+                runCatching { Sentry.captureException(error) }
               }
             }
           }
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
-        Logger.e(e) { "GraphQL error" }
-        Sentry.captureException(e)
         state = QueryState.Error(e)
+        runCatching { Logger.e { "GraphQL error: ${e.message ?: "unknown error"}" } }
+        runCatching { Sentry.captureException(e) }
       }
     }
   }
