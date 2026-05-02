@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -103,6 +104,7 @@ internal fun EditorBody(
                 Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
                   uiState.updateEditorBounds(
                     boundsInRoot = coordinates.unclippedBoundsInRoot(),
+                    clippedBoundsInRoot = coordinates.boundsInRoot(),
                     density = density.density,
                   )
                 }

@@ -5,6 +5,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.KeyInputModifierNode
@@ -62,6 +63,9 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   onEditCommand: (List<EditCommand>) -> Unit,
+  focusedRectInRoot: () -> Rect?,
+  textFieldRectInRoot: () -> Rect?,
+  textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest
 
@@ -81,6 +85,21 @@ internal fun shouldRestartEditorInputSession(
 
 internal fun requiresRawKeyTextFallback(platform: Platform): Boolean =
   platform == Platform.Android || platform == Platform.Desktop
+
+internal fun fixedLocalCaretTextFieldRectInRoot(
+  focusedRectInRoot: Rect?,
+  textClippingRectInRoot: Rect?,
+  fallbackRectInRoot: Rect?,
+): Rect? {
+  val focused = focusedRectInRoot ?: return fallbackRectInRoot
+  val rightBoundary = textClippingRectInRoot?.right ?: fallbackRectInRoot?.right ?: focused.right
+  return Rect(
+    left = focused.left,
+    top = focused.top,
+    right = maxOf(focused.right, focused.left + 1f, rightBoundary),
+    bottom = maxOf(focused.bottom, focused.top + 1f),
+  )
+}
 
 private data class EditorInputElement(
   private val editor: Editor,
@@ -315,6 +334,9 @@ internal class EditorInputNode(
                       )
                     )
                   },
+                  focusedRectInRoot = { uiState.cursorRectInRoot(editor.cursor) },
+                  textFieldRectInRoot = uiState::editorRectInRoot,
+                  textClippingRectInRoot = uiState::textClippingRectInRoot,
                   suppressSoftwareKeyboard = suppressSoftwareKeyboard,
                 )
               launch {

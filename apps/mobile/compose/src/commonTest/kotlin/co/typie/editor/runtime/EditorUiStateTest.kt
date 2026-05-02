@@ -2,6 +2,8 @@ package co.typie.editor.runtime
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.Size
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -75,12 +77,18 @@ class EditorUiStateTest {
     val state = EditorUiState()
 
     state.updateExtensionAreaBounds(boundsInRoot = Rect(0f, 120f, 400f, 920f), density = 2f)
-    state.updateEditorBounds(boundsInRoot = Rect(40f, 200f, 360f, 680f), density = 2f)
+    state.updateEditorBounds(
+      boundsInRoot = Rect(40f, 200f, 360f, 680f),
+      clippedBoundsInRoot = Rect(40f, 240f, 360f, 640f),
+      density = 2f,
+    )
 
     assertEquals(20f, state.editorBoundsInContainer.x)
     assertEquals(40f, state.editorBoundsInContainer.y)
     assertEquals(160f, state.editorBoundsInContainer.width)
     assertEquals(240f, state.editorBoundsInContainer.height)
+    assertEquals(Rect(40f, 200f, 360f, 680f), state.editorRectInRoot())
+    assertEquals(Rect(40f, 240f, 360f, 640f), state.textClippingRectInRoot())
   }
 
   @Test
@@ -95,5 +103,44 @@ class EditorUiStateTest {
     assertNotNull(point)
     assertEquals(60f, point.x)
     assertEquals(60f, point.y)
+  }
+
+  @Test
+  fun `ui state maps cursor page coordinates into root coordinates`() {
+    val state = EditorUiState()
+    state.updateDisplayZoom(1.5f)
+    state.updatePagePositionInRoot(page = 2, positionInRoot = Offset(200f, 300f), density = 2f)
+
+    val rect =
+      state.cursorRectInRoot(
+        CursorMetrics(
+          pageIdx = 2,
+          caret = FfiRect(x = 10f, y = 20f, width = 1f, height = 18f),
+          line = FfiRect(x = 0f, y = 18f, width = 100f, height = 20f),
+        )
+      )
+
+    assertNotNull(rect)
+    assertEquals(230f, rect.left)
+    assertEquals(360f, rect.top)
+    assertEquals(233f, rect.right)
+    assertEquals(414f, rect.bottom)
+  }
+
+  @Test
+  fun `ui state returns null root geometry before layout is known`() {
+    val state = EditorUiState()
+
+    assertNull(state.editorRectInRoot())
+    assertNull(state.textClippingRectInRoot())
+    assertNull(
+      state.cursorRectInRoot(
+        CursorMetrics(
+          pageIdx = 0,
+          caret = FfiRect(x = 0f, y = 0f, width = 1f, height = 18f),
+          line = FfiRect(x = 0f, y = 0f, width = 100f, height = 20f),
+        )
+      )
+    )
   }
 }

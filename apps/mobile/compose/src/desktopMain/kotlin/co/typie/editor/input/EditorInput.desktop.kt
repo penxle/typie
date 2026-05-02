@@ -29,6 +29,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   onEditCommand: (List<EditCommand>) -> Unit,
+  focusedRectInRoot: () -> Rect?,
+  textFieldRectInRoot: () -> Rect?,
+  textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
@@ -51,19 +54,13 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val onImeAction: ((ImeAction) -> Unit)? = null
 
-    // Returning Rect.Zero until page→root coordinate translation is wired here.
-    // editor.cursor is a CursorMetrics whose `caret` is page-local; CMP requires
-    // editor-root coordinates so the desktop IME (macOS NSTextInputClient /
-    // Windows IMM / X11 XIM) can position candidate windows under the cursor.
-    // pageOffsets live in EditorView.kt and are not reachable from this session scope
-    // today — Rect.Zero makes the platform fall back to a default anchor.
-    override val focusedRectInRoot: () -> Rect? = { Rect.Zero }
+    override val focusedRectInRoot: () -> Rect? = focusedRectInRoot
 
     override val textLayoutResult: () -> TextLayoutResult? = { null }
 
-    override val textFieldRectInRoot: () -> Rect? = { null }
+    override val textFieldRectInRoot: () -> Rect? = textFieldRectInRoot
 
-    override val textClippingRectInRoot: () -> Rect? = { null }
+    override val textClippingRectInRoot: () -> Rect? = textClippingRectInRoot
 
     override val state: TextEditorState =
       object : TextEditorState {

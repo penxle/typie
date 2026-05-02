@@ -1,5 +1,6 @@
 package co.typie.editor.input
 
+import androidx.compose.ui.geometry.Rect
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.Message
@@ -8,6 +9,7 @@ import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SelectionOp
 import co.typie.platform.Platform
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -21,6 +23,32 @@ class EditorInputKeyHandlingTest {
   fun `non iOS platforms keep raw key text fallback`() {
     assertTrue(requiresRawKeyTextFallback(platform = Platform.Android))
     assertTrue(requiresRawKeyTextFallback(platform = Platform.Desktop))
+  }
+
+  @Test
+  fun `fixed local caret text field rect keeps caret origin and expands to clipping edge`() {
+    assertEquals(
+      Rect(left = 100f, top = 200f, right = 360f, bottom = 218f),
+      fixedLocalCaretTextFieldRectInRoot(
+        focusedRectInRoot = Rect(left = 100f, top = 200f, right = 101f, bottom = 218f),
+        textClippingRectInRoot = Rect(left = 40f, top = 120f, right = 360f, bottom = 700f),
+        fallbackRectInRoot = Rect(left = 20f, top = 80f, right = 380f, bottom = 720f),
+      ),
+    )
+  }
+
+  @Test
+  fun `fixed local caret text field rect falls back when cursor is unknown`() {
+    val fallback = Rect(left = 20f, top = 80f, right = 380f, bottom = 720f)
+
+    assertEquals(
+      fallback,
+      fixedLocalCaretTextFieldRectInRoot(
+        focusedRectInRoot = null,
+        textClippingRectInRoot = Rect(left = 40f, top = 120f, right = 360f, bottom = 700f),
+        fallbackRectInRoot = fallback,
+      ),
+    )
   }
 
   @Test

@@ -4,6 +4,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.node.GlobalPositionAwareModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
 import co.typie.editor.runtime.EditorUiState
@@ -42,6 +43,11 @@ private class EditorPagePositionTrackerNode(
 
     val pos = coordinates.positionInParent()
     uiState.updatePageOffset(page = page, offset = Offset(pos.x / density, pos.y / density))
+    uiState.updatePagePositionInRoot(
+      page = page,
+      positionInRoot = coordinates.positionInRoot(),
+      density = density,
+    )
   }
 
   override fun onDetach() {

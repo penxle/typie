@@ -27,6 +27,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   onEditCommand: (List<EditCommand>) -> Unit,
+  focusedRectInRoot: () -> Rect?,
+  textFieldRectInRoot: () -> Rect?,
+  textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
@@ -55,14 +58,24 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val onImeAction: ((ImeAction) -> Unit)? = null
 
-    override val focusedRectInRoot: () -> Rect? = { null }
+    override val focusedRectInRoot: () -> Rect? = focusedRectInRoot
 
     override val textLayoutResult: () -> TextLayoutResult? = { null }
 
-    // 커서 좌표 연동할 때 요거 써야 함 (snapshot flow로 reactive하게 추적됨)
-    override val textFieldRectInRoot: () -> Rect? = { null }
+    // Workaround for Compose iOS 1.10.3: startInputMethod only uses textFieldRectInRoot
+    // to position the hidden UIKit text input view, while IntermediateTextInputUIView
+    // returns a fixed local caretRectForPosition(1, 1, 1, 1). Keep the hidden view's
+    // origin at the caret, but expand the frame to the visible line edge so Japanese IME
+    // candidates anchor near the insertion point without treating the text field as 1x1.
+    override val textFieldRectInRoot: () -> Rect? = {
+      fixedLocalCaretTextFieldRectInRoot(
+        focusedRectInRoot = focusedRectInRoot(),
+        textClippingRectInRoot = textClippingRectInRoot(),
+        fallbackRectInRoot = textFieldRectInRoot(),
+      )
+    }
 
-    override val textClippingRectInRoot: () -> Rect? = { null }
+    override val textClippingRectInRoot: () -> Rect? = textClippingRectInRoot
 
     override val state: TextEditorState =
       object : TextEditorState {

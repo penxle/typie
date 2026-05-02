@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import co.typie.editor.EditorViewportTransform
+import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Size
 
 @Stable
@@ -23,8 +24,11 @@ class EditorUiState {
     private set
 
   private val pageOffsets = mutableStateMapOf<Int, Offset>()
+  // Root-space page positions are for IME geometry; pageOffsets remain editor-local.
+  private val pagePositionsInRoot = mutableStateMapOf<Int, PagePositionInRoot>()
   private var extensionAreaBoundsInRoot: Rect = Rect.Zero
   private var editorBoundsInRoot: Rect = Rect.Zero
+  private var editorClippedBoundsInRoot: Rect = Rect.Zero
 
   fun updateFocus(focused: Boolean) {
     this.focused = focused
@@ -34,8 +38,10 @@ class EditorUiState {
     focused = false
     displayZoom = 1f
     pageOffsets.clear()
+    pagePositionsInRoot.clear()
     extensionAreaBoundsInRoot = Rect.Zero
     editorBoundsInRoot = Rect.Zero
+    editorClippedBoundsInRoot = Rect.Zero
     editorBoundsInContainer = EditorBoundsInContainer()
   }
 
@@ -69,6 +75,39 @@ class EditorUiState {
       displayZoom = displayZoom,
     )
 
+  fun editorRectInRoot(): Rect? = editorBoundsInRoot.takeIf { it.isUsable }
+
+  fun textClippingRectInRoot(): Rect? = editorClippedBoundsInRoot.takeIf { it.isUsable }
+
+  fun cursorRectInRoot(cursor: CursorMetrics?): Rect? {
+    cursor ?: return null
+    val pagePositionInRoot = pagePositionsInRoot[cursor.pageIdx] ?: return null
+    if (pagePositionInRoot.density <= 0f) {
+      return null
+    }
+    val caret = cursor.caret
+    if (
+      !caret.x.isFinite() ||
+        !caret.y.isFinite() ||
+        !caret.width.isFinite() ||
+        !caret.height.isFinite() ||
+        caret.width < 0f ||
+        caret.height <= 0f
+    ) {
+      return null
+    }
+
+    val scale = displayZoom * pagePositionInRoot.density
+    val left = pagePositionInRoot.position.x + caret.x * scale
+    val top = pagePositionInRoot.position.y + caret.y * scale
+    return Rect(
+      left = left,
+      top = top,
+      right = left + caret.width * scale,
+      bottom = top + caret.height * scale,
+    )
+  }
+
   internal fun updatePageOffset(page: Int, offset: Offset) {
     if (pageOffsets[page] == offset) {
       return
@@ -77,8 +116,18 @@ class EditorUiState {
     pageOffsets[page] = offset
   }
 
+  internal fun updatePagePositionInRoot(page: Int, positionInRoot: Offset, density: Float) {
+    val position = PagePositionInRoot(position = positionInRoot, density = density)
+    if (pagePositionsInRoot[page] == position) {
+      return
+    }
+
+    pagePositionsInRoot[page] = position
+  }
+
   internal fun clearPageOffset(page: Int) {
     pageOffsets.remove(page)
+    pagePositionsInRoot.remove(page)
   }
 
   fun updateExtensionAreaBounds(boundsInRoot: Rect, density: Float) {
@@ -86,8 +135,13 @@ class EditorUiState {
     syncEditorBoundsInContainer(density)
   }
 
-  fun updateEditorBounds(boundsInRoot: Rect, density: Float) {
+  fun updateEditorBounds(
+    boundsInRoot: Rect,
+    clippedBoundsInRoot: Rect = boundsInRoot,
+    density: Float,
+  ) {
     editorBoundsInRoot = boundsInRoot
+    editorClippedBoundsInRoot = clippedBoundsInRoot
     syncEditorBoundsInContainer(density)
   }
 
@@ -112,6 +166,17 @@ class EditorUiState {
       )
   }
 }
+
+private data class PagePositionInRoot(val position: Offset, val density: Float)
+
+private val Rect.isUsable: Boolean
+  get() =
+    width > 0f &&
+      height > 0f &&
+      left.isFinite() &&
+      top.isFinite() &&
+      right.isFinite() &&
+      bottom.isFinite()
 
 data class EditorBoundsInContainer(
   val x: Float = 0f,
