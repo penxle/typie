@@ -3,10 +3,10 @@ use std::hash::Hash;
 
 use crate::{CrdtError, Dot};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrSetOp<T> {
-    Add { id: Dot, elem: T },
+    Add { elem: T },
     Remove { target: Dot },
 }
 
@@ -73,9 +73,9 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
     /// layer must guarantee. Wire integrations should reject malformed ops before
     /// reaching this API; this `Err` is a defense-in-depth signal that wire validation
     /// failed.
-    pub fn apply(&self, op: OrSetOp<T>) -> Result<Self, CrdtError> {
+    pub fn apply(&self, id: Dot, op: OrSetOp<T>) -> Result<Self, CrdtError> {
         match op {
-            OrSetOp::Add { id, elem } => self.apply_add(id, elem),
+            OrSetOp::Add { elem } => self.apply_add(id, elem),
             OrSetOp::Remove { target } => Ok(self.apply_remove(target)),
         }
     }
@@ -86,7 +86,7 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
             // is a bug in the op generation layer (actor id collision, clock reuse,
             // etc.). Silent first-wins would diverge replicas.
             if existing.elem != elem {
-                return Err(CrdtError::DotPayloadConflict { dot: id });
+                return Err(CrdtError::DotConflict { dot: id });
             }
             return Ok(self.clone());
         }
@@ -141,10 +141,7 @@ mod tests {
     #[test]
     fn add_single_element() {
         let s = OrSet::new()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap();
         assert_eq!(s.len(), 1);
         assert!(s.contains(&42));
@@ -153,16 +150,14 @@ mod tests {
 
     #[test]
     fn add_same_dot_same_elem_idempotent() {
-        let op = OrSetOp::Add {
-            id: Dot::new(1, 0),
-            elem: 42u32,
-        };
+        let id = Dot::new(1, 0);
+        let op = OrSetOp::Add { elem: 42u32 };
         let s = OrSet::new()
-            .apply(op.clone())
+            .apply(id, op.clone())
             .unwrap()
-            .apply(op.clone())
+            .apply(id, op.clone())
             .unwrap()
-            .apply(op)
+            .apply(id, op)
             .unwrap();
         assert_eq!(s.len(), 1);
         assert!(s.contains(&42));
@@ -171,15 +166,9 @@ mod tests {
     #[test]
     fn iter_dedups_by_elem() {
         let s = OrSet::new()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap()
-            .apply(OrSetOp::Add {
-                id: Dot::new(2, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(2, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap();
         assert_eq!(s.len(), 1);
         assert_eq!(s.iter().count(), 1);
@@ -189,18 +178,12 @@ mod tests {
     #[test]
     fn duplicate_dot_different_elem_returns_err() {
         let s = OrSet::new()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap();
-        let result = s.apply(OrSetOp::Add {
-            id: Dot::new(1, 0),
-            elem: 99u32,
-        });
+        let result = s.apply(Dot::new(1, 0), OrSetOp::Add { elem: 99u32 });
         assert_eq!(
             result,
-            Err(CrdtError::DotPayloadConflict {
+            Err(CrdtError::DotConflict {
                 dot: Dot::new(1, 0)
             })
         );
@@ -209,14 +192,14 @@ mod tests {
     #[test]
     fn add_then_remove_yields_empty() {
         let s = OrSet::new()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         assert_eq!(s.len(), 0);
         assert!(s.is_empty());
@@ -226,18 +209,21 @@ mod tests {
     #[test]
     fn remove_existing_dead_idempotent() {
         let s = OrSet::new()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 1),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         assert_eq!(s.len(), 0);
         assert!(!s.contains(&42));
@@ -246,14 +232,14 @@ mod tests {
     #[test]
     fn remove_unseen_then_add_arrives_dead() {
         let s = OrSet::new()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap();
         assert_eq!(s.len(), 0);
         assert!(!s.contains(&42));
@@ -264,26 +250,26 @@ mod tests {
         // Applying Remove twice on an unseen Dot must register the tombstone exactly
         // once so that the late-arriving Add sees the same dead state either way.
         let s1 = OrSet::new()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         let s2 = s1
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 1),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         let after_add_1 = s1
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap();
         let after_add_2 = s2
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap();
         assert_eq!(after_add_1, after_add_2);
         assert!(after_add_1.is_empty());
@@ -292,19 +278,16 @@ mod tests {
     #[test]
     fn remove_unseen_other_ops_then_target_arrives() {
         let s = OrSet::new()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(2, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                OrSetOp::Remove {
+                    target: Dot::new(2, 0),
+                },
+            )
             .unwrap()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 1u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 1u32 })
             .unwrap()
-            .apply(OrSetOp::Add {
-                id: Dot::new(2, 0),
-                elem: 2u32,
-            })
+            .apply(Dot::new(2, 0), OrSetOp::Add { elem: 2u32 })
             .unwrap();
         assert!(s.contains(&1));
         assert!(!s.contains(&2));
@@ -313,19 +296,22 @@ mod tests {
 
     #[test]
     fn permutation_add_remove_vs_remove_add_converges() {
-        let op_a = OrSetOp::Add {
-            id: Dot::new(1, 0),
-            elem: 42u32,
-        };
+        let id_a = Dot::new(1, 0);
+        let id_r = Dot::new(u64::MAX, 0);
+        let op_a = OrSetOp::Add { elem: 42u32 };
         let op_r = OrSetOp::Remove {
             target: Dot::new(1, 0),
         };
         let s1 = OrSet::new()
-            .apply(op_a.clone())
+            .apply(id_a, op_a.clone())
             .unwrap()
-            .apply(op_r.clone())
+            .apply(id_r, op_r.clone())
             .unwrap();
-        let s2 = OrSet::new().apply(op_r).unwrap().apply(op_a).unwrap();
+        let s2 = OrSet::new()
+            .apply(id_r, op_r)
+            .unwrap()
+            .apply(id_a, op_a)
+            .unwrap();
         assert_eq!(s1, s2);
         assert!(s1.is_empty());
     }
@@ -333,19 +319,16 @@ mod tests {
     #[test]
     fn remove_one_tag_keeps_element_add_wins() {
         let s = OrSet::new()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap()
-            .apply(OrSetOp::Add {
-                id: Dot::new(2, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(2, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         assert_eq!(s.len(), 1);
         assert!(s.contains(&42));
@@ -354,24 +337,18 @@ mod tests {
     #[test]
     fn tags_for_returns_alive_dots_only() {
         let s = OrSet::new()
-            .apply(OrSetOp::Add {
-                id: Dot::new(1, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap()
-            .apply(OrSetOp::Add {
-                id: Dot::new(2, 0),
-                elem: 42u32,
-            })
+            .apply(Dot::new(2, 0), OrSetOp::Add { elem: 42u32 })
             .unwrap()
-            .apply(OrSetOp::Add {
-                id: Dot::new(3, 0),
-                elem: 99u32,
-            })
+            .apply(Dot::new(3, 0), OrSetOp::Add { elem: 99u32 })
             .unwrap()
-            .apply(OrSetOp::Remove {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                OrSetOp::Remove {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
 
         let tags_42: std::collections::HashSet<Dot> = s.tags_for(&42).copied().collect();
@@ -402,7 +379,7 @@ mod proptests {
         max_ops: usize,
         num_actors: u64,
         elem_domain: u32,
-    ) -> impl Strategy<Value = Vec<OrSetOp<u32>>> {
+    ) -> impl Strategy<Value = Vec<(Dot, OrSetOp<u32>)>> {
         let domain = elem_domain.max(1);
         proptest::collection::vec(
             (0u64..num_actors, any::<bool>(), any::<u8>(), 0u32..domain),
@@ -411,10 +388,11 @@ mod proptests {
         .prop_map(build_ops)
     }
 
-    fn build_ops(raw: Vec<(u64, bool, u8, u32)>) -> Vec<OrSetOp<u32>> {
+    fn build_ops(raw: Vec<(u64, bool, u8, u32)>) -> Vec<(Dot, OrSetOp<u32>)> {
         let mut clocks: HashMap<u64, u64> = HashMap::new();
         let mut existing: Vec<Dot> = Vec::new();
-        let mut ops: Vec<OrSetOp<u32>> = Vec::new();
+        let mut ops: Vec<(Dot, OrSetOp<u32>)> = Vec::new();
+        let mut remove_counter: u64 = 0;
 
         // No drop path: when want_remove=true but existing is empty the loop falls
         // through to the Add branch. Every raw entry produces exactly one op, keeping
@@ -423,22 +401,24 @@ mod proptests {
             let do_remove = want_remove && !existing.is_empty();
             if do_remove {
                 let target = existing[(target_byte as usize) % existing.len()];
-                ops.push(OrSetOp::Remove { target });
+                let id = Dot::new(u64::MAX, remove_counter);
+                remove_counter += 1;
+                ops.push((id, OrSetOp::Remove { target }));
                 continue;
             }
             let clock = clocks.entry(actor).or_insert(0);
             let id = Dot::new(actor, *clock);
             *clock += 1;
-            ops.push(OrSetOp::Add { id, elem });
+            ops.push((id, OrSetOp::Add { elem }));
             existing.push(id);
         }
         ops
     }
 
-    pub(super) fn apply_all(ops: &[OrSetOp<u32>]) -> OrSet<u32> {
+    pub(super) fn apply_all(ops: &[(Dot, OrSetOp<u32>)]) -> OrSet<u32> {
         ops.iter()
             .cloned()
-            .fold(OrSet::new(), |s, op| s.apply(op).unwrap())
+            .fold(OrSet::new(), |s, (id, op)| s.apply(id, op).unwrap())
     }
 
     #[test]
@@ -478,9 +458,9 @@ mod proptests {
             seed in any::<u64>(),
         ) {
             let single = apply_all(&ops);
-            let doubled: Vec<OrSetOp<u32>> = ops
+            let doubled: Vec<(Dot, OrSetOp<u32>)> = ops
                 .iter()
-                .flat_map(|op| [op.clone(), op.clone()])
+                .flat_map(|p| [p.clone(), p.clone()])
                 .collect();
             let permuted_doubled = permute(&doubled, seed);
             let s2 = apply_all(&permuted_doubled);
@@ -501,22 +481,24 @@ mod proptests {
             elem_domain in 2u32..=4,
             seed in any::<u64>(),
         ) {
-            let mut ops: Vec<OrSetOp<u32>> = Vec::new();
+            let mut ops: Vec<(Dot, OrSetOp<u32>)> = Vec::new();
             let mut existing: Vec<Dot> = Vec::new();
+            let mut remove_counter: u64 = 0;
 
             for actor in 1..=num_actors {
                 for i in 0..ops_per_actor {
                     let id = Dot::new(actor, i as u64);
                     if i % 2 == 0 || existing.is_empty() {
                         let elem = (i as u32) % elem_domain;
-                        ops.push(OrSetOp::Add { id, elem });
+                        ops.push((id, OrSetOp::Add { elem }));
                         existing.push(id);
                     } else {
                         // Cross-actor target: (i + actor) % len selects a different
                         // index per actor, so Remove occasionally kills another actor's
                         // token and exercises add-wins under selective remove.
                         let target = existing[(i + actor as usize) % existing.len()];
-                        ops.push(OrSetOp::Remove { target });
+                        ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { target }));
+                        remove_counter += 1;
                     }
                 }
             }
@@ -548,25 +530,28 @@ mod proptests {
             seed in any::<u64>(),
         ) {
             let num_dots = (elem_domain as usize) * 2 + extra_dots;
-            let mut ops: Vec<OrSetOp<u32>> = Vec::new();
+            let mut ops: Vec<(Dot, OrSetOp<u32>)> = Vec::new();
             let mut existing: Vec<Dot> = Vec::new();
+            let mut remove_counter: u64 = 0;
 
             // (3) Force pending tombstone: target the last Dot before it is added.
             let pending_target = Dot::new(0, (num_dots as u64) - 1);
-            ops.push(OrSetOp::Remove { target: pending_target });
+            ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { target: pending_target }));
+            remove_counter += 1;
 
             // (1) Single actor, clock advancing, elem assigned round-robin.
             for i in 0..num_dots as u64 {
                 let id = Dot::new(0, i);
                 let elem = (i as u32) % elem_domain;
-                ops.push(OrSetOp::Add { id, elem });
+                ops.push((id, OrSetOp::Add { elem }));
                 existing.push(id);
             }
 
             // (2) Remove sequence — duplicates allowed.
             for &idx in &remove_indices {
                 let target = existing[idx % existing.len()];
-                ops.push(OrSetOp::Remove { target });
+                ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { target }));
+                remove_counter += 1;
             }
 
             let s1 = apply_all(&ops);
@@ -588,8 +573,8 @@ mod proptests {
         ) {
             let permuted = permute(&ops, seed);
             let mut state: OrSet<u32> = OrSet::new();
-            for op in &permuted {
-                state = state.apply(op.clone()).unwrap();
+            for (id, op) in &permuted {
+                state = state.apply(*id, op.clone()).unwrap();
                 let oracle: std::collections::HashSet<u32> = state
                     .entries
                     .iter()
@@ -599,14 +584,12 @@ mod proptests {
                 prop_assert_eq!(
                     state.len(),
                     oracle.len(),
-                    "len vs oracle mismatch after applying {:?}",
-                    op
+                    "len vs oracle mismatch after applying ({:?}, {:?})", id, op
                 );
                 prop_assert_eq!(
                     state.iter().count(),
                     oracle.len(),
-                    "iter().count() vs oracle mismatch after applying {:?}",
-                    op
+                    "iter().count() vs oracle mismatch after applying ({:?}, {:?})", id, op
                 );
             }
         }

@@ -2,6 +2,15 @@ use crate::Dot;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CrdtError {
-    #[error("Dot {dot:?} already exists with a different payload")]
-    DotPayloadConflict { dot: Dot },
+    #[error("Dot {dot:?} already exists with different op contents")]
+    DotConflict { dot: Dot },
+
+    #[error("Op {dot:?} cannot reference itself in parents")]
+    SelfReference { dot: Dot },
+
+    #[error("Op {dot:?} references missing parents: {missing:?}")]
+    MissingParents { dot: Dot, missing: Vec<Dot> },
+
+    #[error("Op {dot:?} clock cannot advance — overflow")]
+    ClockOverflow { dot: Dot },
 }

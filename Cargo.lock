@@ -638,6 +638,8 @@ name = "editor-crdt"
 version = "0.0.1"
 dependencies = [
  "editor-macros",
+ "getrandom 0.4.2",
+ "hashbrown 0.17.0",
  "imbl",
  "proptest",
  "serde",

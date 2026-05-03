@@ -9,6 +9,8 @@ wasm = ["dep:tsify", "dep:wasm-bindgen"]
 
 [dependencies]
 editor-macros = { path = "../editor-macros" }
+getrandom.workspace = true
+hashbrown = { workspace = true }
 imbl = { workspace = true, features = ["serde"] }
 serde.workspace = true
 thiserror.workspace = true

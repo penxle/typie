@@ -3,17 +3,11 @@ use std::fmt;
 
 use crate::{CrdtError, Dot};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TextOp {
-    InsertChar {
-        id: Dot,
-        after: Option<Dot>,
-        ch: char,
-    },
-    RemoveChar {
-        target: Dot,
-    },
+    InsertChar { after: Option<Dot>, ch: char },
+    RemoveChar { target: Dot },
 }
 
 /// **Standalone-POC representation — do not embed in an editor as-is.**
@@ -76,9 +70,9 @@ impl TextCrdt {
     /// layer must guarantee. Wire integrations should reject malformed ops before
     /// reaching this API; this `Err` is a defense-in-depth signal that wire validation
     /// failed.
-    pub fn apply(&self, op: TextOp) -> Result<Self, CrdtError> {
+    pub fn apply(&self, id: Dot, op: TextOp) -> Result<Self, CrdtError> {
         match op {
-            TextOp::InsertChar { id, after, ch } => self.apply_insert(id, after, ch),
+            TextOp::InsertChar { after, ch } => self.apply_insert(id, after, ch),
             TextOp::RemoveChar { target } => Ok(self.apply_remove(target)),
         }
     }
@@ -89,7 +83,7 @@ impl TextCrdt {
             // is a bug in the op generation layer (actor id collision, clock reuse,
             // etc.). Silent first-wins would diverge replicas.
             if existing.ch != ch || existing.after != after {
-                return Err(CrdtError::DotPayloadConflict { dot: id });
+                return Err(CrdtError::DotConflict { dot: id });
             }
             return Ok(self.clone());
         }
@@ -189,11 +183,13 @@ mod tests {
     #[test]
     fn insert_single_char_at_start() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(1, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "a");
         assert_eq!(crdt.len(), 1);
@@ -202,15 +198,20 @@ mod tests {
     #[test]
     fn insert_then_remove_yields_empty_string() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(1, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "");
         assert_eq!(crdt.len(), 0);
@@ -220,21 +221,28 @@ mod tests {
     #[test]
     fn remove_insert_other_chars_then_target_arrives() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(2, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(2, 0),
+                },
+            )
             .unwrap() // pending
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 0),
-                after: None,
-                ch: 'A',
-            })
+            .apply(
+                Dot::new(1, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'A',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(2, 0),
-                after: None,
-                ch: 'B',
-            })
+            .apply(
+                Dot::new(2, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'B',
+                },
+            )
             .unwrap();
         // children of None desc: (2,0) > (1,0) -> 'B' subtree (dead, no emit) then 'A' subtree.
         // Final: "A".
@@ -243,8 +251,9 @@ mod tests {
 
     #[test]
     fn permutation_remove_insert_vs_insert_remove_converges() {
+        let id_i = Dot::new(1, 0);
+        let id_r = Dot::new(u64::MAX, 0);
         let op_i = TextOp::InsertChar {
-            id: Dot::new(1, 0),
             after: None,
             ch: 'x',
         };
@@ -252,39 +261,53 @@ mod tests {
             target: Dot::new(1, 0),
         };
         let s1 = TextCrdt::new()
-            .apply(op_i.clone())
+            .apply(id_i, op_i.clone())
             .unwrap()
-            .apply(op_r.clone())
+            .apply(id_r, op_r.clone())
             .unwrap();
-        let s2 = TextCrdt::new().apply(op_r).unwrap().apply(op_i).unwrap();
+        let s2 = TextCrdt::new()
+            .apply(id_r, op_r)
+            .unwrap()
+            .apply(id_i, op_i)
+            .unwrap();
         assert_eq!(s1.to_string(), s2.to_string());
     }
 
     #[test]
     fn remove_twice_pending() {
         let s1 = TextCrdt::new()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         let s2 = s1
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(1, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 1),
+                TextOp::RemoveChar {
+                    target: Dot::new(1, 0),
+                },
+            )
             .unwrap();
         let after_insert_1 = s1
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(1, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap();
         let after_insert_2 = s2
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(1, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap();
         assert_eq!(after_insert_1.to_string(), after_insert_2.to_string());
         assert_eq!(after_insert_1.to_string(), "");
@@ -293,23 +316,29 @@ mod tests {
     #[test]
     fn linear_chain_three_chars() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 2),
-                after: Some(Dot::new(0, 1)),
-                ch: 'c',
-            })
+            .apply(
+                Dot::new(0, 2),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 1)),
+                    ch: 'c',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "abc");
         assert_eq!(crdt.len(), 3);
@@ -318,23 +347,29 @@ mod tests {
     #[test]
     fn root_siblings_clock_desc_same_actor() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'A',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'A',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: None,
-                ch: 'B',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'B',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 2),
-                after: None,
-                ch: 'C',
-            })
+            .apply(
+                Dot::new(0, 2),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'C',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "CBA");
     }
@@ -342,23 +377,29 @@ mod tests {
     #[test]
     fn root_siblings_actor_tiebreak_on_equal_clock() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 0),
-                after: None,
-                ch: 'A',
-            })
+            .apply(
+                Dot::new(1, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'A',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(2, 0),
-                after: None,
-                ch: 'B',
-            })
+            .apply(
+                Dot::new(2, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'B',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(3, 0),
-                after: None,
-                ch: 'C',
-            })
+            .apply(
+                Dot::new(3, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'C',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "CBA");
     }
@@ -366,23 +407,29 @@ mod tests {
     #[test]
     fn clock_primary_dominates_actor() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 5),
-                after: None,
-                ch: 'A',
-            })
+            .apply(
+                Dot::new(1, 5),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'A',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(2, 3),
-                after: None,
-                ch: 'B',
-            })
+            .apply(
+                Dot::new(2, 3),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'B',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 7),
-                after: None,
-                ch: 'C',
-            })
+            .apply(
+                Dot::new(1, 7),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'C',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "CAB");
     }
@@ -390,29 +437,37 @@ mod tests {
     #[test]
     fn subtree_dfs_pre_order() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 2),
-                after: Some(Dot::new(0, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(0, 2),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 3),
-                after: Some(Dot::new(0, 2)),
-                ch: 'd',
-            })
+            .apply(
+                Dot::new(0, 3),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 2)),
+                    ch: 'd',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'c',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'c',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "abdc");
     }
@@ -420,27 +475,36 @@ mod tests {
     #[test]
     fn tombstone_anchor_with_multiple_alive_children() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 2),
-                after: Some(Dot::new(0, 0)),
-                ch: 'c',
-            })
+            .apply(
+                Dot::new(0, 2),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'c',
+                },
+            )
             .unwrap()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(0, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(0, 0),
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "cb");
     }
@@ -448,27 +512,36 @@ mod tests {
     #[test]
     fn tombstone_mid_chain_preserves_descendants() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 2),
-                after: Some(Dot::new(0, 1)),
-                ch: 'c',
-            })
+            .apply(
+                Dot::new(0, 2),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 1)),
+                    ch: 'c',
+                },
+            )
             .unwrap()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(0, 1),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(0, 1),
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "ac");
     }
@@ -476,17 +549,21 @@ mod tests {
     #[test]
     fn out_of_order_insert_eventually_renders() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "ab");
         assert_eq!(crdt.len(), 2);
@@ -495,11 +572,13 @@ mod tests {
     #[test]
     fn orphan_entry_invisible_in_len_and_to_string() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "");
         assert_eq!(crdt.len(), 0);
@@ -509,15 +588,20 @@ mod tests {
     #[test]
     fn pending_tombstone_then_late_insert() {
         let s = TextCrdt::new()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(0, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(0, 0),
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap();
         assert_eq!(s.to_string(), "");
         assert_eq!(s.len(), 0);
@@ -525,19 +609,19 @@ mod tests {
 
     #[test]
     fn applying_same_insert_n_times() {
+        let id = Dot::new(0, 0);
         let op = TextOp::InsertChar {
-            id: Dot::new(0, 0),
             after: None,
             ch: 'a',
         };
         let s = TextCrdt::new()
-            .apply(op.clone())
+            .apply(id, op.clone())
             .unwrap()
-            .apply(op.clone())
+            .apply(id, op.clone())
             .unwrap()
-            .apply(op.clone())
+            .apply(id, op.clone())
             .unwrap()
-            .apply(op)
+            .apply(id, op)
             .unwrap();
         assert_eq!(s.to_string(), "a");
         assert_eq!(s.len(), 1);
@@ -554,11 +638,7 @@ mod tests {
                 Some(Dot::new(0, i - 1))
             };
             crdt = crdt
-                .apply(TextOp::InsertChar {
-                    id: Dot::new(0, i),
-                    after,
-                    ch: 'a',
-                })
+                .apply(Dot::new(0, i), TextOp::InsertChar { after, ch: 'a' })
                 .unwrap();
         }
         assert_eq!(crdt.len() as u64, chain_len);
@@ -568,41 +648,53 @@ mod tests {
     #[test]
     fn complex_multi_actor_tree() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(1, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 1),
-                after: Some(Dot::new(1, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(1, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(1, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 2),
-                after: Some(Dot::new(1, 1)),
-                ch: 'c',
-            })
+            .apply(
+                Dot::new(1, 2),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(1, 1)),
+                    ch: 'c',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(1, 3),
-                after: Some(Dot::new(1, 0)),
-                ch: 'd',
-            })
+            .apply(
+                Dot::new(1, 3),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(1, 0)),
+                    ch: 'd',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(2, 0),
-                after: None,
-                ch: 'e',
-            })
+            .apply(
+                Dot::new(2, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'e',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(2, 1),
-                after: Some(Dot::new(2, 0)),
-                ch: 'f',
-            })
+            .apply(
+                Dot::new(2, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(2, 0)),
+                    ch: 'f',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "efadbc");
     }
@@ -610,20 +702,24 @@ mod tests {
     #[test]
     fn duplicate_dot_different_ch_returns_err() {
         let s = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap();
-        let result = s.apply(TextOp::InsertChar {
-            id: Dot::new(0, 0),
-            after: None,
-            ch: 'b',
-        });
+        let result = s.apply(
+            Dot::new(0, 0),
+            TextOp::InsertChar {
+                after: None,
+                ch: 'b',
+            },
+        );
         assert_eq!(
             result,
-            Err(CrdtError::DotPayloadConflict {
+            Err(CrdtError::DotConflict {
                 dot: Dot::new(0, 0)
             })
         );
@@ -632,26 +728,32 @@ mod tests {
     #[test]
     fn duplicate_dot_different_after_returns_err() {
         let s = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'a',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'b',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'b',
+                },
+            )
             .unwrap();
-        let result = s.apply(TextOp::InsertChar {
-            id: Dot::new(0, 1),
-            after: None,
-            ch: 'b',
-        });
+        let result = s.apply(
+            Dot::new(0, 1),
+            TextOp::InsertChar {
+                after: None,
+                ch: 'b',
+            },
+        );
         assert_eq!(
             result,
-            Err(CrdtError::DotPayloadConflict {
+            Err(CrdtError::DotConflict {
                 dot: Dot::new(0, 1)
             })
         );
@@ -660,21 +762,28 @@ mod tests {
     #[test]
     fn pending_tombstoned_anchor_with_live_descendant() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(0, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(0, 0),
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'A',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'A',
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'B',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'B',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "B");
         assert_eq!(crdt.len(), 1);
@@ -683,21 +792,28 @@ mod tests {
     #[test]
     fn pending_tombstoned_anchor_descendant_first_arrival() {
         let crdt = TextCrdt::new()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 1),
-                after: Some(Dot::new(0, 0)),
-                ch: 'B',
-            })
+            .apply(
+                Dot::new(0, 1),
+                TextOp::InsertChar {
+                    after: Some(Dot::new(0, 0)),
+                    ch: 'B',
+                },
+            )
             .unwrap()
-            .apply(TextOp::RemoveChar {
-                target: Dot::new(0, 0),
-            })
+            .apply(
+                Dot::new(u64::MAX, 0),
+                TextOp::RemoveChar {
+                    target: Dot::new(0, 0),
+                },
+            )
             .unwrap()
-            .apply(TextOp::InsertChar {
-                id: Dot::new(0, 0),
-                after: None,
-                ch: 'A',
-            })
+            .apply(
+                Dot::new(0, 0),
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'A',
+                },
+            )
             .unwrap();
         assert_eq!(crdt.to_string(), "B");
         assert_eq!(crdt.len(), 1);
@@ -718,7 +834,7 @@ mod proptests {
     pub(super) fn arb_op_sequence(
         max_ops: usize,
         num_actors: u64,
-    ) -> impl Strategy<Value = Vec<TextOp>> {
+    ) -> impl Strategy<Value = Vec<(Dot, TextOp)>> {
         proptest::collection::vec(
             (0u64..num_actors, any::<bool>(), any::<u8>(), any::<char>()),
             0..=max_ops,
@@ -726,10 +842,11 @@ mod proptests {
         .prop_map(build_ops)
     }
 
-    fn build_ops(raw: Vec<(u64, bool, u8, char)>) -> Vec<TextOp> {
+    fn build_ops(raw: Vec<(u64, bool, u8, char)>) -> Vec<(Dot, TextOp)> {
         let mut clocks: HashMap<u64, u64> = HashMap::new();
         let mut existing: Vec<Dot> = Vec::new();
-        let mut ops: Vec<TextOp> = Vec::new();
+        let mut ops: Vec<(Dot, TextOp)> = Vec::new();
+        let mut remove_counter: u64 = 0;
 
         // No ASCII filter: the full Unicode char is used as-is. The RGA algorithm depends
         // only on char identity, not on *which* char. An earlier version had an ASCII
@@ -743,7 +860,9 @@ mod proptests {
             let do_remove = want_remove && !existing.is_empty();
             if do_remove {
                 let target = existing[(target_byte as usize) % existing.len()];
-                ops.push(TextOp::RemoveChar { target });
+                let id = Dot::new(u64::MAX, remove_counter);
+                remove_counter += 1;
+                ops.push((id, TextOp::RemoveChar { target }));
                 continue;
             }
             let clock = clocks.entry(actor).or_insert(0);
@@ -754,29 +873,29 @@ mod proptests {
             } else {
                 Some(existing[(target_byte as usize) % existing.len()])
             };
-            ops.push(TextOp::InsertChar { id, after, ch });
+            ops.push((id, TextOp::InsertChar { after, ch }));
             existing.push(id);
         }
         ops
     }
 
-    pub(super) fn apply_all(ops: &[TextOp]) -> TextCrdt {
+    pub(super) fn apply_all(ops: &[(Dot, TextOp)]) -> TextCrdt {
         ops.iter()
             .cloned()
-            .fold(TextCrdt::new(), |s, op| s.apply(op).unwrap())
+            .fold(TextCrdt::new(), |s, (id, op)| s.apply(id, op).unwrap())
     }
 
     /// Independent reference using a different code path (std HashMap, mutable, recursive
     /// DFS) than TextCrdt (imbl HashMap, functional, iterative). Same RGA semantic, but
     /// disagreement on any input would indicate a bug in one path.
-    fn reference_render(ops: &[TextOp]) -> String {
+    fn reference_render(ops: &[(Dot, TextOp)]) -> String {
         use std::collections::{HashMap, HashSet};
 
         let mut entries: HashMap<Dot, (char, Option<Dot>, bool)> = HashMap::new();
         let mut pending: HashSet<Dot> = HashSet::new();
-        for op in ops {
+        for (id, op) in ops {
             match op {
-                TextOp::InsertChar { id, after, ch } => {
+                TextOp::InsertChar { after, ch } => {
                     if entries.contains_key(id) {
                         continue;
                     }
@@ -882,7 +1001,7 @@ mod proptests {
             seed in any::<u64>(),
         ) {
             let single = apply_all(&ops);
-            let doubled: Vec<TextOp> = ops.iter().flat_map(|op| [op.clone(), op.clone()]).collect();
+            let doubled: Vec<(Dot, TextOp)> = ops.iter().flat_map(|p| [p.clone(), p.clone()]).collect();
             let permuted_doubled = permute(&doubled, seed);
             let s2 = apply_all(&permuted_doubled);
             prop_assert_eq!(single, s2);
@@ -899,15 +1018,17 @@ mod proptests {
             depth in 1u64..5,
             seed in any::<u64>(),
         ) {
-            let mut ops: Vec<TextOp> = Vec::new();
+            let mut ops: Vec<(Dot, TextOp)> = Vec::new();
 
             for i in 0..3u64 {
                 let after = if i == 0 { None } else { Some(Dot::new(0, i - 1)) };
-                ops.push(TextOp::InsertChar {
-                    id: Dot::new(0, i),
-                    after,
-                    ch: (b'a' + i as u8) as char,
-                });
+                ops.push((
+                    Dot::new(0, i),
+                    TextOp::InsertChar {
+                        after,
+                        ch: (b'a' + i as u8) as char,
+                    },
+                ));
             }
 
             // Per-actor distinct char: a uniform 'x' would hurt string-level
@@ -919,7 +1040,7 @@ mod proptests {
                 let actor_ch = (b'A' + (actor as u8 - 1)) as char;
                 for d in 0..depth {
                     let id = Dot::new(actor, d);
-                    ops.push(TextOp::InsertChar { id, after: Some(prev), ch: actor_ch });
+                    ops.push((id, TextOp::InsertChar { after: Some(prev), ch: actor_ch }));
                     prev = id;
                 }
             }
@@ -948,31 +1069,37 @@ mod proptests {
             extras_per_anchor in 2u64..4,
             seed in any::<u64>(),
         ) {
-            let mut ops: Vec<TextOp> = Vec::new();
+            let mut ops: Vec<(Dot, TextOp)> = Vec::new();
+            let mut remove_counter: u64 = 0;
 
             for i in 0..chain_len as u64 {
                 let after = if i == 0 { None } else { Some(Dot::new(0, i - 1)) };
-                ops.push(TextOp::InsertChar {
-                    id: Dot::new(0, i),
-                    after,
-                    ch: (b'a' + (i as u8 % 26)) as char,
-                });
+                ops.push((
+                    Dot::new(0, i),
+                    TextOp::InsertChar {
+                        after,
+                        ch: (b'a' + (i as u8 % 26)) as char,
+                    },
+                ));
             }
 
             // Duplicate targets allowed — also exercises idempotency.
             for &idx in &remove_indices {
                 let target = Dot::new(0, (idx % chain_len) as u64);
-                ops.push(TextOp::RemoveChar { target });
+                ops.push((Dot::new(u64::MAX, remove_counter), TextOp::RemoveChar { target }));
+                remove_counter += 1;
             }
 
             let mut child_clock: u64 = 0;
             for chain_idx in 0..chain_len as u64 {
                 for _ in 0..extras_per_anchor {
-                    ops.push(TextOp::InsertChar {
-                        id: Dot::new(1, child_clock),
-                        after: Some(Dot::new(0, chain_idx)),
-                        ch: 'X',
-                    });
+                    ops.push((
+                        Dot::new(1, child_clock),
+                        TextOp::InsertChar {
+                            after: Some(Dot::new(0, chain_idx)),
+                            ch: 'X',
+                        },
+                    ));
                     child_clock += 1;
                 }
             }
@@ -993,12 +1120,12 @@ mod proptests {
         ) {
             let permuted = permute(&ops, seed);
             let mut state = TextCrdt::new();
-            for op in &permuted {
-                state = state.apply(op.clone()).unwrap();
+            for (id, op) in &permuted {
+                state = state.apply(*id, op.clone()).unwrap();
                 prop_assert_eq!(
                     state.len(),
                     state.to_string().chars().count(),
-                    "len/visible-chars consistency broken after applying {:?}", op
+                    "len/visible-chars consistency broken after applying ({:?}, {:?})", id, op
                 );
             }
         }
