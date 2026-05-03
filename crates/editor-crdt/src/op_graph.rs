@@ -76,22 +76,28 @@ impl<P> Default for OpGraph<P> {
 impl<P: Clone> OpGraph<P> {
     pub fn add(&mut self, payload: P) -> Result<Op<P>, CrdtError> {
         let id = Dot::new(self.actor, self.next_clock);
+
         self.next_clock = self
             .next_clock
             .checked_add(1)
             .ok_or(CrdtError::ClockOverflow { dot: id })?;
+
         let mut parents: Vec<Dot> = self.heads.iter().copied().collect();
         parents.sort();
+
         let op = Op {
             id,
             parents: parents.clone(),
             payload,
         };
         self.ops.insert(id, op.clone());
+
         for p in &parents {
             self.heads.remove(p);
         }
+
         self.heads.insert(id);
+
         Ok(op)
     }
 }
@@ -130,8 +136,10 @@ impl<P: Clone + Eq> OpGraph<P> {
         for p in &op.parents {
             self.heads.remove(p);
         }
+
         self.heads.insert(op.id);
         self.ops.insert(op.id, op);
+
         Ok(())
     }
 
