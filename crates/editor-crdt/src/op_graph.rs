@@ -22,6 +22,18 @@ pub struct OpGraph<P> {
     next_clock: u64,
     ops: HashMap<Dot, Op<P>>,
     heads: HashSet<Dot>,
+    /// Reverse parent index: each dot maps to the set of ops that reference
+    /// it as a parent. Drives O(1) `has_child` checks during frontier
+    /// maintenance and powers the cascade walks that keep `self_contained`
+    /// accurate on data loss / restore.
+    children: HashMap<Dot, HashSet<Dot>>,
+    /// Subset of `ops` whose transitive ancestry is fully present locally.
+    /// Maintained incrementally so `missing_for` can emit only replayable
+    /// batches in O(walk) rather than scanning the full op set per round.
+    /// Diverges from `ops` only after server-side data loss
+    /// (`debug_remove`); `add` and `receive` keep parents-before-children
+    /// invariants so they always preserve the set.
+    self_contained: HashSet<Dot>,
 }
 
 impl<P: PartialEq> OpGraph<P> {
@@ -43,6 +55,8 @@ impl<P> OpGraph<P> {
             next_clock: 0,
             ops: HashMap::new(),
             heads: HashSet::new(),
+            children: HashMap::new(),
+            self_contained: HashSet::new(),
         }
     }
 
@@ -64,6 +78,64 @@ impl<P> OpGraph<P> {
 
     pub fn is_empty(&self) -> bool {
         self.ops.is_empty()
+    }
+
+    /// Order is unstable across inserts; callers needing
+    /// causality-respecting order should pass the result through
+    /// [`OpGraph::topo_sort`].
+    pub fn iter_all(&self) -> impl Iterator<Item = &Op<P>> + '_ {
+        self.ops.values()
+    }
+
+    /// `true` when some op in `self.ops` has an ancestor missing locally —
+    /// i.e. an ancestor was lost (storage failover, partial WAL replay, etc.)
+    /// and its descendants are stranded. While this holds, [`missing_for`]
+    /// silently drops the dangling descendants from emitted batches and the
+    /// replica is "sync-degraded": new peers can fully sync but only see
+    /// the self-contained prefix until a peer that still holds the missing
+    /// ancestor pushes it back via [`CrdtError::UnknownHeads`] negative-ack.
+    /// Production callers should surface this to operational alerting.
+    ///
+    /// [`missing_for`]: OpGraph::missing_for
+    pub fn has_dangling(&self) -> bool {
+        self.ops.len() != self.self_contained.len()
+    }
+
+    /// Test-only — drop a single op to model server-side data loss
+    /// (replica failover with stale snapshot, point-in-time recovery, etc.).
+    /// Leaves descendants intact with dangling parent references; the
+    /// negative-ack recovery path is what restores consistency.
+    #[cfg(test)]
+    pub(crate) fn debug_remove(&mut self, dot: &Dot) {
+        if let Some(op) = self.ops.remove(dot) {
+            for parent in &op.parents {
+                if let Some(set) = self.children.get_mut(parent) {
+                    set.remove(dot);
+                    if set.is_empty() {
+                        self.children.remove(parent);
+                        // Parent has no children left in `self.ops`, so by
+                        // the heads invariant it becomes a head — otherwise
+                        // it stays unreachable from any frontier walk.
+                        if self.ops.contains_key(parent) {
+                            self.heads.insert(*parent);
+                        }
+                    }
+                }
+            }
+        }
+        self.heads.remove(dot);
+
+        // Cascade through `children` to revoke `self_contained` for every
+        // descendant — losing an ancestor breaks the transitive-ancestry
+        // invariant for everything below it.
+        let mut queue: Vec<Dot> = vec![*dot];
+        while let Some(d) = queue.pop() {
+            if self.self_contained.remove(&d)
+                && let Some(children) = self.children.get(&d)
+            {
+                queue.extend(children.iter().copied());
+            }
+        }
     }
 }
 
@@ -94,11 +166,135 @@ impl<P: Clone> OpGraph<P> {
 
         for p in &parents {
             self.heads.remove(p);
+            self.children.entry(*p).or_default().insert(id);
         }
 
         self.heads.insert(id);
+        // After server-side data loss, `debug_remove` re-promotes a non-SC
+        // ancestor into `heads` so the frontier walk can still see it. A new
+        // op built on such a head inherits its broken ancestry, so derive SC
+        // status from the parents instead of assuming all heads qualify.
+        // The op stays in `self.ops` either way; once the missing ancestor is
+        // restored, `receive`'s `try_promote_self_contained` cascade lifts it
+        // through `self.children` automatically.
+        if parents.iter().all(|p| self.self_contained.contains(p)) {
+            self.self_contained.insert(id);
+        }
 
         Ok(op)
+    }
+
+    /// Compute the ops a peer is missing, given the peer's frontier
+    /// `remote_heads`. The returned vector is `self.ops` minus the ancestry
+    /// of `remote_heads`, emitted in ancestry-first (topological) order so
+    /// that a peer applying the result via [`OpGraph::receive`] never hits
+    /// a [`CrdtError::MissingParents`] rejection.
+    ///
+    /// Returns `Err(CrdtError::UnknownHeads)` if any dot encountered while
+    /// walking `remote_heads` and their ancestry is not in `self.ops` —
+    /// either a head itself or a missing parent reached through the walk.
+    /// The unknown set drives the negative-ack path: the peer holds the op
+    /// locally and must re-send it (with its own ancestry) so the local
+    /// replica can recover from server-side data loss.
+    ///
+    /// When [`has_dangling`] is `true`, descendants of locally-lost ancestors
+    /// are silently dropped from the emitted batch so the receiver never
+    /// rejects with `MissingParents`. The `Ok` branch therefore signals only
+    /// that the batch is replayable — not that it carries every reachable
+    /// op. Callers should consult [`has_dangling`] separately to surface
+    /// degraded sync for operational alerting.
+    ///
+    /// [`has_dangling`]: OpGraph::has_dangling
+    pub fn missing_for(&self, remote_heads: &HashSet<Dot>) -> Result<Vec<Op<P>>, CrdtError> {
+        let mut known: HashSet<Dot> = HashSet::new();
+        let mut unknown: HashSet<Dot> = HashSet::new();
+        let mut walk: Vec<Dot> = remote_heads.iter().copied().collect();
+        while let Some(dot) = walk.pop() {
+            if !self.ops.contains_key(&dot) {
+                unknown.insert(dot);
+                continue;
+            }
+            if known.insert(dot)
+                && let Some(op) = self.ops.get(&dot)
+            {
+                walk.extend(op.parents.iter().copied());
+            }
+        }
+        if !unknown.is_empty() {
+            return Err(CrdtError::UnknownHeads {
+                unknown: unknown.into_iter().collect(),
+            });
+        }
+
+        // Restrict the emitted batch to ops whose full ancestry still lives
+        // here. After a non-head ancestor is lost server-side its descendants
+        // remain in `self.ops` but are no longer in `self_contained` — sending
+        // them would force the peer to reject the batch with `MissingParents`.
+        // We silently drop those descendants and let the negative-ack path
+        // (`ResendRequest`) restore the lost ancestor from a peer that still
+        // holds it.
+        Ok(self.dfs_post_order_filtered(
+            self.heads.iter().copied().collect(),
+            &known,
+            Some(&self.self_contained),
+        ))
+    }
+
+    /// Topologically sort the given dots in ancestry-first order. Parents
+    /// outside `dots` are skipped — the caller controls the boundary, so the
+    /// output is a self-contained ancestry-first batch over the chosen
+    /// subset. Dots not present in `self.ops` are silently skipped.
+    pub fn topo_sort(&self, dots: &HashSet<Dot>) -> Vec<Op<P>> {
+        self.dfs_post_order_filtered(dots.iter().copied().collect(), &HashSet::new(), Some(dots))
+    }
+
+    /// Iterative DFS post-order from `roots`, emitting each visited dot in
+    /// ancestry-first (parents-before-children) order. Iterative — not
+    /// recursive — so deep chains do not blow the stack.
+    ///
+    /// `skip`: dots whose ancestry must not be entered. Treated as an
+    /// already-known boundary — neither the dot nor its parents are emitted.
+    /// `include`: when `Some`, only dots in the set are emitted; their
+    /// parents outside the set are skipped (used to restrict to a subset).
+    fn dfs_post_order_filtered(
+        &self,
+        roots: Vec<Dot>,
+        skip: &HashSet<Dot>,
+        include: Option<&HashSet<Dot>>,
+    ) -> Vec<Op<P>> {
+        enum Frame {
+            Enter(Dot),
+            Emit(Dot),
+        }
+        let mut visited: HashSet<Dot> = HashSet::new();
+        let mut stack: Vec<Frame> = roots.into_iter().map(Frame::Enter).collect();
+        let mut result: Vec<Op<P>> = Vec::new();
+        while let Some(frame) = stack.pop() {
+            match frame {
+                Frame::Enter(dot) => {
+                    if skip.contains(&dot) {
+                        continue;
+                    }
+                    if !visited.insert(dot) {
+                        continue;
+                    }
+                    if let Some(op) = self.ops.get(&dot) {
+                        if include.is_none_or(|set| set.contains(&dot)) {
+                            stack.push(Frame::Emit(dot));
+                        }
+                        for &parent in &op.parents {
+                            stack.push(Frame::Enter(parent));
+                        }
+                    }
+                }
+                Frame::Emit(dot) => {
+                    if let Some(op) = self.ops.get(&dot) {
+                        result.push(op.clone());
+                    }
+                }
+            }
+        }
+        result
     }
 }
 
@@ -133,14 +329,51 @@ impl<P: Clone + Eq> OpGraph<P> {
 
         self.sync_clock_for(&op.id)?;
 
+        let id = op.id;
         for p in &op.parents {
             self.heads.remove(p);
+            self.children.entry(*p).or_default().insert(id);
         }
 
-        self.heads.insert(op.id);
-        self.ops.insert(op.id, op);
+        // Skip the head insert when an existing op already lists this dot
+        // as a parent. The recovery path can deliver an ancestor after its
+        // descendants are already present (server lost a non-head op and
+        // the client resends it); blindly inserting would resurrect the
+        // ancestor as a head and leave `current_heads` reporting an op
+        // that has children. The `children` index makes this an O(1)
+        // check so the hot path stays linear during storage replay and
+        // initial sync.
+        if self.children.get(&id).is_none_or(HashSet::is_empty) {
+            self.heads.insert(id);
+        }
+        self.ops.insert(id, op);
+
+        // Promote into `self_contained` if every parent is already there,
+        // then cascade to the new op's children — a previously dangling
+        // descendant whose only missing ancestor was just restored becomes
+        // self-contained too.
+        self.try_promote_self_contained(id);
 
         Ok(())
+    }
+
+    fn try_promote_self_contained(&mut self, root: Dot) {
+        let mut queue: Vec<Dot> = vec![root];
+        while let Some(dot) = queue.pop() {
+            if self.self_contained.contains(&dot) {
+                continue;
+            }
+            let Some(op) = self.ops.get(&dot) else {
+                continue;
+            };
+            if !op.parents.iter().all(|p| self.self_contained.contains(p)) {
+                continue;
+            }
+            self.self_contained.insert(dot);
+            if let Some(children) = self.children.get(&dot) {
+                queue.extend(children.iter().copied());
+            }
+        }
     }
 
     fn sync_clock_for(&mut self, dot: &Dot) -> Result<(), CrdtError> {
@@ -620,6 +853,284 @@ mod tests {
         assert_eq!(merge_parents, expected);
         let heads_after: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(heads_after, vec![&merge.id]);
+    }
+
+    #[test]
+    fn missing_for_empty_remote_returns_self_ops_topo_sorted() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        let result = g.missing_for(&HashSet::new()).unwrap();
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![a.id, b.id, c.id]);
+    }
+
+    #[test]
+    fn missing_for_full_remote_returns_empty() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let _a = g.add(1).unwrap();
+        let _b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        let remote_heads: HashSet<Dot> = [c.id].into_iter().collect();
+        let result = g.missing_for(&remote_heads).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn missing_for_partial_remote_returns_only_descendants() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
+        let result = g.missing_for(&remote_heads).unwrap();
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![b.id, c.id]);
+    }
+
+    #[test]
+    fn missing_for_unknown_remote_head_returns_err() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let _a = g.add(1).unwrap();
+        let _b = g.add(2).unwrap();
+        let unknown = Dot::new(99, 0);
+        let remote_heads: HashSet<Dot> = [unknown].into_iter().collect();
+        let err = g.missing_for(&remote_heads).unwrap_err();
+        assert_eq!(
+            err,
+            CrdtError::UnknownHeads {
+                unknown: vec![unknown]
+            }
+        );
+    }
+
+    #[test]
+    fn receive_does_not_resurrect_ancestor_as_head() {
+        // a → b → c chain. Drop a to model server-side data loss, then
+        // re-receive it via the recovery path. The descendants are still
+        // present, so a must not become a head — heads must stay {c}.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let _b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        g.debug_remove(&a.id);
+        g.receive(a.clone()).unwrap();
+        let heads: HashSet<Dot> = g.current_heads().copied().collect();
+        let expected: HashSet<Dot> = [c.id].into_iter().collect();
+        assert_eq!(heads, expected);
+    }
+
+    #[test]
+    fn missing_for_walk_reports_dropped_ancestor_as_unknown() {
+        // a → b → c. Server simulates losing a (server-side rollback). Then
+        // missing_for({c}) walks c → b → a, finds a missing in self.ops,
+        // and reports a as unknown so the peer can re-send it.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let _b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        g.debug_remove(&a.id);
+        let remote_heads: HashSet<Dot> = [c.id].into_iter().collect();
+        let err = g.missing_for(&remote_heads).unwrap_err();
+        match err {
+            CrdtError::UnknownHeads { unknown } => {
+                assert_eq!(unknown, vec![a.id]);
+            }
+            _ => panic!("expected UnknownHeads"),
+        }
+    }
+
+    #[test]
+    fn missing_for_empty_remote_skips_descendants_of_lost_ancestor() {
+        // a → b → c. Server loses non-head op b (replica failover, stale
+        // snapshot, etc.). A fresh peer with no frontier asks for everything.
+        // b and c reference a missing parent, so emitting them would force
+        // the peer to reject the batch with `MissingParents`. We instead
+        // emit only the self-contained subset {a}; the negative-ack path
+        // restores b later from a peer that still holds it.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let _c = g.add(3).unwrap();
+        g.debug_remove(&b.id);
+        let result = g.missing_for(&HashSet::new()).unwrap();
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![a.id]);
+    }
+
+    #[test]
+    fn add_after_lost_ancestor_does_not_mark_new_op_self_contained() {
+        // a → b → c. Lose b, then locally add d on top of the now-broken
+        // frontier (heads become {a, c} after `debug_remove` re-promotes a;
+        // d's parents = [a, c]). c is no longer self-contained, so d
+        // inherits its broken ancestry and must not be emitted by
+        // `missing_for(empty)` — otherwise a fresh peer would receive d
+        // without c/b and reject with `MissingParents`.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let _c = g.add(3).unwrap();
+        g.debug_remove(&b.id);
+        let _d = g.add(4).unwrap();
+        let result = g.missing_for(&HashSet::new()).unwrap();
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![a.id]);
+    }
+
+    #[test]
+    fn add_after_recovery_promotes_descendant_chain_to_self_contained() {
+        // Same loss as above, but b is restored before sync. The cascade
+        // through `self.children` must promote c and d (built post-loss)
+        // back into `self_contained`, so `missing_for(empty)` emits the
+        // full chain in ancestry-first order.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        g.debug_remove(&b.id);
+        let d = g.add(4).unwrap();
+        g.receive(b.clone()).unwrap();
+        let result = g.missing_for(&HashSet::new()).unwrap();
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids.len(), 4);
+        let pos = |dot: Dot| ids.iter().position(|&x| x == dot).unwrap();
+        assert!(pos(a.id) < pos(b.id));
+        assert!(pos(b.id) < pos(c.id));
+        assert!(pos(c.id) < pos(d.id));
+    }
+
+    #[test]
+    fn has_dangling_observable_after_non_head_loss() {
+        // After losing a non-head ancestor, `missing_for` filters its
+        // descendants out and returns `Ok` with no caller-visible signal.
+        // `has_dangling` is the operational signal: it stays `true` until a
+        // peer pushes the missing ancestor back, at which point the cascade
+        // promotes the descendants and the replica is no longer degraded.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let _a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let _c = g.add(3).unwrap();
+        assert!(!g.has_dangling());
+        g.debug_remove(&b.id);
+        assert!(g.has_dangling());
+        g.receive(b.clone()).unwrap();
+        assert!(!g.has_dangling());
+    }
+
+    #[test]
+    fn missing_for_older_frontier_skips_descendants_of_lost_ancestor() {
+        // Same loss scenario as above, but the peer already has `a`. The
+        // emitted batch must remain self-contained — empty here, since the
+        // only remaining self-contained op is what the peer already holds.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let _c = g.add(3).unwrap();
+        g.debug_remove(&b.id);
+        let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
+        let result = g.missing_for(&remote_heads).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn missing_for_branch_topology_topo_sorted() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = Op {
+            id: Dot::new(2, 0),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let c = Op {
+            id: Dot::new(3, 0),
+            parents: vec![a.id],
+            payload: 3,
+        };
+        g.receive(b.clone()).unwrap();
+        g.receive(c.clone()).unwrap();
+        let d = g.add(4).unwrap();
+
+        let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
+        let result = g.missing_for(&remote_heads).unwrap();
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids.len(), 3);
+        assert!(ids.contains(&b.id));
+        assert!(ids.contains(&c.id));
+        assert!(ids.contains(&d.id));
+        let pos_b = ids.iter().position(|&x| x == b.id).unwrap();
+        let pos_c = ids.iter().position(|&x| x == c.id).unwrap();
+        let pos_d = ids.iter().position(|&x| x == d.id).unwrap();
+        assert!(pos_b < pos_d);
+        assert!(pos_c < pos_d);
+    }
+
+    #[test]
+    fn topo_sort_linear_chain() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        let dots: HashSet<Dot> = [a.id, b.id, c.id].into_iter().collect();
+        let result = g.topo_sort(&dots);
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![a.id, b.id, c.id]);
+    }
+
+    #[test]
+    fn topo_sort_subset_skips_parents_outside_dots() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let _a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        let dots: HashSet<Dot> = [b.id, c.id].into_iter().collect();
+        let result = g.topo_sort(&dots);
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![b.id, c.id]);
+    }
+
+    #[test]
+    fn topo_sort_empty_dots() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let result = g.topo_sort(&HashSet::new());
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn topo_sort_skips_unknown_dots() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let unknown = Dot::new(99, 0);
+        let dots: HashSet<Dot> = [a.id, unknown].into_iter().collect();
+        let result = g.topo_sort(&dots);
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![a.id]);
+    }
+
+    #[test]
+    fn topo_sort_with_internal_gap_preserves_ancestry() {
+        // a → b → c, dots = {a, c} (b excluded). Traversal must still walk
+        // through b to reach a; otherwise c emits before a and breaks the
+        // ancestry-first contract.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let _b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        let dots: HashSet<Dot> = [a.id, c.id].into_iter().collect();
+        let result = g.topo_sort(&dots);
+        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
+        assert_eq!(ids, vec![a.id, c.id]);
+    }
+
+    #[test]
+    fn iter_all_yields_every_op() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add(1).unwrap();
+        let b = g.add(2).unwrap();
+        let c = g.add(3).unwrap();
+        let collected: HashSet<Dot> = g.iter_all().map(|op| op.id).collect();
+        let expected: HashSet<Dot> = [a.id, b.id, c.id].into_iter().collect();
+        assert_eq!(collected, expected);
     }
 }
 

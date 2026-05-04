@@ -13,4 +13,7 @@ pub enum CrdtError {
 
     #[error("Op {dot:?} clock cannot advance — overflow")]
     ClockOverflow { dot: Dot },
+
+    #[error("Remote heads include dots not present in self.ops: {unknown:?}")]
+    UnknownHeads { unknown: Vec<Dot> },
 }
