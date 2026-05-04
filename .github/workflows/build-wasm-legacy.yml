@@ -9,7 +9,7 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: arc-16x
+    runs-on: arc-p-16x
 
     steps:
       - name: Checkout repository

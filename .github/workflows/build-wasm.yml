@@ -9,7 +9,7 @@ permissions:
 jobs:
   build:
     name: Build (${{ matrix.target }})
-    runs-on: arc-16x
+    runs-on: arc-p-16x
     strategy:
       matrix:
         target: [browser, server]
@@ -48,7 +48,7 @@ jobs:
   merge:
     name: Merge WASM artifacts
     needs: build
-    runs-on: arc-4x
+    runs-on: arc-p-4x
     steps:
       - name: Merge WASM artifacts
         uses: actions/upload-artifact/merge@v7
