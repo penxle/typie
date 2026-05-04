@@ -255,6 +255,9 @@ internal class EditorInputNode(
     if (event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
+      if (editor.ime?.composing != null) {
+        return true
+      }
       if (platformInputBridge.shouldConsumeKeyEvent(event)) {
         return true
       }
@@ -287,6 +290,9 @@ internal class EditorInputNode(
   override fun onPreKeyEvent(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
+    if (editor.ime?.composing != null) {
+      return true
+    }
     return platformInputBridge.onPreKeyEvent(
       event = event,
       selection = editor.ime?.selection,
