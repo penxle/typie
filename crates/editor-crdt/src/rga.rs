@@ -6,7 +6,7 @@ use crate::{CrdtError, Dot};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RgaOp<T> {
     Insert { after: Option<Dot>, value: T },
-    Remove { target: Dot },
+    Remove { observed: Dot },
 }
 
 /// **Standalone-POC representation — do not embed in an editor as-is.**
@@ -87,7 +87,7 @@ impl<T: Clone + Eq> Rga<T> {
     pub fn apply(&self, id: Dot, op: RgaOp<T>) -> Result<Self, CrdtError> {
         match op {
             RgaOp::Insert { after, value } => self.apply_insert(id, after, value),
-            RgaOp::Remove { target } => Ok(self.apply_remove(target)),
+            RgaOp::Remove { observed } => Ok(self.apply_remove(observed)),
         }
     }
 
@@ -110,8 +110,8 @@ impl<T: Clone + Eq> Rga<T> {
         })
     }
 
-    fn apply_remove(&self, target: Dot) -> Self {
-        if let Some(entry) = self.entries.get(&target) {
+    fn apply_remove(&self, observed: Dot) -> Self {
+        if let Some(entry) = self.entries.get(&observed) {
             if !entry.alive {
                 return self.clone();
             }
@@ -121,13 +121,13 @@ impl<T: Clone + Eq> Rga<T> {
                 alive: false,
             };
             return Self {
-                entries: self.entries.update(target, new_entry),
+                entries: self.entries.update(observed, new_entry),
                 pending_tombstones: self.pending_tombstones.clone(),
             };
         }
         Self {
             entries: self.entries.clone(),
-            pending_tombstones: self.pending_tombstones.update(target),
+            pending_tombstones: self.pending_tombstones.update(observed),
         }
     }
 }
@@ -212,7 +212,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -227,7 +227,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(2, 0),
+                    observed: Dot::new(2, 0),
                 },
             )
             .unwrap() // pending
@@ -261,7 +261,7 @@ mod tests {
             value: 1u32,
         };
         let op_r = RgaOp::<u32>::Remove {
-            target: Dot::new(1, 0),
+            observed: Dot::new(1, 0),
         };
         let s1 = Rga::<u32>::new()
             .apply(id_i, op_i.clone())
@@ -282,7 +282,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -290,7 +290,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 1),
                 RgaOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -505,7 +505,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(0, 0),
+                    observed: Dot::new(0, 0),
                 },
             )
             .unwrap();
@@ -542,7 +542,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(0, 1),
+                    observed: Dot::new(0, 1),
                 },
             )
             .unwrap();
@@ -594,7 +594,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(0, 0),
+                    observed: Dot::new(0, 0),
                 },
             )
             .unwrap()
@@ -768,7 +768,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(0, 0),
+                    observed: Dot::new(0, 0),
                 },
             )
             .unwrap()
@@ -806,7 +806,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 RgaOp::Remove {
-                    target: Dot::new(0, 0),
+                    observed: Dot::new(0, 0),
                 },
             )
             .unwrap()
@@ -881,10 +881,10 @@ mod proptests {
         for (actor, want_remove, target_byte, value) in raw {
             let do_remove = want_remove && !existing.is_empty();
             if do_remove {
-                let target = existing[(target_byte as usize) % existing.len()];
+                let observed = existing[(target_byte as usize) % existing.len()];
                 let id = Dot::new(u64::MAX, remove_counter);
                 remove_counter += 1;
-                ops.push((id, RgaOp::Remove { target }));
+                ops.push((id, RgaOp::Remove { observed }));
                 continue;
             }
             let clock = clocks.entry(actor).or_insert(0);
@@ -925,11 +925,11 @@ mod proptests {
                     entries.insert(*id, (*value, *after, alive));
                     pending.remove(id);
                 }
-                RgaOp::Remove { target } => {
-                    if let Some(e) = entries.get_mut(target) {
+                RgaOp::Remove { observed } => {
+                    if let Some(e) = entries.get_mut(observed) {
                         e.2 = false;
                     } else {
-                        pending.insert(*target);
+                        pending.insert(*observed);
                     }
                 }
             }
@@ -1088,8 +1088,8 @@ mod proptests {
 
             // Duplicate targets allowed — also exercises idempotency.
             for &idx in &remove_indices {
-                let target = Dot::new(0, (idx % chain_len) as u64);
-                ops.push((Dot::new(u64::MAX, remove_counter), RgaOp::Remove { target }));
+                let observed = Dot::new(0, (idx % chain_len) as u64);
+                ops.push((Dot::new(u64::MAX, remove_counter), RgaOp::Remove { observed }));
                 remove_counter += 1;
             }
 

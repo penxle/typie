@@ -7,7 +7,7 @@ use crate::{CrdtError, Dot, Rga, RgaOp};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TextOp {
     InsertChar { after: Option<Dot>, ch: char },
-    RemoveChar { target: Dot },
+    RemoveChar { observed: Dot },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -23,7 +23,7 @@ impl Text {
     pub fn apply(&self, id: Dot, op: TextOp) -> Result<Self, CrdtError> {
         let rga_op = match op {
             TextOp::InsertChar { after, ch } => RgaOp::Insert { after, value: ch },
-            TextOp::RemoveChar { target } => RgaOp::Remove { target },
+            TextOp::RemoveChar { observed } => RgaOp::Remove { observed },
         };
         self.0.apply(id, rga_op).map(Self)
     }
@@ -80,7 +80,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_remove_char_tombstones_target() {
+    fn apply_remove_char_tombstones_observed() {
         let t = Text::new()
             .apply(
                 Dot::new(1, 0),
@@ -93,7 +93,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 TextOp::RemoveChar {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();

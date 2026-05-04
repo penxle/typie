@@ -7,7 +7,7 @@ use crate::{CrdtError, Dot};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrSetOp<T> {
     Add { elem: T },
-    Remove { target: Dot },
+    Remove { observed: Dot },
 }
 
 /// **Standalone-POC representation — do not embed in an editor as-is.**
@@ -76,7 +76,7 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
     pub fn apply(&self, id: Dot, op: OrSetOp<T>) -> Result<Self, CrdtError> {
         match op {
             OrSetOp::Add { elem } => self.apply_add(id, elem),
-            OrSetOp::Remove { target } => Ok(self.apply_remove(target)),
+            OrSetOp::Remove { observed } => Ok(self.apply_remove(observed)),
         }
     }
 
@@ -98,8 +98,8 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
         })
     }
 
-    fn apply_remove(&self, target: Dot) -> Self {
-        if let Some(entry) = self.entries.get(&target) {
+    fn apply_remove(&self, observed: Dot) -> Self {
+        if let Some(entry) = self.entries.get(&observed) {
             if !entry.alive {
                 return self.clone();
             }
@@ -108,13 +108,13 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
                 alive: false,
             };
             return Self {
-                entries: self.entries.update(target, new_entry),
+                entries: self.entries.update(observed, new_entry),
                 pending_tombstones: self.pending_tombstones.clone(),
             };
         }
         Self {
             entries: self.entries.clone(),
-            pending_tombstones: self.pending_tombstones.update(target),
+            pending_tombstones: self.pending_tombstones.update(observed),
         }
     }
 }
@@ -197,7 +197,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -214,14 +214,14 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap()
             .apply(
                 Dot::new(u64::MAX, 1),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -235,7 +235,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap()
@@ -253,7 +253,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -261,7 +261,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 1),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -281,7 +281,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 OrSetOp::Remove {
-                    target: Dot::new(2, 0),
+                    observed: Dot::new(2, 0),
                 },
             )
             .unwrap()
@@ -300,7 +300,7 @@ mod tests {
         let id_r = Dot::new(u64::MAX, 0);
         let op_a = OrSetOp::Add { elem: 42u32 };
         let op_r = OrSetOp::Remove {
-            target: Dot::new(1, 0),
+            observed: Dot::new(1, 0),
         };
         let s1 = OrSet::new()
             .apply(id_a, op_a.clone())
@@ -326,7 +326,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -346,7 +346,7 @@ mod tests {
             .apply(
                 Dot::new(u64::MAX, 0),
                 OrSetOp::Remove {
-                    target: Dot::new(1, 0),
+                    observed: Dot::new(1, 0),
                 },
             )
             .unwrap();
@@ -400,10 +400,10 @@ mod proptests {
         for (actor, want_remove, target_byte, elem) in raw {
             let do_remove = want_remove && !existing.is_empty();
             if do_remove {
-                let target = existing[(target_byte as usize) % existing.len()];
+                let observed = existing[(target_byte as usize) % existing.len()];
                 let id = Dot::new(u64::MAX, remove_counter);
                 remove_counter += 1;
-                ops.push((id, OrSetOp::Remove { target }));
+                ops.push((id, OrSetOp::Remove { observed }));
                 continue;
             }
             let clock = clocks.entry(actor).or_insert(0);
@@ -496,8 +496,8 @@ mod proptests {
                         // Cross-actor target: (i + actor) % len selects a different
                         // index per actor, so Remove occasionally kills another actor's
                         // token and exercises add-wins under selective remove.
-                        let target = existing[(i + actor as usize) % existing.len()];
-                        ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { target }));
+                        let observed = existing[(i + actor as usize) % existing.len()];
+                        ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { observed }));
                         remove_counter += 1;
                     }
                 }
@@ -535,8 +535,8 @@ mod proptests {
             let mut remove_counter: u64 = 0;
 
             // (3) Force pending tombstone: target the last Dot before it is added.
-            let pending_target = Dot::new(0, (num_dots as u64) - 1);
-            ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { target: pending_target }));
+            let pending_observed = Dot::new(0, (num_dots as u64) - 1);
+            ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { observed: pending_observed }));
             remove_counter += 1;
 
             // (1) Single actor, clock advancing, elem assigned round-robin.
@@ -549,8 +549,8 @@ mod proptests {
 
             // (2) Remove sequence — duplicates allowed.
             for &idx in &remove_indices {
-                let target = existing[idx % existing.len()];
-                ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { target }));
+                let observed = existing[idx % existing.len()];
+                ops.push((Dot::new(u64::MAX, remove_counter), OrSetOp::Remove { observed }));
                 remove_counter += 1;
             }
 
