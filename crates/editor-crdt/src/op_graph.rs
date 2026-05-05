@@ -1,4 +1,4 @@
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot};
@@ -15,25 +15,25 @@ pub struct Op<P> {
     pub payload: P,
 }
 
-/// Op-DAG storage. Mutable, append-only.
+/// Op-DAG storage. Immutable, structural-sharing append-only.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OpGraph<P> {
     actor: u64,
     next_clock: u64,
-    ops: HashMap<Dot, Op<P>>,
-    heads: HashSet<Dot>,
+    ops: imbl::HashMap<Dot, Op<P>>,
+    heads: imbl::HashSet<Dot>,
     /// Reverse parent index: each dot maps to the set of ops that reference
     /// it as a parent. Drives O(1) `has_child` checks during frontier
     /// maintenance and powers the cascade walks that keep `self_contained`
     /// accurate on data loss / restore.
-    children: HashMap<Dot, HashSet<Dot>>,
+    children: imbl::HashMap<Dot, imbl::HashSet<Dot>>,
     /// Subset of `ops` whose transitive ancestry is fully present locally.
     /// Maintained incrementally so `missing_for` can emit only replayable
     /// batches in O(walk) rather than scanning the full op set per round.
     /// Diverges from `ops` only after server-side data loss
     /// (`debug_remove`); `add` and `receive` keep parents-before-children
     /// invariants so they always preserve the set.
-    self_contained: HashSet<Dot>,
+    self_contained: imbl::HashSet<Dot>,
 }
 
 impl<P: PartialEq> OpGraph<P> {
@@ -53,10 +53,10 @@ impl<P> OpGraph<P> {
         Self {
             actor,
             next_clock: 0,
-            ops: HashMap::new(),
-            heads: HashSet::new(),
-            children: HashMap::new(),
-            self_contained: HashSet::new(),
+            ops: imbl::HashMap::new(),
+            heads: imbl::HashSet::new(),
+            children: imbl::HashMap::new(),
+            self_contained: imbl::HashSet::new(),
         }
     }
 
@@ -106,36 +106,41 @@ impl<P> OpGraph<P> {
     /// Leaves descendants intact with dangling parent references; the
     /// negative-ack recovery path is what restores consistency.
     #[cfg(test)]
-    pub(crate) fn debug_remove(&mut self, dot: &Dot) {
-        if let Some(op) = self.ops.remove(dot) {
+    pub(crate) fn debug_remove(&self, dot: &Dot) -> Self
+    where
+        P: Clone,
+    {
+        let mut next = self.clone();
+        if let Some(op) = next.ops.remove(dot) {
             for parent in &op.parents {
-                if let Some(set) = self.children.get_mut(parent) {
+                if let Some(set) = next.children.get_mut(parent) {
                     set.remove(dot);
                     if set.is_empty() {
-                        self.children.remove(parent);
-                        // Parent has no children left in `self.ops`, so by
+                        next.children.remove(parent);
+                        // Parent has no children left in `next.ops`, so by
                         // the heads invariant it becomes a head — otherwise
                         // it stays unreachable from any frontier walk.
-                        if self.ops.contains_key(parent) {
-                            self.heads.insert(*parent);
+                        if next.ops.contains_key(parent) {
+                            next.heads.insert(*parent);
                         }
                     }
                 }
             }
         }
-        self.heads.remove(dot);
+        next.heads.remove(dot);
 
         // Cascade through `children` to revoke `self_contained` for every
         // descendant — losing an ancestor breaks the transitive-ancestry
         // invariant for everything below it.
         let mut queue: Vec<Dot> = vec![*dot];
         while let Some(d) = queue.pop() {
-            if self.self_contained.remove(&d)
-                && let Some(children) = self.children.get(&d)
+            if next.self_contained.remove(&d).is_some()
+                && let Some(children) = next.children.get(&d)
             {
                 queue.extend(children.iter().copied());
             }
         }
+        next
     }
 }
 
@@ -146,10 +151,9 @@ impl<P> Default for OpGraph<P> {
 }
 
 impl<P: Clone> OpGraph<P> {
-    pub fn add(&mut self, payload: P) -> Result<Op<P>, CrdtError> {
+    pub fn add(&self, payload: P) -> Result<(Self, Op<P>), CrdtError> {
         let id = Dot::new(self.actor, self.next_clock);
-
-        self.next_clock = self
+        let next_clock = self
             .next_clock
             .checked_add(1)
             .ok_or(CrdtError::ClockOverflow { dot: id })?;
@@ -162,14 +166,15 @@ impl<P: Clone> OpGraph<P> {
             parents: parents.clone(),
             payload,
         };
-        self.ops.insert(id, op.clone());
 
+        let mut next = self.clone();
+        next.next_clock = next_clock;
+        next.ops.insert(id, op.clone());
         for p in &parents {
-            self.heads.remove(p);
-            self.children.entry(*p).or_default().insert(id);
+            next.heads.remove(p);
+            next.children.entry(*p).or_default().insert(id);
         }
-
-        self.heads.insert(id);
+        next.heads.insert(id);
         // After server-side data loss, `debug_remove` re-promotes a non-SC
         // ancestor into `heads` so the frontier walk can still see it. A new
         // op built on such a head inherits its broken ancestry, so derive SC
@@ -177,11 +182,11 @@ impl<P: Clone> OpGraph<P> {
         // The op stays in `self.ops` either way; once the missing ancestor is
         // restored, `receive`'s `try_promote_self_contained` cascade lifts it
         // through `self.children` automatically.
-        if parents.iter().all(|p| self.self_contained.contains(p)) {
-            self.self_contained.insert(id);
+        if parents.iter().all(|p| next.self_contained.contains(p)) {
+            next.self_contained.insert(id);
         }
 
-        Ok(op)
+        Ok((next, op))
     }
 
     /// Compute the ops a peer is missing, given the peer's frontier
@@ -233,10 +238,13 @@ impl<P: Clone> OpGraph<P> {
         // We silently drop those descendants and let the negative-ack path
         // (`ResendRequest`) restore the lost ancestor from a peer that still
         // holds it.
+        // Materialize a hashbrown snapshot to bridge to `dfs_post_order_filtered`'s
+        // `&HashSet<Dot>` argument — `self.self_contained` is `imbl::HashSet`.
+        let self_contained: HashSet<Dot> = self.self_contained.iter().copied().collect();
         Ok(self.dfs_post_order_filtered(
             self.heads.iter().copied().collect(),
             &known,
-            Some(&self.self_contained),
+            Some(&self_contained),
         ))
     }
 
@@ -299,7 +307,7 @@ impl<P: Clone> OpGraph<P> {
 }
 
 impl<P: Clone + Eq> OpGraph<P> {
-    pub fn receive(&mut self, mut op: Op<P>) -> Result<(), CrdtError> {
+    pub fn receive(&self, mut op: Op<P>) -> Result<Self, CrdtError> {
         if op.parents.contains(&op.id) {
             return Err(CrdtError::SelfReference { dot: op.id });
         }
@@ -322,17 +330,18 @@ impl<P: Clone + Eq> OpGraph<P> {
 
         if let Some(existing) = self.ops.get(&op.id) {
             if existing.parents == op.parents && existing.payload == op.payload {
-                return Ok(());
+                return Ok(self.clone());
             }
             return Err(CrdtError::DotConflict { dot: op.id });
         }
 
-        self.sync_clock_for(&op.id)?;
+        let mut next = self.clone();
+        next.sync_clock_for(&op.id)?;
 
         let id = op.id;
         for p in &op.parents {
-            self.heads.remove(p);
-            self.children.entry(*p).or_default().insert(id);
+            next.heads.remove(p);
+            next.children.entry(*p).or_default().insert(id);
         }
 
         // Skip the head insert when an existing op already lists this dot
@@ -343,21 +352,19 @@ impl<P: Clone + Eq> OpGraph<P> {
         // that has children. The `children` index makes this an O(1)
         // check so the hot path stays linear during storage replay and
         // initial sync.
-        if self.children.get(&id).is_none_or(HashSet::is_empty) {
-            self.heads.insert(id);
+        if next.children.get(&id).is_none_or(imbl::HashSet::is_empty) {
+            next.heads.insert(id);
         }
-        self.ops.insert(id, op);
+        next.ops.insert(id, op);
 
         // Promote into `self_contained` if every parent is already there,
         // then cascade to the new op's children — a previously dangling
         // descendant whose only missing ancestor was just restored becomes
         // self-contained too.
-        self.try_promote_self_contained(id);
-
-        Ok(())
+        Ok(next.try_promote_self_contained(id))
     }
 
-    fn try_promote_self_contained(&mut self, root: Dot) {
+    fn try_promote_self_contained(mut self, root: Dot) -> Self {
         let mut queue: Vec<Dot> = vec![root];
         while let Some(dot) = queue.pop() {
             if self.self_contained.contains(&dot) {
@@ -374,6 +381,7 @@ impl<P: Clone + Eq> OpGraph<P> {
                 queue.extend(children.iter().copied());
             }
         }
+        self
     }
 
     fn sync_clock_for(&mut self, dot: &Dot) -> Result<(), CrdtError> {
@@ -392,8 +400,8 @@ mod tests {
 
     #[test]
     fn add_first_op_genesis() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let op = g.add(42).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, op) = g.add(42).unwrap();
         assert_eq!(op.id, Dot::new(1, 0));
         assert!(op.parents.is_empty(), "first op is genesis (no parents)");
         assert_eq!(op.payload, 42);
@@ -404,9 +412,9 @@ mod tests {
 
     #[test]
     fn add_second_op_parents_first() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        g.add(10).unwrap();
-        let op2 = g.add(20).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _) = g.add(10).unwrap();
+        let (g, op2) = g.add(20).unwrap();
         assert_eq!(op2.id, Dot::new(1, 1));
         assert_eq!(op2.parents, vec![Dot::new(1, 0)]);
         assert_eq!(g.len(), 2);
@@ -416,10 +424,10 @@ mod tests {
 
     #[test]
     fn add_advances_next_clock() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(5);
-        let op1 = g.add(1).unwrap();
-        let op2 = g.add(2).unwrap();
-        let op3 = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(5);
+        let (g, op1) = g.add(1).unwrap();
+        let (g, op2) = g.add(2).unwrap();
+        let (_g, op3) = g.add(3).unwrap();
         assert_eq!(op1.id, Dot::new(5, 0));
         assert_eq!(op2.id, Dot::new(5, 1));
         assert_eq!(op3.id, Dot::new(5, 2));
@@ -427,13 +435,13 @@ mod tests {
 
     #[test]
     fn receive_genesis_op() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let op = Op {
             id: Dot::new(99, 0),
             parents: vec![],
             payload: 1,
         };
-        g.receive(op.clone()).unwrap();
+        let g = g.receive(op.clone()).unwrap();
         assert_eq!(g.len(), 1);
         assert!(g.contains(&Dot::new(99, 0)));
         let heads: Vec<&Dot> = g.current_heads().collect();
@@ -442,7 +450,7 @@ mod tests {
 
     #[test]
     fn receive_linear_chain() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let a = Op {
             id: Dot::new(99, 0),
             parents: vec![],
@@ -458,9 +466,9 @@ mod tests {
             parents: vec![b.id],
             payload: 3,
         };
-        g.receive(a).unwrap();
-        g.receive(b).unwrap();
-        g.receive(c).unwrap();
+        let g = g.receive(a).unwrap();
+        let g = g.receive(b).unwrap();
+        let g = g.receive(c).unwrap();
         assert_eq!(g.len(), 3);
         let heads: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(heads, vec![&Dot::new(99, 2)], "only the leaf is head");
@@ -468,7 +476,7 @@ mod tests {
 
     #[test]
     fn receive_branching_two_heads() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
             parents: vec![],
@@ -484,9 +492,9 @@ mod tests {
             parents: vec![root.id],
             payload: 2,
         };
-        g.receive(root).unwrap();
-        g.receive(a).unwrap();
-        g.receive(b).unwrap();
+        let g = g.receive(root).unwrap();
+        let g = g.receive(a).unwrap();
+        let g = g.receive(b).unwrap();
         let heads: HashSet<Dot> = g.current_heads().copied().collect();
         let expected: HashSet<Dot> = [Dot::new(1, 0), Dot::new(2, 0)].into_iter().collect();
         assert_eq!(heads, expected);
@@ -494,7 +502,7 @@ mod tests {
 
     #[test]
     fn receive_merging_back_to_one_head() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
             parents: vec![],
@@ -515,10 +523,10 @@ mod tests {
             parents: vec![a.id, b.id],
             payload: 3,
         };
-        g.receive(root).unwrap();
-        g.receive(a).unwrap();
-        g.receive(b).unwrap();
-        g.receive(m).unwrap();
+        let g = g.receive(root).unwrap();
+        let g = g.receive(a).unwrap();
+        let g = g.receive(b).unwrap();
+        let g = g.receive(m).unwrap();
         let heads: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(
             heads,
@@ -529,7 +537,7 @@ mod tests {
 
     #[test]
     fn receive_self_reference_rejected() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let id = Dot::new(99, 0);
         let op = Op {
             id,
@@ -543,7 +551,7 @@ mod tests {
 
     #[test]
     fn receive_with_missing_parent_rejected() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let missing = Dot::new(99, 0);
         let op = Op {
             id: Dot::new(99, 1),
@@ -563,13 +571,13 @@ mod tests {
 
     #[test]
     fn receive_with_partial_missing_parents_lists_only_missing() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let present = Op {
             id: Dot::new(99, 0),
             parents: vec![],
             payload: 0,
         };
-        g.receive(present.clone()).unwrap();
+        let g = g.receive(present.clone()).unwrap();
         let missing_a = Dot::new(99, 5);
         let missing_b = Dot::new(99, 6);
         let op = Op {
@@ -592,26 +600,26 @@ mod tests {
 
     #[test]
     fn receive_normalizes_duplicate_parents() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let p = Op {
             id: Dot::new(99, 0),
             parents: vec![],
             payload: 0,
         };
-        g.receive(p.clone()).unwrap();
+        let g = g.receive(p.clone()).unwrap();
         let op_dup = Op {
             id: Dot::new(99, 1),
             parents: vec![p.id, p.id, p.id],
             payload: 1,
         };
-        g.receive(op_dup).unwrap();
+        let g = g.receive(op_dup).unwrap();
         let stored = g.get(&Dot::new(99, 1)).unwrap();
         assert_eq!(stored.parents, vec![p.id]);
     }
 
     #[test]
     fn receive_normalizes_unsorted_multi_parents() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         // Dot::Ord ranks (clock=0, actor=98) < (clock=0, actor=99).
         let a = Op {
             id: Dot::new(98, 0),
@@ -623,36 +631,36 @@ mod tests {
             parents: vec![],
             payload: 0,
         };
-        g.receive(a.clone()).unwrap();
-        g.receive(b.clone()).unwrap();
+        let g = g.receive(a.clone()).unwrap();
+        let g = g.receive(b.clone()).unwrap();
 
         let op_unsorted = Op {
             id: Dot::new(99, 1),
             parents: vec![b.id, a.id],
             payload: 1,
         };
-        g.receive(op_unsorted).unwrap();
+        let g = g.receive(op_unsorted).unwrap();
         let stored = g.get(&Dot::new(99, 1)).unwrap();
         assert_eq!(stored.parents, vec![a.id, b.id]);
     }
 
     #[test]
     fn receive_same_op_twice_is_idempotent() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let op = Op {
             id: Dot::new(99, 0),
             parents: vec![],
             payload: 7,
         };
-        g.receive(op.clone()).unwrap();
-        g.receive(op.clone()).unwrap();
+        let g = g.receive(op.clone()).unwrap();
+        let g = g.receive(op.clone()).unwrap();
         assert_eq!(g.len(), 1);
         assert_eq!(g.get(&Dot::new(99, 0)), Some(&op));
     }
 
     #[test]
     fn receive_same_dot_different_payload_rejected() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let op_a = Op {
             id: Dot::new(99, 0),
             parents: vec![],
@@ -663,7 +671,7 @@ mod tests {
             parents: vec![],
             payload: 2,
         };
-        g.receive(op_a.clone()).unwrap();
+        let g = g.receive(op_a.clone()).unwrap();
         let result = g.receive(op_b);
         assert_eq!(
             result,
@@ -676,7 +684,7 @@ mod tests {
 
     #[test]
     fn receive_same_dot_different_parents_rejected() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root_a = Op {
             id: Dot::new(98, 0),
             parents: vec![],
@@ -687,8 +695,8 @@ mod tests {
             parents: vec![],
             payload: 0,
         };
-        g.receive(root_a.clone()).unwrap();
-        g.receive(root_b.clone()).unwrap();
+        let g = g.receive(root_a.clone()).unwrap();
+        let g = g.receive(root_b.clone()).unwrap();
         let op_x = Op {
             id: Dot::new(99, 0),
             parents: vec![root_a.id],
@@ -699,7 +707,7 @@ mod tests {
             parents: vec![root_b.id],
             payload: 1,
         };
-        g.receive(op_x).unwrap();
+        let g = g.receive(op_x).unwrap();
         let result = g.receive(op_y);
         assert_eq!(
             result,
@@ -711,7 +719,7 @@ mod tests {
 
     #[test]
     fn receive_duplicate_does_not_resurrect_a_head() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
             parents: vec![],
@@ -722,62 +730,62 @@ mod tests {
             parents: vec![root.id],
             payload: 1,
         };
-        g.receive(root.clone()).unwrap();
-        g.receive(child.clone()).unwrap();
-        g.receive(root).unwrap();
+        let g = g.receive(root.clone()).unwrap();
+        let g = g.receive(child.clone()).unwrap();
+        let g = g.receive(root).unwrap();
         let heads: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(heads, vec![&Dot::new(99, 1)]);
     }
 
     #[test]
     fn receive_advances_next_clock_past_observed_op() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(7);
+        let g: OpGraph<u32> = OpGraph::with_actor(7);
         let observed = Op {
             id: Dot::new(99, 50),
             parents: vec![],
             payload: 1,
         };
-        g.receive(observed).unwrap();
-        let next = g.add(2).unwrap();
+        let g = g.receive(observed).unwrap();
+        let (_g, next) = g.add(2).unwrap();
         assert_eq!(next.id, Dot::new(7, 51));
     }
 
     #[test]
     fn receive_lower_clock_does_not_lower_next_clock() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(7);
+        let g: OpGraph<u32> = OpGraph::with_actor(7);
         let high = Op {
             id: Dot::new(99, 10),
             parents: vec![],
             payload: 1,
         };
-        g.receive(high).unwrap();
+        let g = g.receive(high).unwrap();
         let low = Op {
             id: Dot::new(98, 3),
             parents: vec![],
             payload: 2,
         };
-        g.receive(low).unwrap();
-        let next = g.add(3).unwrap();
+        let g = g.receive(low).unwrap();
+        let (_g, next) = g.add(3).unwrap();
         assert_eq!(next.id, Dot::new(7, 11));
     }
 
     #[test]
     fn receive_idempotent_op_keeps_next_clock_advanced() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(7);
+        let g: OpGraph<u32> = OpGraph::with_actor(7);
         let op = Op {
             id: Dot::new(99, 50),
             parents: vec![],
             payload: 1,
         };
-        g.receive(op.clone()).unwrap();
-        g.receive(op).unwrap();
-        let next = g.add(2).unwrap();
+        let g = g.receive(op.clone()).unwrap();
+        let g = g.receive(op).unwrap();
+        let (_g, next) = g.add(2).unwrap();
         assert_eq!(next.id, Dot::new(7, 51));
     }
 
     #[test]
     fn receive_max_clock_returns_clock_overflow() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(7);
+        let g: OpGraph<u32> = OpGraph::with_actor(7);
         let op = Op {
             id: Dot::new(99, u64::MAX),
             parents: vec![],
@@ -795,8 +803,8 @@ mod tests {
 
     #[test]
     fn derive_partial_eq_compares_full_state() {
-        let mut g1: OpGraph<u32> = OpGraph::with_actor(0);
-        let mut g2: OpGraph<u32> = OpGraph::with_actor(42);
+        let g1: OpGraph<u32> = OpGraph::with_actor(0);
+        let g2: OpGraph<u32> = OpGraph::with_actor(42);
         let a = Op {
             id: Dot::new(1, 0),
             parents: vec![],
@@ -807,17 +815,17 @@ mod tests {
             parents: vec![],
             payload: 2,
         };
-        g1.receive(a.clone()).unwrap();
-        g1.receive(b.clone()).unwrap();
-        g2.receive(b).unwrap();
-        g2.receive(a).unwrap();
+        let g1 = g1.receive(a.clone()).unwrap();
+        let g1 = g1.receive(b.clone()).unwrap();
+        let g2 = g2.receive(b).unwrap();
+        let g2 = g2.receive(a).unwrap();
         assert_ne!(g1, g2);
     }
 
     #[test]
     fn graph_state_eq_ignores_actor_and_clock() {
-        let mut g1: OpGraph<u32> = OpGraph::with_actor(0);
-        let mut g2: OpGraph<u32> = OpGraph::with_actor(42);
+        let g1: OpGraph<u32> = OpGraph::with_actor(0);
+        let g2: OpGraph<u32> = OpGraph::with_actor(42);
         let a = Op {
             id: Dot::new(1, 0),
             parents: vec![],
@@ -828,27 +836,27 @@ mod tests {
             parents: vec![],
             payload: 2,
         };
-        g1.receive(a.clone()).unwrap();
-        g1.receive(b.clone()).unwrap();
-        g2.receive(b).unwrap();
-        g2.receive(a).unwrap();
+        let g1 = g1.receive(a.clone()).unwrap();
+        let g1 = g1.receive(b.clone()).unwrap();
+        let g2 = g2.receive(b).unwrap();
+        let g2 = g2.receive(a).unwrap();
         assert!(g1.graph_state_eq(&g2));
     }
 
     #[test]
     fn mixed_local_and_remote_then_merge() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let mine_a = g.add(10).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, mine_a) = g.add(10).unwrap();
         let theirs = Op {
             id: Dot::new(2, 0),
             parents: vec![],
             payload: 20,
         };
-        g.receive(theirs.clone()).unwrap();
+        let g = g.receive(theirs.clone()).unwrap();
         let heads: HashSet<Dot> = g.current_heads().copied().collect();
         let expected: HashSet<Dot> = [mine_a.id, theirs.id].into_iter().collect();
         assert_eq!(heads, expected);
-        let merge = g.add(30).unwrap();
+        let (g, merge) = g.add(30).unwrap();
         let merge_parents: HashSet<Dot> = merge.parents.iter().copied().collect();
         assert_eq!(merge_parents, expected);
         let heads_after: Vec<&Dot> = g.current_heads().collect();
@@ -857,10 +865,10 @@ mod tests {
 
     #[test]
     fn missing_for_empty_remote_returns_self_ops_topo_sorted() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
         let result = g.missing_for(&HashSet::new()).unwrap();
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
         assert_eq!(ids, vec![a.id, b.id, c.id]);
@@ -868,10 +876,10 @@ mod tests {
 
     #[test]
     fn missing_for_full_remote_returns_empty() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let _a = g.add(1).unwrap();
-        let _b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _a) = g.add(1).unwrap();
+        let (g, _b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
         let remote_heads: HashSet<Dot> = [c.id].into_iter().collect();
         let result = g.missing_for(&remote_heads).unwrap();
         assert!(result.is_empty());
@@ -879,10 +887,10 @@ mod tests {
 
     #[test]
     fn missing_for_partial_remote_returns_only_descendants() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
         let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
         let result = g.missing_for(&remote_heads).unwrap();
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
@@ -891,9 +899,9 @@ mod tests {
 
     #[test]
     fn missing_for_unknown_remote_head_returns_err() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let _a = g.add(1).unwrap();
-        let _b = g.add(2).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _a) = g.add(1).unwrap();
+        let (g, _b) = g.add(2).unwrap();
         let unknown = Dot::new(99, 0);
         let remote_heads: HashSet<Dot> = [unknown].into_iter().collect();
         let err = g.missing_for(&remote_heads).unwrap_err();
@@ -910,12 +918,12 @@ mod tests {
         // a → b → c chain. Drop a to model server-side data loss, then
         // re-receive it via the recovery path. The descendants are still
         // present, so a must not become a head — heads must stay {c}.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let _b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
-        g.debug_remove(&a.id);
-        g.receive(a.clone()).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, _b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
+        let g = g.debug_remove(&a.id);
+        let g = g.receive(a.clone()).unwrap();
         let heads: HashSet<Dot> = g.current_heads().copied().collect();
         let expected: HashSet<Dot> = [c.id].into_iter().collect();
         assert_eq!(heads, expected);
@@ -926,11 +934,11 @@ mod tests {
         // a → b → c. Server simulates losing a (server-side rollback). Then
         // missing_for({c}) walks c → b → a, finds a missing in self.ops,
         // and reports a as unknown so the peer can re-send it.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let _b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
-        g.debug_remove(&a.id);
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, _b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
+        let g = g.debug_remove(&a.id);
         let remote_heads: HashSet<Dot> = [c.id].into_iter().collect();
         let err = g.missing_for(&remote_heads).unwrap_err();
         match err {
@@ -949,11 +957,11 @@ mod tests {
         // the peer to reject the batch with `MissingParents`. We instead
         // emit only the self-contained subset {a}; the negative-ack path
         // restores b later from a peer that still holds it.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let _c = g.add(3).unwrap();
-        g.debug_remove(&b.id);
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, _c) = g.add(3).unwrap();
+        let g = g.debug_remove(&b.id);
         let result = g.missing_for(&HashSet::new()).unwrap();
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
         assert_eq!(ids, vec![a.id]);
@@ -967,12 +975,12 @@ mod tests {
         // inherits its broken ancestry and must not be emitted by
         // `missing_for(empty)` — otherwise a fresh peer would receive d
         // without c/b and reject with `MissingParents`.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let _c = g.add(3).unwrap();
-        g.debug_remove(&b.id);
-        let _d = g.add(4).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, _c) = g.add(3).unwrap();
+        let g = g.debug_remove(&b.id);
+        let (g, _d) = g.add(4).unwrap();
         let result = g.missing_for(&HashSet::new()).unwrap();
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
         assert_eq!(ids, vec![a.id]);
@@ -984,13 +992,13 @@ mod tests {
         // through `self.children` must promote c and d (built post-loss)
         // back into `self_contained`, so `missing_for(empty)` emits the
         // full chain in ancestry-first order.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
-        g.debug_remove(&b.id);
-        let d = g.add(4).unwrap();
-        g.receive(b.clone()).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
+        let g = g.debug_remove(&b.id);
+        let (g, d) = g.add(4).unwrap();
+        let g = g.receive(b.clone()).unwrap();
         let result = g.missing_for(&HashSet::new()).unwrap();
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
         assert_eq!(ids.len(), 4);
@@ -1007,14 +1015,14 @@ mod tests {
         // `has_dangling` is the operational signal: it stays `true` until a
         // peer pushes the missing ancestor back, at which point the cascade
         // promotes the descendants and the replica is no longer degraded.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let _a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let _c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, _c) = g.add(3).unwrap();
         assert!(!g.has_dangling());
-        g.debug_remove(&b.id);
+        let g = g.debug_remove(&b.id);
         assert!(g.has_dangling());
-        g.receive(b.clone()).unwrap();
+        let g = g.receive(b.clone()).unwrap();
         assert!(!g.has_dangling());
     }
 
@@ -1023,11 +1031,11 @@ mod tests {
         // Same loss scenario as above, but the peer already has `a`. The
         // emitted batch must remain self-contained — empty here, since the
         // only remaining self-contained op is what the peer already holds.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let _c = g.add(3).unwrap();
-        g.debug_remove(&b.id);
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, _c) = g.add(3).unwrap();
+        let g = g.debug_remove(&b.id);
         let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
         let result = g.missing_for(&remote_heads).unwrap();
         assert!(result.is_empty());
@@ -1035,8 +1043,8 @@ mod tests {
 
     #[test]
     fn missing_for_branch_topology_topo_sorted() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
         let b = Op {
             id: Dot::new(2, 0),
             parents: vec![a.id],
@@ -1047,9 +1055,9 @@ mod tests {
             parents: vec![a.id],
             payload: 3,
         };
-        g.receive(b.clone()).unwrap();
-        g.receive(c.clone()).unwrap();
-        let d = g.add(4).unwrap();
+        let g = g.receive(b.clone()).unwrap();
+        let g = g.receive(c.clone()).unwrap();
+        let (g, d) = g.add(4).unwrap();
 
         let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
         let result = g.missing_for(&remote_heads).unwrap();
@@ -1067,10 +1075,10 @@ mod tests {
 
     #[test]
     fn topo_sort_linear_chain() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
         let dots: HashSet<Dot> = [a.id, b.id, c.id].into_iter().collect();
         let result = g.topo_sort(&dots);
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
@@ -1079,10 +1087,10 @@ mod tests {
 
     #[test]
     fn topo_sort_subset_skips_parents_outside_dots() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let _a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
         let dots: HashSet<Dot> = [b.id, c.id].into_iter().collect();
         let result = g.topo_sort(&dots);
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
@@ -1098,8 +1106,8 @@ mod tests {
 
     #[test]
     fn topo_sort_skips_unknown_dots() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
         let unknown = Dot::new(99, 0);
         let dots: HashSet<Dot> = [a.id, unknown].into_iter().collect();
         let result = g.topo_sort(&dots);
@@ -1112,10 +1120,10 @@ mod tests {
         // a → b → c, dots = {a, c} (b excluded). Traversal must still walk
         // through b to reach a; otherwise c emits before a and breaks the
         // ancestry-first contract.
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let _b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, _b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
         let dots: HashSet<Dot> = [a.id, c.id].into_iter().collect();
         let result = g.topo_sort(&dots);
         let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
@@ -1124,10 +1132,10 @@ mod tests {
 
     #[test]
     fn iter_all_yields_every_op() {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
-        let a = g.add(1).unwrap();
-        let b = g.add(2).unwrap();
-        let c = g.add(3).unwrap();
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
         let collected: HashSet<Dot> = g.iter_all().map(|op| op.id).collect();
         let expected: HashSet<Dot> = [a.id, b.id, c.id].into_iter().collect();
         assert_eq!(collected, expected);
@@ -1195,11 +1203,10 @@ mod proptests {
     }
 
     fn apply_all(ops: &[Op<u32>]) -> OpGraph<u32> {
-        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
-        for op in ops {
-            g.receive(op.clone()).unwrap();
-        }
-        g
+        ops.iter()
+            .cloned()
+            .try_fold(OpGraph::with_actor(0), |g, op| g.receive(op))
+            .unwrap()
     }
 
     #[test]

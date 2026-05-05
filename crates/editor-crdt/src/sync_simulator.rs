@@ -69,7 +69,8 @@ fn random_actor() -> u64 {
 impl<P: Clone + Eq> Replica<P> {
     /// Atomic update of `op_graph` and `pending_push`.
     pub fn create_op(&mut self, payload: P) -> Result<(Op<P>, SyncMessage<P>), CrdtError> {
-        let op = self.op_graph.add(payload)?;
+        let (next, op) = self.op_graph.add(payload)?;
+        self.op_graph = next;
         self.pending_push.insert(op.id);
         let msg = SyncMessage::Ops(vec![op.clone()]);
         Ok((op, msg))
@@ -90,10 +91,10 @@ impl<P: Clone + Eq> Replica<P> {
         match msg {
             SyncMessage::Ops(ops) => {
                 for op in ops {
-                    if let Err(e) = self.op_graph.receive(op)
-                        && !matches!(e, CrdtError::MissingParents { .. })
-                    {
-                        self.receive_errors.push(e);
+                    match self.op_graph.receive(op) {
+                        Ok(next) => self.op_graph = next,
+                        Err(CrdtError::MissingParents { .. }) => {}
+                        Err(e) => self.receive_errors.push(e),
                     }
                 }
             }
@@ -141,13 +142,10 @@ impl<P: Clone + Eq> Replica<P> {
         self.actor_id = new_actor;
         let all_dots: HashSet<Dot> = self.op_graph.iter_all().map(|op| op.id).collect();
         let topo_sorted = self.op_graph.topo_sort(&all_dots);
-        let mut fresh = OpGraph::with_actor(new_actor);
-        for op in topo_sorted {
-            fresh
-                .receive(op)
-                .expect("storage replay of own ops never fails");
-        }
-        self.op_graph = fresh;
+        self.op_graph = topo_sorted
+            .into_iter()
+            .try_fold(OpGraph::with_actor(new_actor), |g, op| g.receive(op))
+            .expect("storage replay of own ops never fails");
         self.inbox.clear();
     }
 
@@ -250,15 +248,13 @@ impl<P: Clone + Eq> Server<P> {
                 let mut acked: Vec<Dot> = Vec::new();
                 for op in ops {
                     match self.op_graph.receive(op.clone()) {
-                        Ok(()) => {
+                        Ok(next) => {
+                            self.op_graph = next;
                             acked.push(op.id);
                             accepted.push(op);
                         }
-                        Err(e) => {
-                            if !matches!(e, CrdtError::MissingParents { .. }) {
-                                self.receive_errors.push(e);
-                            }
-                        }
+                        Err(CrdtError::MissingParents { .. }) => {}
+                        Err(e) => self.receive_errors.push(e),
                     }
                 }
                 if !acked.is_empty() {
@@ -328,7 +324,8 @@ impl<P: Clone + Eq> Server<P> {
     /// Test/bootstrap helper — directly receive an op into the server's
     /// OpGraph. Production server only receives ops via enqueue + tick.
     pub(crate) fn debug_receive(&mut self, op: Op<P>) -> Result<(), CrdtError> {
-        self.op_graph.receive(op)
+        self.op_graph = self.op_graph.receive(op)?;
+        Ok(())
     }
 }
 
@@ -479,7 +476,9 @@ impl<P: Clone + Eq> Simulator<P> {
             }
             Action::RestartInstance { client } => self.restart_instance(client),
             Action::FallbackSync { client } => self.fallback_sync(client),
-            Action::ServerForgetOp { dot } => self.server.op_graph.debug_remove(&dot),
+            Action::ServerForgetOp { dot } => {
+                self.server.op_graph = self.server.op_graph.debug_remove(&dot);
+            }
         }
     }
 
