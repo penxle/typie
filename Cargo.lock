@@ -706,6 +706,7 @@ dependencies = [
  "bitcode",
  "editor-bindgen",
  "editor-common",
+ "editor-crdt",
  "editor-model",
  "editor-state",
  "heck",

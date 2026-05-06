@@ -16,6 +16,7 @@ syn.workspace = true
 
 [dev-dependencies]
 editor-common = { path = "../editor-common" }
+editor-crdt = { path = "../editor-crdt" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state" }
 imbl.workspace = true
