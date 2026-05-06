@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{CrdtError, Dot};
+use crate::{CrdtError, Dot, ToPlain};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -50,7 +50,7 @@ impl<T> Rga<T> {
     /// Stack-based so recursion depth is irrelevant — no stack overflow on deep chains.
     /// Children are sorted asc and pushed; popping then yields desc Dot order.
     pub fn iter(&self) -> impl Iterator<Item = &T> + '_ {
-        VisibleIter::new(self)
+        self.iter_with_dot().map(|(_, v)| v)
     }
 
     /// Asc-sorted `Vec<Dot>` of `parent`'s children — popping yields desc order.
@@ -63,6 +63,25 @@ impl<T> Rga<T> {
             .collect();
         ids.sort();
         ids
+    }
+
+    pub fn iter_with_dot(&self) -> impl Iterator<Item = (Dot, &T)> + '_ {
+        VisibleIterWithDot::new(self)
+    }
+
+    pub fn dot_at(&self, offset: usize) -> Result<Option<Dot>, CrdtError> {
+        if offset == 0 {
+            return Ok(None);
+        }
+        let mut iter = self.iter_with_dot();
+        if let Some((dot, _)) = iter.nth(offset - 1) {
+            Ok(Some(dot))
+        } else {
+            Err(CrdtError::OffsetOutOfBounds {
+                offset,
+                len: self.len(),
+            })
+        }
     }
 }
 
@@ -132,12 +151,19 @@ impl<T: Clone + Eq> Rga<T> {
     }
 }
 
-struct VisibleIter<'a, T> {
+impl<T: Clone + Eq> ToPlain for Rga<T> {
+    type Plain = Vec<T>;
+    fn to_plain(&self) -> Vec<T> {
+        self.iter().cloned().collect()
+    }
+}
+
+struct VisibleIterWithDot<'a, T> {
     crdt: &'a Rga<T>,
     stack: Vec<Dot>,
 }
 
-impl<'a, T> VisibleIter<'a, T> {
+impl<'a, T> VisibleIterWithDot<'a, T> {
     fn new(crdt: &'a Rga<T>) -> Self {
         Self {
             crdt,
@@ -146,21 +172,20 @@ impl<'a, T> VisibleIter<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for VisibleIter<'a, T> {
-    type Item = &'a T;
-    fn next(&mut self) -> Option<&'a T> {
+impl<'a, T> Iterator for VisibleIterWithDot<'a, T> {
+    type Item = (Dot, &'a T);
+    fn next(&mut self) -> Option<(Dot, &'a T)> {
         while let Some(id) = self.stack.pop() {
             // Tombstones still act as anchors, so traverse regardless of alive.
             let children = self.crdt.children_asc(Some(id));
             self.stack.extend(children);
-
             let entry = self
                 .crdt
                 .entries
                 .get(&id)
                 .expect("popped id must be in entries");
             if entry.alive {
-                return Some(&entry.value);
+                return Some((id, &entry.value));
             }
         }
         None
@@ -845,6 +870,201 @@ mod tests {
         );
 
         let _: Rga<String> = Rga::default();
+    }
+
+    #[test]
+    fn dot_at_empty_returns_none_for_zero() {
+        let crdt = Rga::<u32>::new();
+        assert_eq!(crdt.dot_at(0), Ok(None));
+        assert_eq!(
+            crdt.dot_at(1),
+            Err(CrdtError::OffsetOutOfBounds { offset: 1, len: 0 })
+        );
+    }
+
+    #[test]
+    fn dot_at_single_element() {
+        let d = Dot::new(1, 0);
+        let crdt = Rga::<u32>::new()
+            .apply(
+                d,
+                RgaOp::Insert {
+                    after: None,
+                    value: 7,
+                },
+            )
+            .unwrap();
+        assert_eq!(crdt.dot_at(0), Ok(None));
+        assert_eq!(crdt.dot_at(1), Ok(Some(d)));
+        assert_eq!(
+            crdt.dot_at(2),
+            Err(CrdtError::OffsetOutOfBounds { offset: 2, len: 1 })
+        );
+    }
+
+    #[test]
+    fn dot_at_three_elements_in_order() {
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let d3 = Dot::new(1, 2);
+        let crdt = Rga::<u32>::new()
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 1,
+                },
+            )
+            .unwrap()
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 2,
+                },
+            )
+            .unwrap()
+            .apply(
+                d3,
+                RgaOp::Insert {
+                    after: Some(d2),
+                    value: 3,
+                },
+            )
+            .unwrap();
+        assert_eq!(crdt.dot_at(0), Ok(None));
+        assert_eq!(crdt.dot_at(1), Ok(Some(d1)));
+        assert_eq!(crdt.dot_at(2), Ok(Some(d2)));
+        assert_eq!(crdt.dot_at(3), Ok(Some(d3)));
+        assert_eq!(
+            crdt.dot_at(4),
+            Err(CrdtError::OffsetOutOfBounds { offset: 4, len: 3 })
+        );
+    }
+
+    #[test]
+    fn iter_with_dot_yields_dot_value_pairs() {
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let crdt = Rga::<u32>::new()
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 7,
+                },
+            )
+            .unwrap()
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 9,
+                },
+            )
+            .unwrap();
+        let collected: Vec<(Dot, u32)> = crdt.iter_with_dot().map(|(d, v)| (d, *v)).collect();
+        assert_eq!(collected, vec![(d1, 7), (d2, 9)]);
+    }
+
+    #[test]
+    fn dot_at_skips_tombstones() {
+        // Insert three, remove the middle. dot_at should index live elements only.
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let d3 = Dot::new(1, 2);
+        let d_remove = Dot::new(u64::MAX, 0);
+        let crdt = Rga::<u32>::new()
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 1,
+                },
+            )
+            .unwrap()
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 2,
+                },
+            )
+            .unwrap()
+            .apply(
+                d3,
+                RgaOp::Insert {
+                    after: Some(d2),
+                    value: 3,
+                },
+            )
+            .unwrap()
+            .apply(d_remove, RgaOp::Remove { observed: d2 })
+            .unwrap();
+        assert_eq!(crdt.dot_at(0), Ok(None));
+        assert_eq!(crdt.dot_at(1), Ok(Some(d1)));
+        assert_eq!(crdt.dot_at(2), Ok(Some(d3))); // d2 tombstoned, skipped
+        assert_eq!(
+            crdt.dot_at(3),
+            Err(CrdtError::OffsetOutOfBounds { offset: 3, len: 2 })
+        );
+    }
+
+    #[test]
+    fn empty_rga_to_plain_is_empty_vec() {
+        let crdt: Rga<u32> = Rga::new();
+        assert_eq!(crdt.to_plain(), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn rga_to_plain_yields_live_in_order() {
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let crdt = Rga::<u32>::new()
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 1,
+                },
+            )
+            .unwrap()
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 2,
+                },
+            )
+            .unwrap();
+        assert_eq!(crdt.to_plain(), vec![1, 2]);
+    }
+
+    #[test]
+    fn rga_to_plain_skips_tombstoned() {
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let d_remove = Dot::new(u64::MAX, 0);
+        let crdt = Rga::<u32>::new()
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 1,
+                },
+            )
+            .unwrap()
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 2,
+                },
+            )
+            .unwrap()
+            .apply(d_remove, RgaOp::Remove { observed: d1 })
+            .unwrap();
+        assert_eq!(crdt.to_plain(), vec![2]);
     }
 }
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-use crate::{CrdtError, Dot};
+use crate::{CrdtError, Dot, ToPlain};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -125,9 +125,20 @@ impl<T: Clone + Eq + Hash> Default for OrSet<T> {
     }
 }
 
+impl<T> ToPlain for OrSet<T>
+where
+    T: Clone + Eq + std::hash::Hash + Ord,
+{
+    type Plain = std::collections::BTreeSet<T>;
+    fn to_plain(&self) -> Self::Plain {
+        self.iter().cloned().collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn empty_state() {
@@ -361,6 +372,41 @@ mod tests {
         assert_eq!(tags_99.len(), 1);
         assert!(tags_99.contains(&Dot::new(3, 0)));
         assert!(tags_missing.is_empty());
+    }
+
+    #[test]
+    fn empty_orset_to_plain_is_empty_btreeset() {
+        let s: OrSet<u32> = OrSet::new();
+        assert_eq!(s.to_plain(), BTreeSet::new());
+    }
+
+    #[test]
+    fn orset_to_plain_yields_alive_sorted() {
+        let s = OrSet::<u32>::new()
+            .apply(Dot::new(1, 0), OrSetOp::Add { elem: 2 })
+            .unwrap()
+            .apply(Dot::new(1, 1), OrSetOp::Add { elem: 1 })
+            .unwrap();
+        let mut expected = BTreeSet::new();
+        expected.insert(1u32);
+        expected.insert(2u32);
+        assert_eq!(s.to_plain(), expected);
+    }
+
+    #[test]
+    fn orset_to_plain_skips_tombstoned() {
+        let d_a = Dot::new(1, 0);
+        let d_remove = Dot::new(u64::MAX, 0);
+        let s = OrSet::<u32>::new()
+            .apply(d_a, OrSetOp::Add { elem: 7 })
+            .unwrap()
+            .apply(Dot::new(1, 1), OrSetOp::Add { elem: 9 })
+            .unwrap()
+            .apply(d_remove, OrSetOp::Remove { observed: d_a })
+            .unwrap();
+        let mut expected = BTreeSet::new();
+        expected.insert(9u32);
+        assert_eq!(s.to_plain(), expected);
     }
 }
 

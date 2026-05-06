@@ -9,6 +9,7 @@ pub mod orset;
 pub mod rga;
 pub mod sync;
 pub mod text;
+pub mod to_plain;
 
 pub use dot::Dot;
 pub use error::CrdtError;
@@ -19,6 +20,7 @@ pub use orset::{OrSet, OrSetOp};
 pub use rga::{Rga, RgaOp};
 pub use sync::SyncMessage;
 pub use text::{Text, TextOp};
+pub use to_plain::ToPlain;
 
 #[cfg(test)]
 mod test_utils;

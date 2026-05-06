@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-use crate::{CrdtError, Dot};
+use crate::{CrdtError, Dot, ToPlain};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -148,6 +148,17 @@ impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
 impl<K, V> Default for OrMap<K, V> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<K, V> ToPlain for OrMap<K, V>
+where
+    K: Clone + Eq + std::hash::Hash + Ord,
+    V: Clone + Eq,
+{
+    type Plain = std::collections::BTreeMap<K, V>;
+    fn to_plain(&self) -> Self::Plain {
+        self.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
 }
 
@@ -430,6 +441,27 @@ mod tests {
         entries.sort();
         assert_eq!(entries, vec![(7, 99), (9, 1)]);
         assert_eq!(m.len(), 2);
+    }
+
+    #[test]
+    fn empty_ormap_to_plain_is_empty_btreemap() {
+        use std::collections::BTreeMap;
+        let m: OrMap<u32, u32> = OrMap::new();
+        assert_eq!(m.to_plain(), BTreeMap::new());
+    }
+
+    #[test]
+    fn ormap_to_plain_returns_canonical_winners() {
+        use std::collections::BTreeMap;
+        let m = OrMap::<u32, u32>::new()
+            .apply(Dot::new(1, 0), OrMapOp::Set { key: 7, value: 42 })
+            .unwrap()
+            .apply(Dot::new(1, 1), OrMapOp::Set { key: 9, value: 99 })
+            .unwrap();
+        let mut expected = BTreeMap::new();
+        expected.insert(7u32, 42u32);
+        expected.insert(9u32, 99u32);
+        assert_eq!(m.to_plain(), expected);
     }
 }
 

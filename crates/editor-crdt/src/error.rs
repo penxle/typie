@@ -16,4 +16,7 @@ pub enum CrdtError {
 
     #[error("Remote heads include dots not present in self.ops: {unknown:?}")]
     UnknownHeads { unknown: Vec<Dot> },
+
+    #[error("offset {offset} out of bounds (len {len})")]
+    OffsetOutOfBounds { offset: usize, len: usize },
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{CrdtError, Dot};
+use crate::{CrdtError, Dot, ToPlain};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -45,6 +45,13 @@ impl<T: Clone + PartialEq> LwwReg<T> {
                 value,
             }),
         }
+    }
+}
+
+impl<T: Clone + PartialEq> ToPlain for LwwReg<T> {
+    type Plain = T;
+    fn to_plain(&self) -> T {
+        self.value.clone()
     }
 }
 
@@ -191,6 +198,20 @@ mod tests {
             .unwrap();
         assert_eq!(r.get(), &44);
         assert_eq!(r.last_set(), Some(a2c4));
+    }
+
+    #[test]
+    fn lwwreg_to_plain_returns_winner_value() {
+        let r = LwwReg::with_value(0u32)
+            .apply(Dot::new(1, 0), LwwRegOp::Set { value: 42 })
+            .unwrap();
+        assert_eq!(r.to_plain(), 42);
+    }
+
+    #[test]
+    fn lwwreg_to_plain_returns_initial_when_unmodified() {
+        let r = LwwReg::with_value(7u32);
+        assert_eq!(r.to_plain(), 7);
     }
 }
 

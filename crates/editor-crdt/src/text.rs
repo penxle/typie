@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::{CrdtError, Dot, Rga, RgaOp};
+use crate::{CrdtError, Dot, Rga, RgaOp, ToPlain};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -28,6 +28,10 @@ impl Text {
         self.0.apply(id, rga_op).map(Self)
     }
 
+    pub fn dot_at(&self, char_offset: usize) -> Result<Option<Dot>, CrdtError> {
+        self.0.dot_at(char_offset)
+    }
+
     /// Count of reachable + alive characters — equal to `to_string().chars().count()`.
     pub fn len(&self) -> usize {
         self.0.len()
@@ -44,6 +48,13 @@ impl fmt::Display for Text {
             write!(f, "{ch}")?;
         }
         Ok(())
+    }
+}
+
+impl ToPlain for Text {
+    type Plain = String;
+    fn to_plain(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -122,5 +133,62 @@ mod tests {
             .unwrap();
         assert_eq!(t.to_string(), "hi");
         assert_eq!(t.len(), t.to_string().chars().count());
+    }
+
+    #[test]
+    fn dot_at_delegates_to_rga() {
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let t = Text::new()
+            .apply(
+                d1,
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'h',
+                },
+            )
+            .unwrap()
+            .apply(
+                d2,
+                TextOp::InsertChar {
+                    after: Some(d1),
+                    ch: 'i',
+                },
+            )
+            .unwrap();
+        assert_eq!(t.dot_at(0), Ok(None));
+        assert_eq!(t.dot_at(1), Ok(Some(d1)));
+        assert_eq!(t.dot_at(2), Ok(Some(d2)));
+        assert!(t.dot_at(3).is_err());
+    }
+
+    #[test]
+    fn empty_text_plain_is_empty_string() {
+        let t = Text::new();
+        assert_eq!(t.to_plain(), "");
+    }
+
+    #[test]
+    fn two_chars_plain() {
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let t = Text::new()
+            .apply(
+                d1,
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'h',
+                },
+            )
+            .unwrap()
+            .apply(
+                d2,
+                TextOp::InsertChar {
+                    after: Some(d1),
+                    ch: 'i',
+                },
+            )
+            .unwrap();
+        assert_eq!(t.to_plain(), "hi");
     }
 }
