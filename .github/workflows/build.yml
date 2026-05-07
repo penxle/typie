@@ -8,13 +8,14 @@ on:
         type: string
         description: The app to build.
     outputs:
-      version:
-        value: ${{ jobs.build.outputs.version }}
-        description: The version of the built image.
+      sha:
+        value: ${{ jobs.build.outputs.sha }}
+        description: Short SHA of the built commit.
 
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   build:
@@ -22,7 +23,7 @@ jobs:
     runs-on: arc-p-8x
 
     outputs:
-      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.sha.outputs.sha }}
 
     steps:
       - name: Checkout repository
@@ -62,16 +63,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Generate image metadata
-        id: meta
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::509399603331:role/actions@github
+          aws-region: ap-northeast-2
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Compute short SHA
+        id: sha
+        run: echo "sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+
+      - name: Generate ghcr metadata
+        id: meta-ghcr
         uses: docker/metadata-action@v6
         with:
-          images: |
-            name=ghcr.io/${{ github.repository_owner }}/${{ inputs.app }}
-          flavor: |
-            latest=true
+          images: ghcr.io/${{ github.repository_owner }}/${{ inputs.app }}
+          flavor: latest=true
+          tags: type=sha
+
+      - name: Generate ECR metadata
+        id: meta-ecr
+        uses: docker/metadata-action@v6
+        with:
+          images: 509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/${{ inputs.app }}
+          flavor: latest=false
           tags: |
-            type=sha
+            type=sha,prefix=dev-
+            type=raw,value=dev-latest
 
       - name: Build image
         uses: docker/build-push-action@v7
@@ -79,11 +100,13 @@ jobs:
           push: true
           context: .
           file: apps/${{ inputs.app }}/Dockerfile
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ steps.meta-ghcr.outputs.tags }}
+            ${{ steps.meta-ecr.outputs.tags }}
+          labels: ${{ steps.meta-ghcr.outputs.labels }}
           build-args: |
-            IMAGE_TAG=${{ steps.meta.outputs.version }}
+            IMAGE_TAG=${{ steps.meta-ghcr.outputs.version }}
           secrets: |
             TURBO_TOKEN=${{ secrets.TURBO_TOKEN }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/cache:${{ inputs.app }}
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/cache:${{ inputs.app }},mode=max,compression=zstd,oci-mediatypes=true,ignore-error=true
+          cache-from: type=registry,ref=509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/cache:${{ inputs.app }}
+          cache-to: type=registry,ref=509399603331.dkr.ecr.ap-northeast-2.amazonaws.com/cache:${{ inputs.app }},mode=max,compression=zstd,image-manifest=true,oci-mediatypes=true,ignore-error=true

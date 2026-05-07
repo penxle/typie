@@ -3,21 +3,22 @@ name: Production
 on:
   workflow_dispatch:
     inputs:
-      version:
+      sha:
         required: false
         type: string
-        description: 'Git hash'
+        description: 'Git short SHA (defaults to main HEAD)'
 
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   get-version:
     name: Get deployment version
     runs-on: arc-p-4x
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,19 +29,49 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            echo "version=sha-${{ inputs.version }}" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.sha }}" ]; then
+            SHA=$(git rev-parse --short=7 "${{ inputs.sha }}")
           else
             SHA=$(git rev-parse --short=7 HEAD)
-            echo "version=sha-${SHA}" >> $GITHUB_OUTPUT
           fi
-          echo "Using version: $(cat $GITHUB_OUTPUT | grep version | cut -d'=' -f2)"
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Using sha: $SHA"
+
+  tag-prod:
+    name: Tag images for prod
+    needs: get-version
+    runs-on: arc-p-4x
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::509399603331:role/actions@github
+          aws-region: ap-northeast-2
+
+      - name: Re-tag dev images as prod
+        env:
+          SHA: ${{ needs.get-version.outputs.sha }}
+        run: |
+          for app in api website; do
+            MANIFEST=$(aws ecr batch-get-image \
+              --repository-name "$app" \
+              --image-ids "imageTag=dev-$SHA" \
+              --query 'images[0].imageManifest' --output text)
+            aws ecr put-image \
+              --repository-name "$app" \
+              --image-tag "prod-$SHA" \
+              --image-manifest "$MANIFEST"
+            aws ecr put-image \
+              --repository-name "$app" \
+              --image-tag "prod-latest" \
+              --image-manifest "$MANIFEST"
+          done
 
   deploy-prod:
     name: Deployment (prod)
-    needs: get-version
+    needs: [get-version, tag-prod]
     uses: ./.github/workflows/deployment.yml
     with:
       stack: prod
-      version: ${{ needs.get-version.outputs.version }}
+      sha: ${{ needs.get-version.outputs.sha }}
     secrets: inherit

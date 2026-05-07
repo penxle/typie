@@ -12,6 +12,7 @@ concurrency:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   build-wasm:
@@ -44,5 +45,5 @@ jobs:
     uses: ./.github/workflows/deployment.yml
     with:
       stack: dev
-      version: ${{ needs.build-api.outputs.version }}
+      sha: ${{ needs.build-api.outputs.sha }}
     secrets: inherit

@@ -7,10 +7,10 @@ on:
         required: true
         type: string
         description: The stack to deploy to.
-      version:
+      sha:
         required: true
         type: string
-        description: The version to deploy.
+        description: Short SHA of the commit to deploy.
 
 permissions:
   contents: read
@@ -52,12 +52,14 @@ jobs:
 
       - name: Update version
         run: |
-          for repo in kube kube2; do
-            cat > "$repo/apps/base/version.${{ inputs.stack }}.yaml" << EOF
+          cat > kube/apps/base/version.${{ inputs.stack }}.yaml << EOF
           image:
-            version: ${{ inputs.version }}
+            version: sha-${{ inputs.sha }}
           EOF
-          done
+          cat > kube2/apps/base/version.${{ inputs.stack }}.yaml << EOF
+          image:
+            version: ${{ inputs.stack }}-${{ inputs.sha }}
+          EOF
 
       - name: Commit and push changes
         run: |
@@ -66,7 +68,7 @@ jobs:
           for repo in kube kube2; do
             cd "$repo"
             git add apps/base/version.${{ inputs.stack }}.yaml
-            git commit -m "Deploy to ${{ inputs.stack }}: ${{ inputs.version }}"
+            git commit -m "Deploy to ${{ inputs.stack }}: ${{ inputs.sha }}"
             git push
             cd ..
           done
