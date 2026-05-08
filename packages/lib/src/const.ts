@@ -20,6 +20,7 @@ export type PromptId = keyof typeof PromptId;
 export const PromptId = {
   SUMMARIZE: 'PRMT0SUMMARIZE',
   ANALYZE: 'PRMT0ANALYZE',
+  META: 'PRMT0META',
 } as const;
 // spell-checker:enable
 

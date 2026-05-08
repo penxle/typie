@@ -95,6 +95,7 @@ export type AiFeedback = {
   startText: string;
   endText: string;
   feedback: string;
+  category: string | null;
   active: boolean;
 };
 

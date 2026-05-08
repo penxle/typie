@@ -77,6 +77,7 @@
             startText
             endText
             feedback
+            category
           }
           progress {
             current
@@ -102,6 +103,7 @@
               startText: item.startText,
               endText: item.endText,
               feedback: item.feedback,
+              category: item.category ?? null,
               active: false,
             },
           ];
@@ -434,6 +436,23 @@
           </button>
 
           <div class={flex({ flexDirection: 'column', gap: '8px', paddingRight: '24px' })}>
+            {#if feedback.category}
+              <div
+                class={css({
+                  alignSelf: 'flex-start',
+                  borderRadius: '4px',
+                  paddingX: '6px',
+                  paddingY: '2px',
+                  fontSize: '11px',
+                  fontWeight: 'semibold',
+                  color: 'text.subtle',
+                  backgroundColor: 'surface.muted',
+                })}
+              >
+                {feedback.category}
+              </div>
+            {/if}
+
             <div class={css({ fontSize: '14px', color: 'text.default' })}>
               {#if feedback.startText === feedback.endText}
                 "{feedback.startText}"
@@ -462,8 +481,12 @@
             {#if progress}
               {#if progress.phase === 'summarizing'}
                 분석 중... ({progress.current}/{progress.total})
-              {:else}
+              {:else if progress.phase === 'meta'}
+                작품 전체 분석 중...
+              {:else if progress.phase === 'analyzing'}
                 피드백 중... ({progress.current}/{progress.total})
+              {:else}
+                준비 중...
               {/if}
             {:else}
               준비 중...

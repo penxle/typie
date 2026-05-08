@@ -834,6 +834,7 @@ export const Prompts = pgTable('prompts', {
   model: text('model').notNull(),
   effort: text('effort'),
   systemPrompt: text('system_prompt').notNull(),
+  toolDescriptions: jsonb('tool_descriptions'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

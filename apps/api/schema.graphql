@@ -318,6 +318,7 @@ type DocumentLiteraryAnalysisPayload {
 }
 
 type DocumentLiteraryFeedbackResult {
+  category: String
   endOffset: Int!
   endText: String!
   feedback: String!
