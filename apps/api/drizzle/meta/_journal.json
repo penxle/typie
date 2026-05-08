@@ -575,6 +575,13 @@
       "when": 1778248590971,
       "tag": "0081_wealthy_winter_soldier",
       "breakpoints": false
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1778266945891,
+      "tag": "0082_square_vulcan",
+      "breakpoints": false
     }
   ]
 }
