@@ -829,6 +829,19 @@ export const PreorderUsers = pgTable('preorder_users', {
     .default(sql`now()`),
 });
 
+export const Prompts = pgTable('prompts', {
+  id: text('id').primaryKey(),
+  model: text('model').notNull(),
+  effort: text('effort'),
+  systemPrompt: text('system_prompt').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Redirects = pgTable(
   'redirects',
   {

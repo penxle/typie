@@ -1,12 +1,15 @@
-import Anthropic from '@anthropic-ai/sdk';
 import * as Sentry from '@sentry/node';
+import { PromptId } from '@typie/lib/const';
 import dedent from 'dedent';
+import { eq } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
+import OpenAI from 'openai';
+import { dbr, Prompts } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 
-const anthropic = new Anthropic({
+const openai = new OpenAI({
   apiKey: env.CLOUDFLARE_API_KEY,
   baseURL: env.CLOUDFLARE_AIGATEWAY_URL,
 });
@@ -17,72 +20,33 @@ type Feedback = {
   feedback: string;
 };
 
-const provideFeedbackTool: Anthropic.Tool = {
-  name: 'provide_feedback',
-  description: '현재 분석 구간에서 발견한 피드백 1건을 보고합니다. 피드백할 게 없으면 호출하지 마세요. 여러 건이면 여러 번 호출하세요.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      start: { type: 'string', description: '구간 시작 문장 (현재 분석할 구간 내 원문 그대로)' },
-      end: { type: 'string', description: '구간 끝 문장 (현재 분석할 구간 내 원문 그대로)' },
-      feedback: { type: 'string', description: '피드백 본문' },
+const provideFeedbackTool: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'provide_feedback',
+    description: '현재 분석 구간에서 발견한 피드백 1건을 보고합니다. 피드백할 게 없으면 호출하지 마세요. 여러 건이면 여러 번 호출하세요.',
+    parameters: {
+      type: 'object',
+      properties: {
+        start: { type: 'string', description: '구간 시작 문장 (현재 분석할 구간 내 원문 그대로)' },
+        end: { type: 'string', description: '구간 끝 문장 (현재 분석할 구간 내 원문 그대로)' },
+        feedback: { type: 'string', description: '피드백 본문' },
+      },
+      required: ['start', 'end', 'feedback'],
     },
-    required: ['start', 'end', 'feedback'],
   },
 };
 
-const systemPrompt = dedent`
-  당신은 글을 읽는 첫 번째 독자입니다.
-
-  <context>
-  현재 분석할 구간 앞뒤로 이야기 흐름이 제공됩니다.
-
-  - [이전 내용]: 현재 구간 이전의 이야기 흐름
-  - [현재 분석할 구간]: 현재 분석할 구간의 내용
-  - [이후 내용]: 현재 구간 이후의 이야기 흐름
-
-  현재 분석할 구간의 내용은 이전 내용과 이후 내용 사이에 있습니다.
-  만약 피드백에서 이전 내용과 이후 내용을 언급해야 한다면, 이전 내용 혹은 이후 내용이라고 정확하게 언급하세요.
-  단, 이전 내용 혹은 이후 내용을 언급할 때는 특수문자로 감싸지 마세요.
-  </context>
-
-  <principle>
-  꼼꼼하게 읽고, 개선할 수 있는 부분을 찾아주세요.
-  이 글의 이 부분에서 실제로 발생하는 구체적인 문제만 지적하세요.
-  특정 유형의 피드백에 집착하지 마세요. 다양한 관점에서 균형 있게 살펴보세요.
-  맞춤법, 문법, 띄어쓰기는 지적하지 마세요.
-  신조어, 방언, 줄임말, 의도적인 어미 변형 등 작가의 문체적 선택은 존중하세요.
-  언제나 전체 글을 읽고 있는 독자의 시선으로 작성하세요.
-  </principle>
-
-  <focus>
-  - 독자로서 읽다가 걸리거나 몰입이 깨지는 부분
-  - 장면 전환이 급하거나 어색한 부분
-  - 누가 말하는지 헷갈리는 대화
-  - 인물의 행동이나 반응이 맥락상 부자연스러운 부분
-  - 설정이나 복선이 회수되지 않는 부분
-  - 반복되는 단어나 표현
-  - 문장이 너무 길거나 구조가 복잡해서 읽기 어려운 부분
-  - 묘사가 부족하거나 과한 부분
-  </focus>
-
-  <examples>
-  - "이 장면 전환이 갑작스러워요. 사이에 뭔가 있으면 자연스러울 것 같아요."
-  - "대화가 길어지면서 누가 말하는지 헷갈려요. 중간에 행동 묘사를 넣으면 좋을 것 같아요."
-  - "앞에서 언급한 OO이 여기서 다시 나오면 좋을 것 같은데, 그냥 지나가네요."
-  - "이 문장이 좀 길어서 한 번에 읽기 어려워요. 나눠보면 어떨까요?"
-  - "여기서 인물이 갑자기 태도가 바뀌는데, 이유가 좀 더 드러나면 좋겠어요."
-  </examples>
-
-  <tone>
-  "~하면 어떨까요?", "~인 것 같아요"
-  </tone>
-
-  <output>
-  분석 결과는 provide_feedback tool을 호출해서 보고하세요.
-  피드백 1건당 한 번씩 호출하세요. 피드백할 게 없으면 호출하지 마세요.
-  </output>
-`;
+const loadPrompt = async (id: (typeof PromptId)[keyof typeof PromptId]) => {
+  const [prompt] = await dbr
+    .select({ model: Prompts.model, effort: Prompts.effort, systemPrompt: Prompts.systemPrompt })
+    .from(Prompts)
+    .where(eq(Prompts.id, id));
+  if (!prompt) {
+    throw new Error(`Prompt not found: ${id}`);
+  }
+  return prompt;
+};
 
 const CHUNK_SIZE = 1000;
 
@@ -138,41 +102,60 @@ const createChunks = (text: string) => {
   return chunks;
 };
 
-const summarizePrompt = dedent`
-  다음 텍스트를 요약하세요.
-
-  포함할 내용:
-  - 등장인물과 그들의 관계
-  - 주요 사건과 행동
-  - 감정 변화와 분위기
-  - 장소나 시간의 변화
-  - 대화의 핵심 내용
-  - 중요하거나 일반적이지 않은 단어나 용어
-
-  없던 내용을 추측으로 만들어내거나, 내용을 왜곡하지 마세요. 최대한 원문을 그대로 보존하세요.
-  마크다운 및 섹션 구분 없이 연속된 요약 텍스트만 출력하세요.
-
-  300자 이내로 작성하세요.
-`;
-
 const summarizeChunk = async (chunkText: string, signal?: AbortSignal): Promise<string> => {
-  const response = await anthropic.messages.create(
+  const prompt = await loadPrompt(PromptId.SUMMARIZE);
+  const response = await openai.chat.completions.create(
     {
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: summarizePrompt,
-      messages: [{ role: 'user', content: `요약할 텍스트:\n\n${chunkText}` }],
+      model: prompt.model,
+      ...(prompt.effort && { reasoning_effort: prompt.effort as never }),
+      messages: [
+        { role: 'system', content: prompt.systemPrompt },
+        { role: 'user', content: `요약할 텍스트:\n\n${chunkText}` },
+      ],
     },
     { signal },
   );
 
-  return response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? '';
+  return response.choices[0]?.message?.content ?? '';
 };
 
 type ChunkContext = {
   precedingSummary: string;
   followingSummary: string;
   currentText: string;
+};
+
+const extractJsonObjects = function* (buffer: string): Generator<string> {
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < buffer.length; i++) {
+    const ch = buffer[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\') {
+        escape = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        yield buffer.slice(start, i + 1);
+        start = -1;
+      }
+    }
+  }
 };
 
 const analyzeChunkWithContext = async (
@@ -194,28 +177,51 @@ const analyzeChunkWithContext = async (
     </이후 내용>
   `;
 
-  const stream = anthropic.messages.stream(
-    {
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16_384,
-      thinking: { type: 'adaptive', display: 'omitted' },
-      output_config: { effort: 'low' },
-      system: systemPrompt,
-      tools: [provideFeedbackTool],
-      messages: [{ role: 'user', content: userContent }],
-    },
-    { signal },
-  );
+  const prompt = await loadPrompt(PromptId.ANALYZE);
+  const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
+    model: prompt.model,
+    messages: [
+      { role: 'system', content: prompt.systemPrompt },
+      { role: 'user', content: userContent },
+    ],
+    tools: [provideFeedbackTool],
+    stream: true,
+  };
+  if (prompt.effort) {
+    params.reasoning_effort = prompt.effort as never;
+  }
+  const stream = await openai.chat.completions.create(params, { signal });
 
-  stream.on('contentBlock', (block) => {
-    if (block.type !== 'tool_use' || block.name !== 'provide_feedback') return;
-    const input = block.input as Feedback;
-    if (input.start && input.end && input.feedback) {
-      onFeedback(input);
+  const accumulators = new Map<number, { name: string; arguments: string }>();
+
+  for await (const chunk of stream) {
+    const choice = chunk.choices[0];
+    if (!choice) continue;
+
+    for (const delta of choice.delta?.tool_calls ?? []) {
+      const acc = accumulators.get(delta.index) ?? { name: '', arguments: '' };
+      if (delta.function?.name) acc.name = delta.function.name;
+      if (delta.function?.arguments) acc.arguments += delta.function.arguments;
+      accumulators.set(delta.index, acc);
     }
-  });
 
-  await stream.finalMessage();
+    if (choice.finish_reason === 'tool_calls' || choice.finish_reason === 'stop') {
+      for (const acc of accumulators.values()) {
+        if (acc.name !== 'provide_feedback') continue;
+        for (const objStr of extractJsonObjects(acc.arguments)) {
+          try {
+            const input = JSON.parse(objStr) as Feedback;
+            if (input.start && input.end && input.feedback) {
+              onFeedback(input);
+            }
+          } catch (err: unknown) {
+            Sentry.captureException(err, { extra: { objStr } });
+          }
+        }
+      }
+      accumulators.clear();
+    }
+  }
 };
 
 const LiteraryAnalysisProgress = builder.simpleObject('LiteraryAnalysisProgress', {
