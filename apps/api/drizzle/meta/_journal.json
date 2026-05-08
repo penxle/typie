@@ -568,6 +568,13 @@
       "when": 1777629361901,
       "tag": "0080_majestic_hammerhead",
       "breakpoints": false
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1778248590971,
+      "tag": "0081_wealthy_winter_soldier",
+      "breakpoints": false
     }
   ]
 }

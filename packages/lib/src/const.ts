@@ -15,6 +15,14 @@ export const PlanId = {
 } as const;
 // spell-checker:enable
 
+// spell-checker:disable
+export type PromptId = keyof typeof PromptId;
+export const PromptId = {
+  SUMMARIZE: 'PRMT0SUMMARIZE',
+  ANALYZE: 'PRMT0ANALYZE',
+} as const;
+// spell-checker:enable
+
 export const PlanPair = {
   [PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY]: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY,
   [PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY]: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY,
