@@ -240,10 +240,10 @@ fn baseline_two_replicas_concurrent_text_insert_converges() {
     replicas[1] = s1;
 
     for cs in sync_missing(&replicas[0].graph.clone(), &replicas[1].graph).unwrap() {
-        replicas[1] = replicas[1].receive_remote_changeset(cs).unwrap();
+        replicas[1] = replicas[1].receive_remote_changeset(cs).unwrap().0;
     }
     for cs in sync_missing(&replicas[1].graph.clone(), &replicas[0].graph).unwrap() {
-        replicas[0] = replicas[0].receive_remote_changeset(cs).unwrap();
+        replicas[0] = replicas[0].receive_remote_changeset(cs).unwrap().0;
     }
 
     assert!(replicas[0].graph.graph_state_eq(&replicas[1].graph));
@@ -327,7 +327,8 @@ fn run_actions_and_converge(
                 for cs in missing.into_iter().take(take) {
                     to_state = to_state
                         .receive_remote_changeset(cs)
-                        .map_err(|e| TestCaseError::fail(format!("receive: {e:?}")))?;
+                        .map_err(|e| TestCaseError::fail(format!("receive: {e:?}")))?
+                        .0;
                 }
                 replicas[to_idx] = to_state;
             }
@@ -351,7 +352,8 @@ fn run_actions_and_converge(
                     for cs in missing {
                         to_state = to_state
                             .receive_remote_changeset(cs)
-                            .map_err(|e| TestCaseError::fail(format!("converge receive: {e:?}")))?;
+                            .map_err(|e| TestCaseError::fail(format!("converge receive: {e:?}")))?
+                            .0;
                     }
                     replicas[to] = to_state;
                     changed = true;
@@ -433,7 +435,8 @@ fn run_actions_and_converge_via_wire(
                         .map_err(|e| TestCaseError::fail(format!("decode: {e:?}")))?;
                     to_state = to_state
                         .receive_remote_changeset(decoded)
-                        .map_err(|e| TestCaseError::fail(format!("receive: {e:?}")))?;
+                        .map_err(|e| TestCaseError::fail(format!("receive: {e:?}")))?
+                        .0;
                 }
                 replicas[to_idx] = to_state;
             }
@@ -459,7 +462,8 @@ fn run_actions_and_converge_via_wire(
                             .map_err(|e| TestCaseError::fail(format!("decode: {e:?}")))?;
                         to_state = to_state
                             .receive_remote_changeset(decoded)
-                            .map_err(|e| TestCaseError::fail(format!("converge receive: {e:?}")))?;
+                            .map_err(|e| TestCaseError::fail(format!("converge receive: {e:?}")))?
+                            .0;
                     }
                     replicas[to] = to_state;
                     changed = true;
@@ -547,7 +551,7 @@ proptest! {
         for cs in all_css {
             after = after
                 .receive_remote_changeset(cs)
-                .map_err(|e| TestCaseError::fail(format!("dup receive: {e:?}")))?;
+                .map_err(|e| TestCaseError::fail(format!("dup receive: {e:?}")))?.0;
         }
         prop_assert!(
             before_graph.graph_state_eq(&after.graph),
@@ -678,10 +682,12 @@ fn partial_cs_delivery_rejected() {
     let fresh = replicas.remove(1);
     let fresh = fresh
         .receive_remote_changeset(op_a_wrapped)
-        .expect("op_a delivery must succeed");
+        .expect("op_a delivery must succeed")
+        .0;
     let fresh = fresh
         .receive_remote_changeset(op_b_wrapped)
-        .expect("op_b delivery must succeed");
+        .expect("op_b delivery must succeed")
+        .0;
 
     // Delivering the original 2-op cs now must be rejected — op_a's dot is
     // already present under a different (1-op) boundary.

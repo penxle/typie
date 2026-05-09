@@ -232,16 +232,45 @@ pub enum FlatImeOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
-    Key { event: KeyEvent },
-    Pointer { event: PointerEvent },
-    Insertion { op: InsertionOp },
-    Deletion { op: DeletionOp },
-    Selection { op: SelectionOp },
-    Modifier { op: ModifierOp },
-    Node { op: NodeOp },
-    Clipboard { op: ClipboardOp },
-    Composition { op: CompositionOp },
-    Navigation { op: NavigationOp },
-    History { op: HistoryOp },
-    System { event: SystemEvent },
+    Key {
+        event: KeyEvent,
+    },
+    Pointer {
+        event: PointerEvent,
+    },
+    Insertion {
+        op: InsertionOp,
+    },
+    Deletion {
+        op: DeletionOp,
+    },
+    Selection {
+        op: SelectionOp,
+    },
+    Modifier {
+        op: ModifierOp,
+    },
+    Node {
+        op: NodeOp,
+    },
+    Clipboard {
+        op: ClipboardOp,
+    },
+    Composition {
+        op: CompositionOp,
+    },
+    Navigation {
+        op: NavigationOp,
+    },
+    History {
+        op: HistoryOp,
+    },
+    System {
+        event: SystemEvent,
+    },
+
+    #[ffi(skip)]
+    Remote {
+        changeset: editor_crdt::Changeset<editor_model::DocOp>,
+    },
 }

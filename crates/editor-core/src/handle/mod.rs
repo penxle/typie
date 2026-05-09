@@ -8,6 +8,7 @@ mod modifier;
 mod navigation;
 mod node;
 mod pointer;
+mod remote;
 mod selection;
 mod system;
 
@@ -21,5 +22,6 @@ pub use modifier::handle_modifier_op;
 pub use navigation::handle_navigation_op;
 pub use node::handle_node_op;
 pub use pointer::handle_pointer_event;
+pub use remote::handle_remote;
 pub use selection::handle_selection_op;
 pub use system::handle_system_event;

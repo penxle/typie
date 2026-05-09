@@ -80,10 +80,12 @@ pub(crate) fn apply_to(
         ContentMove::Text { chars } => {
             let mut after = target_end_dot;
             for (_, ch) in &chars {
-                let op_id = batched.apply(DocOp::Text {
-                    node_id: target_id,
-                    op: TextOp::InsertChar { ch: *ch, after },
-                })?;
+                let op_id = batched
+                    .apply(DocOp::Text {
+                        node_id: target_id,
+                        op: TextOp::InsertChar { ch: *ch, after },
+                    })?
+                    .id;
                 after = Some(op_id);
             }
             for (target, _) in chars {
@@ -96,13 +98,15 @@ pub(crate) fn apply_to(
         ContentMove::Children { children } => {
             let mut after = target_end_dot;
             for (_, child_id) in &children {
-                let op_id = batched.apply(DocOp::Children {
-                    node_id: target_id,
-                    op: RgaOp::Insert {
-                        after,
-                        value: *child_id,
-                    },
-                })?;
+                let op_id = batched
+                    .apply(DocOp::Children {
+                        node_id: target_id,
+                        op: RgaOp::Insert {
+                            after,
+                            value: *child_id,
+                        },
+                    })?
+                    .id;
                 batched.apply(DocOp::Parent {
                     node_id: *child_id,
                     op: LwwRegOp::Set {

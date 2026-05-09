@@ -1,12 +1,10 @@
 use editor_common::time::Duration;
-use editor_crdt::{Changeset, CrdtError, Dot};
+use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{DocOp, ModifierState, Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
-use editor_state::{
-    DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, State, StateError,
-};
-use editor_transaction::{Effect, HistoryMeta, Step, Transaction};
+use editor_state::{DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, State};
+use editor_transaction::{Effect, HistoryMeta, Transaction};
 use editor_view::{PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -50,7 +48,7 @@ pub struct Editor {
     pub(crate) is_dragging: bool,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,
-    pending_steps: Vec<Step>,
+    pub(crate) pending_ops: Vec<Op<DocOp>>,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>,
 }
@@ -66,7 +64,7 @@ impl Editor {
             is_dragging: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
-            pending_steps: Vec::new(),
+            pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
         }
@@ -76,13 +74,8 @@ impl Editor {
         &self.state
     }
 
-    pub fn receive_remote_changeset(
-        &mut self,
-        changeset: Changeset<DocOp>,
-    ) -> Result<(), StateError> {
-        let next = self.state.receive_remote_changeset(changeset)?;
-        self.state = next;
-        Ok(())
+    pub fn receive_remote_changeset(&mut self, changeset: Changeset<DocOp>) {
+        self.enqueue(Message::Remote { changeset });
     }
 
     pub fn local_changesets_since(
@@ -161,7 +154,7 @@ impl Editor {
     }
 
     pub fn tick(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
-        let old_doc = self.state.doc.clone();
+        let old_state = self.state.clone();
 
         let messages = std::mem::take(&mut self.message_queue);
         for msg in messages {
@@ -173,38 +166,36 @@ impl Editor {
             self.process_effects(effects);
         }
 
-        let steps = std::mem::take(&mut self.pending_steps);
-        let mut fields = HashSet::new();
-
+        let ops = std::mem::take(&mut self.pending_ops);
         let pending_style = normalize_pending_style(&self.state);
-        if !steps.is_empty()
+        let dirty = !ops.is_empty()
             && self
                 .view
-                .reconcile(&old_doc, &self.state.doc, &steps, pending_style)
-        {
+                .reconcile_with_ops(&old_state.doc, &self.state.doc, &ops, pending_style);
+
+        let mut fields: HashSet<StateField> = HashSet::new();
+
+        if dirty {
             fields.insert(StateField::Cursor);
             fields.insert(StateField::PageSizes);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
-        if steps.iter().any(|s| s.is_doc_step()) {
+        if !ops.is_empty() {
             fields.insert(StateField::Doc);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
         }
 
-        if steps.iter().any(|s| {
-            matches!(
-                s,
-                Step::SetNode { node_id, .. } if *node_id == NodeId::ROOT
-            )
-        }) {
+        if ops.iter().any(
+            |op| matches!(&op.payload, DocOp::Attr { node_id, .. } if *node_id == NodeId::ROOT),
+        ) {
             fields.insert(StateField::Doc);
             fields.insert(StateField::RootAttrs);
         }
 
-        if steps.iter().any(|s| s.is_selection_step()) {
+        if old_state.selection != self.state.selection {
             fields.insert(StateField::Cursor);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Selection);
@@ -213,13 +204,17 @@ impl Editor {
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
-        if steps.iter().any(|s| s.is_pending_modifiers_step()) {
+        if old_state.pending_modifiers != self.state.pending_modifiers {
             fields.insert(StateField::Modifiers);
+        }
+
+        if old_state.composition != self.state.composition {
+            fields.insert(StateField::Ime);
         }
 
         if !fields.is_empty() {
             self.push_event(EditorEvent::StateChanged {
-                fields: fields.iter().copied().collect(),
+                fields: fields.into_iter().collect(),
             });
         }
 
@@ -286,6 +281,7 @@ impl Editor {
             Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
             Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,
+            Message::Remote { changeset } => handle::handle_remote(self, changeset)?,
         }
         Ok(())
     }
@@ -297,7 +293,7 @@ impl Editor {
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
 
-        let (state, steps, effects, meta) = tr.commit();
+        let (state, steps, ops, effects, meta) = tr.commit();
 
         if !steps.is_empty() {
             match meta.history {
@@ -308,7 +304,7 @@ impl Editor {
         }
 
         self.state = state;
-        self.pending_steps.extend(steps);
+        self.pending_ops.extend(ops);
         self.pending_effects.extend(effects);
 
         Ok(())
@@ -437,7 +433,7 @@ impl Editor {
             is_dragging: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
-            pending_steps: Vec::new(),
+            pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
         }
@@ -451,12 +447,127 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use editor_crdt::OpGraph;
+    use editor_crdt::{OpGraph, RgaOp};
     use editor_macros::{doc, state};
-    use editor_model::{DocOp, Modifier, NodeId};
-    use editor_state::{PendingModifier, PendingModifiers, Position, Selection};
+    use editor_model::{
+        Doc, DocOp, Modifier, Node, NodeId, PlainDoc, PlainNode, PlainNodeEntry,
+        PlainParagraphNode, PlainRootNode, PlainTextNode,
+    };
+    use editor_state::{PendingModifier, PendingModifiers, Position, Selection, State};
+    use hashbrown::HashSet;
+    use std::collections::BTreeMap;
 
     use super::*;
+
+    /// Builds a two-replica pair from a shared PlainDoc so both replicas have
+    /// identical NodeIds and a common base OpGraph — required for remote ops
+    /// from replica A to resolve on replica B.
+    fn bootstrap_two_replicas(plain: PlainDoc) -> (State, State) {
+        let (doc, graph) = Doc::from_plain(plain);
+        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
+        let seed = State::new(doc, graph, sel);
+
+        let seed_css = seed.graph.changesets().to_vec();
+        let replica_b =
+            State::from_changesets(seed_css, sel).expect("from_changesets on bootstrap");
+        (seed, replica_b)
+    }
+
+    fn plain_doc_with_one_text() -> (PlainDoc, NodeId) {
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            NodeId::ROOT,
+            PlainNodeEntry {
+                parent: None,
+                children: vec![para_id],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Root(PlainRootNode::default()),
+            },
+        );
+        nodes.insert(
+            para_id,
+            PlainNodeEntry {
+                parent: Some(NodeId::ROOT),
+                children: vec![text_id],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Paragraph(PlainParagraphNode {}),
+            },
+        );
+        nodes.insert(
+            text_id,
+            PlainNodeEntry {
+                parent: Some(para_id),
+                children: vec![],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Text(PlainTextNode {
+                    text: "hi".to_string(),
+                }),
+            },
+        );
+        (PlainDoc { nodes }, text_id)
+    }
+
+    fn plain_doc_with_two_paragraphs() -> (PlainDoc, NodeId, NodeId, NodeId) {
+        let para1_id = NodeId::new();
+        let text1_id = NodeId::new();
+        let para2_id = NodeId::new();
+        let text2_id = NodeId::new();
+
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            NodeId::ROOT,
+            PlainNodeEntry {
+                parent: None,
+                children: vec![para1_id, para2_id],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Root(PlainRootNode::default()),
+            },
+        );
+        nodes.insert(
+            para1_id,
+            PlainNodeEntry {
+                parent: Some(NodeId::ROOT),
+                children: vec![text1_id],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Paragraph(PlainParagraphNode {}),
+            },
+        );
+        nodes.insert(
+            text1_id,
+            PlainNodeEntry {
+                parent: Some(para1_id),
+                children: vec![],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Text(PlainTextNode {
+                    text: String::new(),
+                }),
+            },
+        );
+        nodes.insert(
+            para2_id,
+            PlainNodeEntry {
+                parent: Some(NodeId::ROOT),
+                children: vec![text2_id],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Paragraph(PlainParagraphNode {}),
+            },
+        );
+        nodes.insert(
+            text2_id,
+            PlainNodeEntry {
+                parent: Some(para2_id),
+                children: vec![],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Text(PlainTextNode {
+                    text: String::new(),
+                }),
+            },
+        );
+        (PlainDoc { nodes }, para1_id, para2_id, text2_id)
+    }
 
     fn build_state(doc: editor_model::Doc, head: Position, pending: PendingModifiers) -> State {
         let mut s = State::new(doc, OpGraph::<DocOp>::new(), Selection::collapsed(head));
@@ -897,5 +1008,289 @@ mod tests {
             .filter(|e| matches!(e, EditorEvent::StateChanged { .. }))
             .count();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn remote_message_triggers_view_invalidation_and_events() {
+        use editor_crdt::TextOp;
+
+        let (plain, text_id) = plain_doc_with_one_text();
+        let (state_a, state_b) = bootstrap_two_replicas(plain);
+
+        // Snapshot heads before A's edit so local_changesets_since returns only the new op.
+        let baseline: HashSet<_> = state_a.graph.current_heads().copied().collect();
+
+        let (state_a, _) = state_a
+            .apply(DocOp::Text {
+                node_id: text_id,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'x',
+                },
+            })
+            .unwrap();
+        let state_a = State {
+            graph: state_a.graph.commit(),
+            ..state_a
+        };
+
+        let mut css = state_a.local_changesets_since(&baseline).unwrap();
+        let cs = css.remove(0);
+
+        // Pre-layout populates the measurer cache; without this, invalidation has nothing
+        // to evict and dirty stays false.
+        let mut editor = Editor::new_test(state_b);
+        editor.view.layout(&editor.state.doc);
+
+        editor.receive_remote_changeset(cs);
+        let events = editor.tick().unwrap();
+
+        let has_render = events
+            .iter()
+            .any(|e| matches!(e, EditorEvent::RenderInvalidated));
+        let state_changed_fields: Option<&Vec<StateField>> = events.iter().find_map(|e| match e {
+            EditorEvent::StateChanged { fields } => Some(fields),
+            _ => None,
+        });
+        assert!(has_render, "RenderInvalidated must fire for remote receive");
+        let fields = state_changed_fields.expect("StateChanged must fire for remote receive");
+        for required in [
+            StateField::Doc,
+            StateField::Ime,
+            StateField::Modifiers,
+            StateField::Block,
+        ] {
+            assert!(
+                fields.contains(&required),
+                "StateChanged must include {required:?}"
+            );
+        }
+
+        let entry = editor
+            .state
+            .doc
+            .get_entry(text_id)
+            .expect("text node exists");
+        let Node::Text(t) = &entry.node else {
+            panic!("t1 must be Text")
+        };
+        assert!(
+            t.text.iter_with_dot().any(|(_, c)| c == 'x'),
+            "remote insert applied"
+        );
+    }
+
+    #[test]
+    fn multiple_remote_messages_processed_in_single_tick() {
+        use editor_crdt::TextOp;
+
+        let (plain, text_id) = plain_doc_with_one_text();
+        let (state_a, state_b) = bootstrap_two_replicas(plain);
+
+        let baseline1: HashSet<_> = state_a.graph.current_heads().copied().collect();
+        let (state_a, _) = state_a
+            .apply(DocOp::Text {
+                node_id: text_id,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'x',
+                },
+            })
+            .unwrap();
+        let state_a = State {
+            graph: state_a.graph.commit(),
+            ..state_a
+        };
+        let cs1 = state_a
+            .local_changesets_since(&baseline1)
+            .unwrap()
+            .remove(0);
+
+        let baseline2: HashSet<_> = state_a.graph.current_heads().copied().collect();
+        let (state_a, _) = state_a
+            .apply(DocOp::Text {
+                node_id: text_id,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'y',
+                },
+            })
+            .unwrap();
+        let state_a = State {
+            graph: state_a.graph.commit(),
+            ..state_a
+        };
+        let cs2 = state_a
+            .local_changesets_since(&baseline2)
+            .unwrap()
+            .remove(0);
+
+        let baseline3: HashSet<_> = state_a.graph.current_heads().copied().collect();
+        let (state_a, _) = state_a
+            .apply(DocOp::Text {
+                node_id: text_id,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'z',
+                },
+            })
+            .unwrap();
+        let state_a = State {
+            graph: state_a.graph.commit(),
+            ..state_a
+        };
+        let cs3 = state_a
+            .local_changesets_since(&baseline3)
+            .unwrap()
+            .remove(0);
+
+        let mut editor = Editor::new_test(state_b);
+        editor.view.layout(&editor.state.doc);
+
+        editor.receive_remote_changeset(cs1);
+        editor.receive_remote_changeset(cs2);
+        editor.receive_remote_changeset(cs3);
+        let events = editor.tick().unwrap();
+
+        let entry = editor
+            .state
+            .doc
+            .get_entry(text_id)
+            .expect("text node exists");
+        let Node::Text(t) = &entry.node else {
+            panic!("t1 must be Text")
+        };
+        let text_str = t.text.to_string();
+        assert!(text_str.contains('x'), "op1 ('x') applied");
+        assert!(text_str.contains('y'), "op2 ('y') applied");
+        assert!(text_str.contains('z'), "op3 ('z') applied");
+
+        let render_count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::RenderInvalidated))
+            .count();
+        let doc_state_count = events
+            .iter()
+            .filter(|e| {
+                matches!(e, EditorEvent::StateChanged { fields } if fields.contains(&StateField::Doc))
+            })
+            .count();
+        assert_eq!(
+            render_count, 1,
+            "RenderInvalidated deduplicated to one event"
+        );
+        assert_eq!(
+            doc_state_count, 1,
+            "StateChanged(Doc) deduplicated to one event"
+        );
+    }
+
+    #[test]
+    fn remote_children_remove_invalidates_and_fires_events() {
+        use editor_crdt::OrMapOp;
+
+        let (plain, _para1_id, para2_id, text2_id) = plain_doc_with_two_paragraphs();
+        let (state_a, state_b) = bootstrap_two_replicas(plain);
+
+        let baseline: HashSet<_> = state_a.graph.current_heads().copied().collect();
+
+        // Read all dot lookups up front so the batch closure below doesn't need to reborrow state_a.
+        let para2_dot = {
+            let root_entry = state_a.doc.get_entry(NodeId::ROOT).expect("root exists");
+            root_entry
+                .children
+                .iter_with_dot()
+                .find(|(_, v)| **v == para2_id)
+                .map(|(d, _)| d)
+                .expect("para2 must be in root's children")
+        };
+        let text2_presence_dots: Vec<_> = state_a.doc.nodes_tags_for(&text2_id).copied().collect();
+        let para2_presence_dots: Vec<_> = state_a.doc.nodes_tags_for(&para2_id).copied().collect();
+
+        let (state_a, _ops) = state_a
+            .batch_with_ops::<_, editor_state::StateError>(|b| {
+                b.apply(DocOp::Presence {
+                    node_id: text2_id,
+                    op: OrMapOp::Unset {
+                        observed: text2_presence_dots.clone(),
+                    },
+                })?;
+                b.apply(DocOp::Presence {
+                    node_id: para2_id,
+                    op: OrMapOp::Unset {
+                        observed: para2_presence_dots.clone(),
+                    },
+                })?;
+                b.apply(DocOp::Children {
+                    node_id: NodeId::ROOT,
+                    op: RgaOp::Remove {
+                        observed: para2_dot,
+                    },
+                })?;
+                Ok(())
+            })
+            .unwrap();
+        let state_a = State {
+            graph: state_a.graph.commit(),
+            ..state_a
+        };
+        let cs = state_a.local_changesets_since(&baseline).unwrap().remove(0);
+
+        // Pre-layout so both paragraphs are cached; otherwise sibling-shift invalidation
+        // has nothing to evict and dirty stays false.
+        let mut editor = Editor::new_test(state_b);
+        editor.view.layout(&editor.state.doc);
+
+        editor.receive_remote_changeset(cs);
+        let events = editor.tick().unwrap();
+
+        // Multi-op changesets must still emit a single pair of events — covers dedup
+        // along the actual remote-receive path, not just the push_event helper.
+        let render_count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::RenderInvalidated))
+            .count();
+        let state_changed_count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::StateChanged { .. }))
+            .count();
+        assert_eq!(
+            render_count, 1,
+            "RenderInvalidated deduplicated to one event"
+        );
+        assert_eq!(
+            state_changed_count, 1,
+            "StateChanged deduplicated to one event"
+        );
+
+        let fields = events
+            .iter()
+            .find_map(|e| match e {
+                EditorEvent::StateChanged { fields } => Some(fields),
+                _ => None,
+            })
+            .expect("StateChanged must fire");
+        for required in [
+            StateField::Doc,
+            StateField::Ime,
+            StateField::Modifiers,
+            StateField::Block,
+        ] {
+            assert!(
+                fields.contains(&required),
+                "StateChanged must include {required:?}"
+            );
+        }
+
+        let root_after = editor
+            .state
+            .doc
+            .get_entry(NodeId::ROOT)
+            .expect("root exists");
+        let still_present = root_after.children.iter().any(|&c| c == para2_id);
+        assert!(
+            !still_present,
+            "para2 must no longer be a live child of root after removal"
+        );
     }
 }

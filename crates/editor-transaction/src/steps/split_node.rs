@@ -128,10 +128,12 @@ pub(crate) fn apply_to(
             }
             let mut after: Option<Dot> = None;
             for (_, ch) in tail_chars {
-                let op_id = batched.apply(DocOp::Text {
-                    node_id: new_node_id,
-                    op: TextOp::InsertChar { ch, after },
-                })?;
+                let op_id = batched
+                    .apply(DocOp::Text {
+                        node_id: new_node_id,
+                        op: TextOp::InsertChar { ch, after },
+                    })?
+                    .id;
                 after = Some(op_id);
             }
         }
@@ -144,13 +146,15 @@ pub(crate) fn apply_to(
             }
             let mut after: Option<Dot> = None;
             for (_, child_id) in tail_children {
-                let op_id = batched.apply(DocOp::Children {
-                    node_id: new_node_id,
-                    op: RgaOp::Insert {
-                        after,
-                        value: child_id,
-                    },
-                })?;
+                let op_id = batched
+                    .apply(DocOp::Children {
+                        node_id: new_node_id,
+                        op: RgaOp::Insert {
+                            after,
+                            value: child_id,
+                        },
+                    })?
+                    .id;
                 batched.apply(DocOp::Parent {
                     node_id: child_id,
                     op: LwwRegOp::Set {

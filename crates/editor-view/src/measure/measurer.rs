@@ -1,6 +1,6 @@
-use editor_model::{Doc, NodeId};
+use editor_crdt::Op;
+use editor_model::{Doc, DocOp, NodeId};
 use editor_resource::Resource;
-use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
 use crate::view_state::ViewState;
@@ -34,10 +34,15 @@ impl Measurer {
         self.cache.clear();
     }
 
-    pub fn invalidate_with_steps(&mut self, old_doc: &Doc, new_doc: &Doc, steps: &[Step]) -> bool {
+    pub fn invalidate_with_doc_ops(
+        &mut self,
+        old_doc: &Doc,
+        new_doc: &Doc,
+        ops: &[Op<DocOp>],
+    ) -> bool {
         let mut invalidated = false;
-        for step in steps {
-            for id in step.affected_node_ids(old_doc, new_doc) {
+        for op in ops {
+            for id in affected_node_ids_for_doc_op(&op.payload, old_doc) {
                 invalidated = self.invalidate_with_ancestors(new_doc, id) || invalidated;
                 if new_doc.node(id).is_none() {
                     invalidated = self.invalidate_with_ancestors(old_doc, id) || invalidated;
@@ -72,6 +77,66 @@ impl Measurer {
         let arc = Arc::new(measured);
         self.cache.insert(node_id, arc.clone());
         arc
+    }
+}
+
+fn affected_node_ids_for_doc_op(op: &DocOp, old_doc: &Doc) -> Vec<NodeId> {
+    use editor_crdt::{LwwRegOp, OrMapOp, RgaOp};
+    match op {
+        DocOp::Text { node_id, .. }
+        | DocOp::Modifier { node_id, .. }
+        | DocOp::Attr { node_id, .. } => {
+            vec![*node_id]
+        }
+        DocOp::Presence { node_id, op } => {
+            let mut ids = vec![*node_id];
+            if let OrMapOp::Unset { .. } = op {
+                if let Some(entry) = old_doc.get_entry(*node_id)
+                    && let Some(parent) = *entry.parent.get()
+                {
+                    ids.push(parent);
+                }
+            }
+            ids
+        }
+        DocOp::Parent { node_id, op } => {
+            let mut ids = vec![*node_id];
+            if let Some(entry) = old_doc.get_entry(*node_id)
+                && let Some(parent) = *entry.parent.get()
+            {
+                ids.push(parent);
+            }
+            if let LwwRegOp::Set { value: Some(p) } = op {
+                ids.push(*p);
+            }
+            ids
+        }
+        DocOp::Children {
+            node_id: parent_id,
+            op,
+        } => {
+            let mut ids = vec![*parent_id];
+            match op {
+                RgaOp::Insert { value, .. } => ids.push(*value),
+                RgaOp::Remove { observed } => {
+                    // RgaOp::Remove carries only the observed Dot; the NodeId only
+                    // survives in the baseline RGA, so look it up there.
+                    if let Some(entry) = old_doc.get_entry(*parent_id)
+                        && let Some(child) = entry.children.get(*observed)
+                    {
+                        ids.push(*child);
+                    }
+                }
+            }
+            // Sibling children share parent context (indent/padding from list_item,
+            // blockquote, etc.), so a structural change can shift their layout.
+            // Measurer cache keys on NodeId only, so invalidate all live siblings
+            // to evict potentially stale measurements.
+            if let Some(entry) = old_doc.get_entry(*parent_id) {
+                ids.extend(entry.children.iter().copied());
+            }
+            ids
+        }
     }
 }
 
@@ -112,8 +177,7 @@ impl Measurer {
 #[cfg(test)]
 mod tests {
     use editor_macros::doc;
-    use editor_model::{Doc, NodeId, Subtree};
-    use editor_state::{Position, Selection};
+    use editor_model::{Doc, NodeId};
 
     use super::*;
     use crate::measure::{MeasuredContent, MeasuredNode};
@@ -127,7 +191,86 @@ mod tests {
     }
 
     #[test]
-    fn invalidate_clears_node_and_ancestors() {
+    fn cached_atom_index_updates_after_sibling_removal() {
+        use crate::measure::MeasuredTree;
+        use crate::paginate::{LayoutContent, Paginator};
+        use editor_common::EdgeInsets;
+        use editor_crdt::{Dot, RgaOp};
+        use editor_model::DocOp;
+
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+
+        let (doc1, p1, ..) = doc! {
+            root {
+                p1: paragraph
+                horizontal_rule
+                paragraph
+            }
+        };
+
+        let _ = measurer.measure(&doc1, NodeId::ROOT, 400.0, &vs);
+
+        let root_entry = doc1.get_entry(NodeId::ROOT).unwrap();
+        let p1_dot = root_entry
+            .children
+            .iter_with_dot()
+            .find(|(_, id)| **id == p1)
+            .map(|(d, _)| d)
+            .unwrap();
+
+        let mut plain = doc1.to_plain();
+        plain.nodes.remove(&p1);
+        if let Some(root_entry) = plain.nodes.get_mut(&NodeId::ROOT) {
+            root_entry.children.retain(|&id| id != p1);
+        }
+        let (doc2, _) = Doc::from_plain(plain);
+
+        let ops = vec![make_op(
+            Dot::new(99, 0),
+            DocOp::Children {
+                node_id: NodeId::ROOT,
+                op: RgaOp::Remove { observed: p1_dot },
+            },
+        )];
+        measurer.invalidate_with_doc_ops(&doc1, &doc2, &ops);
+
+        let root = measurer.measure(&doc2, NodeId::ROOT, 400.0, &vs);
+        let tree = MeasuredTree {
+            root: std::sync::Arc::unwrap_or_clone(root),
+        };
+        let paginator = Paginator::continuous(440.0, 1024.0, EdgeInsets::all(20.0));
+        let (layout, _) = paginator.paginate(tree);
+
+        let LayoutContent::Box(root_box) = &layout.root.content else {
+            panic!("expected box");
+        };
+        let atom = root_box
+            .children
+            .iter()
+            .find_map(|c| match &c.content {
+                LayoutContent::Atom(a) => Some(a),
+                _ => None,
+            })
+            .expect("should find atom");
+
+        assert_eq!(atom.index, 0, "atom index should reflect current position");
+        assert_eq!(atom.parent_id, NodeId::ROOT);
+    }
+
+    fn make_op(id: editor_crdt::Dot, payload: DocOp) -> Op<DocOp> {
+        Op {
+            id,
+            parents: Default::default(),
+            payload,
+        }
+    }
+
+    #[test]
+    fn doc_ops_text_invalidates_self_and_ancestors() {
+        use editor_crdt::{Dot, TextOp};
+        use editor_model::DocOp;
+
         let mut measurer = Measurer::new_test();
 
         let (doc, p, t) = doc! {
@@ -142,21 +285,26 @@ mod tests {
         measurer.cache.insert(p, dummy());
         measurer.cache.insert(t, dummy());
 
-        let steps = vec![Step::InsertText {
-            node_id: t,
-            offset: 5,
-            text: " world".into(),
-        }];
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Text {
+                node_id: t,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'x',
+                },
+            },
+        )];
 
-        measurer.invalidate_with_steps(&doc, &doc, &steps);
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
 
         assert!(
             measurer.cache.get(t).is_none(),
-            "text should be invalidated"
+            "text node should be invalidated"
         );
         assert!(
             measurer.cache.get(p).is_none(),
-            "para should be invalidated"
+            "paragraph should be invalidated"
         );
         assert!(
             measurer.cache.get(NodeId::ROOT).is_none(),
@@ -165,13 +313,143 @@ mod tests {
     }
 
     #[test]
-    fn invalidate_preserves_unrelated_nodes() {
+    fn doc_ops_attr_invalidates_self() {
+        use editor_crdt::Dot;
+        use editor_model::{CalloutNodeAttr, CalloutVariant, DocOp, NodeAttr};
+
+        let mut measurer = Measurer::new_test();
+        let (doc, c) = doc! { root { c: callout } };
+
+        measurer.cache.insert(c, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Attr {
+                node_id: c,
+                op: NodeAttr::Callout {
+                    attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+                },
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(c).is_none(),
+            "callout should be invalidated"
+        );
+    }
+
+    #[test]
+    fn doc_ops_modifier_invalidates_self_and_preserves_unrelated() {
+        use editor_crdt::{Dot, OrMapOp};
+        use editor_model::{DocOp, Modifier, ModifierType};
+
+        let mut measurer = Measurer::new_test();
+        let (doc, p, sibling) = doc! {
+            root {
+                p: paragraph
+                sibling: paragraph
+            }
+        };
+
+        measurer.cache.insert(p, dummy());
+        measurer.cache.insert(sibling, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Modifier {
+                node_id: p,
+                op: OrMapOp::Set {
+                    key: ModifierType::Bold,
+                    value: Modifier::Bold,
+                },
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(p).is_none(),
+            "paragraph should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(sibling).is_some(),
+            "unrelated sibling must be preserved"
+        );
+    }
+
+    #[test]
+    fn doc_ops_presence_set_invalidates_self() {
+        use editor_crdt::{Dot, OrMapOp};
+        use editor_model::{DocOp, NodeType};
+
+        let mut measurer = Measurer::new_test();
+        let (doc, p) = doc! { root { p: paragraph } };
+
+        measurer.cache.insert(p, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Presence {
+                node_id: p,
+                op: OrMapOp::Set {
+                    key: p,
+                    value: NodeType::Paragraph,
+                },
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(p).is_none(),
+            "paragraph should be invalidated"
+        );
+    }
+
+    #[test]
+    fn doc_ops_presence_unset_invalidates_old_parent_too() {
+        use editor_crdt::{Dot, OrMapOp};
+        use editor_model::DocOp;
+
+        let mut measurer = Measurer::new_test();
+        let (doc, p) = doc! { root { p: paragraph } };
+
+        measurer.cache.insert(NodeId::ROOT, dummy());
+        measurer.cache.insert(p, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Presence {
+                node_id: p,
+                op: OrMapOp::Unset { observed: vec![] },
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(p).is_none(),
+            "paragraph should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(NodeId::ROOT).is_none(),
+            "old parent (root) should be invalidated"
+        );
+    }
+
+    #[test]
+    fn doc_ops_parent_set_invalidates_old_and_new_parent() {
+        use editor_crdt::{Dot, LwwRegOp};
+        use editor_model::DocOp;
+
         let mut measurer = Measurer::new_test();
 
-        let (doc, p1, t, p2) = doc! {
+        let (doc, p1, p2, child) = doc! {
             root {
                 p1: paragraph {
-                    t: text("hello")
+                    child: paragraph
                 }
                 p2: paragraph
             }
@@ -179,155 +457,124 @@ mod tests {
 
         measurer.cache.insert(p1, dummy());
         measurer.cache.insert(p2, dummy());
-        measurer.cache.insert(t, dummy());
+        measurer.cache.insert(child, dummy());
 
-        measurer.invalidate_with_steps(
-            &doc,
-            &doc,
-            &[Step::InsertText {
-                node_id: t,
-                offset: 0,
-                text: "x".into(),
-            }],
-        );
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Parent {
+                node_id: child,
+                op: LwwRegOp::Set { value: Some(p2) },
+            },
+        )];
 
-        assert!(measurer.cache.get(t).is_none());
-        assert!(measurer.cache.get(p1).is_none());
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
         assert!(
-            measurer.cache.get(p2).is_some(),
-            "para2 should be preserved"
+            measurer.cache.get(child).is_none(),
+            "child should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(p1).is_none(),
+            "old parent should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(p2).is_none(),
+            "new parent should be invalidated"
         );
     }
 
     #[test]
-    fn merge_node_invalidates_source_parent() {
+    fn doc_ops_children_insert_invalidates_parent_and_value() {
+        use editor_crdt::{Dot, RgaOp};
+        use editor_model::DocOp;
+
         let mut measurer = Measurer::new_test();
 
-        // old_doc: root > [target, wrapper > [source, remaining]]
-        let (old_doc, target_id, wrapper_id, source_id, remaining_id) = doc! {
+        let (doc, p1, p2) = doc! {
             root {
-                target_id: paragraph
-                wrapper_id: paragraph {
-                    source_id: paragraph
-                    remaining_id: paragraph
-                }
+                p1: paragraph
+                p2: paragraph
             }
         };
 
         measurer.cache.insert(NodeId::ROOT, dummy());
-        measurer.cache.insert(target_id, dummy());
-        measurer.cache.insert(wrapper_id, dummy());
-        measurer.cache.insert(remaining_id, dummy());
-        measurer.cache.insert(source_id, dummy());
+        measurer.cache.insert(p1, dummy());
+        measurer.cache.insert(p2, dummy());
 
-        // new_doc: root > [target, wrapper > [remaining]] (source removed)
-        let mut plain = old_doc.to_plain();
-        plain.nodes.remove(&source_id);
-        if let Some(wrapper_entry) = plain.nodes.get_mut(&wrapper_id) {
-            wrapper_entry.children.retain(|&id| id != source_id);
-        }
-        let (new_doc, _) = Doc::from_plain(plain);
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Children {
+                node_id: NodeId::ROOT,
+                op: RgaOp::Insert {
+                    after: None,
+                    value: p1,
+                },
+            },
+        )];
 
-        let steps = vec![Step::MergeNode {
-            node_id: source_id,
-            target_id,
-            offset: 0,
-        }];
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
 
-        measurer.invalidate_with_steps(&old_doc, &new_doc, &steps);
-
-        assert!(
-            measurer.cache.get(target_id).is_none(),
-            "target should be invalidated"
-        );
         assert!(
             measurer.cache.get(NodeId::ROOT).is_none(),
-            "root should be invalidated"
+            "parent should be invalidated"
         );
         assert!(
-            measurer.cache.get(wrapper_id).is_none(),
-            "wrapper (former parent of merged-away source) should be invalidated"
+            measurer.cache.get(p1).is_none(),
+            "inserted child should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(p2).is_none(),
+            "alive sibling must also be invalidated (shared parent context)"
         );
     }
 
     #[test]
-    fn selection_step_invalidates_nothing() {
-        let mut measurer = Measurer::new_test();
-
-        let id = NodeId::new();
-        measurer.cache.insert(id, dummy());
-
-        let (doc,) = doc! { root { paragraph } };
-        let sel = Selection::collapsed(Position::new(id, 0));
-        measurer.invalidate_with_steps(&doc, &doc, &[Step::SetSelection { old: sel, new: sel }]);
-
-        assert!(measurer.cache.get(id).is_some());
-    }
-
-    #[test]
-    fn cached_atom_index_updates_after_sibling_removal() {
-        use crate::measure::MeasuredTree;
-        use crate::paginate::{LayoutContent, Paginator};
-        use editor_common::EdgeInsets;
+    fn doc_ops_children_remove_resolves_via_baseline_rga() {
+        use editor_crdt::{Dot, RgaOp};
+        use editor_model::DocOp;
 
         let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
 
-        // doc1: root { p1, hr, p2 } — hr at child index 1
-        let (doc1, p1, ..) = doc! {
+        let (doc, p1, p2) = doc! {
             root {
                 p1: paragraph
-                horizontal_rule
-                paragraph
+                p2: paragraph
             }
         };
 
-        // Measure full doc — hr gets cached
-        let _ = measurer.measure(&doc1, NodeId::ROOT, 400.0, &vs);
+        measurer.cache.insert(NodeId::ROOT, dummy());
+        measurer.cache.insert(p1, dummy());
+        measurer.cache.insert(p2, dummy());
 
-        // Delete p1; keep hr at new index 0
-        let steps = vec![Step::RemoveSubtree {
-            parent_id: NodeId::ROOT,
-            index: 0,
-            subtree: Subtree::leaf(
-                p1,
-                editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode::default()),
-            ),
-        }];
-
-        // doc2: root { hr, p2 }
-        let mut plain = doc1.to_plain();
-        plain.nodes.remove(&p1);
-        if let Some(root_entry) = plain.nodes.get_mut(&NodeId::ROOT) {
-            root_entry.children.retain(|&id| id != p1);
-        }
-        let (doc2, _) = Doc::from_plain(plain);
-
-        measurer.invalidate_with_steps(&doc1, &doc2, &steps);
-
-        // Re-measure and paginate
-        let root = measurer.measure(&doc2, NodeId::ROOT, 400.0, &vs);
-        let tree = MeasuredTree {
-            root: std::sync::Arc::unwrap_or_clone(root),
-        };
-        let paginator = Paginator::continuous(440.0, 1024.0, EdgeInsets::all(20.0));
-        let (layout, _) = paginator.paginate(tree);
-
-        // Find the atom in the layout tree
-        let LayoutContent::Box(root_box) = &layout.root.content else {
-            panic!("expected box");
-        };
-        let atom = root_box
+        let root_entry = doc.get_entry(NodeId::ROOT).unwrap();
+        let p1_dot = root_entry
             .children
-            .iter()
-            .find_map(|c| match &c.content {
-                LayoutContent::Atom(a) => Some(a),
-                _ => None,
-            })
-            .expect("should find atom");
+            .iter_with_dot()
+            .find(|(_, id)| **id == p1)
+            .map(|(d, _)| d)
+            .unwrap();
 
-        // After p1 deletion, hr is child index 0
-        assert_eq!(atom.index, 0, "atom index should reflect current position");
-        assert_eq!(atom.parent_id, NodeId::ROOT);
+        let ops = vec![make_op(
+            Dot::new(99, 0),
+            DocOp::Children {
+                node_id: NodeId::ROOT,
+                op: RgaOp::Remove { observed: p1_dot },
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(NodeId::ROOT).is_none(),
+            "parent should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(p1).is_none(),
+            "removed child resolved via baseline Rga should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(p2).is_none(),
+            "sibling shift invalidates alive siblings"
+        );
     }
 }

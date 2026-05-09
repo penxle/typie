@@ -13,6 +13,12 @@ fn strip_ffi_attrs(mut item: syn::DeriveInput) -> syn::DeriveInput {
         }
         syn::Data::Enum(data) => {
             for variant in &mut data.variants {
+                let was_ffi_skip = super::meta::has_ffi_skip_attr(&variant.attrs);
+                variant.attrs.retain(|attr| !attr.path().is_ident("ffi"));
+                if was_ffi_skip {
+                    let attrs: Vec<syn::Attribute> = syn::parse_quote!(#[serde(skip)]);
+                    variant.attrs.extend(attrs);
+                }
                 for field in &mut variant.fields {
                     field.attrs.retain(|attr| !attr.path().is_ident("ffi"));
                 }

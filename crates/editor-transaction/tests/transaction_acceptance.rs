@@ -63,7 +63,7 @@ mod validation_dispatch {
         let mut tr = Transaction::new(&state);
         tr.add_modifier(t1, Modifier::Bold).unwrap();
         tr.add_modifier(t1, Modifier::Bold).unwrap();
-        let (_, _, _, _) = tr.commit();
+        let (_, _, _, _, _) = tr.commit();
     }
 
     #[test]
@@ -82,7 +82,7 @@ mod validation_dispatch {
         let mut tr = Transaction::new(&state);
         let new_t = NodeId::new();
         tr.split_node(t1, 3, new_t).unwrap();
-        let (_, _, _, _) = tr.commit();
+        let (_, _, _, _, _) = tr.commit();
     }
 }
 
@@ -112,13 +112,13 @@ mod structural_single_replica {
             let mut tr = Transaction::new(&state);
             tr.remove_text(t1, 0, "placeholder".chars().count()).unwrap();
             tr.insert_text(t1, 0, &text).unwrap();
-            let (state, _, _, _) = tr.commit();
+            let (state, _, _, _, _) = tr.commit();
 
             let new_t = NodeId::new();
             let mut tr = Transaction::new(&state);
             let result = tr.split_node(t1, split_at, new_t);
             if result.is_err() { return Ok(()); }
-            let (split_state, _, _, _) = tr.commit();
+            let (split_state, _, _, _, _) = tr.commit();
 
             let t1_text = match split_state.doc.get_entry(t1).map(|e| &e.node) {
                 Some(editor_model::Node::Text(t)) => t.text.to_string(),
@@ -156,11 +156,11 @@ mod structural_single_replica {
             tr.insert_text(t1, 0, &text_a).unwrap();
             tr.remove_text(t2, 0, "placeholder_b".chars().count()).unwrap();
             tr.insert_text(t2, 0, &text_b).unwrap();
-            let (state, _, _, _) = tr.commit();
+            let (state, _, _, _, _) = tr.commit();
 
             let mut tr = Transaction::new(&state);
             tr.merge_node(p2, p1).unwrap();
-            let (merged, _, _, _) = tr.commit();
+            let (merged, _, _, _, _) = tr.commit();
 
             let p1_text = extract_text(&merged, p1);
             prop_assert_eq!(p1_text, format!("{}{}", text_a, text_b));
@@ -182,7 +182,7 @@ mod structural_single_replica {
             let mut tr = Transaction::new(&state);
             let result = tr.move_node(t1, p2, target_index);
             if result.is_err() { return Ok(()); }
-            let (moved, _, _, _) = tr.commit();
+            let (moved, _, _, _, _) = tr.commit();
 
             let t1_entry = moved.doc.get_entry(t1).unwrap();
             prop_assert_eq!(*t1_entry.parent.get(), Some(p2));
@@ -205,7 +205,7 @@ mod structural_single_replica {
             let mut tr = Transaction::new(&state);
             let result = tr.insert_subtree(root_id, index, subtree);
             if result.is_err() { return Ok(()); }
-            let (inserted, _, _, _) = tr.commit();
+            let (inserted, _, _, _, _) = tr.commit();
 
             let new_entry = inserted.doc.get_entry(new_id).unwrap();
             prop_assert_eq!(*new_entry.parent.get(), Some(root_id));
@@ -222,7 +222,7 @@ mod structural_single_replica {
 
         let mut tr = Transaction::new(&state);
         tr.remove_subtree(p1).unwrap();
-        let (removed, _, _, _) = tr.commit();
+        let (removed, _, _, _, _) = tr.commit();
 
         assert!(removed.doc.get_entry(p1).is_none());
     }
@@ -255,7 +255,7 @@ mod inverse_visible {
             let mut tr = Transaction::new(&state);
             tr.remove_text(t1, 0, "placeholder".chars().count()).unwrap();
             tr.insert_text(t1, 0, &text).unwrap();
-            let (state, _, _, _) = tr.commit();
+            let (state, _, _, _, _) = tr.commit();
 
             let plain_before = state.doc.to_plain();
             let step = Step::RemoveText { node_id: t1, offset: 0, text: text.clone() };
@@ -314,7 +314,7 @@ mod inverse_visible {
         };
         let mut tr = Transaction::new(&state);
         tr.add_modifier(t1, Modifier::Bold).unwrap();
-        let (state, _, _, _) = tr.commit();
+        let (state, _, _, _, _) = tr.commit();
 
         let plain_before = state.doc.to_plain();
         let step = Step::RemoveModifier {

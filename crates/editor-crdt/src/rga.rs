@@ -84,6 +84,14 @@ impl<T> Rga<T> {
         self.entries.contains_key(&dot)
     }
 
+    /// Looks up the value at `dot` including tombstoned entries — unlike
+    /// `iter_with_dot`, which yields only alive entries. Needed when an op
+    /// carries only a Dot reference to a value already removed from the
+    /// current state but still recoverable from the baseline.
+    pub fn get(&self, dot: Dot) -> Option<&T> {
+        self.entries.get(&dot).map(|e| &e.value)
+    }
+
     pub fn dot_at(&self, offset: usize) -> Result<Option<Dot>, CrdtError> {
         if offset == 0 {
             return Ok(None);
@@ -1053,6 +1061,36 @@ mod tests {
             )
             .unwrap();
         assert_eq!(crdt.to_plain(), vec![1, 2]);
+    }
+
+    #[test]
+    fn get_returns_value_even_after_remove() {
+        let crdt = Rga::<u32>::new()
+            .apply(
+                Dot::new(1, 0),
+                RgaOp::Insert {
+                    after: None,
+                    value: 42u32,
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(u64::MAX, 0),
+                RgaOp::Remove {
+                    observed: Dot::new(1, 0),
+                },
+            )
+            .unwrap();
+        assert!(
+            collect(&crdt).is_empty(),
+            "tombstoned entry hidden from iter"
+        );
+        assert_eq!(
+            crdt.get(Dot::new(1, 0)),
+            Some(&42),
+            "get still recovers tombstoned value"
+        );
+        assert_eq!(crdt.get(Dot::new(99, 99)), None, "absent dot returns None");
     }
 
     #[test]

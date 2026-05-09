@@ -1,5 +1,6 @@
+use editor_crdt::Op;
 use editor_macros::ffi;
-use editor_model::{Doc, Modifier, ModifierType, NodeId, PlainNode, Subtree};
+use editor_model::{DocOp, Modifier, ModifierType, NodeId, PlainNode, Subtree};
 use editor_state::{BatchedState, Composition, PendingModifiers, Selection, State};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
@@ -19,6 +20,7 @@ pub enum Validation {
 
 pub struct StepOutput {
     pub state: State,
+    pub ops: Vec<Op<DocOp>>,
     pub validations: Vec<Validation>,
 }
 
@@ -156,63 +158,12 @@ impl Step {
         }
     }
 
-    pub fn affected_node_ids(&self, old_doc: &Doc, new_doc: &Doc) -> Vec<NodeId> {
-        match self {
-            Step::InsertText { node_id, .. }
-            | Step::RemoveText { node_id, .. }
-            | Step::AddModifier { node_id, .. }
-            | Step::RemoveModifier { node_id, .. }
-            | Step::SetNode { node_id, .. } => vec![*node_id],
-            Step::InsertSubtree {
-                parent_id, subtree, ..
-            } => {
-                let mut ids = vec![*parent_id];
-                ids.extend(subtree.all_ids());
-                ids
-            }
-            Step::RemoveSubtree { parent_id, .. } => vec![*parent_id],
-            Step::SplitNode {
-                node_id,
-                new_node_id,
-                ..
-            } => {
-                let mut ids = vec![*node_id, *new_node_id];
-                if let Some(entry) = new_doc.get_entry(*new_node_id) {
-                    ids.extend(entry.children.iter().copied());
-                }
-                ids
-            }
-            Step::MergeNode {
-                node_id, target_id, ..
-            } => {
-                let mut ids = vec![*target_id];
-                if let Some(entry) = old_doc.get_entry(*node_id)
-                    && let Some(parent) = *entry.parent.get()
-                {
-                    ids.push(parent);
-                }
-                if let Some(entry) = new_doc.get_entry(*target_id) {
-                    ids.extend(entry.children.iter().copied());
-                }
-                ids
-            }
-            Step::MoveNode {
-                node_id,
-                old_parent,
-                new_parent,
-                ..
-            } => vec![*node_id, *old_parent, *new_parent],
-            Step::SetSelection { .. }
-            | Step::SetPendingModifiers { .. }
-            | Step::SetComposition { .. } => vec![],
-        }
-    }
-
     pub fn apply(&self, state: &State) -> Result<StepOutput, StepError> {
         let mut validations = Vec::new();
-        let new_state = state.batch(|s| self.apply_to(s, &mut validations))?;
+        let (new_state, ops) = state.batch_with_ops(|s| self.apply_to(s, &mut validations))?;
         Ok(StepOutput {
             state: new_state,
+            ops,
             validations,
         })
     }
@@ -359,7 +310,7 @@ impl Step {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_model::{PlainNode, PlainParagraphNode, PlainRootNode};
+    use editor_model::{PlainNode, PlainParagraphNode};
     use editor_state::Position;
 
     #[test]
@@ -580,140 +531,5 @@ mod tests {
             new: None,
         };
         assert!(matches!(step.scope(), StepScope::Local));
-    }
-
-    #[test]
-    fn affected_includes_split_new_node_id() {
-        let old = NodeId::new();
-        let new = NodeId::new();
-        let step = Step::SplitNode {
-            node_id: old,
-            offset: 3,
-            new_node_id: new,
-        };
-        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
-        assert!(ids.contains(&old));
-        assert!(ids.contains(&new));
-        assert_eq!(ids.len(), 2);
-    }
-
-    #[test]
-    #[ignore = "Step::apply not yet implemented"]
-    fn affected_split_includes_reparented_children() {
-        use editor_macros::state;
-
-        let (state, p1, t1) = state! {
-            doc {
-                root {
-                    p1: paragraph {
-                        t1: text("Hello")
-                    }
-                }
-            }
-            selection: (t1, 0)
-        };
-
-        let p2 = NodeId::new();
-        let step = Step::SplitNode {
-            node_id: p1,
-            offset: 0,
-            new_node_id: p2,
-        };
-        let new_state = step.apply(&state).unwrap().state;
-        let ids = step.affected_node_ids(&state.doc, &new_state.doc);
-
-        // The reparented text node must be in affected so its post-state hash
-        // (with parent=p2) gets emitted as a new object.
-        assert!(ids.contains(&t1));
-    }
-
-    #[test]
-    fn affected_includes_move_node_id() {
-        let id = NodeId::new();
-        let old_parent = NodeId::new();
-        let new_parent = NodeId::new();
-        let step = Step::MoveNode {
-            node_id: id,
-            old_parent,
-            old_index: 0,
-            new_parent,
-            new_index: 0,
-        };
-        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
-        assert!(ids.contains(&id));
-        assert!(ids.contains(&old_parent));
-        assert!(ids.contains(&new_parent));
-        assert_eq!(ids.len(), 3);
-    }
-
-    #[test]
-    fn affected_merge_node_excludes_removed_node() {
-        let surviving = NodeId::new();
-        let removed = NodeId::new();
-        let step = Step::MergeNode {
-            node_id: removed,
-            target_id: surviving,
-            offset: 0,
-        };
-        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
-        assert_eq!(ids, vec![surviving]);
-    }
-
-    #[test]
-    fn affected_merge_includes_source_old_parent() {
-        // After merge, source is gone but source's old parent has its children
-        // list shrunk. Its hash and layout change, so it must be in affected.
-        use editor_macros::state;
-
-        let (old_state, target_id, wrapper_id, source_id) = state! {
-            doc {
-                root {
-                    target_id: paragraph {}
-                    wrapper_id: paragraph {
-                        source_id: paragraph {}
-                    }
-                }
-            }
-            selection: (target_id, 0)
-        };
-
-        let step = Step::MergeNode {
-            node_id: source_id,
-            target_id,
-            offset: 0,
-        };
-        let new_state = step.apply(&old_state).unwrap().state;
-        let ids = step.affected_node_ids(&old_state.doc, &new_state.doc);
-        assert!(ids.contains(&target_id));
-        assert!(
-            ids.contains(&wrapper_id),
-            "source's old parent must be in affected"
-        );
-    }
-
-    #[test]
-    fn affected_includes_subtree_inserted_nodes() {
-        let parent = NodeId::new();
-        let n1 = NodeId::new();
-        let n2 = NodeId::new();
-        let n3 = NodeId::new();
-        // 3-level: parent → n1 → n2 → n3
-        let subtree =
-            Subtree::leaf(n1, PlainNode::Root(PlainRootNode::default())).with_children(vec![
-                Subtree::leaf(n2, PlainNode::Root(PlainRootNode::default())).with_children(vec![
-                    Subtree::leaf(n3, PlainNode::Root(PlainRootNode::default())),
-                ]),
-            ]);
-        let step = Step::InsertSubtree {
-            parent_id: parent,
-            index: 0,
-            subtree,
-        };
-        let ids = step.affected_node_ids(&Doc::default(), &Doc::default());
-        assert!(ids.contains(&parent));
-        assert!(ids.contains(&n1));
-        assert!(ids.contains(&n2));
-        assert!(ids.contains(&n3));
-        assert_eq!(ids.len(), 4);
     }
 }

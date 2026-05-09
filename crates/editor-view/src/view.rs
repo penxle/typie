@@ -1,8 +1,8 @@
 use editor_common::{EdgeInsets, Movement};
-use editor_model::{Doc, LayoutMode, Node, NodeId};
+use editor_crdt::Op;
+use editor_model::{Doc, DocOp, LayoutMode, Node, NodeId};
 use editor_resource::Resource;
 use editor_state::{Position, ResolvedPosition, ResolvedSelection, Selection};
-use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
 use crate::measure::text::resolve::resolve_text_style;
@@ -47,17 +47,17 @@ impl View {
         }
     }
 
-    pub fn reconcile(
+    pub fn reconcile_with_ops(
         &mut self,
         old_doc: &Doc,
         new_doc: &Doc,
-        steps: &[Step],
+        ops: &[Op<DocOp>],
         new_pending_style: Option<PendingStyle>,
     ) -> bool {
-        let nodes_invalidated = self.measurer.invalidate_with_steps(old_doc, new_doc, steps);
-        let attrs_changed = steps
-            .iter()
-            .any(|s| matches!(s, Step::SetNode { node_id, .. } if *node_id == NodeId::ROOT));
+        let nodes_invalidated = self.measurer.invalidate_with_doc_ops(old_doc, new_doc, ops);
+        let attrs_changed = ops.iter().any(
+            |op| matches!(&op.payload, DocOp::Attr { node_id, .. } if *node_id == NodeId::ROOT),
+        );
 
         let pending_changed = self.view_state.pending_style != new_pending_style;
         if pending_changed {
@@ -308,25 +308,20 @@ mod tests {
     use super::*;
     use editor_macros::doc;
 
+    fn make_op(id: editor_crdt::Dot, payload: DocOp) -> Op<DocOp> {
+        Op {
+            id,
+            parents: Default::default(),
+            payload,
+        }
+    }
+
     #[test]
     fn layout_produces_pages() {
         let (doc,) = doc! { root { paragraph { text("hello") } } };
         let mut view = View::new_test();
         view.layout(&doc);
         assert!(!view.pages().is_empty());
-    }
-
-    #[test]
-    fn reconcile_returns_true_on_change() {
-        let (doc, t1) = doc! { root { paragraph { t1: text("hello") } } };
-        let mut view = View::new_test();
-        view.layout(&doc);
-        let steps = vec![Step::InsertText {
-            node_id: t1,
-            offset: 5,
-            text: " world".into(),
-        }];
-        assert!(view.reconcile(&doc, &doc, &steps, None));
     }
 
     #[test]
@@ -395,7 +390,7 @@ mod tests {
                 modifier: Modifier::FontSize { value: 9600 },
             }],
         });
-        view.reconcile(&doc, &doc, &[], pending_style);
+        view.reconcile_with_ops(&doc, &doc, &[], pending_style);
         let pending = view.cursor_metrics(&doc, &pos).unwrap();
 
         assert!(pending.caret.height > baseline.caret.height);
@@ -421,7 +416,7 @@ mod tests {
                 modifier: Modifier::FontSize { value: 9600 },
             }],
         });
-        view.reconcile(&doc, &doc, &[], pending_style);
+        view.reconcile_with_ops(&doc, &doc, &[], pending_style);
         let after = view.cursor_metrics(&doc, &pos).unwrap();
 
         assert!((after.caret.height - baseline.caret.height).abs() < 0.01);
@@ -430,6 +425,9 @@ mod tests {
 
     #[test]
     fn page_width_change_triggers_reflow() {
+        use editor_crdt::Dot;
+        use editor_model::{DocOp, NodeAttr, RootNodeAttr};
+
         let (doc,) = doc! {
             root (
                 layout_mode: LayoutMode::Paginated {
@@ -462,20 +460,35 @@ mod tests {
                 paragraph { text("hello") }
             }
         };
-        let old_root = doc.get_entry(NodeId::ROOT).unwrap().node.to_plain();
-        let new_root = new_doc.get_entry(NodeId::ROOT).unwrap().node.to_plain();
-        let steps = vec![Step::SetNode {
-            node_id: NodeId::ROOT,
-            old_node: old_root,
-            new_node: new_root,
-        }];
-        let changed = view.reconcile(&doc, &new_doc, &steps, None);
-        assert!(changed, "reconcile should return true for attrs change");
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Attr {
+                node_id: NodeId::ROOT,
+                op: NodeAttr::Root {
+                    attr: RootNodeAttr::LayoutMode(LayoutMode::Paginated {
+                        page_width: 600,
+                        page_height: 600,
+                        page_margin_top: 20,
+                        page_margin_bottom: 20,
+                        page_margin_left: 20,
+                        page_margin_right: 20,
+                    }),
+                },
+            },
+        )];
+        let changed = view.reconcile_with_ops(&doc, &new_doc, &ops, None);
+        assert!(
+            changed,
+            "reconcile_with_ops should return true for root attr change"
+        );
         assert_eq!(view.pages()[0].size.width, 600.0);
     }
 
     #[test]
     fn set_attrs_with_same_layout_mode_produces_same_layout() {
+        use editor_crdt::Dot;
+        use editor_model::{DocOp, NodeAttr, RootNodeAttr};
+
         let (doc,) = doc! {
             root (
                 layout_mode: LayoutMode::Paginated {
@@ -493,13 +506,23 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&doc);
 
-        let root = doc.get_entry(NodeId::ROOT).unwrap().node.to_plain();
-        let steps = vec![Step::SetNode {
-            node_id: NodeId::ROOT,
-            old_node: root.clone(),
-            new_node: root,
-        }];
-        let changed = view.reconcile(&doc, &doc, &steps, None);
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Attr {
+                node_id: NodeId::ROOT,
+                op: NodeAttr::Root {
+                    attr: RootNodeAttr::LayoutMode(LayoutMode::Paginated {
+                        page_width: 400,
+                        page_height: 600,
+                        page_margin_top: 20,
+                        page_margin_bottom: 20,
+                        page_margin_left: 20,
+                        page_margin_right: 20,
+                    }),
+                },
+            },
+        )];
+        let changed = view.reconcile_with_ops(&doc, &doc, &ops, None);
         assert!(changed, "attrs_changed branch returns true");
         assert_eq!(view.pages()[0].size.width, 400.0);
     }
@@ -567,6 +590,9 @@ mod tests {
 
     #[test]
     fn mode_switch_paginated_to_continuous_triggers_reflow() {
+        use editor_crdt::Dot;
+        use editor_model::{DocOp, NodeAttr, RootNodeAttr};
+
         let (doc_old,) = doc! {
             root (
                 layout_mode: LayoutMode::Paginated {
@@ -590,20 +616,25 @@ mod tests {
                 paragraph { text("hello") }
             }
         };
-        let old_root = doc_old.get_entry(NodeId::ROOT).unwrap().node.to_plain();
-        let new_root = doc_new.get_entry(NodeId::ROOT).unwrap().node.to_plain();
-        let steps = vec![Step::SetNode {
-            node_id: NodeId::ROOT,
-            old_node: old_root,
-            new_node: new_root,
-        }];
-        let changed = view.reconcile(&doc_old, &doc_new, &steps, None);
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Attr {
+                node_id: NodeId::ROOT,
+                op: NodeAttr::Root {
+                    attr: RootNodeAttr::LayoutMode(LayoutMode::Continuous { max_width: 600 }),
+                },
+            },
+        )];
+        let changed = view.reconcile_with_ops(&doc_old, &doc_new, &ops, None);
         assert!(changed);
         assert_ne!(view.pages()[0].size.width, old_page_width);
     }
 
     #[test]
     fn mode_switch_continuous_to_paginated_triggers_reflow() {
+        use editor_crdt::Dot;
+        use editor_model::{DocOp, NodeAttr, RootNodeAttr};
+
         let (doc_old,) = doc! {
             root (layout_mode: LayoutMode::Continuous { max_width: 500 }) {
                 paragraph { text("hello") }
@@ -626,16 +657,59 @@ mod tests {
                 paragraph { text("hello") }
             }
         };
-        let old_root = doc_old.get_entry(NodeId::ROOT).unwrap().node.to_plain();
-        let new_root = doc_new.get_entry(NodeId::ROOT).unwrap().node.to_plain();
-        let steps = vec![Step::SetNode {
-            node_id: NodeId::ROOT,
-            old_node: old_root,
-            new_node: new_root,
-        }];
-        let changed = view.reconcile(&doc_old, &doc_new, &steps, None);
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Attr {
+                node_id: NodeId::ROOT,
+                op: NodeAttr::Root {
+                    attr: RootNodeAttr::LayoutMode(LayoutMode::Paginated {
+                        page_width: 700,
+                        page_height: 900,
+                        page_margin_top: 20,
+                        page_margin_bottom: 20,
+                        page_margin_left: 20,
+                        page_margin_right: 20,
+                    }),
+                },
+            },
+        )];
+        let changed = view.reconcile_with_ops(&doc_old, &doc_new, &ops, None);
         assert!(changed);
         assert_eq!(view.pages()[0].size.width, 700.0);
+    }
+
+    #[test]
+    fn reconcile_with_ops_invalidates_view() {
+        use editor_crdt::{Dot, TextOp};
+        use editor_model::DocOp;
+
+        let mut view = View::new_test();
+        let (doc_old, _p, t) = doc! {
+            root { p: paragraph { t: text("hi") } }
+        };
+        view.layout(&doc_old);
+
+        let mut new_plain = doc_old.to_plain();
+        if let Some(entry) = new_plain.nodes.get_mut(&t) {
+            if let editor_model::PlainNode::Text(tn) = &mut entry.node {
+                tn.text = "hello".into();
+            }
+        }
+        let (doc_new, _) = Doc::from_plain(new_plain);
+
+        let op = Op {
+            id: Dot::new(0, 0),
+            parents: Default::default(),
+            payload: DocOp::Text {
+                node_id: t,
+                op: TextOp::InsertChar {
+                    ch: 'x',
+                    after: None,
+                },
+            },
+        };
+        let dirty = view.reconcile_with_ops(&doc_old, &doc_new, &[op], None);
+        assert!(dirty);
     }
 
     #[test]

@@ -124,7 +124,7 @@ impl Editor {
                 minicbor::decode(&payload[..])
                     .map_err(|e| FfiError::Deserialization(e.to_string()))?;
             for changeset in cs.0 {
-                inner.editor.receive_remote_changeset(changeset)?;
+                inner.editor.receive_remote_changeset(changeset);
             }
             Ok(())
         })

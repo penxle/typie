@@ -427,7 +427,7 @@ mod tests {
         // Apply all steps
         let mut tr = Transaction::new(&state);
         tr.apply_steps(steps.clone()).unwrap();
-        let (new_state, _, _, _) = tr.commit();
+        let (new_state, _, _, _, _) = tr.commit();
 
         // After compact: t1 = "ABC", t2/t3/t4 removed
         assert_eq!(new_state.text(t1).text.to_string(), "ABC");
@@ -440,7 +440,7 @@ mod tests {
         let inverse_steps: Vec<_> = steps.iter().rev().map(|s| s.inverse()).collect();
         let mut tr2 = Transaction::new(&new_state);
         tr2.apply_steps(inverse_steps).unwrap();
-        let (restored, _, _, _) = tr2.commit();
+        let (restored, _, _, _, _) = tr2.commit();
 
         // Restored state should match original
         assert_eq!(restored.text(t1).text.to_string(), "A");

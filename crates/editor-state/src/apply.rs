@@ -1,4 +1,4 @@
-use editor_crdt::{Changeset, CrdtError, Dot};
+use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{DocOp, apply_doc_op};
 use hashbrown::HashSet;
 
@@ -6,6 +6,7 @@ use crate::{Composition, PendingModifiers, Selection, State, StateError};
 
 pub struct BatchedState<'a> {
     inner: &'a mut State,
+    pub(crate) emitted_ops: Vec<Op<DocOp>>,
 }
 
 impl<'a> std::ops::Deref for BatchedState<'a> {
@@ -16,8 +17,10 @@ impl<'a> std::ops::Deref for BatchedState<'a> {
 }
 
 impl<'a> BatchedState<'a> {
-    pub fn apply(&mut self, payload: DocOp) -> Result<Dot, StateError> {
-        self.inner.apply_internal(payload)
+    pub fn apply(&mut self, payload: DocOp) -> Result<Op<DocOp>, StateError> {
+        let op = self.inner.apply_internal(payload)?;
+        self.emitted_ops.push(op.clone());
+        Ok(op)
     }
 
     pub fn set_selection(&mut self, selection: Selection) {
@@ -34,7 +37,7 @@ impl<'a> BatchedState<'a> {
 }
 
 impl State {
-    fn apply_internal(&mut self, payload: DocOp) -> Result<Dot, StateError> {
+    fn apply_internal(&mut self, payload: DocOp) -> Result<Op<DocOp>, StateError> {
         let (graph, op) = match self.graph.add(payload) {
             Ok(pair) => pair,
             Err(CrdtError::ClockOverflow { dot }) => {
@@ -42,37 +45,43 @@ impl State {
             }
             Err(other) => panic!("local create: {other:?}"),
         };
-        let dot = op.id;
         let new_doc = apply_doc_op(self.doc.clone(), &op)?;
 
         self.graph = graph;
         self.doc = new_doc;
-        Ok(dot)
+        Ok(op)
     }
 }
 
 impl State {
-    pub fn apply(&self, payload: DocOp) -> Result<(Self, Dot), StateError> {
+    pub fn apply(&self, payload: DocOp) -> Result<(Self, Op<DocOp>), StateError> {
         let mut next = self.clone();
-        let dot = next.apply_internal(payload)?;
+        let op = next.apply_internal(payload)?;
         next.verify()?;
-        Ok((next, dot))
+        Ok((next, op))
     }
 
     pub fn receive_remote_changeset(
         &self,
         changeset: Changeset<DocOp>,
-    ) -> Result<Self, StateError> {
+    ) -> Result<(Self, Vec<Op<DocOp>>), StateError> {
+        let prev_count = self.graph.changesets().len();
         let mut next = self.clone();
         next.graph = next
             .graph
             .receive_changeset(changeset.clone())
             .map_err(StateError::Crdt)?;
-        for op in &changeset.ops {
-            next.doc = apply_doc_op(next.doc.clone(), op).map_err(StateError::Model)?;
-        }
+        let next_count = next.graph.changesets().len();
+        let applied_ops = if next_count > prev_count {
+            for op in &changeset.ops {
+                next.doc = apply_doc_op(next.doc.clone(), op).map_err(StateError::Model)?;
+            }
+            changeset.ops
+        } else {
+            Vec::new()
+        };
         next.verify()?;
-        Ok(next)
+        Ok((next, applied_ops))
     }
 
     pub fn local_changesets_since(
@@ -82,18 +91,30 @@ impl State {
         self.graph.missing_changesets_for(remote_heads)
     }
 
-    pub fn batch<F, E>(&self, f: F) -> Result<Self, E>
+    pub fn batch_with_ops<F, E>(&self, f: F) -> Result<(Self, Vec<Op<DocOp>>), E>
     where
         F: FnOnce(&mut BatchedState) -> Result<(), E>,
         E: From<StateError>,
     {
         let mut next = self.clone();
-        {
-            let mut batched = BatchedState { inner: &mut next };
+        let ops = {
+            let mut batched = BatchedState {
+                inner: &mut next,
+                emitted_ops: Vec::new(),
+            };
             f(&mut batched)?;
-        }
+            std::mem::take(&mut batched.emitted_ops)
+        };
         next.verify().map_err(E::from)?;
-        Ok(next)
+        Ok((next, ops))
+    }
+
+    pub fn batch<F, E>(&self, f: F) -> Result<Self, E>
+    where
+        F: FnOnce(&mut BatchedState) -> Result<(), E>,
+        E: From<StateError>,
+    {
+        self.batch_with_ops(f).map(|(state, _ops)| state)
     }
 }
 
@@ -406,6 +427,42 @@ mod tests {
     }
 
     #[test]
+    fn batched_apply_returns_op() {
+        let state = rooted_state();
+        let root_id = state.doc.root().unwrap().id();
+        let child_id = NodeId::new();
+        let new_state: State = state
+            .batch(|b| {
+                let op = b.apply(DocOp::Presence {
+                    node_id: child_id,
+                    op: OrMapOp::Set {
+                        key: child_id,
+                        value: NodeType::Paragraph,
+                    },
+                })?;
+                assert!(matches!(op.payload, DocOp::Presence { .. }));
+                let _ = op.id.actor;
+                let _ = op.id.clock;
+                b.apply(DocOp::Parent {
+                    node_id: child_id,
+                    op: LwwRegOp::Set {
+                        value: Some(root_id),
+                    },
+                })?;
+                b.apply(DocOp::Children {
+                    node_id: root_id,
+                    op: RgaOp::Insert {
+                        after: None,
+                        value: child_id,
+                    },
+                })?;
+                Ok::<(), StateError>(())
+            })
+            .expect("valid batch");
+        assert!(new_state.doc.get_entry(child_id).is_some());
+    }
+
+    #[test]
     fn local_changesets_since_returns_vec() {
         let state = rooted_state();
         let result = state.local_changesets_since(&hashbrown::HashSet::new());
@@ -415,5 +472,57 @@ mod tests {
             state.graph.changesets().len(),
             "empty remote heads → all sealed cs are missing for remote"
         );
+    }
+
+    #[test]
+    fn duplicate_changeset_returns_empty_ops() {
+        let state = rooted_state();
+        let root_id = state.doc.root().unwrap().id();
+        let child = NodeId::new();
+
+        let baseline_heads: hashbrown::HashSet<_> = state.graph.current_heads().copied().collect();
+
+        let new_state: State = state
+            .batch(|b| {
+                b.apply(DocOp::Presence {
+                    node_id: child,
+                    op: OrMapOp::Set {
+                        key: child,
+                        value: NodeType::Paragraph,
+                    },
+                })?;
+                b.apply(DocOp::Parent {
+                    node_id: child,
+                    op: LwwRegOp::Set {
+                        value: Some(root_id),
+                    },
+                })?;
+                b.apply(DocOp::Children {
+                    node_id: root_id,
+                    op: RgaOp::Insert {
+                        after: None,
+                        value: child,
+                    },
+                })?;
+                Ok::<(), StateError>(())
+            })
+            .unwrap();
+
+        let committed = State {
+            graph: new_state.graph.commit(),
+            ..new_state
+        };
+        let css = committed.local_changesets_since(&baseline_heads).unwrap();
+        assert!(
+            !css.is_empty(),
+            "batch must have produced at least one changeset"
+        );
+        let cs = css.into_iter().next().unwrap();
+
+        let (after_first, ops1) = state.receive_remote_changeset(cs.clone()).unwrap();
+        assert!(!ops1.is_empty(), "first delivery must yield ops");
+
+        let (_after_second, ops2) = after_first.receive_remote_changeset(cs).unwrap();
+        assert!(ops2.is_empty(), "duplicate delivery must yield empty ops");
     }
 }

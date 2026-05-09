@@ -40,10 +40,12 @@ pub(crate) fn apply_to(
 
     // Sequential apply, chaining each emitted dot as the next `after`
     for ch in text.chars() {
-        let op_id = batched.apply(DocOp::Text {
-            node_id,
-            op: TextOp::InsertChar { ch, after },
-        })?;
+        let op_id = batched
+            .apply(DocOp::Text {
+                node_id,
+                op: TextOp::InsertChar { ch, after },
+            })?
+            .id;
         after = Some(op_id);
     }
 

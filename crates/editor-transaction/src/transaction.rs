@@ -1,4 +1,5 @@
-use editor_model::{Doc, Modifier, ModifierType, Node, NodeId, PlainNode, Subtree};
+use editor_crdt::Op;
+use editor_model::{Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainNode, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
 
 use crate::{Effect, Step, StepError, TransactionMeta, Validation, validate};
@@ -10,6 +11,7 @@ struct Batch {
 pub struct Transaction {
     state: State,
     steps: Vec<Step>,
+    ops: Vec<Op<DocOp>>,
     effects: Vec<Effect>,
     meta: TransactionMeta,
     batch: Option<Batch>,
@@ -19,6 +21,7 @@ pub struct Transaction {
 pub struct Savepoint {
     state: State,
     steps_len: usize,
+    ops_len: usize,
     effects_len: usize,
     batch_validations_len: Option<usize>,
 }
@@ -28,6 +31,7 @@ impl Transaction {
         Self {
             state: state.clone(),
             steps: Vec::new(),
+            ops: Vec::new(),
             effects: Vec::new(),
             meta: TransactionMeta::default(),
             batch: None,
@@ -69,6 +73,7 @@ impl Transaction {
     fn apply_step(&mut self, step: Step) -> Result<(), StepError> {
         let output = step.apply(&self.state)?;
         self.state = output.state;
+        self.ops.extend(output.ops);
         self.steps.push(step);
         if let Some(batch) = &mut self.batch {
             batch.validations.extend(output.validations);
@@ -82,6 +87,7 @@ impl Transaction {
         Savepoint {
             state: self.state.clone(),
             steps_len: self.steps.len(),
+            ops_len: self.ops.len(),
             effects_len: self.effects.len(),
             batch_validations_len: self.batch.as_ref().map(|b| b.validations.len()),
         }
@@ -90,6 +96,7 @@ impl Transaction {
     pub fn rollback(&mut self, sp: Savepoint) {
         self.state = sp.state;
         self.steps.truncate(sp.steps_len);
+        self.ops.truncate(sp.ops_len);
         self.effects.truncate(sp.effects_len);
         if let (Some(batch), Some(len)) = (&mut self.batch, sp.batch_validations_len) {
             batch.validations.truncate(len);
@@ -372,9 +379,22 @@ impl Transaction {
         f(&mut self.meta);
     }
 
-    pub fn commit(mut self) -> (State, Vec<Step>, Vec<Effect>, TransactionMeta) {
+    pub fn commit(
+        mut self,
+    ) -> (
+        State,
+        Vec<Step>,
+        Vec<Op<DocOp>>,
+        Vec<Effect>,
+        TransactionMeta,
+    ) {
         self.state.graph = self.state.graph.commit();
-        (self.state, self.steps, self.effects, self.meta)
+        (self.state, self.steps, self.ops, self.effects, self.meta)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ops_for_test(&self) -> &[Op<DocOp>] {
+        &self.ops
     }
 }
 
@@ -449,7 +469,7 @@ mod tests {
         };
 
         let tr = Transaction::new(&state);
-        let (_, steps, effects, _) = tr.commit();
+        let (_, steps, _, effects, _) = tr.commit();
 
         assert!(steps.is_empty());
         assert!(effects.is_empty());
@@ -467,7 +487,7 @@ mod tests {
 
         assert_eq!(tr.doc().text(t1).text.to_string(), "Hello Beautiful World");
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
 
         assert_eq!(steps.len(), 1);
         assert!(matches!(&steps[0], Step::InsertText { .. }));
@@ -485,7 +505,7 @@ mod tests {
 
         assert_eq!(tr.doc().text(t1).text.to_string(), "Hello");
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
 
         assert_eq!(steps.len(), 1);
         match &steps[0] {
@@ -525,7 +545,7 @@ mod tests {
         let root = doc.get_entry(NodeId::ROOT).unwrap();
         assert_eq!(root.children.len(), 2);
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
     }
 
@@ -545,7 +565,7 @@ mod tests {
         assert_eq!(root.children.len(), 1);
         assert_eq!(root.children.iter().next().copied().unwrap(), p2);
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         match &steps[0] {
             Step::RemoveSubtree { subtree, .. } => {
                 assert!(matches!(subtree.node, PlainNode::Paragraph(_)));
@@ -584,7 +604,7 @@ mod tests {
             t1
         );
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         match &steps[0] {
             Step::MoveNode {
                 old_parent,
@@ -630,7 +650,7 @@ mod tests {
         assert!(tr.doc().get_entry(t2).is_none());
         assert_eq!(tr.doc().get_entry(p1).unwrap().children.len(), 1);
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 2);
         match &steps[1] {
             Step::MergeNode { offset, .. } => assert_eq!(*offset, 5),
@@ -653,7 +673,7 @@ mod tests {
         let modifiers: Vec<Modifier> = entry.modifiers.iter().map(|(_, m)| m.clone()).collect();
         assert_eq!(modifiers, vec![Modifier::Bold]);
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
     }
 
@@ -672,7 +692,7 @@ mod tests {
         let entry = doc.get_entry(t1).unwrap();
         assert!(entry.modifiers.is_empty());
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 2);
     }
 
@@ -689,7 +709,7 @@ mod tests {
 
         assert_eq!(tr.selection(), new_sel);
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         match &steps[0] {
             Step::SetSelection { old, new } => {
                 assert_eq!(*old, Selection::collapsed(Position::new(t1, 0)));
@@ -718,7 +738,7 @@ mod tests {
             panic!("expected Callout node");
         }
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         match &steps[0] {
             Step::SetNode { old_node, .. } => {
                 if let PlainNode::Callout(n) = old_node {
@@ -765,7 +785,7 @@ mod tests {
             t2
         );
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 3);
     }
 
@@ -789,7 +809,7 @@ mod tests {
 
         assert_eq!(tr.doc().text(t1).text.to_string(), "Hello World!");
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
     }
 
@@ -806,7 +826,7 @@ mod tests {
         tr.set_selection(Selection::collapsed(Position::new(t1, 15)))
             .unwrap();
 
-        let (_, steps, _, _) = tr.commit();
+        let (_, steps, _, _, _) = tr.commit();
 
         let mut current = steps
             .iter()
@@ -963,7 +983,7 @@ mod tests {
 
         let mut tr = Transaction::new(&state);
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
-        let (_, _, _, meta) = tr.commit();
+        let (_, _, _, _, meta) = tr.commit();
         assert!(matches!(meta.history, HistoryMeta::Skip));
     }
 
@@ -1022,7 +1042,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
         tr.insert_text(t, 0, "a").unwrap();
         tr.insert_text(t, 1, "b").unwrap();
-        let (new_state, _steps, _effects, _meta) = tr.commit();
+        let (new_state, _steps, _, _effects, _meta) = tr.commit();
         assert_eq!(
             new_state.graph.changesets().len(),
             baseline + 1,
@@ -1039,12 +1059,64 @@ mod tests {
         };
         let baseline = state.graph.changesets().len();
         let tr = Transaction::new(&state);
-        let (new_state, _, _, _) = tr.commit();
+        let (new_state, _, _, _, _) = tr.commit();
         assert_eq!(
             new_state.graph.changesets().len(),
             baseline,
             "no steps → commit is a no-op on changesets"
         );
         assert!(new_state.graph.pending().is_empty());
+    }
+
+    #[test]
+    fn commit_returns_ops_alongside_steps() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("Hi") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        tr.apply_step(Step::InsertText {
+            node_id: t1,
+            offset: 2,
+            text: "!".to_string(),
+        })
+        .unwrap();
+        let (_state, steps, ops, _effects, _meta) = tr.commit();
+        assert!(!steps.is_empty(), "step recorded");
+        assert!(!ops.is_empty(), "ops emitted by InsertText");
+        assert!(
+            ops.iter()
+                .any(|op| matches!(op.payload, DocOp::Text { .. })),
+            "ops must include DocOp::Text"
+        );
+    }
+
+    #[test]
+    fn savepoint_rollback_truncates_ops() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("Hi") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        tr.apply_step(Step::InsertText {
+            node_id: t1,
+            offset: 2,
+            text: "x".into(),
+        })
+        .unwrap();
+        let sp = tr.savepoint();
+        tr.apply_step(Step::InsertText {
+            node_id: t1,
+            offset: 3,
+            text: "y".into(),
+        })
+        .unwrap();
+        let ops_after_two = tr.ops_for_test().len();
+        tr.rollback(sp);
+        let ops_after_rollback = tr.ops_for_test().len();
+        assert!(
+            ops_after_two > ops_after_rollback,
+            "rollback must truncate ops accumulated after savepoint"
+        );
     }
 }

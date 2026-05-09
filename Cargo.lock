@@ -876,6 +876,7 @@ name = "editor-view"
 version = "0.0.1"
 dependencies = [
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-resource",

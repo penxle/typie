@@ -68,10 +68,12 @@ fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepE
     if let PlainNode::Text(text_node) = &subtree.node {
         let mut after: Option<Dot> = None;
         for ch in text_node.text.chars() {
-            let op_id = batched.apply(DocOp::Text {
-                node_id: subtree.id,
-                op: TextOp::InsertChar { ch, after },
-            })?;
+            let op_id = batched
+                .apply(DocOp::Text {
+                    node_id: subtree.id,
+                    op: TextOp::InsertChar { ch, after },
+                })?
+                .id;
             after = Some(op_id);
         }
     }
@@ -93,13 +95,15 @@ fn emit_pass2(
             value: Some(parent_id),
         },
     })?;
-    let emit_dot = batched.apply(DocOp::Children {
-        node_id: parent_id,
-        op: RgaOp::Insert {
-            after: anchor,
-            value: subtree.id,
-        },
-    })?;
+    let emit_dot = batched
+        .apply(DocOp::Children {
+            node_id: parent_id,
+            op: RgaOp::Insert {
+                after: anchor,
+                value: subtree.id,
+            },
+        })?
+        .id;
     let mut sibling_after: Option<Dot> = None;
     for child in &subtree.children {
         let child_emit = emit_pass2(batched, child, subtree.id, sibling_after)?;

@@ -47,7 +47,7 @@ pub fn extract(input: &DeriveInput, custom: Option<&syn::Type>) -> FfiMeta {
         syn::Data::Enum(data) => {
             let serde_tag = parse_serde_tag(&input.attrs);
             let default_variant = find_default_variant(&data.variants);
-            let variants = data.variants.iter().map(extract_variant).collect();
+            let variants = data.variants.iter().filter_map(extract_variant).collect();
             FfiKind::Enum {
                 variants,
                 serde_tag,
@@ -78,9 +78,31 @@ fn extract_field(f: &syn::Field) -> FfiField {
     }
 }
 
-fn extract_variant(v: &syn::Variant) -> FfiVariant {
+pub(super) fn has_ffi_skip_attr(attrs: &[syn::Attribute]) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("ffi") {
+            continue;
+        }
+        let mut found = false;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("skip") {
+                found = true;
+            }
+            Ok(())
+        });
+        if found {
+            return true;
+        }
+    }
+    false
+}
+
+fn extract_variant(v: &syn::Variant) -> Option<FfiVariant> {
+    if has_ffi_skip_attr(&v.attrs) {
+        return None;
+    }
     let vname = v.ident.to_string();
-    match &v.fields {
+    Some(match &v.fields {
         syn::Fields::Unit => FfiVariant::Unit { name: vname },
         syn::Fields::Unnamed(fields) => FfiVariant::Tuple {
             name: vname,
@@ -98,7 +120,7 @@ fn extract_variant(v: &syn::Variant) -> FfiVariant {
                 serde_rename_all,
             }
         }
-    }
+    })
 }
 
 /// Parse `#[serde(rename = "...")]` from attributes.
