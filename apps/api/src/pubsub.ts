@@ -9,7 +9,7 @@ const options: RedisOptions = production ? { name: 'primary', sentinels: [{ host
 
 export const pubsub = createPubSub<{
   'document:sync': [documentId: string, { target: string; type: DocumentSyncType; data: string }];
-  'document:changesets': [documentId: string, { target: string; payload: Uint8Array; serverHeads: Uint8Array }];
+  'document:changesets': [documentId: string, { target: string; payload: string; serverHeads: string }];
   'site:update': [siteId: string, { scope: 'site' } | { scope: 'entity'; entityId: string }];
   'site:usage:update': [siteId: string, null];
   'user:usage:update': [userId: string, null];

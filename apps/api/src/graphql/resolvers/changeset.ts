@@ -89,8 +89,8 @@ builder.mutationFields((t) => ({
       if (opsCount > 0) {
         pubsub.publish('document:changesets', input.documentId, {
           target: `!${input.clientId}`,
-          payload: input.changesets,
-          serverHeads,
+          payload: input.changesets.toBase64(),
+          serverHeads: serverHeads.toBase64(),
         });
 
         await enqueueJob('document:changesets:collect', input.documentId);
@@ -179,10 +179,15 @@ builder.subscriptionFields((t) => ({
 
         const livePromise = (async () => {
           for await (const event of liveStream) {
+            const decoded: Event = {
+              target: event.target,
+              payload: Uint8Array.fromBase64(event.payload),
+              serverHeads: Uint8Array.fromBase64(event.serverHeads),
+            };
             if (catchupComplete) {
-              await push(event);
+              await push(decoded);
             } else {
-              liveBuffer.push(event);
+              liveBuffer.push(decoded);
             }
           }
         })();

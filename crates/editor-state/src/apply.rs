@@ -88,7 +88,7 @@ impl State {
         &self,
         remote_heads: &HashSet<Dot>,
     ) -> Result<Vec<Changeset<DocOp>>, CrdtError> {
-        self.graph.missing_changesets_for(remote_heads)
+        self.graph.local_changesets_since(remote_heads)
     }
 
     pub fn batch_with_ops<F, E>(&self, f: F) -> Result<(Self, Vec<Op<DocOp>>), E>
@@ -524,5 +524,77 @@ mod tests {
 
         let (_after_second, ops2) = after_first.receive_remote_changeset(cs).unwrap();
         assert!(ops2.is_empty(), "duplicate delivery must yield empty ops");
+    }
+
+    #[test]
+    fn local_changesets_since_excludes_remote_origin() {
+        // Two peers share a baseline. Peer A authors a changeset and Peer B
+        // ingests it via receive_remote_changeset. Peer B's
+        // local_changesets_since must then return nothing — otherwise B would
+        // echo A's changeset back to the server, producing the N-fold
+        // duplication observed in production.
+        let baseline = rooted_state();
+        let baseline_css = baseline.graph.changesets().to_vec();
+        let sel = baseline.selection;
+
+        let replica_a = baseline;
+        let replica_b = State::from_changesets(baseline_css.clone(), sel).unwrap();
+
+        let baseline_b_heads: hashbrown::HashSet<_> =
+            replica_b.graph.current_heads().copied().collect();
+
+        let root_id = replica_a.doc.root().unwrap().id();
+        let child = NodeId::new();
+        let replica_a: State = replica_a
+            .batch(|b| {
+                b.apply(DocOp::Presence {
+                    node_id: child,
+                    op: OrMapOp::Set {
+                        key: child,
+                        value: NodeType::Paragraph,
+                    },
+                })?;
+                b.apply(DocOp::Parent {
+                    node_id: child,
+                    op: LwwRegOp::Set {
+                        value: Some(root_id),
+                    },
+                })?;
+                b.apply(DocOp::Children {
+                    node_id: root_id,
+                    op: RgaOp::Insert {
+                        after: None,
+                        value: child,
+                    },
+                })?;
+                Ok::<(), StateError>(())
+            })
+            .unwrap();
+        let replica_a = State {
+            graph: replica_a.graph.commit(),
+            ..replica_a
+        };
+
+        let css_from_a = replica_a.local_changesets_since(&baseline_b_heads).unwrap();
+        assert!(
+            !css_from_a.is_empty(),
+            "replica_a must have authored a changeset"
+        );
+
+        let mut replica_b = replica_b;
+        for cs in css_from_a {
+            let (next, _ops) = replica_b.receive_remote_changeset(cs).unwrap();
+            replica_b = next;
+        }
+
+        let echoed = replica_b
+            .local_changesets_since(&hashbrown::HashSet::new())
+            .unwrap();
+        assert!(
+            echoed.is_empty(),
+            "replica_b authored nothing locally; receive must not turn remote-origin \
+             changesets into push candidates (got {} cs)",
+            echoed.len(),
+        );
     }
 }

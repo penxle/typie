@@ -215,7 +215,10 @@ export class Editor {
 
   enqueue(message: Message) {
     this.#wasm.enqueue(message);
+    this.#scheduleTick();
+  }
 
+  #scheduleTick(): void {
     if (!this.#queued) {
       this.#queued = true;
 
@@ -251,6 +254,7 @@ export class Editor {
 
   receiveRemoteChangeset(payload: Uint8Array): void {
     this.#wasm.receive_remote_changeset(payload);
+    this.#scheduleTick();
   }
 
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {

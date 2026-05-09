@@ -298,6 +298,33 @@ impl<P: Clone> OpGraph<P> {
         Ok(out)
     }
 
+    /// Like [`missing_changesets_for`], but additionally filters out
+    /// changesets whose ops were authored by a different actor — i.e.,
+    /// changesets we ingested via [`receive_changeset`] rather than authored
+    /// locally via [`add`] + [`commit`]. This is the right primitive for
+    /// server-mediated sync: a peer must push only what it authored, since the
+    /// server already holds anything it broadcast to us. Without this filter
+    /// each broadcast op would be echoed back by every receiving peer.
+    ///
+    /// `commit` seals only the local-actor `pending` ops, and
+    /// `receive_changeset` writes incoming changesets straight to
+    /// `self.changesets` without touching `pending`, so a sealed changeset's
+    /// ops are uniformly local- or remote-origin — the per-changeset
+    /// `all(op.id.actor == self.actor)` check is a complete classifier.
+    ///
+    /// [`missing_changesets_for`]: OpGraph::missing_changesets_for
+    /// [`receive_changeset`]: OpGraph::receive_changeset
+    /// [`add`]: OpGraph::add
+    /// [`commit`]: OpGraph::commit
+    pub fn local_changesets_since(
+        &self,
+        remote_heads: &HashSet<Dot>,
+    ) -> Result<Vec<crate::Changeset<P>>, CrdtError> {
+        let mut out = self.missing_changesets_for(remote_heads)?;
+        out.retain(|cs| cs.ops.iter().all(|op| op.id.actor == self.actor));
+        Ok(out)
+    }
+
     /// Topologically sort the given dots in ancestry-first order. Parents
     /// outside `dots` are skipped — the caller controls the boundary, so the
     /// output is a self-contained ancestry-first batch over the chosen

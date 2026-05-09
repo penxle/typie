@@ -545,8 +545,6 @@ export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection 
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
 
-export type Step = { InsertText: { node_id: NodeId; offset: number; text: string } } | { RemoveText: { node_id: NodeId; offset: number; text: string } } | { InsertSubtree: { parent_id: NodeId; index: number; subtree: Subtree } } | { RemoveSubtree: { parent_id: NodeId; index: number; subtree: Subtree } } | { MoveNode: { node_id: NodeId; old_parent: NodeId; old_index: number; new_parent: NodeId; new_index: number } } | { SplitNode: { node_id: NodeId; offset: number; new_node_id: NodeId } } | { MergeNode: { node_id: NodeId; target_id: NodeId; offset: number } } | { SetNode: { node_id: NodeId; old_node: PlainNode; new_node: PlainNode } } | { AddModifier: { node_id: NodeId; modifier: Modifier } } | { RemoveModifier: { node_id: NodeId; modifier: Modifier } } | { SetSelection: { old: Selection; new: Selection } } | { SetPendingModifiers: { old: PendingModifiers; new: PendingModifiers } } | { SetComposition: { old: Composition | undefined; new: Composition | undefined } };
-
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";

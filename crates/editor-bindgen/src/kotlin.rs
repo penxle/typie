@@ -222,7 +222,12 @@ fn map_type_path(
             let inner = extract_single_type_arg(args);
             format!("List<{}>", map_syn_type(inner, custom_types, known_types))
         }
-        "HashMap" | "imbl::HashMap" | "std::collections::HashMap" | "hashbrown::HashMap" => {
+        "HashMap"
+        | "imbl::HashMap"
+        | "std::collections::HashMap"
+        | "hashbrown::HashMap"
+        | "BTreeMap"
+        | "std::collections::BTreeMap" => {
             let mut arg_iter = args.args.iter();
             let key_ty = match arg_iter.next().expect("missing key type arg") {
                 syn::GenericArgument::Type(ty) => ty,
@@ -670,6 +675,20 @@ mod tests {
         assert_eq!(
             map_type("imbl::HashMap<String, f64>", &ct, &kt),
             "Map<String, Double>"
+        );
+    }
+
+    #[test]
+    fn map_btreemap_types() {
+        let ct = empty_custom_types();
+        let kt = empty_known_types();
+        assert_eq!(
+            map_type("BTreeMap<String, u32>", &ct, &kt),
+            "Map<String, Int>"
+        );
+        assert_eq!(
+            map_type("std::collections::BTreeMap<String, Vec<u32>>", &ct, &kt),
+            "Map<String, List<Int>>"
         );
     }
 

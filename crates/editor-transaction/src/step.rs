@@ -1,5 +1,4 @@
 use editor_crdt::Op;
-use editor_macros::ffi;
 use editor_model::{DocOp, Modifier, ModifierType, NodeId, PlainNode, Subtree};
 use editor_state::{BatchedState, Composition, PendingModifiers, Selection, State};
 use serde::{Deserialize, Serialize};
@@ -24,7 +23,6 @@ pub struct StepOutput {
     pub validations: Vec<Validation>,
 }
 
-#[ffi]
 #[derive(Clone, Debug, PartialEq, EnumDiscriminants)]
 #[strum_discriminants(name(StepType))]
 #[strum_discriminants(derive(Hash, Serialize, Deserialize, IntoStaticStr))]
