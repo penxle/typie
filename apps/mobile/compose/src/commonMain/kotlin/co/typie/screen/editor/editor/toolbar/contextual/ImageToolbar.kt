@@ -2,7 +2,7 @@ package co.typie.screen.editor.editor.toolbar.contextual
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import co.typie.editor.ffi.Node
+import co.typie.editor.ffi.PlainNode
 import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
@@ -10,7 +10,7 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageScope
 import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 
-internal fun editorImageToolbarPage(image: Node.Image?): EditorToolbarPage =
+internal fun editorImageToolbarPage(image: PlainNode.Image?): EditorToolbarPage =
   EditorToolbarPage(
     key = EditorToolbarPageKey.Image,
     icon = Lucide.Image,
@@ -21,7 +21,7 @@ internal fun editorImageToolbarPage(image: Node.Image?): EditorToolbarPage =
 @Composable
 private fun EditorImageToolbar(
   scope: EditorToolbarPageScope,
-  image: Node.Image?,
+  image: PlainNode.Image?,
   modifier: Modifier = Modifier,
 ) {
   val hasImage = image?.id != null

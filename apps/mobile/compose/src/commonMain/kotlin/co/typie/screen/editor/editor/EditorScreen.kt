@@ -37,9 +37,8 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePagesContentHeight
+import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.Node
-import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.rememberEditorZoomController
 import co.typie.editor.runtime.EditorRuntime
@@ -134,19 +133,6 @@ fun EditorScreen(entityId: String) {
     runtime.error ?: return@LaunchedEffect
     dialog.error(nav) { runtime.clearError() }
   }
-  fun toggleDebugLayoutMode() {
-    val rootAttrs = model.toggleDebugLayoutMode()
-    val editor = runtime.editor ?: return
-    scope.launch {
-      editor.await {
-        enqueue(
-          Message.Node(
-            NodeOp.SetAttrs(id = "0", attrs = Node.Root(layoutMode = rootAttrs.layoutMode))
-          )
-        )
-      }
-    }
-  }
   fun requestEditorFocus() {
     if (nav.current == Route.Editor(entityId)) {
       runtime.focus()
@@ -175,13 +161,14 @@ fun EditorScreen(entityId: String) {
         }
       }
     },
-    trailing = {
-      EditorTopBarMenu(model = model, onDebugLayoutModeToggle = ::toggleDebugLayoutMode)
-    },
+    trailing = { EditorTopBarMenu(model = model) },
     scrollOffset = null,
   )
 
-  val layoutSpec = model.documentLayoutSpec
+  val editor = runtime.editor
+  val layoutSpec: EditorDocumentLayoutSpec =
+    editor?.state?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
+      ?: EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
   val background =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Paginated -> AppTheme.colors.surfaceCanvas
@@ -190,7 +177,6 @@ fun EditorScreen(entityId: String) {
 
   Screen(loadable = model.query, background = background, contentPadding = PaddingValues()) {
     contentPadding ->
-    val editor = runtime.editor
     val editorState = editor?.state ?: EditorState.Initial
     val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
@@ -482,18 +468,21 @@ fun EditorScreen(entityId: String) {
           )
         },
         body = {
-          EditorBody(
-            doc = model.doc,
-            initialSelection = model.selection,
-            geometry = bodyGeometry,
-            layoutSpec = layoutSpec,
-            autoScrollPolicy = autoScrollPolicy,
-            modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
-            textInputSessionEnabled = toolbarTextInputSessionEnabled,
-            suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
-            showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
-            showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
-          )
+          val graph = model.graph
+          if (graph != null) {
+            EditorBody(
+              graph = graph,
+              initialSelection = model.initialSelection,
+              geometry = bodyGeometry,
+              layoutSpec = layoutSpec,
+              autoScrollPolicy = autoScrollPolicy,
+              modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
+              textInputSessionEnabled = toolbarTextInputSessionEnabled,
+              suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
+              showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
+              showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
+            )
+          }
         },
         toolbar = {
           EditorToolbarHost(
@@ -514,7 +503,7 @@ fun EditorScreen(entityId: String) {
 }
 
 @Composable
-private fun EditorTopBarMenu(model: EditorViewModel, onDebugLayoutModeToggle: () -> Unit) {
+private fun EditorTopBarMenu(model: EditorViewModel) {
   val noop = {}
 
   PopoverMenu(anchor = { TopBarButton(icon = Lucide.PanelBottom) }) {
@@ -528,11 +517,6 @@ private fun EditorTopBarMenu(model: EditorViewModel, onDebugLayoutModeToggle: ()
     if (Preference.devMode) {
       item(icon = Lucide.Send, label = "입력 로그 보내기", onClick = noop)
       divider()
-      item(
-        icon = if (model.isPaginatedDebugLayout) Lucide.ScrollText else Lucide.LayoutTemplate,
-        label = "[디버그] 레이아웃 토글",
-        onClick = onDebugLayoutModeToggle,
-      )
       item(
         icon = Lucide.PanelTop,
         label = model.debugViewportOverlayVisible.debugToggleLabel("[디버그] 뷰포트 기준선"),

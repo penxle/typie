@@ -34,7 +34,7 @@ import co.typie.editor.ffi.Fragment
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.Node
+import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
@@ -159,47 +159,47 @@ internal fun editorToolbarNodeInsertItems(
       EditorToolbarNodeInsertItem(
         icon = Lucide.Image,
         label = "이미지",
-        message = fragmentInsertion(Node.Image(id = null)),
+        message = fragmentInsertion(PlainNode.Image(id = null)),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Paperclip,
         label = "파일",
-        message = fragmentInsertion(Node.File(id = null)),
+        message = fragmentInsertion(PlainNode.File(id = null)),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.FileUp,
         label = "임베드",
-        message = fragmentInsertion(Node.Embed(id = null)),
+        message = fragmentInsertion(PlainNode.Embed(id = null)),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Scissors,
         label = "구분선",
-        message = fragmentInsertion(Node.HorizontalRule()),
+        message = fragmentInsertion(PlainNode.HorizontalRule()),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Quote,
         label = "인용구",
-        message = fragmentInsertion(Node.Blockquote()),
+        message = fragmentInsertion(PlainNode.Blockquote()),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.GalleryVerticalEnd,
         label = "강조",
-        message = fragmentInsertion(Node.Callout()),
+        message = fragmentInsertion(PlainNode.Callout()),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.ChevronsDownUp,
         label = "접기",
-        message = fragmentInsertion(Node.Fold),
+        message = fragmentInsertion(PlainNode.Fold),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Table,
         label = "표",
-        message = fragmentInsertion(Node.Table()),
+        message = fragmentInsertion(PlainNode.Table()),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.List,
         label = "목록",
-        message = fragmentInsertion(Node.BulletList),
+        message = fragmentInsertion(PlainNode.BulletList),
       ),
       if (showPageBreak) {
         EditorToolbarNodeInsertItem(
@@ -218,7 +218,7 @@ internal fun editorToolbarNodeInsertItems(
     )
     .filterNotNull()
 
-private fun fragmentInsertion(node: Node): Message.Insertion =
+private fun fragmentInsertion(node: PlainNode): Message.Insertion =
   Message.Insertion(InsertionOp.Fragment(Fragment(node = node)))
 
 private val NodeInsertPanelPadding = 16.dp

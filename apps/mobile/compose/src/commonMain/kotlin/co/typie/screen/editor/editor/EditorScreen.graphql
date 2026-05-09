@@ -15,6 +15,9 @@ query EditorScreen_Query($entityId: ID!) {
         id
         nullableTitle
         subtitle
+        state {
+          graph
+        }
         ...FontLoader_Document
       }
     }

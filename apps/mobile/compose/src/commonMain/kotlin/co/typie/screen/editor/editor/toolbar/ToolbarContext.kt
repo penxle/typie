@@ -2,7 +2,7 @@ package co.typie.screen.editor.editor.toolbar
 
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.ModifierState
-import co.typie.editor.ffi.Node
+import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Tri
 import kotlin.math.abs
@@ -10,7 +10,7 @@ import kotlin.math.abs
 internal data class EditorToolbarContext(
   val pageKeys: List<EditorToolbarPageKey>,
   val autoTargetPageKey: EditorToolbarPageKey?,
-  val selectedNode: Node? = null,
+  val selectedNode: PlainNode? = null,
   val listMode: EditorToolbarListMode? = null,
   val tableMode: EditorToolbarTableMode? = null,
 )
@@ -57,18 +57,18 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
 
   blockState?.ancestors.orEmpty().forEach { block ->
     when (block.node) {
-      Node.BulletList -> {
+      PlainNode.BulletList -> {
         listMode = EditorToolbarListMode.Bullet
         addPage(EditorToolbarPageKey.List)
       }
-      Node.OrderedList -> {
+      PlainNode.OrderedList -> {
         listMode = EditorToolbarListMode.Ordered
         addPage(EditorToolbarPageKey.List)
       }
-      is Node.Blockquote -> addPage(EditorToolbarPageKey.Blockquote)
-      is Node.Callout -> addPage(EditorToolbarPageKey.Callout)
-      Node.Fold -> addPage(EditorToolbarPageKey.Fold)
-      is Node.Table -> {
+      is PlainNode.Blockquote -> addPage(EditorToolbarPageKey.Blockquote)
+      is PlainNode.Callout -> addPage(EditorToolbarPageKey.Callout)
+      PlainNode.Fold -> addPage(EditorToolbarPageKey.Fold)
+      is PlainNode.Table -> {
         if (tableMode == null) {
           tableMode = EditorToolbarTableMode.InTable
         }
@@ -106,13 +106,13 @@ private fun Tri<*>.isPresent(): Boolean = this !is Tri.Absent
 private fun Selection.isSingleBlockRange(): Boolean =
   anchor.nodeId == head.nodeId && abs(anchor.offset - head.offset) == 1
 
-private fun Node.selectedToolbarPageKey(): EditorToolbarPageKey? =
+private fun PlainNode.selectedToolbarPageKey(): EditorToolbarPageKey? =
   when (this) {
-    is Node.Image -> EditorToolbarPageKey.Image
-    is Node.File -> EditorToolbarPageKey.File
-    is Node.Embed -> EditorToolbarPageKey.Embed
-    is Node.Archived -> EditorToolbarPageKey.Archived
-    is Node.HorizontalRule -> EditorToolbarPageKey.HorizontalRule
-    is Node.Table -> EditorToolbarPageKey.Table
+    is PlainNode.Image -> EditorToolbarPageKey.Image
+    is PlainNode.File -> EditorToolbarPageKey.File
+    is PlainNode.Embed -> EditorToolbarPageKey.Embed
+    is PlainNode.Archived -> EditorToolbarPageKey.Archived
+    is PlainNode.HorizontalRule -> EditorToolbarPageKey.HorizontalRule
+    is PlainNode.Table -> EditorToolbarPageKey.Table
     else -> null
   }

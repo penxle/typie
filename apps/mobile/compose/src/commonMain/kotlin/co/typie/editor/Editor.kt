@@ -9,13 +9,12 @@ import androidx.compose.ui.focus.FocusRequester
 import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
-import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ModifierState
-import co.typie.editor.ffi.RootNode
+import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.SystemEvent
@@ -57,7 +56,7 @@ internal constructor(
   val cursor: CursorMetrics? by derivedStateOf { state.cursor }
   val selection: Selection? by derivedStateOf { state.selection }
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
-  val rootAttrs: RootNode? by derivedStateOf { state.rootAttrs }
+  val rootAttrs: PlainRootNode? by derivedStateOf { state.rootAttrs }
   val modifierState: ModifierState? by derivedStateOf { state.modifierState }
   val blockState: BlockState? by derivedStateOf { state.blockState }
   val ime: Ime? by derivedStateOf { state.ime }
@@ -362,7 +361,7 @@ internal constructor(
 
   companion object {
     suspend fun create(
-      doc: Doc,
+      graph: ByteArray,
       selection: Selection,
       viewport: Viewport,
       scope: CoroutineScope,
@@ -370,7 +369,7 @@ internal constructor(
       onError: (Editor, Throwable) -> Unit = { _, _ -> },
     ): Editor =
       withContext(Dispatchers.Default) {
-        val inner = PlatformModule.editorHost.createEditor(doc, selection, viewport)
+        val inner = PlatformModule.editorHost.createEditorFromGraph(graph, selection, viewport)
         val editor = Editor(inner, scope, dispatcher, onError)
 
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)

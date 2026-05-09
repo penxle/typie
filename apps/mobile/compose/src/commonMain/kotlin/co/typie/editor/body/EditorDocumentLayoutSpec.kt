@@ -21,15 +21,15 @@ internal sealed interface EditorDocumentLayoutSpec {
 
 internal fun LayoutMode.toEditorDocumentLayoutSpec(): EditorDocumentLayoutSpec =
   when (this) {
-    is LayoutMode.Continuous -> EditorDocumentLayoutSpec.Continuous(maxWidth = maxWidth)
+    is LayoutMode.Continuous -> EditorDocumentLayoutSpec.Continuous(maxWidth = maxWidth.toFloat())
     is LayoutMode.Paginated ->
       EditorDocumentLayoutSpec.Paginated(
-        pageWidth = pageWidth,
-        pageHeight = pageHeight,
-        pageMarginTop = pageMarginTop,
-        pageMarginBottom = pageMarginBottom,
-        pageMarginLeft = pageMarginLeft,
-        pageMarginRight = pageMarginRight,
+        pageWidth = pageWidth.toFloat(),
+        pageHeight = pageHeight.toFloat(),
+        pageMarginTop = pageMarginTop.toFloat(),
+        pageMarginBottom = pageMarginBottom.toFloat(),
+        pageMarginLeft = pageMarginLeft.toFloat(),
+        pageMarginRight = pageMarginRight.toFloat(),
       )
   }
 

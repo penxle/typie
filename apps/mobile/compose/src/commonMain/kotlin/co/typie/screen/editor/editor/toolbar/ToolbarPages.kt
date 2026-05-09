@@ -33,7 +33,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import co.typie.editor.ffi.Node
+import co.typie.editor.ffi.PlainNode
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
@@ -72,7 +72,7 @@ internal fun rememberEditorToolbarPages(
           editorMainToolbarPage(hasTextPage = EditorToolbarPageKey.Text in toolbarContext.pageKeys)
         EditorToolbarPageKey.Text -> textToolbarPage
         EditorToolbarPageKey.Image ->
-          editorImageToolbarPage(toolbarContext.selectedNode as? Node.Image)
+          editorImageToolbarPage(toolbarContext.selectedNode as? PlainNode.Image)
         EditorToolbarPageKey.File -> editorFileToolbarPage()
         EditorToolbarPageKey.Embed -> editorEmbedToolbarPage()
         EditorToolbarPageKey.Archived -> editorArchivedToolbarPage()

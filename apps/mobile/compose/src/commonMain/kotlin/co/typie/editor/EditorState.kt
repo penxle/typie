@@ -4,7 +4,7 @@ import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ModifierState
-import co.typie.editor.ffi.RootNode
+import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
 
@@ -13,7 +13,7 @@ data class EditorState(
   val cursor: CursorMetrics?,
   val selection: Selection?,
   val pageSizes: List<Size>,
-  val rootAttrs: RootNode?,
+  val rootAttrs: PlainRootNode?,
   val modifierState: ModifierState? = null,
   val blockState: BlockState? = null,
   val ime: Ime?,
