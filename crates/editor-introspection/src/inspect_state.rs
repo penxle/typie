@@ -17,7 +17,7 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     let labeler = Labeler::new(&state.doc, &state.selection);
     let mut output = String::new();
 
-    let root = state.doc.root();
+    let root = state.doc.root().unwrap();
     if let Some(l) = labeler.label(root.id()) {
         write!(output, "{l}: ").unwrap();
     }
@@ -25,7 +25,9 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     if options.show_node_ids {
         write!(output, " ({})", root.id()).unwrap();
     }
-    write_modifiers_tree(&non_default_root_modifiers(root.modifiers()), &mut output);
+    let mut root_mods: Vec<Modifier> = root.modifiers().cloned().collect();
+    root_mods.sort_by_key(|m| m.as_type());
+    write_modifiers_tree(&non_default_root_modifiers(&root_mods), &mut output);
     output.push('\n');
 
     let children: Vec<_> = root.children().collect();
@@ -69,11 +71,14 @@ fn write_tree_node(
     }
 
     if let Node::Text(t) = node_ref.node() {
-        write!(output, " \"{}\"", truncate_text(&t.text, 50)).unwrap();
+        let s = t.text.to_string();
+        write!(output, " \"{}\"", truncate_text(&s, 50)).unwrap();
     }
 
     write_node_attrs_tree(node_ref.node(), output);
-    write_modifiers_tree(node_ref.modifiers(), output);
+    let mut mods: Vec<Modifier> = node_ref.modifiers().cloned().collect();
+    mods.sort_by_key(|m| m.as_type());
+    write_modifiers_tree(&mods, output);
     output.push('\n');
 
     let child_prefix = if is_last {
@@ -126,45 +131,45 @@ fn write_position_tree(pos: &editor_state::Position, labeler: &Labeler, output: 
 fn write_node_attrs_tree(node: &Node, output: &mut String) {
     match node {
         Node::Blockquote(bq) => {
-            write!(output, " variant={:?}", bq.variant).unwrap();
+            write!(output, " variant={:?}", bq.variant.get()).unwrap();
         }
         Node::Callout(c) => {
-            write!(output, " variant={:?}", c.variant).unwrap();
+            write!(output, " variant={:?}", c.variant.get()).unwrap();
         }
         Node::HorizontalRule(hr) => {
-            write!(output, " variant={:?}", hr.variant).unwrap();
+            write!(output, " variant={:?}", hr.variant.get()).unwrap();
         }
         Node::Table(t) => {
-            write!(output, " border_style={:?}", t.border_style).unwrap();
-            if (t.proportion - 1.0).abs() > f32::EPSILON {
-                write!(output, " proportion={}", t.proportion).unwrap();
+            write!(output, " border_style={:?}", t.border_style.get()).unwrap();
+            if *t.proportion.get() != 100 {
+                write!(output, " proportion={}", t.proportion.get()).unwrap();
             }
         }
         Node::TableCell(tc) => {
-            if let Some(w) = tc.col_width {
+            if let Some(w) = tc.col_width.get() {
                 write!(output, " col_width={w}").unwrap();
             }
         }
         Node::Image(img) => {
-            if let Some(id) = &img.id {
+            if let Some(id) = img.id.get() {
                 write!(output, " id=\"{id}\"").unwrap();
             }
-            if (img.proportion - 1.0).abs() > f32::EPSILON {
-                write!(output, " proportion={}", img.proportion).unwrap();
+            if *img.proportion.get() != 100 {
+                write!(output, " proportion={}", img.proportion.get()).unwrap();
             }
         }
         Node::File(f) => {
-            if let Some(id) = &f.id {
+            if let Some(id) = f.id.get() {
                 write!(output, " id=\"{id}\"").unwrap();
             }
         }
         Node::Embed(e) => {
-            if let Some(id) = &e.id {
+            if let Some(id) = e.id.get() {
                 write!(output, " id=\"{id}\"").unwrap();
             }
         }
         Node::Archived(a) => {
-            if let Some(id) = &a.id {
+            if let Some(id) = a.id.get() {
                 write!(output, " id=\"{id}\"").unwrap();
             }
         }

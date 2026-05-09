@@ -1,6 +1,4 @@
 use cfg_if::cfg_if;
-use editor_macros::ffi;
-use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
 use crate::prelude::*;
@@ -54,19 +52,35 @@ impl EditorHost {
         }))
     }
 
-    pub fn create_editor(
+    pub fn create_editor_from_doc(
         &self,
-        doc: Complex<editor_model::Doc>,
+        doc: Complex<editor_model::PlainDoc>,
         selection: Complex<editor_state::Selection>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let doc = doc.from_ffi()?;
+        let plain: editor_model::PlainDoc = doc.from_ffi()?;
+        let (doc, op_graph) = editor_model::Doc::from_plain(plain);
         let selection = selection.from_ffi()?;
-        let state = editor_state::State::new(doc, selection);
+        let state = editor_state::State::new(doc, op_graph, selection);
 
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
 
+        Ok(into_owned(crate::editor::Editor::new(core)))
+    }
+
+    pub fn create_editor_from_graph(
+        &self,
+        changesets: Vec<u8>,
+        selection: Complex<editor_state::Selection>,
+        viewport: Complex<editor_view::Viewport>,
+    ) -> EditorResult<Owned<crate::editor::Editor>> {
+        let cs: editor_crdt::Changesets<editor_model::DocOp> = minicbor::decode(&changesets[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let selection = selection.from_ffi()?;
+        let state = editor_state::State::from_changesets(cs.0, selection)?;
+        let viewport = viewport.from_ffi()?;
+        let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))
     }
 
@@ -99,26 +113,6 @@ impl EditorHost {
             Ok(())
         })
     }
-
-    pub fn hash_commit_content(
-        &self,
-        content: Complex<editor_model::CommitContent>,
-    ) -> EditorResult<String> {
-        let content: editor_model::CommitContent = content.from_ffi()?;
-        Ok(content.hash())
-    }
-
-    pub fn reconstruct_doc_from_objects(
-        &self,
-        root_hash: String,
-        objects: Vec<Complex<ObjectEntry>>,
-    ) -> EditorResult<Complex<editor_model::Doc>> {
-        let objects: Vec<ObjectEntry> = objects.from_ffi()?;
-        let pairs: Vec<(String, editor_model::ObjectContent)> =
-            objects.into_iter().map(|o| (o.hash, o.content)).collect();
-        let doc = editor_model::Doc::reconstruct_from_objects(&root_hash, &pairs)?;
-        Ok(doc.into_ffi()?)
-    }
 }
 
 impl EditorHost {
@@ -129,12 +123,4 @@ impl EditorHost {
         let mut resource = self.resource.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut resource)
     }
-}
-
-#[ffi]
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ObjectEntry {
-    pub hash: String,
-    pub content: editor_model::ObjectContent,
 }

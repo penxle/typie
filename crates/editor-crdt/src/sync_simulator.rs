@@ -70,28 +70,32 @@ impl<P: Clone + Eq> Replica<P> {
     /// Atomic update of `op_graph` and `pending_push`.
     pub fn create_op(&mut self, payload: P) -> Result<(Op<P>, SyncMessage<P>), CrdtError> {
         let (next, op) = self.op_graph.add(payload)?;
+        let next = next.commit();
         self.op_graph = next;
         self.pending_push.insert(op.id);
-        let msg = SyncMessage::Ops(vec![op.clone()]);
+        let cs = crate::Changeset {
+            ops: vec![op.clone()],
+        };
+        let msg = SyncMessage::Changesets(vec![cs]);
         Ok((op, msg))
     }
 
     /// `None` when the inbox was empty; `Some(outgoing)` after processing
     /// one message — `outgoing` is non-empty only on the `ResendRequest`
     /// arm, where the server has explicitly asked the client to re-send
-    /// dots from its local OpGraph.
+    /// sealed changesets from its local OpGraph.
     ///
-    /// `MissingParents` on `Ops` receive is a transient transport event
-    /// (broadcast loss + child-arrived-first); silent reject.
+    /// `MissingParents` on `Changesets` receive is a transient transport
+    /// event (broadcast loss + child-arrived-first); silent reject.
     /// `DotConflict` / `SelfReference` / `ClockOverflow` are
     /// generation-layer violations and flow into `receive_errors`.
     pub fn process_one(&mut self) -> Option<Vec<SyncMessage<P>>> {
         let msg = self.inbox.pop_front()?;
         let mut outgoing = Vec::new();
         match msg {
-            SyncMessage::Ops(ops) => {
-                for op in ops {
-                    match self.op_graph.receive(op) {
+            SyncMessage::Changesets(css) => {
+                for cs in css {
+                    match self.op_graph.receive_changeset(cs) {
                         Ok(next) => self.op_graph = next,
                         Err(CrdtError::MissingParents { .. }) => {}
                         Err(e) => self.receive_errors.push(e),
@@ -104,9 +108,8 @@ impl<P: Clone + Eq> Replica<P> {
                 }
             }
             SyncMessage::ResendRequest(dots) => {
-                // Server-driven recovery: walk the requested dots' full
-                // local ancestry (some ancestors may also be missing on
-                // the server side) and re-send the batch ancestry-first.
+                // Server-driven recovery: walk requested dots' full local
+                // ancestry and re-send real sealed changesets, ancestry-first.
                 let mut ancestry: HashSet<Dot> = HashSet::new();
                 let mut walk: Vec<Dot> = dots
                     .into_iter()
@@ -119,9 +122,15 @@ impl<P: Clone + Eq> Replica<P> {
                         walk.extend(op.parents.iter().copied());
                     }
                 }
-                let batch = self.op_graph.topo_sort(&ancestry);
-                if !batch.is_empty() {
-                    outgoing.push(SyncMessage::Ops(batch));
+                let to_send: Vec<crate::Changeset<P>> = self
+                    .op_graph
+                    .changesets()
+                    .iter()
+                    .filter(|cs| cs.ops.iter().any(|op| ancestry.contains(&op.id)))
+                    .cloned()
+                    .collect();
+                if !to_send.is_empty() {
+                    outgoing.push(SyncMessage::Changesets(to_send));
                 }
             }
         }
@@ -131,35 +140,45 @@ impl<P: Clone + Eq> Replica<P> {
     /// Instance restart with a new actor. Models the editor instance
     /// terminating and a fresh instance opening the same doc — production
     /// hosts spin up a brand-new `OpGraph` with a freshly-minted ephemeral
-    /// actor and replay the persisted ops through `receive`. This method
-    /// mirrors that flow exactly: dump every op via `iter_all`, sort them
-    /// ancestry-first, build a fresh `OpGraph` with `new_actor`, replay.
+    /// actor and replay the persisted changesets. This method mirrors that
+    /// flow exactly: take the sealed changesets in order, build a fresh
+    /// `OpGraph` with `new_actor`, replay each via `receive_changeset`.
     ///
     /// `pending_push` and `receive_errors` survive (host-side storage and
     /// observability outlive the connection). The inbox is implicitly gone
     /// — the new graph starts with no in-flight messages.
     pub fn restart_with_actor(&mut self, new_actor: u64) {
         self.actor_id = new_actor;
-        let all_dots: HashSet<Dot> = self.op_graph.iter_all().map(|op| op.id).collect();
-        let topo_sorted = self.op_graph.topo_sort(&all_dots);
-        self.op_graph = topo_sorted
+        let css = self.op_graph.changesets().to_vec();
+        self.op_graph = css
             .into_iter()
-            .try_fold(OpGraph::with_actor(new_actor), |g, op| g.receive(op))
-            .expect("storage replay of own ops never fails");
+            .try_fold(OpGraph::with_actor(new_actor), |g, cs| {
+                g.receive_changeset(cs)
+            })
+            .expect("storage replay of own changesets never fails");
         self.inbox.clear();
     }
 
     /// Push side is `None` when `pending_push` is empty (avoids a redundant
-    /// empty `Ops` round-trip). Request side is always sent — an empty
-    /// heads vector is the explicit "send me everything" signal a client
-    /// uses on a fresh `OpGraph`.
+    /// empty round-trip). Request side is always sent — an empty heads
+    /// vector is the explicit "send me everything" signal a client uses on a
+    /// fresh `OpGraph`.
     pub fn sync_messages(&self) -> (Option<SyncMessage<P>>, SyncMessage<P>) {
         let push = if self.pending_push.is_empty() {
             None
         } else {
-            Some(SyncMessage::Ops(
-                self.op_graph.topo_sort(&self.pending_push),
-            ))
+            let to_send: Vec<crate::Changeset<P>> = self
+                .op_graph
+                .changesets()
+                .iter()
+                .filter(|cs| cs.ops.iter().any(|op| self.pending_push.contains(&op.id)))
+                .cloned()
+                .collect();
+            if to_send.is_empty() {
+                None
+            } else {
+                Some(SyncMessage::Changesets(to_send))
+            }
         };
         let heads: Vec<Dot> = self.op_graph.current_heads().copied().collect();
         let request = SyncMessage::Dots(heads);
@@ -230,28 +249,28 @@ impl<P: Clone + Eq> Server<P> {
         true
     }
 
-    /// `Ops` arm: accepted ops ack back to the sender (`Dots`) and broadcast
-    /// to all *other* registered clients (`Ops`). `MissingParents` on receive
-    /// is transient (push loss + child-arrived-first); silent reject.
-    /// `DotConflict` / `SelfReference` / `ClockOverflow` flow into
-    /// `receive_errors`.
+    /// `Changesets` arm: accepted changesets ack back to the sender (`Dots`)
+    /// and broadcast to all *other* registered clients (`Changesets`).
+    /// `MissingParents` on receive is transient (push loss +
+    /// child-arrived-first); silent reject. `DotConflict` /
+    /// `SelfReference` / `ClockOverflow` flow into `receive_errors`.
     ///
-    /// `Dots` arm: `client_heads` drives `missing_for`. `UnknownHeads` is
-    /// transient (the matching push was lost); silent ignore. Empty
-    /// `client_heads` is the explicit "send me everything" signal — clients
-    /// opening a fresh doc rely on `missing_for(empty_set)` returning the
-    /// full op set.
+    /// `Dots` arm: `client_heads` drives `missing_changesets_for`.
+    /// `UnknownHeads` is transient (the matching push was lost); silent
+    /// ignore. Empty `client_heads` is the explicit "send me everything"
+    /// signal — clients opening a fresh doc rely on
+    /// `missing_changesets_for(empty_set)` returning the full changeset log.
     fn handle(&mut self, from: ClientId, msg: SyncMessage<P>) {
         match msg {
-            SyncMessage::Ops(ops) => {
-                let mut accepted: Vec<Op<P>> = Vec::new();
+            SyncMessage::Changesets(css) => {
+                let mut accepted: Vec<crate::Changeset<P>> = Vec::new();
                 let mut acked: Vec<Dot> = Vec::new();
-                for op in ops {
-                    match self.op_graph.receive(op.clone()) {
+                for cs in css {
+                    match self.op_graph.receive_changeset(cs.clone()) {
                         Ok(next) => {
                             self.op_graph = next;
-                            acked.push(op.id);
-                            accepted.push(op);
+                            acked.extend(cs.ops.iter().map(|op| op.id));
+                            accepted.push(cs);
                         }
                         Err(CrdtError::MissingParents { .. }) => {}
                         Err(e) => self.receive_errors.push(e),
@@ -274,19 +293,19 @@ impl<P: Clone + Eq> Server<P> {
                         self.outboxes
                             .entry(id)
                             .or_default()
-                            .push_back(SyncMessage::Ops(accepted.clone()));
+                            .push_back(SyncMessage::Changesets(accepted.clone()));
                     }
                 }
             }
             SyncMessage::Dots(client_heads) => {
                 let heads_set: HashSet<Dot> = client_heads.into_iter().collect();
-                match self.op_graph.missing_for(&heads_set) {
+                match self.op_graph.missing_changesets_for(&heads_set) {
                     Ok(missing) => {
                         if !missing.is_empty() {
                             self.outboxes
                                 .entry(from)
                                 .or_default()
-                                .push_back(SyncMessage::Ops(missing));
+                                .push_back(SyncMessage::Changesets(missing));
                         }
                     }
                     Err(CrdtError::UnknownHeads { unknown }) => {
@@ -304,9 +323,9 @@ impl<P: Clone + Eq> Server<P> {
                     }
                     Err(_) => {
                         // Other CrdtError variants are unreachable from
-                        // missing_for — it only emits UnknownHeads. Keep
-                        // exhaustive on the Result so future error variants
-                        // surface visibly.
+                        // missing_changesets_for — it only emits UnknownHeads.
+                        // Keep exhaustive on the Result so future error
+                        // variants surface visibly.
                     }
                 }
             }
@@ -322,9 +341,12 @@ impl<P: Clone + Eq> Server<P> {
 
 impl<P: Clone + Eq> Server<P> {
     /// Test/bootstrap helper — directly receive an op into the server's
-    /// OpGraph. Production server only receives ops via enqueue + tick.
+    /// OpGraph as a 1-op changeset. Production server only receives ops via
+    /// enqueue + tick.
     pub(crate) fn debug_receive(&mut self, op: Op<P>) -> Result<(), CrdtError> {
-        self.op_graph = self.op_graph.receive(op)?;
+        self.op_graph = self
+            .op_graph
+            .receive_changeset(crate::Changeset { ops: vec![op] })?;
         Ok(())
     }
 }
@@ -394,7 +416,7 @@ pub enum Action<P> {
         client: ClientReplicaId,
     },
     /// Trigger one fallback sync round from the given client: emits
-    /// `Ops(pending_push)` (if non-empty) followed by `Dots(client_heads)`
+    /// `Changesets(...)` (if non-empty) followed by `Dots(client_heads)`
     /// into the server's inbound queue. Same-direction FIFO ordering means
     /// server processes the push before the request, ensuring
     /// `client_heads ⊆ server.OpGraph` before the missing-response walk.
@@ -604,7 +626,7 @@ impl<P: Clone + Eq> Simulator<P> {
     /// 4. If the snapshot diff shows no change and pending_push is empty
     ///    on both clients, stop. Otherwise loop.
     ///
-    /// Termination relies on the server suppressing empty Ops/Dots
+    /// Termination relies on the server suppressing empty Changesets/Dots
     /// responses: once fully synced, step 2 enqueues nothing, so step 3
     /// is a no-op and the snapshot is stable.
     pub fn quiesce(&mut self) {
@@ -713,11 +735,12 @@ mod tests {
         assert!(r.pending_push.contains(&op.id));
         assert!(r.op_graph.contains(&op.id));
         match msg {
-            SyncMessage::Ops(ops) => {
-                assert_eq!(ops.len(), 1);
-                assert_eq!(ops[0].id, op.id);
+            SyncMessage::Changesets(css) => {
+                assert_eq!(css.len(), 1);
+                assert_eq!(css[0].ops.len(), 1);
+                assert_eq!(css[0].ops[0].id, op.id);
             }
-            _ => panic!("expected Ops message"),
+            _ => panic!("expected Changesets message"),
         }
     }
 
@@ -729,7 +752,11 @@ mod tests {
             parents: vec![],
             payload: 99,
         };
-        r.inbox.push_back(SyncMessage::Ops(vec![foreign.clone()]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        r.inbox
+            .push_back(SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![foreign.clone()],
+            }]));
         let outgoing = r.process_one().expect("inbox had a message");
         assert!(outgoing.is_empty());
         assert!(r.op_graph.contains(&foreign.id));
@@ -746,7 +773,11 @@ mod tests {
             parents: vec![Dot::new(99, 0)],
             payload: 1,
         };
-        r.inbox.push_back(SyncMessage::Ops(vec![orphan.clone()]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        r.inbox
+            .push_back(SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![orphan.clone()],
+            }]));
         r.process_one();
         assert!(!r.op_graph().contains(&orphan.id));
         assert!(r.receive_errors.is_empty());
@@ -761,14 +792,22 @@ mod tests {
             parents: vec![],
             payload: 1,
         };
-        r.inbox.push_back(SyncMessage::Ops(vec![original]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        r.inbox
+            .push_back(SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![original],
+            }]));
         r.process_one();
         let conflict = Op {
             id: Dot::new(2, 0),
             parents: vec![],
             payload: 999,
         };
-        r.inbox.push_back(SyncMessage::Ops(vec![conflict]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        r.inbox
+            .push_back(SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![conflict],
+            }]));
         r.process_one();
         assert_eq!(r.receive_errors.len(), 1);
     }
@@ -792,21 +831,24 @@ mod tests {
     #[test]
     fn process_resend_request_resends_full_ancestry() {
         // a → b chain, both already locally received. Server lost a (its
-        // OpGraph snapshot rolled back) and asks the client to resend a;
-        // the client must include b's parent walk so a single round repairs
-        // the gap.
+        // OpGraph snapshot rolled back) and asks the client to resend b;
+        // the client must include the full sealed cs ancestry so a single
+        // round repairs the gap.
         let mut r: Replica<u32> = Replica::with_actor(1);
         let (a, _) = r.create_op(1).unwrap();
         let (b, _) = r.create_op(2).unwrap();
         r.inbox.push_back(SyncMessage::ResendRequest(vec![b.id]));
         let mut outgoing = r.process_one().expect("inbox had a message");
-        let resend = outgoing.pop().expect("ResendRequest must produce Ops");
+        let resend = outgoing
+            .pop()
+            .expect("ResendRequest must produce Changesets");
         match resend {
-            SyncMessage::Ops(ops) => {
-                let ids: Vec<Dot> = ops.iter().map(|op| op.id).collect();
-                assert_eq!(ids, vec![a.id, b.id]);
+            SyncMessage::Changesets(css) => {
+                assert_eq!(css.len(), 2);
+                assert_eq!(css[0].ops[0].id, a.id);
+                assert_eq!(css[1].ops[0].id, b.id);
             }
-            _ => panic!("expected Ops"),
+            _ => panic!("expected Changesets"),
         }
     }
 
@@ -829,11 +871,12 @@ mod tests {
         let (b, _) = r.create_op(2).unwrap();
         let (push, request) = r.sync_messages();
         match push.expect("push present") {
-            SyncMessage::Ops(ops) => {
-                let ids: Vec<Dot> = ops.iter().map(|op| op.id).collect();
-                assert_eq!(ids, vec![a.id, b.id]);
+            SyncMessage::Changesets(css) => {
+                assert_eq!(css.len(), 2);
+                assert_eq!(css[0].ops[0].id, a.id);
+                assert_eq!(css[1].ops[0].id, b.id);
             }
-            _ => panic!("expected Ops"),
+            _ => panic!("expected Changesets"),
         }
         match request {
             SyncMessage::Dots(dots) => {
@@ -866,7 +909,11 @@ mod tests {
             parents: vec![],
             payload: 42,
         };
-        r.inbox.push_back(SyncMessage::Ops(vec![foreign]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        r.inbox
+            .push_back(SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![foreign],
+            }]));
         r.process_one();
         let (push, request) = r.sync_messages();
         assert!(push.is_none());
@@ -886,7 +933,13 @@ mod tests {
             parents: vec![],
             payload: 99,
         };
-        s.enqueue(1, SyncMessage::Ops(vec![op.clone()]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        s.enqueue(
+            1,
+            SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![op.clone()],
+            }]),
+        );
         s.tick(1);
         assert!(s.op_graph().contains(&op.id));
         let outbox_1 = s.outboxes.get(&1).unwrap();
@@ -894,9 +947,10 @@ mod tests {
         assert!(matches!(&outbox_1[0], SyncMessage::Dots(d) if d == &vec![op.id]));
         let outbox_2 = s.outboxes.get(&2).unwrap();
         assert_eq!(outbox_2.len(), 1);
-        assert!(
-            matches!(&outbox_2[0], SyncMessage::Ops(ops) if ops.len() == 1 && ops[0].id == op.id)
-        );
+        assert!(matches!(
+            &outbox_2[0],
+            SyncMessage::Changesets(css) if css.len() == 1 && css[0].ops.len() == 1 && css[0].ops[0].id == op.id
+        ));
         assert!(s.receive_errors.is_empty());
     }
 
@@ -921,11 +975,14 @@ mod tests {
         let outbox = s.outboxes.get(&1).unwrap();
         assert_eq!(outbox.len(), 1);
         match &outbox[0] {
-            SyncMessage::Ops(ops) => {
-                let ids: Vec<Dot> = ops.iter().map(|op| op.id).collect();
+            SyncMessage::Changesets(css) => {
+                let ids: Vec<Dot> = css
+                    .iter()
+                    .flat_map(|cs| cs.ops.iter().map(|op| op.id))
+                    .collect();
                 assert_eq!(ids, vec![b.id]);
             }
-            _ => panic!("expected Ops"),
+            _ => panic!("expected Changesets"),
         }
     }
 
@@ -954,7 +1011,13 @@ mod tests {
             parents: vec![Dot::new(99, 0)],
             payload: 1,
         };
-        s.enqueue(1, SyncMessage::Ops(vec![orphan.clone()]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        s.enqueue(
+            1,
+            SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![orphan.clone()],
+            }]),
+        );
         s.tick(1);
         assert!(!s.op_graph().contains(&orphan.id));
         assert!(s.receive_errors.is_empty());
@@ -970,14 +1033,26 @@ mod tests {
             parents: vec![],
             payload: 1,
         };
-        s.enqueue(1, SyncMessage::Ops(vec![original]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        s.enqueue(
+            1,
+            SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![original],
+            }]),
+        );
         s.tick(1);
         let conflict = Op {
             id: Dot::new(10, 0),
             parents: vec![],
             payload: 999,
         };
-        s.enqueue(1, SyncMessage::Ops(vec![conflict]));
+        // single-cs envelope: simulator-synthetic batch, no real boundary
+        s.enqueue(
+            1,
+            SyncMessage::Changesets(vec![crate::Changeset {
+                ops: vec![conflict],
+            }]),
+        );
         s.tick(1);
         assert_eq!(s.receive_errors.len(), 1);
     }
@@ -986,7 +1061,7 @@ mod tests {
     fn server_handle_ops_dots_pair_does_not_emit_empty_messages() {
         let mut s: Server<u32> = Server::new();
         s.register(1);
-        s.enqueue(1, SyncMessage::Ops(vec![]));
+        s.enqueue(1, SyncMessage::Changesets(vec![]));
         s.enqueue(1, SyncMessage::Dots(vec![]));
         s.tick(1);
         s.tick(1);
@@ -1125,7 +1200,7 @@ mod tests {
 #[cfg(test)]
 mod proptests {
     use super::*;
-    use crate::{Op, OpGraph, SyncMessage};
+    use crate::SyncMessage;
     use proptest::prelude::*;
 
     fn arb_client_replica() -> impl Strategy<Value = ClientReplicaId> {
@@ -1333,7 +1408,7 @@ mod proptests {
                 payload,
             });
             sim.apply(Action::Tick { replica: ReplicaId::Server });
-            // Server has placed broadcast Ops into clientB outbox.
+            // Server has placed broadcast Changesets into clientB outbox.
             sim.apply(Action::DrainOutbox {
                 client: ClientReplicaId::ClientB,
             });
@@ -1368,10 +1443,10 @@ mod proptests {
             ..ProptestConfig::default()
         })]
 
-        /// Re-delivering the same Ops message yields identical OpGraph.
-        /// Verifies that the sync layer's Ops re-delivery (e.g. duplicate
-        /// broadcast or fallback resend) is absorbed by OpGraph::receive
-        /// idempotency.
+        /// Re-delivering the same changesets yields identical OpGraph.
+        /// Verifies that the sync layer's changeset re-delivery (e.g.
+        /// duplicate broadcast or fallback resend) is absorbed by
+        /// OpGraph::receive_changeset idempotency.
         #[test]
         fn redelivery_is_idempotent(actions in arb_action_sequence(40)) {
             let mut sim: Simulator<u32> = Simulator::new();
@@ -1383,39 +1458,21 @@ mod proptests {
             let snapshot_a = sim.client_a.op_graph().clone();
             let snapshot_b = sim.client_b.op_graph().clone();
 
-            // Force re-delivery: take all ops reachable from server's heads and
-            // send them as Ops to both clients again. After quiesce, each
-            // replica's OpGraph must remain unchanged.
-            let all_ops: Vec<Op<u32>> = collect_all_ops(sim.server.op_graph());
-            sim.client_a.inbox.push_back(SyncMessage::Ops(all_ops.clone()));
-            sim.client_b.inbox.push_back(SyncMessage::Ops(all_ops));
+            // Force re-delivery: replay the server's sealed changesets to both
+            // clients. After quiesce, each replica's OpGraph must remain unchanged.
+            let all_css: Vec<crate::Changeset<u32>> = sim.server.op_graph().changesets().to_vec();
+            sim.client_a.inbox.push_back(SyncMessage::Changesets(all_css.clone()));
+            sim.client_b.inbox.push_back(SyncMessage::Changesets(all_css));
             sim.quiesce();
 
             prop_assert!(sim.server.op_graph().graph_state_eq(&snapshot_server));
             prop_assert!(sim.client_a.op_graph().graph_state_eq(&snapshot_a));
             prop_assert!(sim.client_b.op_graph().graph_state_eq(&snapshot_b));
             // Re-delivery must not trip generation-layer rejects — the
-            // OpGraph::receive idempotency path is what absorbs the duplicate.
+            // OpGraph::receive_changeset idempotency path absorbs duplicates.
             prop_assert!(sim.server.receive_errors.is_empty());
             prop_assert!(sim.client_a.receive_errors.is_empty());
             prop_assert!(sim.client_b.receive_errors.is_empty());
         }
-    }
-
-    fn collect_all_ops<P: Clone>(graph: &OpGraph<P>) -> Vec<Op<P>> {
-        let mut visited: hashbrown::HashSet<Dot> = hashbrown::HashSet::new();
-        let mut stack: Vec<Dot> = graph.current_heads().copied().collect();
-        let mut result: Vec<Op<P>> = Vec::new();
-        while let Some(dot) = stack.pop() {
-            if visited.insert(dot)
-                && let Some(op) = graph.get(&dot)
-            {
-                result.push(op.clone());
-                for &parent in &op.parents {
-                    stack.push(parent);
-                }
-            }
-        }
-        result
     }
 }

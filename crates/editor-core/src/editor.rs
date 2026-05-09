@@ -1,13 +1,17 @@
-use editor_common::time::{Duration, SystemTime, UNIX_EPOCH};
-use editor_model::{Node, NodeId};
+use editor_common::time::Duration;
+use editor_crdt::{Changeset, CrdtError, Dot};
+use editor_model::{DocOp, ModifierState, Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
-use editor_state::{DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, State};
+use editor_state::{
+    DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, State, StateError,
+};
 use editor_transaction::{Effect, HistoryMeta, Step, Transaction};
 use editor_view::{PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+use crate::block_state::BlockState;
 use crate::error::EditorError;
 use crate::event::{EditorEvent, FontData};
 use crate::handle;
@@ -72,15 +76,35 @@ impl Editor {
         &self.state
     }
 
+    pub fn receive_remote_changeset(
+        &mut self,
+        changeset: Changeset<DocOp>,
+    ) -> Result<(), StateError> {
+        let next = self.state.receive_remote_changeset(changeset)?;
+        self.state = next;
+        Ok(())
+    }
+
+    pub fn local_changesets_since(
+        &self,
+        remote_heads: &HashSet<Dot>,
+    ) -> Result<Vec<Changeset<DocOp>>, CrdtError> {
+        self.state.local_changesets_since(remote_heads)
+    }
+
+    pub fn current_heads(&self) -> Vec<Dot> {
+        self.state.graph.current_heads().copied().collect()
+    }
+
     pub fn view(&self) -> &View {
         &self.view
     }
 
-    pub fn modifier_state(&self) -> editor_model::ModifierState {
+    pub fn modifier_state(&self) -> ModifierState {
         editor_state::resolve_modifier_state(&self.state)
     }
 
-    pub fn block_state(&self) -> crate::block_state::BlockState {
+    pub fn block_state(&self) -> BlockState {
         crate::block_state::resolve_block_state(&self.state)
     }
 
@@ -270,40 +294,10 @@ impl Editor {
         &mut self,
         f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
     ) -> Result<(), EditorError> {
-        let old_doc = self.state.doc.clone();
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
 
         let (state, steps, effects, meta) = tr.commit();
-
-        let commitable: Vec<Step> = steps
-            .iter()
-            .filter(|s| s.is_commitable())
-            .cloned()
-            .collect();
-        if !commitable.is_empty() {
-            let mut affected: Vec<editor_model::NodeId> = commitable
-                .iter()
-                .flat_map(|s| s.affected_node_ids(&old_doc, &state.doc))
-                .collect();
-            affected.sort();
-            affected.dedup();
-
-            let (root_object_hash, objects) = state.doc.derive_objects_for_path(&affected);
-
-            self.push_event(EditorEvent::TransactionCommitted {
-                commit: crate::event::Commit {
-                    root_object_hash,
-                    objects,
-                    steps: commitable,
-                    meta: meta.clone(),
-                    committed_at: SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as i64,
-                },
-            });
-        }
 
         if !steps.is_empty() {
             match meta.history {
@@ -328,11 +322,7 @@ impl Editor {
             }
             other => other,
         };
-        // TransactionCommitted is always pushed; multiple transacts in a single tick
-        // must each emit a distinct event even if their (steps, meta) compare equal.
-        if matches!(event, EditorEvent::TransactionCommitted { .. })
-            || !self.pending_events.contains(&event)
-        {
+        if !self.pending_events.contains(&event) {
             self.pending_events.push(event);
         }
     }
@@ -461,14 +451,15 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
+    use editor_crdt::OpGraph;
     use editor_macros::{doc, state};
-    use editor_model::{Modifier, NodeId};
+    use editor_model::{DocOp, Modifier, NodeId};
     use editor_state::{PendingModifier, PendingModifiers, Position, Selection};
 
     use super::*;
 
     fn build_state(doc: editor_model::Doc, head: Position, pending: PendingModifiers) -> State {
-        let mut s = State::new(doc, Selection::collapsed(head));
+        let mut s = State::new(doc, OpGraph::<DocOp>::new(), Selection::collapsed(head));
         s.pending_modifiers = pending;
         s
     }
@@ -890,74 +881,6 @@ mod tests {
     }
 
     #[test]
-    fn transact_emits_transaction_committed_with_commitable_steps() {
-        let (mut editor, _) = test_editor();
-        let events = editor.apply(Message::Insertion {
-            op: InsertionOp::Text { text: "hi".into() },
-        });
-        let committed: Vec<_> = events
-            .iter()
-            .filter_map(|e| match e {
-                EditorEvent::TransactionCommitted { commit } => Some(commit.steps.clone()),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(
-            committed.len(),
-            1,
-            "expected exactly one TransactionCommitted event"
-        );
-        assert!(!committed[0].is_empty(), "steps should not be empty");
-        assert!(
-            committed[0].iter().all(|s| s.is_commitable()),
-            "all emitted steps should be commitable"
-        );
-    }
-
-    #[test]
-    fn transact_emits_commit_with_objects_and_root_hash() {
-        let (mut editor, _) = test_editor();
-        let events = editor.apply(Message::Insertion {
-            op: InsertionOp::Text { text: "hi".into() },
-        });
-        let commit = events
-            .iter()
-            .find_map(|e| match e {
-                EditorEvent::TransactionCommitted { commit } => Some(commit),
-                _ => None,
-            })
-            .expect("expected one TransactionCommitted event");
-        assert_eq!(commit.root_object_hash.len(), 32, "32-char xxh3 hex");
-        assert!(
-            !commit.objects.is_empty(),
-            "InsertText must derive at least one object"
-        );
-        assert!(
-            commit
-                .objects
-                .iter()
-                .any(|o| o.hash == commit.root_object_hash),
-            "root_object_hash must match one of the derived objects"
-        );
-    }
-
-    #[test]
-    fn transact_does_not_emit_transaction_committed_for_selection_only() {
-        let (mut editor, t) = test_editor();
-        let target = Selection::collapsed(Position::new(t, 3));
-        let events = editor.apply(Message::Selection {
-            op: SelectionOp::Set { selection: target },
-        });
-        let has_committed = events
-            .iter()
-            .any(|e| matches!(e, EditorEvent::TransactionCommitted { .. }));
-        assert!(
-            !has_committed,
-            "selection-only transaction should not emit TransactionCommitted"
-        );
-    }
-
-    #[test]
     fn state_changed_dedups_regardless_of_fields_order() {
         let (mut editor, _) = test_editor();
         editor.push_event(EditorEvent::StateChanged {
@@ -974,47 +897,5 @@ mod tests {
             .filter(|e| matches!(e, EditorEvent::StateChanged { .. }))
             .count();
         assert_eq!(count, 1);
-    }
-
-    #[test]
-    fn multiple_transacts_in_single_tick_emit_separate_events_when_steps_differ() {
-        let (mut editor, _) = test_editor();
-        editor.enqueue(Message::Insertion {
-            op: InsertionOp::Text { text: "a".into() },
-        });
-        editor.enqueue(Message::Insertion {
-            op: InsertionOp::Text { text: "b".into() },
-        });
-        let events = editor.tick().unwrap();
-        let committed_count = events
-            .iter()
-            .filter(|e| matches!(e, EditorEvent::TransactionCommitted { .. }))
-            .count();
-        assert_eq!(
-            committed_count, 2,
-            "two distinct transactions should emit two events"
-        );
-    }
-
-    #[test]
-    fn tick_does_not_dedup_transaction_committed() {
-        let (mut editor, _) = test_editor();
-        let event = EditorEvent::TransactionCommitted {
-            commit: crate::event::Commit {
-                root_object_hash: String::new(),
-                objects: vec![],
-                steps: vec![],
-                meta: editor_transaction::TransactionMeta::default(),
-                committed_at: 0,
-            },
-        };
-        editor.push_event(event.clone());
-        editor.push_event(event);
-        let events = editor.tick().unwrap();
-        let count = events
-            .iter()
-            .filter(|e| matches!(e, EditorEvent::TransactionCommitted { .. }))
-            .count();
-        assert_eq!(count, 2, "TransactionCommitted must not be deduplicated");
     }
 }

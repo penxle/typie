@@ -5,7 +5,6 @@ pub fn resolve_inherited<'a>(
     modifier_type: ModifierType,
 ) -> Option<&'a Modifier> {
     node.modifiers()
-        .iter()
         .find(|m| ModifierType::from(*m) == modifier_type)
         .or_else(|| {
             node.parent()

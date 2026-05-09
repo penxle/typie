@@ -1,27 +1,27 @@
-use editor_state::{Composition, State};
+use editor_state::{BatchedState, Composition};
 
-use crate::{Step, StepError, StepOutput};
-
-pub(crate) fn apply(state: &State, new: &Option<Composition>) -> Result<StepOutput, StepError> {
-    let mut new_state = state.clone();
-    new_state.composition = *new;
-
-    Ok(StepOutput {
-        state: new_state,
-        validations: vec![],
-    })
-}
+use crate::{Step, StepError, Validation};
 
 pub(crate) fn inverse(old: Option<Composition>, new: Option<Composition>) -> Step {
     Step::SetComposition { old: new, new: old }
 }
 
+pub(crate) fn apply_to(
+    batched: &mut BatchedState,
+    _validations: &mut Vec<Validation>,
+    _old: Option<Composition>,
+    new: Option<Composition>,
+) -> Result<(), StepError> {
+    batched.set_composition(new);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::*;
+    use editor_state::Composition;
 
-    use crate::*;
+    use crate::Step;
 
     #[test]
     fn set_composition_apply() {
@@ -31,12 +31,10 @@ mod tests {
         };
 
         let comp = Some(Composition { start: 0, end: 1 });
-
         let step = Step::SetComposition {
             old: None,
             new: comp,
         };
-
         let output = step.apply(&state).unwrap();
 
         assert_eq!(output.state.composition, comp);
@@ -50,12 +48,10 @@ mod tests {
         };
 
         let comp = Some(Composition { start: 0, end: 1 });
-
         let step = Step::SetComposition {
             old: None,
             new: comp,
         };
-
         let state2 = step.apply(&state).unwrap().state;
         let state3 = step.inverse().apply(&state2).unwrap().state;
 

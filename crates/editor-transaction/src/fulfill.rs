@@ -113,7 +113,7 @@ fn first_type(expr: &ContentExpr) -> NodeType {
 /// Build minimum valid subtree for a NodeType, recursively filling required children.
 fn scaffold(node_type: NodeType) -> Subtree {
     let id = NodeId::new();
-    let node = node_type.into_node();
+    let node = node_type.into_node().to_plain();
     let spec = node_type.spec();
     let children = scaffold_children(&spec.content);
 
@@ -178,7 +178,7 @@ mod tests {
             } => {
                 assert_eq!(*parent_id, NodeId::ROOT);
                 assert_eq!(*index, 1);
-                assert!(matches!(subtree.node, Node::Paragraph(_)));
+                assert!(matches!(subtree.node, PlainNode::Paragraph(_)));
             }
             _ => panic!("expected InsertSubtree"),
         }
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(steps.len(), 1);
         match &steps[0] {
             Step::InsertSubtree { subtree, .. } => {
-                assert!(matches!(subtree.node, Node::Paragraph(_)));
+                assert!(matches!(subtree.node, PlainNode::Paragraph(_)));
             }
             _ => panic!("expected InsertSubtree"),
         }
@@ -220,9 +220,9 @@ mod tests {
         assert_eq!(steps.len(), 1);
         match &steps[0] {
             Step::InsertSubtree { subtree, .. } => {
-                assert!(matches!(subtree.node, Node::ListItem(_)));
+                assert!(matches!(subtree.node, PlainNode::ListItem(_)));
                 assert_eq!(subtree.children.len(), 1);
-                assert!(matches!(subtree.children[0].node, Node::Paragraph(_)));
+                assert!(matches!(subtree.children[0].node, PlainNode::Paragraph(_)));
             }
             _ => panic!("expected InsertSubtree"),
         }
@@ -231,15 +231,15 @@ mod tests {
     #[test]
     fn scaffold_produces_minimum_valid_subtree() {
         let tree = scaffold(NodeType::BulletList);
-        assert!(matches!(tree.node, Node::BulletList(_)));
+        assert!(matches!(tree.node, PlainNode::BulletList(_)));
         assert_eq!(tree.children.len(), 1);
 
         let item = &tree.children[0];
-        assert!(matches!(item.node, Node::ListItem(_)));
+        assert!(matches!(item.node, PlainNode::ListItem(_)));
         assert_eq!(item.children.len(), 1);
 
         let para = &item.children[0];
-        assert!(matches!(para.node, Node::Paragraph(_)));
+        assert!(matches!(para.node, PlainNode::Paragraph(_)));
         assert!(para.children.is_empty());
     }
 }

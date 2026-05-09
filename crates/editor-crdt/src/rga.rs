@@ -1,15 +1,26 @@
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RgaOp<T> {
-    Insert { after: Option<Dot>, value: T },
-    Remove { observed: Dot },
+    #[n(0)]
+    Insert {
+        #[n(0)]
+        after: Option<Dot>,
+        #[n(1)]
+        value: T,
+    },
+    #[n(1)]
+    Remove {
+        #[n(0)]
+        observed: Dot,
+    },
 }
 
-/// **Standalone-POC representation — do not embed in an editor as-is.**
+/// **Reference impl — do not embed in an editor as-is.**
 /// Without a child-index, `iter()` / `len()` are O(n²) over the document size.
 /// Editor integration must replace this with a child-index or a cached projection
 /// before exposing `Rga<T>` (or any wrapper of it) to user-facing operations on
@@ -67,6 +78,10 @@ impl<T> Rga<T> {
 
     pub fn iter_with_dot(&self) -> impl Iterator<Item = (Dot, &T)> + '_ {
         VisibleIterWithDot::new(self)
+    }
+
+    pub fn contains_dot(&self, dot: Dot) -> bool {
+        self.entries.contains_key(&dot)
     }
 
     pub fn dot_at(&self, offset: usize) -> Result<Option<Dot>, CrdtError> {

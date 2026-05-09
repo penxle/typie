@@ -582,6 +582,20 @@
       "when": 1778266945891,
       "tag": "0082_square_vulcan",
       "breakpoints": false
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1778270038101,
+      "tag": "0083_remarkable_sue_storm",
+      "breakpoints": false
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1778270536588,
+      "tag": "0084_illegal_silverclaw",
+      "breakpoints": false
     }
   ]
 }

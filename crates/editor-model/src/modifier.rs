@@ -2,6 +2,7 @@ use crate::alignment::Alignment;
 use editor_common::Tri;
 use editor_macros::ffi;
 use enum_map::Enum;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
 
@@ -14,6 +15,8 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     Hash,
     Serialize,
     Deserialize,
+    Encode,
+    Decode,
     EnumDiscriminants,
     editor_macros::ModifierState,
 )]
@@ -29,66 +32,113 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     EnumCount,
     Enum,
     IntoStaticStr,
+    minicbor::Encode,
+    minicbor::Decode,
 ))]
+#[strum_discriminants(cbor(index_only))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Modifier {
+    #[n(0)]
+    #[strum_discriminants(n(0))]
     Bold,
+    #[n(1)]
+    #[strum_discriminants(n(1))]
     Italic,
+    #[n(2)]
+    #[strum_discriminants(n(2))]
     Underline,
+    #[n(3)]
+    #[strum_discriminants(n(3))]
     Strikethrough,
 
     /// pt x 100 (e.g. 16pt -> 1600)
+    #[n(4)]
+    #[strum_discriminants(n(4))]
     FontSize {
+        #[n(0)]
         value: u32,
     },
 
+    #[n(5)]
+    #[strum_discriminants(n(5))]
     FontFamily {
+        #[n(0)]
         value: String,
     },
 
+    #[n(6)]
+    #[strum_discriminants(n(6))]
     FontWeight {
+        #[n(0)]
         value: u16,
     },
 
+    #[n(7)]
+    #[strum_discriminants(n(7))]
     TextColor {
+        #[n(0)]
         value: String,
     },
 
+    #[n(8)]
+    #[strum_discriminants(n(8))]
     BackgroundColor {
+        #[n(0)]
         value: String,
     },
 
     /// em x 100 (e.g. 0.05em -> 5)
+    #[n(9)]
+    #[strum_discriminants(n(9))]
     LetterSpacing {
+        #[n(0)]
         value: i32,
     },
 
+    #[n(10)]
+    #[strum_discriminants(n(10))]
     Link {
+        #[n(0)]
         href: String,
     },
 
+    #[n(11)]
+    #[strum_discriminants(n(11))]
     Ruby {
+        #[n(0)]
         text: String,
     },
 
     /// % (e.g. 160 -> 160%)
+    #[n(12)]
+    #[strum_discriminants(n(12))]
     LineHeight {
+        #[n(0)]
         value: u32,
     },
 
     /// x 100 (e.g. 100% -> 100)
+    #[n(13)]
+    #[strum_discriminants(n(13))]
     BlockGap {
+        #[n(0)]
         value: u32,
     },
 
     /// x 100 (e.g. 100% -> 100)
+    #[n(14)]
+    #[strum_discriminants(n(14))]
     ParagraphIndent {
+        #[n(0)]
         value: u32,
     },
 
+    #[n(15)]
+    #[strum_discriminants(n(15))]
     Alignment {
+        #[n(0)]
         value: Alignment,
     },
 }

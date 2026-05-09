@@ -48,11 +48,7 @@ pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
         let inherited_value = inherited.iter().find(|m| m.as_type() == modifier_type);
 
         // Remove existing modifier of same type
-        if let Some(existing) = node
-            .modifiers()
-            .iter()
-            .find(|m| m.as_type() == modifier_type)
-        {
+        if let Some(existing) = node.modifiers().find(|m| m.as_type() == modifier_type) {
             tr.remove_modifier(node_id, existing.clone())?;
         }
 

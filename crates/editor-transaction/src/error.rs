@@ -1,4 +1,5 @@
 use editor_model::{ModifierType, NodeId};
+use editor_state::StateError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StepError {
@@ -34,4 +35,7 @@ pub enum StepError {
         modifier_type: ModifierType,
         detail: String,
     },
+
+    #[error(transparent)]
+    State(#[from] StateError),
 }

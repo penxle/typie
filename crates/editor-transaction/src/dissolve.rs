@@ -48,8 +48,8 @@ fn dissolve_into(
         index: node_index,
         subtree: Subtree {
             id: node.id(),
-            node: node.node().clone(),
-            modifiers: node.modifiers().to_vec(),
+            node: node.node().to_plain(),
+            modifiers: node.modifiers().cloned().collect(),
             children: vec![],
         },
     });
@@ -163,7 +163,7 @@ mod tests {
                 assert_eq!(*parent_id, bl1);
                 assert_eq!(*index, 0);
                 assert_eq!(subtree.id, li1);
-                assert!(matches!(subtree.node, Node::ListItem(_)));
+                assert!(matches!(subtree.node, PlainNode::ListItem(_)));
                 assert!(subtree.children.is_empty());
             }
             _ => panic!("expected RemoveSubtree for li1"),
@@ -197,7 +197,7 @@ mod tests {
                 assert_eq!(*parent_id, bl1);
                 assert_eq!(*index, 0);
                 assert_eq!(subtree.id, bl2);
-                assert!(matches!(subtree.node, Node::BulletList(_)));
+                assert!(matches!(subtree.node, PlainNode::BulletList(_)));
                 assert!(subtree.children.is_empty());
             }
             _ => panic!("expected RemoveSubtree for bl2"),

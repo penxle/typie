@@ -63,12 +63,12 @@ impl<'a> ResolvedPosition<'a> {
         let Node::Text(text_node) = node.node() else {
             return None;
         };
-        let text = &text_node.text;
+        let text_str = text_node.text.to_string();
         let segmenters = &resource.segmenters;
 
         let mut boundaries = vec![0usize];
-        for byte_offset in segmenters.grapheme.as_borrowed().segment_str(text) {
-            boundaries.push(text.nth_byte_char_offset(byte_offset));
+        for byte_offset in segmenters.grapheme.as_borrowed().segment_str(&text_str) {
+            boundaries.push(text_str.nth_byte_char_offset(byte_offset));
         }
         Some(boundaries)
     }

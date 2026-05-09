@@ -10,11 +10,14 @@ wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm"]
 
 [dependencies]
 editor-common = { path = "../editor-common" }
+editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-resource = { path = "../editor-resource" }
+hashbrown = { workspace = true }
 log.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 strum.workspace = true
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }
@@ -23,4 +26,6 @@ wasm-bindgen = { workspace = true, optional = true }
 [dev-dependencies]
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
+minicbor = { workspace = true }
+proptest = { workspace = true }
 serde_json.workspace = true

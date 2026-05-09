@@ -1,5 +1,4 @@
-use editor_common::StrExt;
-use editor_model::{HardBreakNode, Node, NodeId, Subtree};
+use editor_model::{Node, NodeId, PlainHardBreakNode, PlainNode, Subtree};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
@@ -19,7 +18,10 @@ pub fn insert_hard_break(tr: &mut Transaction) -> CommandResult {
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
     let break_id = NodeId::new();
-    let break_subtree = Subtree::leaf(break_id, Node::HardBreak(HardBreakNode::default()));
+    let break_subtree = Subtree::leaf(
+        break_id,
+        PlainNode::HardBreak(PlainHardBreakNode::default()),
+    );
 
     match node.node() {
         Node::Text(text_node) => {
@@ -27,7 +29,7 @@ pub fn insert_hard_break(tr: &mut Transaction) -> CommandResult {
             let node_index = node
                 .index()
                 .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
-            let text_len = text_node.text.char_count();
+            let text_len = text_node.text.len();
 
             if pos.offset == 0 {
                 // Case B: cursor at start of text → insert hard break before

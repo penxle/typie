@@ -92,12 +92,11 @@ fn nearest_in(weights: &[u16], target: u16) -> Option<u16> {
 }
 
 fn is_node_bold(node: &NodeRef) -> bool {
-    if node.modifiers().iter().any(|m| matches!(m, Modifier::Bold)) {
+    if node.modifiers().any(|m| matches!(m, Modifier::Bold)) {
         return true;
     }
     let weight = node
         .modifiers()
-        .iter()
         .find_map(|m| match m {
             Modifier::FontWeight { value } => Some(*value),
             _ => None,
@@ -149,14 +148,13 @@ fn toggle_bold_on_range(
             })
             .unwrap();
 
-        let has_explicit_weight = node.modifiers().iter().find_map(|m| match m {
+        let has_explicit_weight = node.modifiers().find_map(|m| match m {
             Modifier::FontWeight { value } => Some(*value),
             _ => None,
         });
         let current_weight = has_explicit_weight.unwrap_or(inherited_weight);
         let font_family = node
             .modifiers()
-            .iter()
             .find_map(|m| match m {
                 Modifier::FontFamily { value } => Some(value.as_str()),
                 _ => None,
@@ -194,7 +192,7 @@ fn toggle_bold_off_range(
             .node(node_id)
             .ok_or(CommandError::NodeNotFound(node_id))?;
 
-        let has_bold = node.modifiers().iter().any(|m| matches!(m, Modifier::Bold));
+        let has_bold = node.modifiers().any(|m| matches!(m, Modifier::Bold));
         let inherited = resolve_inherited_modifiers(&node);
         let inherited_weight = inherited
             .iter()
@@ -211,14 +209,13 @@ fn toggle_bold_off_range(
             })
             .unwrap();
 
-        let has_explicit_weight = node.modifiers().iter().find_map(|m| match m {
+        let has_explicit_weight = node.modifiers().find_map(|m| match m {
             Modifier::FontWeight { value } => Some(*value),
             _ => None,
         });
         let current_weight = has_explicit_weight.unwrap_or(inherited_weight);
         let font_family = node
             .modifiers()
-            .iter()
             .find_map(|m| match m {
                 Modifier::FontFamily { value } => Some(value.as_str()),
                 _ => None,
@@ -711,7 +708,7 @@ mod tests {
             !entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { .. }))
+                .any(|(_, m)| matches!(m, Modifier::FontWeight { .. }))
         );
     }
 
@@ -731,12 +728,17 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let t1_id = actual.selection.head.node_id;
         let entry = actual.doc.get_entry(t1_id).unwrap();
-        assert!(!entry.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
         assert!(
             !entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { .. }))
+                .any(|(_, m)| matches!(m, Modifier::Bold))
+        );
+        assert!(
+            !entry
+                .modifiers
+                .iter()
+                .any(|(_, m)| matches!(m, Modifier::FontWeight { .. }))
         );
     }
 
@@ -760,7 +762,7 @@ mod tests {
             !entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { .. }))
+                .any(|(_, m)| matches!(m, Modifier::FontWeight { .. }))
         );
     }
 
@@ -784,7 +786,7 @@ mod tests {
             entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { value: 400 }))
+                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 400 }))
         );
     }
 
@@ -869,7 +871,7 @@ mod tests {
             entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
+                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 700 }))
         );
     }
 

@@ -1,21 +1,28 @@
-use editor_macros::ffi;
+use editor_crdt::LwwReg;
+use editor_macros::{NodeAttr, ffi};
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, NodeAttr)]
 pub struct CalloutNode {
-    #[serde(default)]
-    pub variant: CalloutVariant,
+    #[plain(serde(default))]
+    pub variant: LwwReg<CalloutVariant>,
 }
 
 #[ffi]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Encode, Decode,
+)]
+#[cbor(index_only)]
 #[serde(rename_all = "snake_case")]
 pub enum CalloutVariant {
     #[default]
+    #[n(0)]
     Info,
+    #[n(1)]
     Success,
+    #[n(2)]
     Warning,
+    #[n(3)]
     Danger,
 }

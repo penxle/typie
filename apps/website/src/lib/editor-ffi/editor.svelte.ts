@@ -6,12 +6,11 @@ import { register, unregister } from './registry';
 import type {
   BlockState,
   CursorMetrics,
-  Doc,
   Editor as WasmEditor,
   EditorEvent,
   Message,
   ModifierState,
-  RootNode,
+  PlainRootNode,
   Selection,
   Size,
   Viewport,
@@ -53,7 +52,7 @@ export class Editor {
   #cursor = $state<CursorMetrics>();
   #selection = $state<Selection>();
   #pageSizes = $state<Size[]>([]);
-  #rootAttrs = $state<RootNode>();
+  #rootAttrs = $state<PlainRootNode>();
   #modifierState = $state<ModifierState>();
   #blockState = $state<BlockState>();
   #focused = $state(false);
@@ -63,12 +62,12 @@ export class Editor {
     // no-op
   }
 
-  static async create(doc: Doc, selection: Selection, viewport: Viewport) {
+  static async create(graph: Uint8Array, selection: Selection, viewport: Viewport) {
     await ensureWasmInitialized();
 
     const self = new this();
 
-    self.#wasm = wasm.create_editor(doc, selection, viewport);
+    self.#wasm = wasm.create_editor_from_graph(graph, selection, viewport);
     self.#viewport = viewport;
 
     self.on('state_changed', self.#stateChangedHandler);
@@ -240,6 +239,18 @@ export class Editor {
 
   resizeSurface(page: number, width: number, height: number): void {
     this.#wasm.resize_surface(page, width, height, this.#viewport.scale_factor);
+  }
+
+  currentHeads(): Uint8Array {
+    return this.#wasm.current_heads();
+  }
+
+  localChangesetsSince(remoteHeads: Uint8Array): Uint8Array {
+    return this.#wasm.local_changesets_since(remoteHeads);
+  }
+
+  receiveRemoteChangeset(payload: Uint8Array): void {
+    this.#wasm.receive_remote_changeset(payload);
   }
 
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {

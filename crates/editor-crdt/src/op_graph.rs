@@ -1,4 +1,6 @@
+use editor_macros::ffi;
 use hashbrown::HashSet;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot};
@@ -8,10 +10,14 @@ use crate::{CrdtError, Dot};
 /// payload). `parents` are the op-DAG parents of this op (the heads of the
 /// store at the moment this op was created). Stored normalized: sorted
 /// ascending, no duplicates.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[ffi]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct Op<P> {
+    #[n(0)]
     pub id: Dot,
+    #[n(1)]
     pub parents: Vec<Dot>,
+    #[n(2)]
     pub payload: P,
 }
 
@@ -20,6 +26,15 @@ pub struct Op<P> {
 pub struct OpGraph<P> {
     actor: u64,
     next_clock: u64,
+
+    changesets: Vec<crate::Changeset<P>>,
+
+    /// Local-write accumulator. `add` pushes here; `commit` drains into
+    /// `changesets`. Remote ingestion (`receive_changeset`) never touches
+    /// this — it seals its own boundary directly into `changesets`, so
+    /// `pending` only ever holds the in-flight transaction's ops.
+    pending: Vec<Op<P>>,
+
     ops: imbl::HashMap<Dot, Op<P>>,
     heads: imbl::HashSet<Dot>,
     /// Reverse parent index: each dot maps to the set of ops that reference
@@ -28,11 +43,11 @@ pub struct OpGraph<P> {
     /// accurate on data loss / restore.
     children: imbl::HashMap<Dot, imbl::HashSet<Dot>>,
     /// Subset of `ops` whose transitive ancestry is fully present locally.
-    /// Maintained incrementally so `missing_for` can emit only replayable
-    /// batches in O(walk) rather than scanning the full op set per round.
-    /// Diverges from `ops` only after server-side data loss
-    /// (`debug_remove`); `add` and `receive` keep parents-before-children
-    /// invariants so they always preserve the set.
+    /// Maintained incrementally so `missing_changesets_for` can emit only
+    /// replayable batches in O(walk) rather than scanning the full op set
+    /// per round. Diverges from `ops` only after server-side data loss
+    /// (`debug_remove`); `add` and `receive_changeset` keep
+    /// parents-before-children invariants so they always preserve the set.
     self_contained: imbl::HashSet<Dot>,
 }
 
@@ -53,6 +68,8 @@ impl<P> OpGraph<P> {
         Self {
             actor,
             next_clock: 0,
+            changesets: Vec::new(),
+            pending: Vec::new(),
             ops: imbl::HashMap::new(),
             heads: imbl::HashSet::new(),
             children: imbl::HashMap::new(),
@@ -80,6 +97,14 @@ impl<P> OpGraph<P> {
         self.ops.is_empty()
     }
 
+    pub fn changesets(&self) -> &[crate::Changeset<P>] {
+        &self.changesets
+    }
+
+    pub fn pending(&self) -> &[Op<P>] {
+        &self.pending
+    }
+
     /// Order is unstable across inserts; callers needing
     /// causality-respecting order should pass the result through
     /// [`OpGraph::topo_sort`].
@@ -89,14 +114,15 @@ impl<P> OpGraph<P> {
 
     /// `true` when some op in `self.ops` has an ancestor missing locally —
     /// i.e. an ancestor was lost (storage failover, partial WAL replay, etc.)
-    /// and its descendants are stranded. While this holds, [`missing_for`]
-    /// silently drops the dangling descendants from emitted batches and the
-    /// replica is "sync-degraded": new peers can fully sync but only see
-    /// the self-contained prefix until a peer that still holds the missing
-    /// ancestor pushes it back via [`CrdtError::UnknownHeads`] negative-ack.
-    /// Production callers should surface this to operational alerting.
+    /// and its descendants are stranded. While this holds,
+    /// [`missing_changesets_for`] silently drops the dangling changesets from
+    /// emitted batches and the replica is "sync-degraded": new peers can fully
+    /// sync but only see the self-contained prefix until a peer that still
+    /// holds the missing ancestor pushes it back via
+    /// [`CrdtError::UnknownHeads`] negative-ack. Production callers should
+    /// surface this to operational alerting.
     ///
-    /// [`missing_for`]: OpGraph::missing_for
+    /// [`missing_changesets_for`]: OpGraph::missing_changesets_for
     pub fn has_dangling(&self) -> bool {
         self.ops.len() != self.self_contained.len()
     }
@@ -180,37 +206,40 @@ impl<P: Clone> OpGraph<P> {
         // op built on such a head inherits its broken ancestry, so derive SC
         // status from the parents instead of assuming all heads qualify.
         // The op stays in `self.ops` either way; once the missing ancestor is
-        // restored, `receive`'s `try_promote_self_contained` cascade lifts it
-        // through `self.children` automatically.
+        // restored, `receive_changeset`'s `try_promote_self_contained` cascade
+        // lifts it through `self.children` automatically.
         if parents.iter().all(|p| next.self_contained.contains(p)) {
             next.self_contained.insert(id);
         }
+        next.pending.push(op.clone());
 
         Ok((next, op))
     }
 
-    /// Compute the ops a peer is missing, given the peer's frontier
-    /// `remote_heads`. The returned vector is `self.ops` minus the ancestry
-    /// of `remote_heads`, emitted in ancestry-first (topological) order so
-    /// that a peer applying the result via [`OpGraph::receive`] never hits
-    /// a [`CrdtError::MissingParents`] rejection.
-    ///
-    /// Returns `Err(CrdtError::UnknownHeads)` if any dot encountered while
-    /// walking `remote_heads` and their ancestry is not in `self.ops` —
-    /// either a head itself or a missing parent reached through the walk.
-    /// The unknown set drives the negative-ack path: the peer holds the op
-    /// locally and must re-send it (with its own ancestry) so the local
-    /// replica can recover from server-side data loss.
-    ///
-    /// When [`has_dangling`] is `true`, descendants of locally-lost ancestors
-    /// are silently dropped from the emitted batch so the receiver never
-    /// rejects with `MissingParents`. The `Ok` branch therefore signals only
-    /// that the batch is replayable — not that it carries every reachable
-    /// op. Callers should consult [`has_dangling`] separately to surface
-    /// degraded sync for operational alerting.
-    ///
-    /// [`has_dangling`]: OpGraph::has_dangling
-    pub fn missing_for(&self, remote_heads: &HashSet<Dot>) -> Result<Vec<Op<P>>, CrdtError> {
+    /// No-op when `pending` is empty so a transact that emits zero ops does
+    /// not append a stray empty entry. Ops are sealed in push order, which
+    /// matches `add`'s ancestry-first construction (each new op parents on
+    /// current heads), so the resulting `Changeset.ops` satisfies the
+    /// parents-before-children topological-order contract on `Changeset`.
+    pub fn commit(&self) -> Self {
+        let mut next = self.clone();
+        if !next.pending.is_empty() {
+            let ops = std::mem::take(&mut next.pending);
+            next.changesets.push(crate::Changeset { ops });
+        }
+        next
+    }
+
+    /// Atomicity invariant: each changeset in `self.changesets` is either
+    /// fully in remote's ancestry or fully outside it after the
+    /// self-contained filter — mixed → `PartialDuplicate`. The
+    /// self-contained filter runs first so that legitimate degraded-
+    /// storage cases (a cs holding a dangling-ancestor descendant) are
+    /// silently dropped instead of being misclassified as corruption.
+    pub fn missing_changesets_for(
+        &self,
+        remote_heads: &HashSet<Dot>,
+    ) -> Result<Vec<crate::Changeset<P>>, CrdtError> {
         let mut known: HashSet<Dot> = HashSet::new();
         let mut unknown: HashSet<Dot> = HashSet::new();
         let mut walk: Vec<Dot> = remote_heads.iter().copied().collect();
@@ -231,21 +260,42 @@ impl<P: Clone> OpGraph<P> {
             });
         }
 
-        // Restrict the emitted batch to ops whose full ancestry still lives
-        // here. After a non-head ancestor is lost server-side its descendants
-        // remain in `self.ops` but are no longer in `self_contained` — sending
-        // them would force the peer to reject the batch with `MissingParents`.
-        // We silently drop those descendants and let the negative-ack path
-        // (`ResendRequest`) restore the lost ancestor from a peer that still
-        // holds it.
-        // Materialize a hashbrown snapshot to bridge to `dfs_post_order_filtered`'s
-        // `&HashSet<Dot>` argument — `self.self_contained` is `imbl::HashSet`.
-        let self_contained: HashSet<Dot> = self.self_contained.iter().copied().collect();
-        Ok(self.dfs_post_order_filtered(
-            self.heads.iter().copied().collect(),
-            &known,
-            Some(&self_contained),
-        ))
+        let mut out: Vec<crate::Changeset<P>> = Vec::new();
+        for cs in &self.changesets {
+            // Self-contained filter must precede the membership classification
+            // below: a cs holding a dangling-ancestor descendant is a degraded-
+            // storage case to drop silently, not an atomicity violation.
+            if cs
+                .ops
+                .iter()
+                .any(|op| !self.self_contained.contains(&op.id))
+            {
+                continue;
+            }
+            let mut all_known = true;
+            let mut any_known = false;
+            for op in &cs.ops {
+                if known.contains(&op.id) {
+                    any_known = true;
+                } else {
+                    all_known = false;
+                }
+            }
+            if all_known {
+                continue;
+            }
+            if any_known {
+                let dots: Vec<Dot> = cs
+                    .ops
+                    .iter()
+                    .filter(|op| known.contains(&op.id))
+                    .map(|op| op.id)
+                    .collect();
+                return Err(CrdtError::PartialDuplicate { dots });
+            }
+            out.push(cs.clone());
+        }
+        Ok(out)
     }
 
     /// Topologically sort the given dots in ancestry-first order. Parents
@@ -307,63 +357,6 @@ impl<P: Clone> OpGraph<P> {
 }
 
 impl<P: Clone + Eq> OpGraph<P> {
-    pub fn receive(&self, mut op: Op<P>) -> Result<Self, CrdtError> {
-        if op.parents.contains(&op.id) {
-            return Err(CrdtError::SelfReference { dot: op.id });
-        }
-
-        op.parents.sort();
-        op.parents.dedup();
-
-        let missing: Vec<Dot> = op
-            .parents
-            .iter()
-            .copied()
-            .filter(|p| !self.ops.contains_key(p))
-            .collect();
-        if !missing.is_empty() {
-            return Err(CrdtError::MissingParents {
-                dot: op.id,
-                missing,
-            });
-        }
-
-        if let Some(existing) = self.ops.get(&op.id) {
-            if existing.parents == op.parents && existing.payload == op.payload {
-                return Ok(self.clone());
-            }
-            return Err(CrdtError::DotConflict { dot: op.id });
-        }
-
-        let mut next = self.clone();
-        next.sync_clock_for(&op.id)?;
-
-        let id = op.id;
-        for p in &op.parents {
-            next.heads.remove(p);
-            next.children.entry(*p).or_default().insert(id);
-        }
-
-        // Skip the head insert when an existing op already lists this dot
-        // as a parent. The recovery path can deliver an ancestor after its
-        // descendants are already present (server lost a non-head op and
-        // the client resends it); blindly inserting would resurrect the
-        // ancestor as a head and leave `current_heads` reporting an op
-        // that has children. The `children` index makes this an O(1)
-        // check so the hot path stays linear during storage replay and
-        // initial sync.
-        if next.children.get(&id).is_none_or(imbl::HashSet::is_empty) {
-            next.heads.insert(id);
-        }
-        next.ops.insert(id, op);
-
-        // Promote into `self_contained` if every parent is already there,
-        // then cascade to the new op's children — a previously dangling
-        // descendant whose only missing ancestor was just restored becomes
-        // self-contained too.
-        Ok(next.try_promote_self_contained(id))
-    }
-
     fn try_promote_self_contained(mut self, root: Dot) -> Self {
         let mut queue: Vec<Dot> = vec![root];
         while let Some(dot) = queue.pop() {
@@ -384,13 +377,122 @@ impl<P: Clone + Eq> OpGraph<P> {
         self
     }
 
-    fn sync_clock_for(&mut self, dot: &Dot) -> Result<(), CrdtError> {
+    /// Phase A validates fully against `&self` before any mutation; Phase B
+    /// applies a clone-and-replace that is unreachable on the failure
+    /// paths above. The whole call is therefore all-or-nothing.
+    pub fn receive_changeset(&self, cs: crate::Changeset<P>) -> Result<Self, CrdtError> {
+        if cs.ops.is_empty() {
+            return Err(CrdtError::EmptyChangeset);
+        }
+
+        // Normalize parents up-front so the stored form and the
+        // dot-conflict comparison below both use the canonical shape.
+        let mut cs = cs;
+        for op in &mut cs.ops {
+            op.parents.sort();
+            op.parents.dedup();
+        }
+
+        let mut local_known: hashbrown::HashSet<Dot> = hashbrown::HashSet::new();
+        let mut already_dots: Vec<Dot> = Vec::new();
+
+        for op in &cs.ops {
+            // Intra-cs duplicate dot would silently overwrite in the Phase B
+            // `ops.insert` and break atomicity, so reject before any mutation.
+            if !local_known.insert(op.id) {
+                return Err(CrdtError::DotConflict { dot: op.id });
+            }
+
+            if op.parents.contains(&op.id) {
+                return Err(CrdtError::SelfReference { dot: op.id });
+            }
+
+            let missing: Vec<Dot> = op
+                .parents
+                .iter()
+                .copied()
+                .filter(|p| !self.ops.contains_key(p) && !local_known.contains(p))
+                .collect();
+            if !missing.is_empty() {
+                return Err(CrdtError::MissingParents {
+                    dot: op.id,
+                    missing,
+                });
+            }
+
+            if let Some(existing) = self.ops.get(&op.id)
+                && (existing.parents != op.parents || existing.payload != op.payload)
+            {
+                return Err(CrdtError::DotConflict { dot: op.id });
+            }
+            if self.ops.contains_key(&op.id) {
+                already_dots.push(op.id);
+            }
+
+            op.id
+                .clock
+                .checked_add(1)
+                .ok_or(CrdtError::ClockOverflow { dot: op.id })?;
+        }
+
+        // A cs is genuinely idempotent only when every dot is known *and*
+        // the cs matches a stored changeset verbatim — same dots under a
+        // different boundary, or partial overlap, both signal corruption.
+        if !already_dots.is_empty() {
+            let all_known = already_dots.len() == cs.ops.len();
+            if all_known && self.changesets.iter().any(|c| c == &cs) {
+                return Ok(self.clone());
+            }
+            return Err(CrdtError::PartialDuplicate { dots: already_dots });
+        }
+
+        // Phase A above leaves no rejectable state; the cloned mutation below
+        // is infallible.
+        let mut next = self.clone();
+        for op in &cs.ops {
+            next.ops.insert(op.id, op.clone());
+            for p in &op.parents {
+                next.heads.remove(p);
+                next.children.entry(*p).or_default().insert(op.id);
+            }
+            next.advance_clock_past(&op.id);
+        }
+        for op in &cs.ops {
+            if next
+                .children
+                .get(&op.id)
+                .is_none_or(imbl::HashSet::is_empty)
+            {
+                next.heads.insert(op.id);
+            }
+        }
+        for op in &cs.ops {
+            next = next.try_promote_self_contained(op.id);
+        }
+        next.changesets.push(cs);
+        Ok(next)
+    }
+
+    /// First failure short-circuits and the half-built `OpGraph` never
+    /// escapes — callers see all-or-nothing replay.
+    pub fn from_changesets(css: Vec<crate::Changeset<P>>) -> Result<Self, CrdtError> {
+        let mut g = Self::new();
+        for cs in css {
+            g = g.receive_changeset(cs)?;
+        }
+        Ok(g)
+    }
+}
+
+impl<P> OpGraph<P> {
+    /// Phase B caller has already passed `op.id.clock.checked_add(1)` in
+    /// Phase A, so the overflow path is unreachable here.
+    fn advance_clock_past(&mut self, dot: &Dot) {
         let advanced = dot
             .clock
             .checked_add(1)
-            .ok_or(CrdtError::ClockOverflow { dot: *dot })?;
+            .expect("Phase A must have rejected ClockOverflow");
         self.next_clock = self.next_clock.max(advanced);
-        Ok(())
     }
 }
 
@@ -434,21 +536,6 @@ mod tests {
     }
 
     #[test]
-    fn receive_genesis_op() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        let op = Op {
-            id: Dot::new(99, 0),
-            parents: vec![],
-            payload: 1,
-        };
-        let g = g.receive(op.clone()).unwrap();
-        assert_eq!(g.len(), 1);
-        assert!(g.contains(&Dot::new(99, 0)));
-        let heads: Vec<&Dot> = g.current_heads().collect();
-        assert_eq!(heads, vec![&Dot::new(99, 0)]);
-    }
-
-    #[test]
     fn receive_linear_chain() {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let a = Op {
@@ -466,9 +553,15 @@ mod tests {
             parents: vec![b.id],
             payload: 3,
         };
-        let g = g.receive(a).unwrap();
-        let g = g.receive(b).unwrap();
-        let g = g.receive(c).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![a] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![b] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![c] })
+            .unwrap();
         assert_eq!(g.len(), 3);
         let heads: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(heads, vec![&Dot::new(99, 2)], "only the leaf is head");
@@ -492,9 +585,15 @@ mod tests {
             parents: vec![root.id],
             payload: 2,
         };
-        let g = g.receive(root).unwrap();
-        let g = g.receive(a).unwrap();
-        let g = g.receive(b).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![root] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![a] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![b] })
+            .unwrap();
         let heads: HashSet<Dot> = g.current_heads().copied().collect();
         let expected: HashSet<Dot> = [Dot::new(1, 0), Dot::new(2, 0)].into_iter().collect();
         assert_eq!(heads, expected);
@@ -523,50 +622,24 @@ mod tests {
             parents: vec![a.id, b.id],
             payload: 3,
         };
-        let g = g.receive(root).unwrap();
-        let g = g.receive(a).unwrap();
-        let g = g.receive(b).unwrap();
-        let g = g.receive(m).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![root] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![a] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![b] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![m] })
+            .unwrap();
         let heads: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(
             heads,
             vec![&Dot::new(3, 0)],
             "merge collapses to single head"
         );
-    }
-
-    #[test]
-    fn receive_self_reference_rejected() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        let id = Dot::new(99, 0);
-        let op = Op {
-            id,
-            parents: vec![id],
-            payload: 1,
-        };
-        let result = g.receive(op);
-        assert_eq!(result, Err(CrdtError::SelfReference { dot: id }));
-        assert_eq!(g.len(), 0, "rejected op must not enter the store");
-    }
-
-    #[test]
-    fn receive_with_missing_parent_rejected() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        let missing = Dot::new(99, 0);
-        let op = Op {
-            id: Dot::new(99, 1),
-            parents: vec![missing],
-            payload: 1,
-        };
-        let result = g.receive(op);
-        assert_eq!(
-            result,
-            Err(CrdtError::MissingParents {
-                dot: Dot::new(99, 1),
-                missing: vec![missing],
-            })
-        );
-        assert_eq!(g.len(), 0);
     }
 
     #[test]
@@ -577,7 +650,11 @@ mod tests {
             parents: vec![],
             payload: 0,
         };
-        let g = g.receive(present.clone()).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![present.clone()],
+            })
+            .unwrap();
         let missing_a = Dot::new(99, 5);
         let missing_b = Dot::new(99, 6);
         let op = Op {
@@ -585,7 +662,7 @@ mod tests {
             parents: vec![present.id, missing_a, missing_b],
             payload: 1,
         };
-        let result = g.receive(op);
+        let result = g.receive_changeset(crate::Changeset { ops: vec![op] });
         // After internal sort, missing entries appear in sorted order.
         let mut expected_missing = vec![missing_a, missing_b];
         expected_missing.sort();
@@ -594,125 +671,6 @@ mod tests {
             Err(CrdtError::MissingParents {
                 dot: Dot::new(99, 7),
                 missing: expected_missing,
-            })
-        );
-    }
-
-    #[test]
-    fn receive_normalizes_duplicate_parents() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        let p = Op {
-            id: Dot::new(99, 0),
-            parents: vec![],
-            payload: 0,
-        };
-        let g = g.receive(p.clone()).unwrap();
-        let op_dup = Op {
-            id: Dot::new(99, 1),
-            parents: vec![p.id, p.id, p.id],
-            payload: 1,
-        };
-        let g = g.receive(op_dup).unwrap();
-        let stored = g.get(&Dot::new(99, 1)).unwrap();
-        assert_eq!(stored.parents, vec![p.id]);
-    }
-
-    #[test]
-    fn receive_normalizes_unsorted_multi_parents() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        // Dot::Ord ranks (clock=0, actor=98) < (clock=0, actor=99).
-        let a = Op {
-            id: Dot::new(98, 0),
-            parents: vec![],
-            payload: 0,
-        };
-        let b = Op {
-            id: Dot::new(99, 0),
-            parents: vec![],
-            payload: 0,
-        };
-        let g = g.receive(a.clone()).unwrap();
-        let g = g.receive(b.clone()).unwrap();
-
-        let op_unsorted = Op {
-            id: Dot::new(99, 1),
-            parents: vec![b.id, a.id],
-            payload: 1,
-        };
-        let g = g.receive(op_unsorted).unwrap();
-        let stored = g.get(&Dot::new(99, 1)).unwrap();
-        assert_eq!(stored.parents, vec![a.id, b.id]);
-    }
-
-    #[test]
-    fn receive_same_op_twice_is_idempotent() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        let op = Op {
-            id: Dot::new(99, 0),
-            parents: vec![],
-            payload: 7,
-        };
-        let g = g.receive(op.clone()).unwrap();
-        let g = g.receive(op.clone()).unwrap();
-        assert_eq!(g.len(), 1);
-        assert_eq!(g.get(&Dot::new(99, 0)), Some(&op));
-    }
-
-    #[test]
-    fn receive_same_dot_different_payload_rejected() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        let op_a = Op {
-            id: Dot::new(99, 0),
-            parents: vec![],
-            payload: 1,
-        };
-        let op_b = Op {
-            id: Dot::new(99, 0),
-            parents: vec![],
-            payload: 2,
-        };
-        let g = g.receive(op_a.clone()).unwrap();
-        let result = g.receive(op_b);
-        assert_eq!(
-            result,
-            Err(CrdtError::DotConflict {
-                dot: Dot::new(99, 0)
-            })
-        );
-        assert_eq!(g.get(&Dot::new(99, 0)), Some(&op_a), "first wins");
-    }
-
-    #[test]
-    fn receive_same_dot_different_parents_rejected() {
-        let g: OpGraph<u32> = OpGraph::with_actor(0);
-        let root_a = Op {
-            id: Dot::new(98, 0),
-            parents: vec![],
-            payload: 0,
-        };
-        let root_b = Op {
-            id: Dot::new(97, 0),
-            parents: vec![],
-            payload: 0,
-        };
-        let g = g.receive(root_a.clone()).unwrap();
-        let g = g.receive(root_b.clone()).unwrap();
-        let op_x = Op {
-            id: Dot::new(99, 0),
-            parents: vec![root_a.id],
-            payload: 1,
-        };
-        let op_y = Op {
-            id: Dot::new(99, 0),
-            parents: vec![root_b.id],
-            payload: 1,
-        };
-        let g = g.receive(op_x).unwrap();
-        let result = g.receive(op_y);
-        assert_eq!(
-            result,
-            Err(CrdtError::DotConflict {
-                dot: Dot::new(99, 0)
             })
         );
     }
@@ -730,9 +688,17 @@ mod tests {
             parents: vec![root.id],
             payload: 1,
         };
-        let g = g.receive(root.clone()).unwrap();
-        let g = g.receive(child.clone()).unwrap();
-        let g = g.receive(root).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![root.clone()],
+            })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![child] })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![root] })
+            .unwrap();
         let heads: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(heads, vec![&Dot::new(99, 1)]);
     }
@@ -745,7 +711,11 @@ mod tests {
             parents: vec![],
             payload: 1,
         };
-        let g = g.receive(observed).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![observed],
+            })
+            .unwrap();
         let (_g, next) = g.add(2).unwrap();
         assert_eq!(next.id, Dot::new(7, 51));
     }
@@ -758,13 +728,17 @@ mod tests {
             parents: vec![],
             payload: 1,
         };
-        let g = g.receive(high).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![high] })
+            .unwrap();
         let low = Op {
             id: Dot::new(98, 3),
             parents: vec![],
             payload: 2,
         };
-        let g = g.receive(low).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![low] })
+            .unwrap();
         let (_g, next) = g.add(3).unwrap();
         assert_eq!(next.id, Dot::new(7, 11));
     }
@@ -777,28 +751,11 @@ mod tests {
             parents: vec![],
             payload: 1,
         };
-        let g = g.receive(op.clone()).unwrap();
-        let g = g.receive(op).unwrap();
+        let cs = crate::Changeset { ops: vec![op] };
+        let g = g.receive_changeset(cs.clone()).unwrap();
+        let g = g.receive_changeset(cs).unwrap();
         let (_g, next) = g.add(2).unwrap();
         assert_eq!(next.id, Dot::new(7, 51));
-    }
-
-    #[test]
-    fn receive_max_clock_returns_clock_overflow() {
-        let g: OpGraph<u32> = OpGraph::with_actor(7);
-        let op = Op {
-            id: Dot::new(99, u64::MAX),
-            parents: vec![],
-            payload: 1,
-        };
-        let result = g.receive(op);
-        assert_eq!(
-            result,
-            Err(CrdtError::ClockOverflow {
-                dot: Dot::new(99, u64::MAX),
-            })
-        );
-        assert_eq!(g.len(), 0);
     }
 
     #[test]
@@ -815,10 +772,22 @@ mod tests {
             parents: vec![],
             payload: 2,
         };
-        let g1 = g1.receive(a.clone()).unwrap();
-        let g1 = g1.receive(b.clone()).unwrap();
-        let g2 = g2.receive(b).unwrap();
-        let g2 = g2.receive(a).unwrap();
+        let g1 = g1
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+        let g1 = g1
+            .receive_changeset(crate::Changeset {
+                ops: vec![b.clone()],
+            })
+            .unwrap();
+        let g2 = g2
+            .receive_changeset(crate::Changeset { ops: vec![b] })
+            .unwrap();
+        let g2 = g2
+            .receive_changeset(crate::Changeset { ops: vec![a] })
+            .unwrap();
         assert_ne!(g1, g2);
     }
 
@@ -836,10 +805,22 @@ mod tests {
             parents: vec![],
             payload: 2,
         };
-        let g1 = g1.receive(a.clone()).unwrap();
-        let g1 = g1.receive(b.clone()).unwrap();
-        let g2 = g2.receive(b).unwrap();
-        let g2 = g2.receive(a).unwrap();
+        let g1 = g1
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+        let g1 = g1
+            .receive_changeset(crate::Changeset {
+                ops: vec![b.clone()],
+            })
+            .unwrap();
+        let g2 = g2
+            .receive_changeset(crate::Changeset { ops: vec![b] })
+            .unwrap();
+        let g2 = g2
+            .receive_changeset(crate::Changeset { ops: vec![a] })
+            .unwrap();
         assert!(g1.graph_state_eq(&g2));
     }
 
@@ -852,7 +833,11 @@ mod tests {
             parents: vec![],
             payload: 20,
         };
-        let g = g.receive(theirs.clone()).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![theirs.clone()],
+            })
+            .unwrap();
         let heads: HashSet<Dot> = g.current_heads().copied().collect();
         let expected: HashSet<Dot> = [mine_a.id, theirs.id].into_iter().collect();
         assert_eq!(heads, expected);
@@ -861,56 +846,6 @@ mod tests {
         assert_eq!(merge_parents, expected);
         let heads_after: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(heads_after, vec![&merge.id]);
-    }
-
-    #[test]
-    fn missing_for_empty_remote_returns_self_ops_topo_sorted() {
-        let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, a) = g.add(1).unwrap();
-        let (g, b) = g.add(2).unwrap();
-        let (g, c) = g.add(3).unwrap();
-        let result = g.missing_for(&HashSet::new()).unwrap();
-        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
-        assert_eq!(ids, vec![a.id, b.id, c.id]);
-    }
-
-    #[test]
-    fn missing_for_full_remote_returns_empty() {
-        let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, _a) = g.add(1).unwrap();
-        let (g, _b) = g.add(2).unwrap();
-        let (g, c) = g.add(3).unwrap();
-        let remote_heads: HashSet<Dot> = [c.id].into_iter().collect();
-        let result = g.missing_for(&remote_heads).unwrap();
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn missing_for_partial_remote_returns_only_descendants() {
-        let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, a) = g.add(1).unwrap();
-        let (g, b) = g.add(2).unwrap();
-        let (g, c) = g.add(3).unwrap();
-        let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
-        let result = g.missing_for(&remote_heads).unwrap();
-        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
-        assert_eq!(ids, vec![b.id, c.id]);
-    }
-
-    #[test]
-    fn missing_for_unknown_remote_head_returns_err() {
-        let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, _a) = g.add(1).unwrap();
-        let (g, _b) = g.add(2).unwrap();
-        let unknown = Dot::new(99, 0);
-        let remote_heads: HashSet<Dot> = [unknown].into_iter().collect();
-        let err = g.missing_for(&remote_heads).unwrap_err();
-        assert_eq!(
-            err,
-            CrdtError::UnknownHeads {
-                unknown: vec![unknown]
-            }
-        );
     }
 
     #[test]
@@ -923,24 +858,31 @@ mod tests {
         let (g, _b) = g.add(2).unwrap();
         let (g, c) = g.add(3).unwrap();
         let g = g.debug_remove(&a.id);
-        let g = g.receive(a.clone()).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
         let heads: HashSet<Dot> = g.current_heads().copied().collect();
         let expected: HashSet<Dot> = [c.id].into_iter().collect();
         assert_eq!(heads, expected);
     }
 
     #[test]
-    fn missing_for_walk_reports_dropped_ancestor_as_unknown() {
-        // a → b → c. Server simulates losing a (server-side rollback). Then
-        // missing_for({c}) walks c → b → a, finds a missing in self.ops,
-        // and reports a as unknown so the peer can re-send it.
+    fn missing_changesets_for_walk_reports_dropped_ancestor_as_unknown() {
+        // a → b → c across three sealed changesets. Server simulates losing a.
+        // missing_changesets_for({c}) walks c → b → a, finds a missing in
+        // self.ops, and reports a as unknown so the peer can re-send it.
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let (g, a) = g.add(1).unwrap();
+        let g = g.commit();
         let (g, _b) = g.add(2).unwrap();
+        let g = g.commit();
         let (g, c) = g.add(3).unwrap();
+        let g = g.commit();
         let g = g.debug_remove(&a.id);
         let remote_heads: HashSet<Dot> = [c.id].into_iter().collect();
-        let err = g.missing_for(&remote_heads).unwrap_err();
+        let err = g.missing_changesets_for(&remote_heads).unwrap_err();
         match err {
             CrdtError::UnknownHeads { unknown } => {
                 assert_eq!(unknown, vec![a.id]);
@@ -950,68 +892,54 @@ mod tests {
     }
 
     #[test]
-    fn missing_for_empty_remote_skips_descendants_of_lost_ancestor() {
-        // a → b → c. Server loses non-head op b (replica failover, stale
-        // snapshot, etc.). A fresh peer with no frontier asks for everything.
-        // b and c reference a missing parent, so emitting them would force
-        // the peer to reject the batch with `MissingParents`. We instead
-        // emit only the self-contained subset {a}; the negative-ack path
-        // restores b later from a peer that still holds it.
-        let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, a) = g.add(1).unwrap();
-        let (g, b) = g.add(2).unwrap();
-        let (g, _c) = g.add(3).unwrap();
-        let g = g.debug_remove(&b.id);
-        let result = g.missing_for(&HashSet::new()).unwrap();
-        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
-        assert_eq!(ids, vec![a.id]);
-    }
-
-    #[test]
     fn add_after_lost_ancestor_does_not_mark_new_op_self_contained() {
         // a → b → c. Lose b, then locally add d on top of the now-broken
         // frontier (heads become {a, c} after `debug_remove` re-promotes a;
         // d's parents = [a, c]). c is no longer self-contained, so d
         // inherits its broken ancestry and must not be emitted by
-        // `missing_for(empty)` — otherwise a fresh peer would receive d
-        // without c/b and reject with `MissingParents`.
+        // `missing_changesets_for(empty)` — otherwise a fresh peer would
+        // reject with `MissingParents`.
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let (g, a) = g.add(1).unwrap();
+        let g = g.commit();
         let (g, b) = g.add(2).unwrap();
+        let g = g.commit();
         let (g, _c) = g.add(3).unwrap();
+        let g = g.commit();
         let g = g.debug_remove(&b.id);
         let (g, _d) = g.add(4).unwrap();
-        let result = g.missing_for(&HashSet::new()).unwrap();
-        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
-        assert_eq!(ids, vec![a.id]);
+        let g = g.commit();
+        let css = g.missing_changesets_for(&HashSet::new()).unwrap();
+        // Only the cs holding `a` survives the self-contained filter.
+        assert_eq!(css.len(), 1);
+        assert_eq!(css[0].ops[0].id, a.id);
     }
 
     #[test]
     fn add_after_recovery_promotes_descendant_chain_to_self_contained() {
         // Same loss as above, but b is restored before sync. The cascade
         // through `self.children` must promote c and d (built post-loss)
-        // back into `self_contained`, so `missing_for(empty)` emits the
-        // full chain in ancestry-first order.
+        // back into `self_contained`, so `has_dangling` returns false and
+        // the replica is no longer sync-degraded.
         let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, a) = g.add(1).unwrap();
+        let (g, _a) = g.add(1).unwrap();
         let (g, b) = g.add(2).unwrap();
-        let (g, c) = g.add(3).unwrap();
+        let (g, _c) = g.add(3).unwrap();
         let g = g.debug_remove(&b.id);
-        let (g, d) = g.add(4).unwrap();
-        let g = g.receive(b.clone()).unwrap();
-        let result = g.missing_for(&HashSet::new()).unwrap();
-        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
-        assert_eq!(ids.len(), 4);
-        let pos = |dot: Dot| ids.iter().position(|&x| x == dot).unwrap();
-        assert!(pos(a.id) < pos(b.id));
-        assert!(pos(b.id) < pos(c.id));
-        assert!(pos(c.id) < pos(d.id));
+        let (g, _d) = g.add(4).unwrap();
+        assert!(g.has_dangling());
+        // Restore b: the cascade must propagate self_contained through c and d.
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![b] })
+            .unwrap();
+        assert!(
+            !g.has_dangling(),
+            "all descendants must be self-contained after recovery"
+        );
     }
 
     #[test]
     fn has_dangling_observable_after_non_head_loss() {
-        // After losing a non-head ancestor, `missing_for` filters its
-        // descendants out and returns `Ok` with no caller-visible signal.
         // `has_dangling` is the operational signal: it stays `true` until a
         // peer pushes the missing ancestor back, at which point the cascade
         // promotes the descendants and the replica is no longer degraded.
@@ -1022,55 +950,12 @@ mod tests {
         assert!(!g.has_dangling());
         let g = g.debug_remove(&b.id);
         assert!(g.has_dangling());
-        let g = g.receive(b.clone()).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![b.clone()],
+            })
+            .unwrap();
         assert!(!g.has_dangling());
-    }
-
-    #[test]
-    fn missing_for_older_frontier_skips_descendants_of_lost_ancestor() {
-        // Same loss scenario as above, but the peer already has `a`. The
-        // emitted batch must remain self-contained — empty here, since the
-        // only remaining self-contained op is what the peer already holds.
-        let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, a) = g.add(1).unwrap();
-        let (g, b) = g.add(2).unwrap();
-        let (g, _c) = g.add(3).unwrap();
-        let g = g.debug_remove(&b.id);
-        let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
-        let result = g.missing_for(&remote_heads).unwrap();
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn missing_for_branch_topology_topo_sorted() {
-        let g: OpGraph<u32> = OpGraph::with_actor(1);
-        let (g, a) = g.add(1).unwrap();
-        let b = Op {
-            id: Dot::new(2, 0),
-            parents: vec![a.id],
-            payload: 2,
-        };
-        let c = Op {
-            id: Dot::new(3, 0),
-            parents: vec![a.id],
-            payload: 3,
-        };
-        let g = g.receive(b.clone()).unwrap();
-        let g = g.receive(c.clone()).unwrap();
-        let (g, d) = g.add(4).unwrap();
-
-        let remote_heads: HashSet<Dot> = [a.id].into_iter().collect();
-        let result = g.missing_for(&remote_heads).unwrap();
-        let ids: Vec<Dot> = result.iter().map(|op| op.id).collect();
-        assert_eq!(ids.len(), 3);
-        assert!(ids.contains(&b.id));
-        assert!(ids.contains(&c.id));
-        assert!(ids.contains(&d.id));
-        let pos_b = ids.iter().position(|&x| x == b.id).unwrap();
-        let pos_c = ids.iter().position(|&x| x == c.id).unwrap();
-        let pos_d = ids.iter().position(|&x| x == d.id).unwrap();
-        assert!(pos_b < pos_d);
-        assert!(pos_c < pos_d);
     }
 
     #[test]
@@ -1140,6 +1025,399 @@ mod tests {
         let expected: HashSet<Dot> = [a.id, b.id, c.id].into_iter().collect();
         assert_eq!(collected, expected);
     }
+
+    #[test]
+    fn add_pushes_to_pending_only() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _op) = g.add(42).unwrap();
+        assert!(g.changesets().is_empty(), "no sealed cs yet");
+        assert_eq!(g.pending().len(), 1, "op should be in pending");
+        assert_eq!(g.len(), 1, "derived ops index sees pending op");
+    }
+
+    #[test]
+    fn commit_seals_pending_into_one_changeset() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _) = g.add(1).unwrap();
+        let (g, _) = g.add(2).unwrap();
+        let g = g.commit();
+        assert_eq!(g.changesets().len(), 1);
+        assert_eq!(g.changesets()[0].ops.len(), 2);
+        assert!(g.pending().is_empty());
+    }
+
+    #[test]
+    fn commit_on_empty_pending_is_noop() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let g_committed = g.clone().commit();
+        assert_eq!(g_committed.changesets().len(), 0);
+        assert!(g_committed.pending().is_empty());
+    }
+
+    #[test]
+    fn add_after_commit_starts_new_changeset() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _) = g.add(1).unwrap();
+        let g = g.commit();
+        let (g, _) = g.add(2).unwrap();
+        let g = g.commit();
+        assert_eq!(g.changesets().len(), 2);
+        assert_eq!(g.changesets()[0].ops.len(), 1);
+        assert_eq!(g.changesets()[1].ops.len(), 1);
+    }
+
+    #[test]
+    fn receive_changeset_empty_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let cs = crate::Changeset::<u32> { ops: vec![] };
+        let err = g.receive_changeset(cs).unwrap_err();
+        assert!(matches!(err, CrdtError::EmptyChangeset));
+    }
+
+    #[test]
+    fn receive_changeset_missing_parents_rejects_atomically() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let missing = Dot::new(99, 0);
+        let op = Op {
+            id: Dot::new(99, 1),
+            parents: vec![missing],
+            payload: 1,
+        };
+        let cs = crate::Changeset { ops: vec![op] };
+        let result = g.receive_changeset(cs);
+        assert!(matches!(result, Err(CrdtError::MissingParents { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_self_reference_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let id = Dot::new(99, 0);
+        let op = Op {
+            id,
+            parents: vec![id],
+            payload: 1,
+        };
+        let cs = crate::Changeset { ops: vec![op] };
+        let result = g.receive_changeset(cs);
+        assert!(matches!(result, Err(CrdtError::SelfReference { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_dot_conflict_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let op_a = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset { ops: vec![op_a] })
+            .unwrap();
+        let op_b = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 2,
+        };
+        let result = g.receive_changeset(crate::Changeset { ops: vec![op_b] });
+        assert!(matches!(result, Err(CrdtError::DotConflict { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_full_duplicate_idempotent() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let op = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let cs = crate::Changeset { ops: vec![op] };
+        let g1 = g.receive_changeset(cs.clone()).unwrap();
+        let g2 = g1.clone().receive_changeset(cs).unwrap();
+        assert_eq!(g1.changesets().len(), g2.changesets().len());
+        assert_eq!(g1.len(), g2.len());
+    }
+
+    #[test]
+    fn receive_changeset_partial_duplicate_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+        let b = Op {
+            id: Dot::new(99, 1),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let cs = crate::Changeset { ops: vec![a, b] };
+        let result = g.receive_changeset(cs);
+        assert!(matches!(result, Err(CrdtError::PartialDuplicate { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_intra_cs_duplicate_dot_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let dot = Dot::new(99, 0);
+        let a = Op {
+            id: dot,
+            parents: vec![],
+            payload: 1,
+        };
+        let b = Op {
+            id: dot,
+            parents: vec![],
+            payload: 2,
+        };
+        let cs = crate::Changeset { ops: vec![a, b] };
+        let result = g.receive_changeset(cs);
+        assert!(matches!(result, Err(CrdtError::DotConflict { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_normalizes_parents() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let p1 = Op {
+            id: Dot::new(98, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let p2 = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 2,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![p1.clone(), p2.clone()],
+            })
+            .unwrap();
+        let child = Op {
+            id: Dot::new(99, 1),
+            parents: vec![p2.id, p1.id, p2.id],
+            payload: 3,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![child.clone()],
+            })
+            .unwrap();
+        let stored = g.get(&child.id).unwrap();
+        let mut expected = vec![p1.id, p2.id];
+        expected.sort();
+        assert_eq!(stored.parents, expected);
+    }
+
+    #[test]
+    fn receive_changeset_clock_overflow_at_any_op_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let ok = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let bad = Op {
+            id: Dot::new(99, u64::MAX),
+            parents: vec![ok.id],
+            payload: 2,
+        };
+        let cs = crate::Changeset { ops: vec![ok, bad] };
+        let result = g.receive_changeset(cs);
+        assert!(matches!(result, Err(CrdtError::ClockOverflow { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_single_op_dup_against_multi_op_cs_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let b = Op {
+            id: Dot::new(99, 1),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone(), b],
+            })
+            .unwrap();
+        let probe = crate::Changeset { ops: vec![a] };
+        let result = g.receive_changeset(probe);
+        assert!(matches!(result, Err(CrdtError::PartialDuplicate { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_same_dots_different_boundary_rejects() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let b = Op {
+            id: Dot::new(99, 1),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![b.clone()],
+            })
+            .unwrap();
+        let result = g.receive_changeset(crate::Changeset { ops: vec![a, b] });
+        assert!(matches!(result, Err(CrdtError::PartialDuplicate { .. })));
+    }
+
+    #[test]
+    fn receive_changeset_success_appends_and_updates_caches() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let b = Op {
+            id: Dot::new(99, 1),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let cs = crate::Changeset {
+            ops: vec![a.clone(), b.clone()],
+        };
+        let g2 = g.receive_changeset(cs).unwrap();
+        assert_eq!(g2.changesets().len(), 1);
+        assert_eq!(g2.changesets()[0].ops.len(), 2);
+        assert_eq!(g2.len(), 2);
+        let heads: HashSet<Dot> = g2.current_heads().copied().collect();
+        assert_eq!(heads, [b.id].into_iter().collect());
+    }
+
+    #[test]
+    fn from_changesets_round_trip() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _) = g.add(1).unwrap();
+        let (g, _) = g.add(2).unwrap();
+        let g = g.commit();
+        let (g, _) = g.add(3).unwrap();
+        let g = g.commit();
+
+        let css = g.changesets().to_vec();
+        let g2 = OpGraph::<u32>::from_changesets(css.clone()).unwrap();
+        assert_eq!(g2.changesets(), css.as_slice());
+        assert_eq!(g2.len(), 3);
+        assert!(g2.graph_state_eq(&g));
+    }
+
+    #[test]
+    fn from_changesets_rejects_bad_input() {
+        let bad = crate::Changeset {
+            ops: vec![Op {
+                id: Dot::new(99, 1),
+                parents: vec![Dot::new(99, 0)], // missing parent
+                payload: 1u32,
+            }],
+        };
+        let result = OpGraph::<u32>::from_changesets(vec![bad]);
+        assert!(matches!(result, Err(CrdtError::MissingParents { .. })));
+    }
+
+    #[test]
+    fn missing_changesets_for_empty_remote_returns_all() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _) = g.add(1).unwrap();
+        let (g, _) = g.add(2).unwrap();
+        let g = g.commit();
+        let (g, _) = g.add(3).unwrap();
+        let g = g.commit();
+        let css = g.missing_changesets_for(&HashSet::new()).unwrap();
+        assert_eq!(css.len(), 2);
+        assert_eq!(css[0].ops.len(), 2);
+        assert_eq!(css[1].ops.len(), 1);
+    }
+
+    #[test]
+    fn missing_changesets_for_full_remote_returns_empty() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _) = g.add(1).unwrap();
+        let g = g.commit();
+        let head = *g.current_heads().next().unwrap();
+        let css = g
+            .missing_changesets_for(&[head].into_iter().collect())
+            .unwrap();
+        assert!(css.is_empty());
+    }
+
+    #[test]
+    fn missing_changesets_for_partial_remote_returns_subset() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, op_a) = g.add(1).unwrap();
+        let g = g.commit();
+        let (g, _) = g.add(2).unwrap();
+        let g = g.commit();
+        let css = g
+            .missing_changesets_for(&[op_a.id].into_iter().collect())
+            .unwrap();
+        assert_eq!(css.len(), 1);
+        assert_eq!(css[0].ops[0].payload, 2);
+    }
+
+    #[test]
+    fn missing_changesets_for_unknown_head_errors() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, _) = g.add(1).unwrap();
+        let g = g.commit();
+        let unknown = Dot::new(42, 0);
+        let result = g.missing_changesets_for(&[unknown].into_iter().collect());
+        assert!(matches!(result, Err(CrdtError::UnknownHeads { .. })));
+    }
+
+    #[test]
+    fn missing_changesets_for_drops_dangling_cs_silently() {
+        // Build a → b → c chain across three sealed cs, then simulate
+        // server-side data loss of `b` via debug_remove. The cs containing
+        // c is no longer self-contained; missing_changesets_for must drop
+        // it silently (not surface as PartialDuplicate).
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let g = g.commit();
+        let (g, b) = g.add(2).unwrap();
+        let g = g.commit();
+        let (g, _c) = g.add(3).unwrap();
+        let g = g.commit();
+        let g = g.debug_remove(&b.id);
+        let css = g.missing_changesets_for(&HashSet::new()).unwrap();
+        // Only the cs holding `a` survives the self-contained filter.
+        assert_eq!(css.len(), 1);
+        assert_eq!(css[0].ops[0].id, a.id);
+    }
+
+    #[test]
+    fn missing_changesets_for_mixed_known_signals_partial_duplicate() {
+        // Sealed cs containing two ops [a, b]. Tell missing_changesets_for
+        // that remote already has a but not b. That mixed state is a
+        // corruption signal — atomicity says boundaries are preserved
+        // everywhere, so a known-prefix-of-cs case must surface as
+        // PartialDuplicate, not silently emit half a cs.
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, _b) = g.add(2).unwrap();
+        let g = g.commit();
+        let result = g.missing_changesets_for(&[a.id].into_iter().collect());
+        assert!(matches!(result, Err(CrdtError::PartialDuplicate { .. })));
+    }
 }
 
 #[cfg(test)]
@@ -1205,7 +1483,9 @@ mod proptests {
     fn apply_all(ops: &[Op<u32>]) -> OpGraph<u32> {
         ops.iter()
             .cloned()
-            .try_fold(OpGraph::with_actor(0), |g, op| g.receive(op))
+            .try_fold(OpGraph::with_actor(0), |g, op| {
+                g.receive_changeset(crate::Changeset { ops: vec![op] })
+            })
             .unwrap()
     }
 

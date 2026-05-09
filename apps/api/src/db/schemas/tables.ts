@@ -35,7 +35,6 @@ export const Documents = pgTable(
     locked: boolean('locked').notNull().default(false),
     thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     type: E._DocumentType('type').notNull().default('NORMAL'),
-    headCommitId: text('head_commit_id').references((): AnyPgColumn => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'set null' }),
     dirtyAt: datetime('dirty_at'),
     createdAt: datetime('created_at')
       .notNull()
@@ -136,138 +135,6 @@ export const DocumentCharacterCountChanges = pgTable(
   },
   (t) => [uniqueIndex().on(t.userId, t.documentId, t.bucket), index().on(t.userId, t.bucket)],
 );
-
-export const DocumentCommits = pgTable(
-  'document_commits',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.DOCUMENT_COMMITS)),
-    documentId: text('document_id')
-      .notNull()
-      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    deviceId: text('device_id').references((): AnyPgColumn => UserDevices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    parentId: text('parent_id').references((): AnyPgColumn => DocumentCommits.id),
-    secondParentId: text('second_parent_id').references((): AnyPgColumn => DocumentCommits.id),
-    rootObjectId: text('root_object_id')
-      .notNull()
-      .references((): AnyPgColumn => DocumentObjects.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    steps: jsonb('steps'),
-    meta: jsonb('meta'),
-    hash: text('hash').notNull(),
-    sequence: bigint('sequence', { mode: 'number' }).notNull().generatedAlwaysAsIdentity(),
-    committedAt: datetime('committed_at').notNull(),
-    pushedAt: datetime('pushed_at')
-      .notNull()
-      .default(sql`now()`),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [
-    index().on(t.documentId, t.pushedAt),
-    index().on(t.documentId, t.sequence),
-    index().on(t.documentId, t.parentId),
-    index().on(t.documentId, t.secondParentId),
-    uniqueIndex().on(t.documentId, t.hash),
-  ],
-);
-
-export const DocumentObjects = pgTable(
-  'document_objects',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.DOCUMENT_OBJECTS)),
-    hash: text('hash').notNull(),
-    content: jsonb('content').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [uniqueIndex().on(t.hash)],
-);
-
-export const DocumentHeadContents = pgTable('document_head_contents', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.DOCUMENT_HEAD_CONTENTS)),
-  documentId: text('document_id')
-    .notNull()
-    .unique()
-    .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  json: jsonb('json').notNull(),
-  text: text('text').notNull(),
-  characterCount: integer('character_count').notNull().default(0),
-  blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
-  updatedAt: datetime('updated_at')
-    .notNull()
-    .default(sql`now()`),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
-
-export const DocumentConflicts = pgTable(
-  'document_conflicts',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONFLICTS)),
-    documentId: text('document_id')
-      .notNull()
-      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    mergeCommitId: text('merge_commit_id')
-      .notNull()
-      .references(() => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    kind: E._DocumentConflictKind('kind').notNull(),
-    target: jsonb('target').notNull(),
-    baseValue: jsonb('base_value'),
-    autoResolvedBranchId: text('auto_resolved_branch_id').references((): AnyPgColumn => DocumentConflictBranches.id),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.documentId)],
-);
-
-export const DocumentConflictBranches = pgTable(
-  'document_conflict_branches',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONFLICT_BRANCHES)),
-    conflictId: text('conflict_id')
-      .notNull()
-      .references(() => DocumentConflicts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    commitId: text('commit_id')
-      .notNull()
-      .references(() => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    value: jsonb('value').notNull(),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.conflictId), index().on(t.commitId)],
-);
-
-export const DocumentConflictResolutions = pgTable('document_conflict_resolutions', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONFLICT_RESOLUTIONS)),
-  conflictId: text('conflict_id')
-    .notNull()
-    .unique()
-    .references(() => DocumentConflicts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  value: jsonb('value').notNull(),
-  commitId: text('commit_id')
-    .notNull()
-    .references(() => DocumentCommits.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
 
 export const Coupons = pgTable('coupons', {
   id: text('id')
@@ -800,6 +667,47 @@ export const DocumentReactions = pgTable(
   },
   (t) => [index().on(t.documentId, t.createdAt)],
 );
+
+export const DocumentStates = pgTable('document_states', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.DOCUMENT_STATES)),
+  documentId: text('document_id')
+    .notNull()
+    .unique()
+    .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  graph: bytea('graph').notNull(),
+  json: jsonb('json').notNull(),
+  text: text('text').notNull(),
+  characterCount: integer('character_count').notNull().default(0),
+  blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const DocumentChangesetsDeadLetter = pgTable('document_changesets_dead_letter', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.DOCUMENT_CHANGESETS_DEAD_LETTER)),
+  documentId: text('document_id')
+    .notNull()
+    .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  payload: bytea('payload').notNull(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  deviceId: text('device_id')
+    .notNull()
+    .references((): AnyPgColumn => UserDevices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  errorMessage: text('error_message').notNull(),
+  failedAt: datetime('failed_at')
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const PreorderPayments = pgTable('preorder_payments', {
   id: text('id')

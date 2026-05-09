@@ -42,13 +42,13 @@ pub use table_cell::*;
 pub use table_row::*;
 pub use text::*;
 
-use editor_macros::{FromDiscriminant, ffi};
+use crate::ModelError;
+use editor_macros::{FromDiscriminant, NodeCompanion, ffi};
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
 
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumDiscriminants, FromDiscriminant)]
+#[derive(Debug, Clone, PartialEq, EnumDiscriminants, FromDiscriminant, NodeCompanion)]
 #[strum_discriminants(name(NodeType))]
 #[strum_discriminants(ffi)]
 #[strum_discriminants(derive(
@@ -61,32 +61,55 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     EnumCount,
     Enum,
     IntoStaticStr,
+    minicbor::Encode,
+    minicbor::Decode,
 ))]
+#[strum_discriminants(cbor(index_only))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
-#[serde(tag = "type", rename_all = "snake_case")]
 #[from_discriminant(NodeType)]
 pub enum Node {
+    #[strum_discriminants(n(0))]
     Root(RootNode),
+    #[strum_discriminants(n(1))]
     Paragraph(ParagraphNode),
+    #[strum_discriminants(n(2))]
     Blockquote(BlockquoteNode),
+    #[strum_discriminants(n(3))]
     Callout(CalloutNode),
+    #[strum_discriminants(n(4))]
     Text(TextNode),
+    #[strum_discriminants(n(5))]
     BulletList(BulletListNode),
+    #[strum_discriminants(n(6))]
     OrderedList(OrderedListNode),
+    #[strum_discriminants(n(7))]
     ListItem(ListItemNode),
+    #[strum_discriminants(n(8))]
     Fold(FoldNode),
+    #[strum_discriminants(n(9))]
     FoldTitle(FoldTitleNode),
+    #[strum_discriminants(n(10))]
     FoldContent(FoldContentNode),
+    #[strum_discriminants(n(11))]
     Table(TableNode),
+    #[strum_discriminants(n(12))]
     TableRow(TableRowNode),
+    #[strum_discriminants(n(13))]
     TableCell(TableCellNode),
+    #[strum_discriminants(n(14))]
     Image(ImageNode),
+    #[strum_discriminants(n(15))]
     File(FileNode),
+    #[strum_discriminants(n(16))]
     Embed(EmbedNode),
+    #[strum_discriminants(n(17))]
     Archived(ArchivedNode),
+    #[strum_discriminants(n(18))]
     HardBreak(HardBreakNode),
+    #[strum_discriminants(n(19))]
     HorizontalRule(HorizontalRuleNode),
+    #[strum_discriminants(n(20))]
     PageBreak(PageBreakNode),
 }
 
@@ -105,6 +128,7 @@ impl NodeType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use editor_crdt::Dot;
 
     #[test]
     fn node_type_roundtrip() {
@@ -128,12 +152,31 @@ mod tests {
     }
 
     #[test]
-    fn serde_roundtrip() {
-        let node = Node::Callout(CalloutNode {
-            variant: CalloutVariant::Warning,
-        });
-        let json = serde_json::to_string(&node).unwrap();
-        let parsed: Node = serde_json::from_str(&json).unwrap();
-        assert_eq!(node, parsed);
+    fn apply_attr_dispatches_by_kind() {
+        let mut node = Node::Callout(CalloutNode::default());
+        node.apply_attr(
+            Dot::new(1, 0),
+            &NodeAttr::Callout {
+                attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+            },
+        )
+        .unwrap();
+        if let Node::Callout(n) = &node {
+            assert_eq!(*n.variant.get(), CalloutVariant::Warning);
+        } else {
+            panic!("expected Callout");
+        }
+    }
+
+    #[test]
+    fn apply_attr_kind_mismatch_returns_error() {
+        let mut node = Node::Root(RootNode::default());
+        let result = node.apply_attr(
+            Dot::new(1, 0),
+            &NodeAttr::Callout {
+                attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+            },
+        );
+        assert_eq!(result, Err(ModelError::AttrNodeKindMismatch));
     }
 }

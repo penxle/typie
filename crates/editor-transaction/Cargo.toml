@@ -20,6 +20,7 @@ wasm = [
 
 [dependencies]
 editor-common = { path = "../editor-common" }
+editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-state = { path = "../editor-state" }
@@ -33,6 +34,7 @@ uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
+editor-crdt = { path = "../editor-crdt" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 proptest.workspace = true
 serde_json.workspace = true

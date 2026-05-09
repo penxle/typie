@@ -1,6 +1,4 @@
 use editor_macros::ffi;
-use editor_model::CommitObject;
-use editor_transaction::{Step, TransactionMeta};
 use serde::{Deserialize, Serialize};
 
 use crate::state_field::StateField;
@@ -11,17 +9,6 @@ use crate::state_field::StateField;
 pub enum FontData {
     Base,
     Chunk { id: u16 },
-}
-
-#[ffi]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct Commit {
-    pub root_object_hash: String,
-    pub objects: Vec<CommitObject>,
-    pub steps: Vec<Step>,
-    pub meta: TransactionMeta,
-    pub committed_at: i64,
 }
 
 #[ffi]
@@ -39,7 +26,4 @@ pub enum EditorEvent {
         prefetch: Vec<FontData>,
     },
     CursorExitedDocumentStart,
-    TransactionCommitted {
-        commit: Commit,
-    },
 }

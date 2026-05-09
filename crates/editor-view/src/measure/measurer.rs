@@ -111,7 +111,8 @@ impl Measurer {
 
 #[cfg(test)]
 mod tests {
-    use editor_model::{Doc, HorizontalRuleNode, Node, NodeEntry, NodeId, ParagraphNode, TextNode};
+    use editor_macros::doc;
+    use editor_model::{Doc, NodeId, Subtree};
     use editor_state::{Position, Selection};
 
     use super::*;
@@ -129,28 +130,20 @@ mod tests {
     fn invalidate_clears_node_and_ancestors() {
         let mut measurer = Measurer::new_test();
 
-        let paragraph_id = NodeId::new();
-        let text_id = NodeId::new();
+        let (doc, p, t) = doc! {
+            root {
+                p: paragraph {
+                    t: text("hello")
+                }
+            }
+        };
 
         measurer.cache.insert(NodeId::ROOT, dummy());
-        measurer.cache.insert(paragraph_id, dummy());
-        measurer.cache.insert(text_id, dummy());
-
-        let doc = Doc::new_test()
-            .insert_node(
-                paragraph_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            )
-            .insert_node(
-                text_id,
-                NodeEntry::new(Node::Text(TextNode {
-                    text: "hello".into(),
-                }))
-                .with_parent(paragraph_id),
-            );
+        measurer.cache.insert(p, dummy());
+        measurer.cache.insert(t, dummy());
 
         let steps = vec![Step::InsertText {
-            node_id: text_id,
+            node_id: t,
             offset: 5,
             text: " world".into(),
         }];
@@ -158,11 +151,11 @@ mod tests {
         measurer.invalidate_with_steps(&doc, &doc, &steps);
 
         assert!(
-            measurer.cache.get(text_id).is_none(),
+            measurer.cache.get(t).is_none(),
             "text should be invalidated"
         );
         assert!(
-            measurer.cache.get(paragraph_id).is_none(),
+            measurer.cache.get(p).is_none(),
             "para should be invalidated"
         );
         assert!(
@@ -175,45 +168,33 @@ mod tests {
     fn invalidate_preserves_unrelated_nodes() {
         let mut measurer = Measurer::new_test();
 
-        let paragraph1_id = NodeId::new();
-        let paragraph2_id = NodeId::new();
-        let text_id = NodeId::new();
+        let (doc, p1, t, p2) = doc! {
+            root {
+                p1: paragraph {
+                    t: text("hello")
+                }
+                p2: paragraph
+            }
+        };
 
-        measurer.cache.insert(paragraph1_id, dummy());
-        measurer.cache.insert(paragraph2_id, dummy());
-        measurer.cache.insert(text_id, dummy());
-
-        let doc = Doc::new_test()
-            .insert_node(
-                paragraph1_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            )
-            .insert_node(
-                text_id,
-                NodeEntry::new(Node::Text(TextNode {
-                    text: "hello".into(),
-                }))
-                .with_parent(paragraph1_id),
-            )
-            .insert_node(
-                paragraph2_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            );
+        measurer.cache.insert(p1, dummy());
+        measurer.cache.insert(p2, dummy());
+        measurer.cache.insert(t, dummy());
 
         measurer.invalidate_with_steps(
             &doc,
             &doc,
             &[Step::InsertText {
-                node_id: text_id,
+                node_id: t,
                 offset: 0,
                 text: "x".into(),
             }],
         );
 
-        assert!(measurer.cache.get(text_id).is_none());
-        assert!(measurer.cache.get(paragraph1_id).is_none());
+        assert!(measurer.cache.get(t).is_none());
+        assert!(measurer.cache.get(p1).is_none());
         assert!(
-            measurer.cache.get(paragraph2_id).is_some(),
+            measurer.cache.get(p2).is_some(),
             "para2 should be preserved"
         );
     }
@@ -222,10 +203,16 @@ mod tests {
     fn merge_node_invalidates_source_parent() {
         let mut measurer = Measurer::new_test();
 
-        let target_id = NodeId::new();
-        let wrapper_id = NodeId::new();
-        let remaining_id = NodeId::new();
-        let source_id = NodeId::new();
+        // old_doc: root > [target, wrapper > [source, remaining]]
+        let (old_doc, target_id, wrapper_id, source_id, remaining_id) = doc! {
+            root {
+                target_id: paragraph
+                wrapper_id: paragraph {
+                    source_id: paragraph
+                    remaining_id: paragraph
+                }
+            }
+        };
 
         measurer.cache.insert(NodeId::ROOT, dummy());
         measurer.cache.insert(target_id, dummy());
@@ -233,39 +220,13 @@ mod tests {
         measurer.cache.insert(remaining_id, dummy());
         measurer.cache.insert(source_id, dummy());
 
-        // Before merge: root > [target, wrapper > [source, remaining]]
-        let old_doc = Doc::new_test()
-            .insert_node(
-                target_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            )
-            .insert_node(
-                wrapper_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            )
-            .insert_node(
-                source_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(wrapper_id),
-            )
-            .insert_node(
-                remaining_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(wrapper_id),
-            );
-
-        // After merge: root > [target, wrapper > [remaining]]
-        let new_doc = Doc::new_test()
-            .insert_node(
-                target_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            )
-            .insert_node(
-                wrapper_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            )
-            .insert_node(
-                remaining_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(wrapper_id),
-            );
+        // new_doc: root > [target, wrapper > [remaining]] (source removed)
+        let mut plain = old_doc.to_plain();
+        plain.nodes.remove(&source_id);
+        if let Some(wrapper_entry) = plain.nodes.get_mut(&wrapper_id) {
+            wrapper_entry.children.retain(|&id| id != source_id);
+        }
+        let (new_doc, _) = Doc::from_plain(plain);
 
         let steps = vec![Step::MergeNode {
             node_id: source_id,
@@ -296,7 +257,7 @@ mod tests {
         let id = NodeId::new();
         measurer.cache.insert(id, dummy());
 
-        let doc = Doc::new_test();
+        let (doc,) = doc! { root { paragraph } };
         let sel = Selection::collapsed(Position::new(id, 0));
         measurer.invalidate_with_steps(&doc, &doc, &[Step::SetSelection { old: sel, new: sel }]);
 
@@ -312,56 +273,35 @@ mod tests {
         let mut measurer = Measurer::new_test();
         let vs = ViewState::new();
 
-        let p1 = NodeId::new();
-        let hr = NodeId::new();
-        let p2 = NodeId::new();
-
-        // Initial doc: root { p1, hr, p2 } — hr at child index 1
-        let doc1 = Doc::new_test()
-            .with_node(
-                NodeId::ROOT,
-                NodeEntry::new(Node::Root(Default::default()))
-                    .with_children(editor_model::imbl::vector![p1, hr, p2]),
-            )
-            .with_node(
-                p1,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            )
-            .with_node(
-                hr,
-                NodeEntry::new(Node::HorizontalRule(HorizontalRuleNode::default()))
-                    .with_parent(NodeId::ROOT),
-            )
-            .with_node(
-                p2,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            );
+        // doc1: root { p1, hr, p2 } — hr at child index 1
+        let (doc1, p1, ..) = doc! {
+            root {
+                p1: paragraph
+                horizontal_rule
+                paragraph
+            }
+        };
 
         // Measure full doc — hr gets cached
         let _ = measurer.measure(&doc1, NodeId::ROOT, 400.0, &vs);
 
-        // Delete p1
+        // Delete p1; keep hr at new index 0
         let steps = vec![Step::RemoveSubtree {
             parent_id: NodeId::ROOT,
             index: 0,
-            subtree: editor_model::Subtree::leaf(p1, Node::Paragraph(ParagraphNode::default())),
+            subtree: Subtree::leaf(
+                p1,
+                editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode::default()),
+            ),
         }];
 
-        let doc2 = Doc::new_test()
-            .with_node(
-                NodeId::ROOT,
-                NodeEntry::new(Node::Root(Default::default()))
-                    .with_children(editor_model::imbl::vector![hr, p2]),
-            )
-            .with_node(
-                hr,
-                NodeEntry::new(Node::HorizontalRule(HorizontalRuleNode::default()))
-                    .with_parent(NodeId::ROOT),
-            )
-            .with_node(
-                p2,
-                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
-            );
+        // doc2: root { hr, p2 }
+        let mut plain = doc1.to_plain();
+        plain.nodes.remove(&p1);
+        if let Some(root_entry) = plain.nodes.get_mut(&NodeId::ROOT) {
+            root_entry.children.retain(|&id| id != p1);
+        }
+        let (doc2, _) = Doc::from_plain(plain);
 
         measurer.invalidate_with_steps(&doc1, &doc2, &steps);
 

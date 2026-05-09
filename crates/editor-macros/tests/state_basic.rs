@@ -22,7 +22,7 @@ fn state_collapsed_selection() {
 
     let t_entry = state.doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
-        assert_eq!(text_node.text, "Hello World");
+        assert_eq!(text_node.text.to_string(), "Hello World");
     } else {
         panic!("expected Text node");
     }

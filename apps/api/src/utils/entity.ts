@@ -20,6 +20,7 @@ import {
 import { compressZstd } from '#/utils/compression.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
 import { wasm } from '#/utils/wasm.ts';
+import type { Modifier, PlainDoc, PlainRootNode } from '@typie/editor-ffi/server';
 import type { Transaction } from '#/db/index.ts';
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
@@ -189,6 +190,72 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
   paragraphNode.setContainer('children', new LoroList());
 
   return doc;
+};
+
+export const derivePlainRootFromPreset = (preset?: TemplatePreset): { root: PlainRootNode; modifiers: Modifier[] } => {
+  const r = resolvePreset(preset);
+
+  const root: PlainRootNode = {
+    layout_mode:
+      r.layout.type === 'paginated'
+        ? {
+            type: 'paginated',
+            page_width: r.layout.pageWidth,
+            page_height: r.layout.pageHeight,
+            page_margin_top: r.layout.pageMarginTop,
+            page_margin_bottom: r.layout.pageMarginBottom,
+            page_margin_left: r.layout.pageMarginLeft,
+            page_margin_right: r.layout.pageMarginRight,
+          }
+        : { type: 'continuous', max_width: r.layout.maxWidth },
+  };
+
+  const modifiers: Modifier[] = [
+    { type: 'font_family', value: r.fontFamily },
+    { type: 'font_size', value: r.fontSize },
+    { type: 'font_weight', value: r.fontWeight },
+    { type: 'text_color', value: r.textColor },
+    { type: 'background_color', value: r.backgroundColor },
+    { type: 'letter_spacing', value: r.letterSpacing },
+    { type: 'line_height', value: r.lineHeight },
+    { type: 'paragraph_indent', value: r.paragraphIndent },
+    { type: 'block_gap', value: r.blockGap },
+  ];
+
+  return { root, modifiers };
+};
+
+export const extractAssetIdsFromPlainDoc = (
+  plain: PlainDoc,
+): { imageIds: string[]; fileIds: string[]; embedIds: string[]; archivedIds: string[] } => {
+  const imageIds: string[] = [];
+  const fileIds: string[] = [];
+  const embedIds: string[] = [];
+  const archivedIds: string[] = [];
+
+  for (const entry of Object.values(plain.nodes)) {
+    const node = entry.node;
+    switch (node.type) {
+      case 'image': {
+        if (node.id != null) imageIds.push(node.id);
+        break;
+      }
+      case 'file': {
+        if (node.id != null) fileIds.push(node.id);
+        break;
+      }
+      case 'embed': {
+        if (node.id != null) embedIds.push(node.id);
+        break;
+      }
+      case 'archived': {
+        if (node.id != null) archivedIds.push(node.id);
+        break;
+      }
+    }
+  }
+
+  return { imageIds, fileIds, embedIds, archivedIds };
 };
 
 const extractTextFromLoroDoc = (doc: LoroDoc): string => {

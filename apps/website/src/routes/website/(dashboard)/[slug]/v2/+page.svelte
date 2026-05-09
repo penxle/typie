@@ -9,6 +9,6 @@
   const document$key = $derived(query.data.entity?.node.__typename === 'Document' ? query.data.entity.node : null);
 </script>
 
-{#if document$key}
-  <DocumentEditorV2 {document$key} slug={data.slug} />
+{#if document$key?.state}
+  <DocumentEditorV2 {document$key} />
 {/if}

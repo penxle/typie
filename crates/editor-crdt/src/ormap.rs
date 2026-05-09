@@ -1,13 +1,17 @@
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrMapOp<K, V> {
+    #[n(0)]
     Set {
+        #[n(0)]
         key: K,
+        #[n(1)]
         value: V,
     },
     /// `observed` — the add-token dots this unset has observed at generation time.
@@ -15,12 +19,14 @@ pub enum OrMapOp<K, V> {
     /// unset cannot kill what it did not see.
     /// `observed` must be ascending-sorted and deduplicated by the op generator
     /// (canonical wire form for hash/equality stability).
+    #[n(1)]
     Unset {
+        #[n(0)]
         observed: Vec<Dot>,
     },
 }
 
-/// **Standalone-POC representation — do not embed in an editor as-is.**
+/// **Reference impl — do not embed in an editor as-is.**
 /// `get()` / `contains_key()` / `iter()` / `len()` are O(n) full-scan over entries.
 /// Editor integration must replace this with an inverted index `K → HashSet<Dot>`
 /// (or a per-K winner cache) before exposing `OrMap<K, V>` to user-facing operations.

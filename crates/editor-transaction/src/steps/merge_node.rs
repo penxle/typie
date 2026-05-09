@@ -1,89 +1,8 @@
-use editor_model::{Node, NodeId, TextNode};
-use editor_state::State;
+use editor_crdt::{Dot, LwwRegOp, OrMapOp, RgaOp, TextOp};
+use editor_model::{DocOp, Node, NodeId};
+use editor_state::BatchedState;
 
-use crate::{Step, StepError, StepOutput, Validation};
-
-pub(crate) fn apply(
-    state: &State,
-    node_id: NodeId,
-    target_id: NodeId,
-) -> Result<StepOutput, StepError> {
-    let node_entry = state
-        .doc
-        .get_entry(node_id)
-        .ok_or(StepError::NodeNotFound(node_id))?;
-    let target_entry = state
-        .doc
-        .get_entry(target_id)
-        .ok_or(StepError::NodeNotFound(target_id))?;
-    let parent_id = node_entry.parent.ok_or(StepError::NodeNotFound(node_id))?;
-
-    match (&target_entry.node, &node_entry.node) {
-        (Node::Text(target_text), Node::Text(node_text)) => {
-            let merged_text = format!("{}{}", target_text.text, node_text.text);
-
-            let doc = state
-                .doc
-                .with_node_updated(target_id, |mut e| {
-                    e.node = Node::Text(TextNode { text: merged_text });
-                    e
-                })
-                .remove_node(node_id)
-                .with_node_updated(parent_id, |mut e| {
-                    let idx = e.children.iter().position(|&id| id == node_id).unwrap();
-                    let mut children = e.children.clone();
-                    children.remove(idx);
-                    e.children = children;
-                    e
-                });
-
-            let mut new_state = state.clone();
-            new_state.doc = doc;
-
-            Ok(StepOutput {
-                state: new_state,
-                validations: vec![Validation::Node(parent_id)],
-            })
-        }
-        _ => {
-            let moved_children = node_entry.children.clone();
-
-            let mut doc = state
-                .doc
-                .with_node_updated(target_id, |mut e| {
-                    let mut children = e.children.clone();
-                    for child_id in &moved_children {
-                        children.push_back(*child_id);
-                    }
-                    e.children = children;
-                    e
-                })
-                .remove_node(node_id)
-                .with_node_updated(parent_id, |mut e| {
-                    let idx = e.children.iter().position(|&id| id == node_id).unwrap();
-                    let mut children = e.children.clone();
-                    children.remove(idx);
-                    e.children = children;
-                    e
-                });
-
-            for child_id in &moved_children {
-                doc = doc.with_node_updated(*child_id, |mut e| {
-                    e.parent = Some(target_id);
-                    e
-                });
-            }
-
-            let mut new_state = state.clone();
-            new_state.doc = doc;
-
-            Ok(StepOutput {
-                state: new_state,
-                validations: vec![Validation::Node(target_id), Validation::Node(parent_id)],
-            })
-        }
-    }
-}
+use crate::{Step, StepError, Validation};
 
 pub(crate) fn inverse(node_id: NodeId, target_id: NodeId, offset: usize) -> Step {
     Step::SplitNode {
@@ -93,13 +12,144 @@ pub(crate) fn inverse(node_id: NodeId, target_id: NodeId, offset: usize) -> Step
     }
 }
 
+pub(crate) fn apply_to(
+    batched: &mut BatchedState,
+    validations: &mut Vec<Validation>,
+    node_id: NodeId,
+    target_id: NodeId,
+    _offset: usize,
+) -> Result<(), StepError> {
+    let (parent_id, parent_anchor_dots, source_presence_dots, content_to_move, target_end_dot) = {
+        let source_entry = batched
+            .doc
+            .get_entry(node_id)
+            .ok_or(StepError::NodeNotFound(node_id))?;
+        let parent_id = (*source_entry.parent.get()).ok_or(StepError::NodeNotFound(node_id))?;
+
+        let mut source_presence_dots: Vec<Dot> =
+            batched.doc.nodes_tags_for(&node_id).copied().collect();
+        source_presence_dots.sort_unstable();
+        source_presence_dots.dedup();
+
+        let parent_entry = batched
+            .doc
+            .get_entry(parent_id)
+            .ok_or(StepError::NodeNotFound(parent_id))?;
+        let parent_anchor_dots: Vec<Dot> = parent_entry
+            .children
+            .iter_with_dot()
+            .filter(|&(_, &v)| v == node_id)
+            .map(|(d, _)| d)
+            .collect();
+
+        let target_entry = batched
+            .doc
+            .get_entry(target_id)
+            .ok_or(StepError::NodeNotFound(target_id))?;
+
+        let target_end_dot: Option<Dot> = match &target_entry.node {
+            Node::Text(t) => t.text.iter_with_dot().last().map(|(d, _)| d),
+            _ => target_entry.children.iter_with_dot().last().map(|(d, _)| d),
+        };
+
+        let content_to_move = match &source_entry.node {
+            Node::Text(t) => {
+                let chars: Vec<(Dot, char)> = t.text.iter_with_dot().collect();
+                ContentMove::Text { chars }
+            }
+            _ => {
+                let children: Vec<(Dot, NodeId)> = source_entry
+                    .children
+                    .iter_with_dot()
+                    .map(|(d, &id)| (d, id))
+                    .collect();
+                ContentMove::Children { children }
+            }
+        };
+
+        (
+            parent_id,
+            parent_anchor_dots,
+            source_presence_dots,
+            content_to_move,
+            target_end_dot,
+        )
+    };
+
+    match content_to_move {
+        ContentMove::Text { chars } => {
+            let mut after = target_end_dot;
+            for (_, ch) in &chars {
+                let op_id = batched.apply(DocOp::Text {
+                    node_id: target_id,
+                    op: TextOp::InsertChar { ch: *ch, after },
+                })?;
+                after = Some(op_id);
+            }
+            for (target, _) in chars {
+                batched.apply(DocOp::Text {
+                    node_id,
+                    op: TextOp::RemoveChar { observed: target },
+                })?;
+            }
+        }
+        ContentMove::Children { children } => {
+            let mut after = target_end_dot;
+            for (_, child_id) in &children {
+                let op_id = batched.apply(DocOp::Children {
+                    node_id: target_id,
+                    op: RgaOp::Insert {
+                        after,
+                        value: *child_id,
+                    },
+                })?;
+                batched.apply(DocOp::Parent {
+                    node_id: *child_id,
+                    op: LwwRegOp::Set {
+                        value: Some(target_id),
+                    },
+                })?;
+                after = Some(op_id);
+            }
+            for (target, _) in children {
+                batched.apply(DocOp::Children {
+                    node_id,
+                    op: RgaOp::Remove { observed: target },
+                })?;
+            }
+        }
+    }
+    if !source_presence_dots.is_empty() {
+        batched.apply(DocOp::Presence {
+            node_id,
+            op: OrMapOp::Unset {
+                observed: source_presence_dots,
+            },
+        })?;
+    }
+    for target in parent_anchor_dots {
+        batched.apply(DocOp::Children {
+            node_id: parent_id,
+            op: RgaOp::Remove { observed: target },
+        })?;
+    }
+
+    validations.push(Validation::Subtree(target_id));
+    validations.push(Validation::Node(parent_id));
+    Ok(())
+}
+
+enum ContentMove {
+    Text { chars: Vec<(Dot, char)> },
+    Children { children: Vec<(Dot, NodeId)> },
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
 
-    use crate::Transaction;
     use crate::test_utils::DocTestExt;
-    use crate::*;
+    use crate::{Step, Transaction};
 
     #[test]
     fn merge_text_nodes() {
@@ -120,14 +170,11 @@ mod tests {
             target_id: t1,
             offset: 5,
         };
+        let new_state = step.apply(&state).unwrap().state;
 
-        let output = step.apply(&state).unwrap();
-        let new_state = output.state;
-        let merged = new_state.text(t1);
-
-        assert_eq!(merged.text, "Hello World");
+        assert_eq!(new_state.text(t1).text.to_string(), "Hello World");
         assert!(!new_state.has_node(t2));
-        assert_eq!(new_state.node(p1).children().len(), 1);
+        assert_eq!(new_state.node(p1).children().count(), 1);
     }
 
     #[test]
@@ -152,17 +199,20 @@ mod tests {
             target_id: p1,
             offset: 1,
         };
+        let new_state = step.apply(&state).unwrap().state;
 
-        let output = step.apply(&state).unwrap();
-        let new_state = output.state;
-        let p1_ref = new_state.node(p1);
-        let p1_children = &p1_ref.entry().children;
-
-        assert_eq!(p1_children.len(), 3);
+        assert_eq!(new_state.node(p1).children().count(), 3);
+        let p1_children: Vec<_> = new_state
+            .node(p1)
+            .entry()
+            .children
+            .iter()
+            .copied()
+            .collect();
         assert_eq!(p1_children[0], t1);
         assert_eq!(p1_children[1], t2);
         assert_eq!(p1_children[2], t3);
-        assert_eq!(new_state.node(t2).entry().parent, Some(p1));
+        assert_eq!(*new_state.node(t2).entry().parent.get(), Some(p1));
         assert!(!new_state.has_node(p2));
     }
 
@@ -187,9 +237,7 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&state);
-        let result = tr.merge_node(p1, bl1);
-
-        assert!(result.is_err());
+        assert!(tr.merge_node(p1, bl1).is_err());
     }
 
     #[test]
@@ -215,6 +263,6 @@ mod tests {
         let state3 = step.inverse().apply(&state2).unwrap().state;
 
         assert!(state3.has_node(t2));
-        assert_eq!(state3.node(p1).children().len(), 2);
+        assert_eq!(state3.node(p1).children().count(), 2);
     }
 }

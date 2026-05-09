@@ -1,12 +1,16 @@
 use proc_macro2::TokenStream;
 use quote::format_ident;
-use syn::{Attribute, Data, DeriveInput, Fields, GenericArgument, LitStr, PathArguments, Type};
+use syn::{
+    Attribute, Data, DeriveInput, Fields, GenericArgument, LitStr, Meta, PathArguments, Token,
+    Type, punctuated::Punctuated,
+};
 
 pub struct FieldSpec {
     pub name: syn::Ident,
     pub variant: syn::Ident,
     pub inner_ty: Type,
     pub default: Option<TokenStream>,
+    pub plain_attrs: Vec<Meta>,
 }
 
 pub struct NodeAttrInput {
@@ -27,8 +31,7 @@ impl NodeAttrInput {
             ));
         }
 
-        let bare = struct_name.strip_suffix("Node").unwrap();
-        let attr_ident = format_ident!("{}Attr", bare);
+        let attr_ident = format_ident!("{}Attr", struct_ident);
         let plain_ident = format_ident!("Plain{}", struct_name);
 
         let named = match &derive.data {
@@ -66,11 +69,13 @@ impl NodeAttrInput {
             };
             let variant = format_ident!("{}", heck::AsPascalCase(name.to_string()).to_string());
             let default = parse_default_attr(&f.attrs)?;
+            let plain_attrs = parse_plain_attrs(&f.attrs)?;
             fields.push(FieldSpec {
                 name,
                 variant,
                 inner_ty: inner,
                 default,
+                plain_attrs,
             });
         }
 
@@ -99,6 +104,19 @@ fn lwwreg_inner(ty: &Type) -> Option<&Type> {
         GenericArgument::Type(t) => Some(t),
         _ => None,
     }
+}
+
+fn parse_plain_attrs(attrs: &[Attribute]) -> syn::Result<Vec<Meta>> {
+    let mut collected = Vec::new();
+    for attr in attrs {
+        if !attr.path().is_ident("plain") {
+            continue;
+        }
+        let metas: Punctuated<Meta, Token![,]> =
+            attr.parse_args_with(Punctuated::parse_terminated)?;
+        collected.extend(metas);
+    }
+    Ok(collected)
 }
 
 fn parse_default_attr(attrs: &[Attribute]) -> syn::Result<Option<TokenStream>> {

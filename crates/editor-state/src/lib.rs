@@ -1,7 +1,9 @@
 editor_macros::preamble!();
 
 mod affinity;
+mod apply;
 mod composition;
+mod error;
 mod flat;
 mod modifier_resolution;
 mod pending_modifier;
@@ -12,7 +14,9 @@ mod selection;
 mod state;
 
 pub use affinity::*;
+pub use apply::*;
 pub use composition::*;
+pub use error::*;
 pub use flat::*;
 pub use modifier_resolution::*;
 pub use pending_modifier::*;

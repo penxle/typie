@@ -1,60 +1,8 @@
-use editor_model::{NodeId, Subtree};
-use editor_state::State;
+use editor_crdt::{Dot, OrMapOp, RgaOp, TextOp};
+use editor_model::{DocOp, ModifierType, Node, NodeId, Subtree};
+use editor_state::BatchedState;
 
-use crate::{Step, StepError, StepOutput, Validation};
-
-pub(crate) fn apply(
-    state: &State,
-    parent_id: NodeId,
-    index: usize,
-    subtree: &Subtree,
-) -> Result<StepOutput, StepError> {
-    let node_id = subtree.id;
-    state
-        .doc
-        .get_entry(node_id)
-        .ok_or(StepError::NodeNotFound(node_id))?;
-    let parent = state
-        .doc
-        .get_entry(parent_id)
-        .ok_or(StepError::NodeNotFound(parent_id))?;
-
-    if index >= parent.children.len() {
-        return Err(StepError::IndexOutOfBounds {
-            parent_id,
-            index,
-            len: parent.children.len(),
-        });
-    }
-
-    let node_ids = collect_ids(subtree);
-    let mut doc = state.doc.clone();
-    for id in node_ids {
-        doc = doc.remove_node(id);
-    }
-    doc = doc.with_node_updated(parent_id, |mut parent| {
-        let mut children = parent.children.clone();
-        children.remove(index);
-        parent.children = children;
-        parent
-    });
-
-    let mut new_state = state.clone();
-    new_state.doc = doc;
-
-    Ok(StepOutput {
-        state: new_state,
-        validations: vec![Validation::Node(parent_id)],
-    })
-}
-
-fn collect_ids(subtree: &Subtree) -> Vec<NodeId> {
-    let mut ids = vec![subtree.id];
-    for child in &subtree.children {
-        ids.extend(collect_ids(child));
-    }
-    ids
-}
+use crate::{Step, StepError, Validation};
 
 pub(crate) fn inverse(parent_id: NodeId, index: usize, subtree: Subtree) -> Step {
     Step::InsertSubtree {
@@ -64,41 +12,138 @@ pub(crate) fn inverse(parent_id: NodeId, index: usize, subtree: Subtree) -> Step
     }
 }
 
+pub(crate) fn apply_to(
+    batched: &mut BatchedState,
+    validations: &mut Vec<Validation>,
+    parent_id: NodeId,
+    _index: usize,
+    subtree: &Subtree,
+) -> Result<(), StepError> {
+    let root_id = subtree.id;
+
+    let (parent_children_dots, presence_dots_per_node) = {
+        let parent_entry = batched
+            .doc
+            .get_entry(parent_id)
+            .ok_or(StepError::NodeNotFound(parent_id))?;
+        let parent_dots: Vec<Dot> = parent_entry
+            .children
+            .iter_with_dot()
+            .filter(|&(_, &v)| v == root_id)
+            .map(|(d, _)| d)
+            .collect();
+        if parent_dots.is_empty() {
+            return Err(StepError::NodeNotFound(root_id));
+        }
+
+        let mut dfs_ids: Vec<NodeId> = Vec::new();
+        collect_dfs_leaves_first(subtree, &mut dfs_ids);
+
+        let mut per_node: Vec<(NodeId, Vec<Dot>)> = Vec::new();
+        for sub_id in dfs_ids {
+            let mut dots: Vec<Dot> = batched.doc.nodes_tags_for(&sub_id).copied().collect();
+            dots.sort_unstable();
+            dots.dedup();
+            per_node.push((sub_id, dots));
+        }
+        (parent_dots, per_node)
+    };
+
+    let dfs_ids: Vec<NodeId> = presence_dots_per_node.iter().map(|(id, _)| *id).collect();
+    for sub_id in &dfs_ids {
+        let entry = match batched.doc.get_entry(*sub_id) {
+            Some(e) => e.clone(),
+            None => continue,
+        };
+
+        for (target_dot, _) in entry.children.iter_with_dot() {
+            batched.apply(DocOp::Children {
+                node_id: *sub_id,
+                op: RgaOp::Remove {
+                    observed: target_dot,
+                },
+            })?;
+        }
+
+        if let Node::Text(text_node) = &entry.node {
+            for (target_dot, _) in text_node.text.iter_with_dot() {
+                batched.apply(DocOp::Text {
+                    node_id: *sub_id,
+                    op: TextOp::RemoveChar {
+                        observed: target_dot,
+                    },
+                })?;
+            }
+        }
+
+        let modifier_keys: Vec<ModifierType> = entry.modifiers.iter().map(|(k, _)| *k).collect();
+        for key in modifier_keys {
+            let mut observed: Vec<Dot> = entry.modifiers.tags_for(&key).copied().collect();
+            observed.sort_unstable();
+            observed.dedup();
+            if !observed.is_empty() {
+                batched.apply(DocOp::Modifier {
+                    node_id: *sub_id,
+                    op: OrMapOp::Unset { observed },
+                })?;
+            }
+        }
+    }
+
+    for (sub_id, observed) in presence_dots_per_node {
+        if observed.is_empty() {
+            continue;
+        }
+        batched.apply(DocOp::Presence {
+            node_id: sub_id,
+            op: OrMapOp::Unset { observed },
+        })?;
+    }
+
+    for target in parent_children_dots {
+        batched.apply(DocOp::Children {
+            node_id: parent_id,
+            op: RgaOp::Remove { observed: target },
+        })?;
+    }
+
+    validations.push(Validation::Node(parent_id));
+    Ok(())
+}
+
+fn collect_dfs_leaves_first(subtree: &Subtree, ids: &mut Vec<NodeId>) {
+    for child in &subtree.children {
+        collect_dfs_leaves_first(child, ids);
+    }
+    ids.push(subtree.id);
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::*;
-    use editor_state::*;
 
     use crate::Transaction;
 
-    fn make_fold_state() -> (State, NodeId, NodeId, NodeId, NodeId, NodeId) {
-        let (state, f1, ft1, t1, fc1, p1) = state! {
+    #[test]
+    fn remove_fold_title_content_violation() {
+        let (state, ft1, ..) = state! {
             doc {
                 root {
-                    f1: fold {
+                    fold {
                         ft1: fold_title {
                             t1: text("Title")
                         }
-                        fc1: fold_content {
-                            p1: paragraph
+                        fold_content {
+                            paragraph
                         }
                     }
                 }
             }
             selection: (t1, 0)
         };
-        (state, f1, ft1, fc1, t1, p1)
-    }
-
-    #[test]
-    fn remove_fold_title_content_violation() {
-        let (state, _, ft1, ..) = make_fold_state();
 
         let mut tr = Transaction::new(&state);
-        let result = tr.remove_subtree(ft1);
-
-        assert!(result.is_err());
+        assert!(tr.remove_subtree(ft1).is_err());
     }
 
     #[test]
@@ -119,8 +164,6 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&state);
-        let result = tr.remove_subtree(li1);
-
-        assert!(result.is_err());
+        assert!(tr.remove_subtree(li1).is_err());
     }
 }

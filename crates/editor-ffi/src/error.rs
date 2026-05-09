@@ -6,6 +6,11 @@ pub enum FfiError {
     #[error("serialization failed: {0}")]
     Serialization(String),
 
+    #[error(
+        "server apply: causal-order violation; first op {first_op:?} has parents not in existing log or earlier-accepted changesets"
+    )]
+    CausalOrderViolation { first_op: editor_crdt::Dot },
+
     #[error("surface creation failed: {0}")]
     Surface(String),
 
@@ -24,7 +29,13 @@ pub enum EditorError {
     Core(#[from] editor_core::EditorError),
 
     #[error(transparent)]
-    Model(#[from] editor_model::ReconstructError),
+    Model(#[from] editor_model::ModelError),
+
+    #[error(transparent)]
+    State(#[from] editor_state::StateError),
+
+    #[error(transparent)]
+    Crdt(#[from] editor_crdt::CrdtError),
 
     #[error(transparent)]
     Resource(#[from] editor_resource::ResourceError),

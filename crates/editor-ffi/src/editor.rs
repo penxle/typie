@@ -52,15 +52,15 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
 
-    pub fn root_attrs(&self) -> EditorResult<Complex<editor_model::RootNode>> {
+    pub fn root_attrs(&self) -> EditorResult<Complex<editor_model::PlainRootNode>> {
         self.with_inner(|inner| {
             let doc = &inner.editor.state().doc;
             let entry = doc
                 .get_entry(editor_model::NodeId::ROOT)
                 .expect("root entry must exist");
-            match &entry.node {
-                editor_model::Node::Root(r) => Ok(r.clone().into_ffi()?),
-                _ => unreachable!("root entry must be Node::Root"),
+            match &entry.node.to_plain() {
+                editor_model::PlainNode::Root(r) => Ok(r.clone().into_ffi()?),
+                _ => unreachable!("root entry must be Root"),
             }
         })
     }
@@ -116,6 +116,43 @@ impl Editor {
         after_limit: usize,
     ) -> EditorResult<Complex<editor_core::Ime>> {
         self.with_inner(|inner| Ok(inner.editor.ime(before_limit, after_limit)?.into_ffi()?))
+    }
+
+    pub fn receive_remote_changeset(&self, payload: Vec<u8>) -> EditorResult<()> {
+        self.with_inner(|inner| {
+            let cs: editor_crdt::Changesets<editor_model::DocOp> =
+                minicbor::decode(&payload[..])
+                    .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            for changeset in cs.0 {
+                inner.editor.receive_remote_changeset(changeset)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn local_changesets_since(&self, remote_heads_payload: Vec<u8>) -> EditorResult<Vec<u8>> {
+        self.with_inner(|inner| {
+            let heads: editor_crdt::Dots = minicbor::decode(&remote_heads_payload[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads.0.into_iter().collect();
+            let css = inner.editor.local_changesets_since(&heads_set)?;
+            if css.is_empty() {
+                return Ok(Vec::new());
+            }
+            let cs = editor_crdt::Changesets(css);
+            let bytes =
+                minicbor::to_vec(&cs).map_err(|e| FfiError::Serialization(e.to_string()))?;
+            Ok(bytes)
+        })
+    }
+
+    pub fn current_heads(&self) -> EditorResult<Vec<u8>> {
+        self.with_inner(|inner| {
+            let heads = editor_crdt::Dots(inner.editor.current_heads());
+            let bytes =
+                minicbor::to_vec(&heads).map_err(|e| FfiError::Serialization(e.to_string()))?;
+            Ok(bytes)
+        })
     }
 }
 

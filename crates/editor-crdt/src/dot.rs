@@ -1,3 +1,5 @@
+use editor_macros::ffi;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
@@ -15,9 +17,12 @@ use std::cmp::Ordering;
 /// declaration order, which is fragile. Clock-primary is just a setup that *can*
 /// evolve into a Lamport-compatible form later; it is not itself a Lamport guarantee
 /// (see caveat above).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[ffi]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct Dot {
+    #[n(0)]
     pub actor: u64,
+    #[n(1)]
     pub clock: u64,
 }
 
@@ -26,6 +31,10 @@ impl Dot {
         Self { actor, clock }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[cbor(transparent)]
+pub struct Dots(#[n(0)] pub Vec<Dot>);
 
 impl Ord for Dot {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -64,5 +73,13 @@ mod tests {
         let a = Dot::new(5, 1);
         let b = Dot::new(5, 7);
         assert!(a < b);
+    }
+
+    #[test]
+    fn minicbor_wire_roundtrip() {
+        let original = Dot::new(42, 1234);
+        let bytes = minicbor::to_vec(&original).expect("encode");
+        let decoded: Dot = minicbor::decode(&bytes[..]).expect("decode");
+        assert_eq!(original, decoded);
     }
 }

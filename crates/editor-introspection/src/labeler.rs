@@ -15,7 +15,7 @@ impl Labeler {
         let mut labels = HashMap::new();
         let mut counters: HashMap<NodeType, usize> = HashMap::new();
 
-        let root = doc.root();
+        let root = doc.root().unwrap();
         if needed.contains(&root.id()) {
             let abbrev = node_type_abbreviation(root.node());
             let counter = counters.entry(root.as_type()).or_insert(0);

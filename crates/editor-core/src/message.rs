@@ -1,6 +1,6 @@
 pub use editor_common::{Axis, Direction, Movement};
 use editor_macros::ffi;
-use editor_model::{Fragment, Modifier, ModifierType, Node, NodeId};
+use editor_model::{Fragment, Modifier, ModifierType, NodeId, PlainNode};
 use editor_state::Selection;
 use serde::{Deserialize, Serialize};
 
@@ -135,7 +135,7 @@ pub enum TableOp {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NodeOp {
     Delete { id: NodeId },
-    SetAttrs { id: NodeId, attrs: Node },
+    SetAttrs { id: NodeId, attrs: PlainNode },
     Table { id: NodeId, op: TableOp },
 }
 

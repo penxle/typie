@@ -1,3 +1,4 @@
+import { DocumentChangesetsCollectJob, DocumentChangesetsScanCron } from './changeset.ts';
 import {
   DocumentGCJob,
   DocumentGCScanCron,
@@ -19,15 +20,14 @@ import {
   SubscriptionRenewalPlanChangeJob,
   SubscriptionRenewalRetryJob,
 } from './subscription.ts';
-import { DocumentAdvanceHeadJob, DocumentAdvanceHeadScanCron } from './sync.ts';
 
 export const jobs = [
+  DocumentChangesetsCollectJob,
   DocumentSyncCollectJob,
   DocumentPreviewInvalidateJob,
   DocumentIndexJob,
   FolderIndexJob,
   DocumentGCJob,
-  DocumentAdvanceHeadJob,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalRetryJob,
   SubscriptionRenewalPlanChangeJob,
@@ -38,7 +38,7 @@ export const jobs = [
   SendSubscriptionWaivedEmailJob,
 ];
 
-export const crons = [DocumentSyncScanCron, DocumentGCScanCron, DocumentAdvanceHeadScanCron, SubscriptionRenewalCron];
+export const crons = [DocumentChangesetsScanCron, DocumentSyncScanCron, DocumentGCScanCron, SubscriptionRenewalCron];
 
 export type Jobs = typeof jobs;
 export type JobName = Jobs[number]['name'];

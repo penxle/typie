@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId};
 use std::ops::Range;
 
@@ -6,27 +5,32 @@ use super::class::{FlatClass, classify};
 use super::segment::FlatSegment;
 
 pub trait DocFlatExt {
-    fn flat_segments(&self) -> FlatSegments<'_>;
+    fn flat_segments(&self) -> FlatSegments;
     fn flat_size(&self) -> usize;
     fn flat_text(&self, range: Range<usize>) -> String;
 }
 
-pub struct FlatSegments<'a> {
-    inner: std::vec::IntoIter<(usize, FlatSegment<'a>)>,
+pub struct FlatSegments {
+    inner: std::vec::IntoIter<(usize, FlatSegment)>,
 }
 
-impl<'a> Iterator for FlatSegments<'a> {
-    type Item = (usize, FlatSegment<'a>);
+impl Iterator for FlatSegments {
+    type Item = (usize, FlatSegment);
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }
 
 impl DocFlatExt for Doc {
-    fn flat_segments(&self) -> FlatSegments<'_> {
+    fn flat_segments(&self) -> FlatSegments {
+        let Some(root) = self.root() else {
+            return FlatSegments {
+                inner: Vec::new().into_iter(),
+            };
+        };
         let mut segments = Vec::new();
         let mut cumulative = 0usize;
-        visit_flat(self, NodeId::ROOT, &mut cumulative, &mut segments);
+        visit_flat(self, root.id(), &mut cumulative, &mut segments);
         FlatSegments {
             inner: segments.into_iter(),
         }
@@ -66,18 +70,18 @@ impl DocFlatExt for Doc {
     }
 }
 
-fn visit_flat<'a>(
-    doc: &'a Doc,
+fn visit_flat(
+    doc: &Doc,
     node_id: NodeId,
     cumulative: &mut usize,
-    out: &mut Vec<(usize, FlatSegment<'a>)>,
+    out: &mut Vec<(usize, FlatSegment)>,
 ) {
     let entry = match doc.get_entry(node_id) {
         Some(e) => e,
         None => return,
     };
 
-    for &child_id in &entry.children {
+    for child_id in entry.children.iter().copied() {
         let child = match doc.get_entry(child_id) {
             Some(c) => c,
             None => continue,
@@ -86,18 +90,18 @@ fn visit_flat<'a>(
 
         match class {
             FlatClass::Text => {
-                let text = match &child.node {
-                    Node::Text(t) => t.text.as_str(),
+                let (text_string, text_len) = match &child.node {
+                    Node::Text(t) => (t.text.to_string(), t.text.len()),
                     _ => unreachable!("classified as Text"),
                 };
                 out.push((
                     *cumulative,
                     FlatSegment::Text {
                         node_id: child_id,
-                        text,
+                        text: text_string,
                     },
                 ));
-                *cumulative += text.char_count();
+                *cumulative += text_len;
             }
             FlatClass::Break => {
                 out.push((*cumulative, FlatSegment::Break { node_id: child_id }));

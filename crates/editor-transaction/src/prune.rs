@@ -6,7 +6,7 @@ use crate::Step;
 /// parent containers that would become empty as a result. Returns empty vec if
 /// the node is non-empty or if empty is valid for this node.
 pub fn prune(node: &NodeRef) -> Vec<Step> {
-    if node.children().len() > 0 {
+    if node.entry().children.len() > 0 {
         return vec![];
     }
 
@@ -33,14 +33,14 @@ fn prune_empty(node: &NodeRef) -> Vec<Step> {
         index,
         subtree: Subtree {
             id: node.id(),
-            node: node.node().clone(),
-            modifiers: node.modifiers().to_vec(),
+            node: node.node().to_plain(),
+            modifiers: node.modifiers().cloned().collect(),
             children: vec![],
         },
     }];
 
     // If parent will also become empty after removal, cascade
-    if parent.children().len() == 1 && parent.spec().content.min_required() > 0 {
+    if parent.entry().children.len() == 1 && parent.spec().content.min_required() > 0 {
         steps.extend(prune_empty(&parent));
     }
 
@@ -76,7 +76,7 @@ mod tests {
                 assert_eq!(*parent_id, NodeId::ROOT);
                 assert_eq!(*index, 0);
                 assert_eq!(subtree.id, bq1);
-                assert!(matches!(subtree.node, Node::Blockquote(_)));
+                assert!(matches!(subtree.node, PlainNode::Blockquote(_)));
                 assert!(subtree.children.is_empty());
             }
             _ => panic!("expected RemoveSubtree"),
@@ -142,7 +142,7 @@ mod tests {
                 assert_eq!(*parent_id, bq1);
                 assert_eq!(*index, 0);
                 assert_eq!(subtree.id, co1);
-                assert!(matches!(subtree.node, Node::Callout(_)));
+                assert!(matches!(subtree.node, PlainNode::Callout(_)));
             }
             _ => panic!("expected RemoveSubtree for callout"),
         }
@@ -157,7 +157,7 @@ mod tests {
                 assert_eq!(*parent_id, NodeId::ROOT);
                 assert_eq!(*index, 0);
                 assert_eq!(subtree.id, bq1);
-                assert!(matches!(subtree.node, Node::Blockquote(_)));
+                assert!(matches!(subtree.node, PlainNode::Blockquote(_)));
             }
             _ => panic!("expected RemoveSubtree for blockquote"),
         }

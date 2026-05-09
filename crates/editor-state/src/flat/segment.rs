@@ -4,16 +4,16 @@ use editor_model::NodeId;
 pub const FLAT_OPEN: char = '\u{2028}';
 pub const FLAT_CLOSE: char = '\u{2029}';
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FlatSegment<'a> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FlatSegment {
     Open { node_id: NodeId },
     Close { node_id: NodeId },
-    Text { node_id: NodeId, text: &'a str },
+    Text { node_id: NodeId, text: String },
     Break { node_id: NodeId },
     Atom { node_id: NodeId },
 }
 
-impl FlatSegment<'_> {
+impl FlatSegment {
     pub fn size(&self) -> usize {
         match self {
             FlatSegment::Text { text, .. } => text.char_count(),
@@ -44,7 +44,7 @@ mod tests {
         let node_id = NodeId::new();
         let seg = FlatSegment::Text {
             node_id,
-            text: "한글",
+            text: "한글".to_string(),
         };
         assert_eq!(seg.size(), 2);
     }

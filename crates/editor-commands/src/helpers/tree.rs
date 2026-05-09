@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId, NodeRef};
 use editor_state::Position;
 
@@ -80,7 +79,7 @@ pub(crate) fn find_first_cursor_position(node: &NodeRef) -> Option<Position> {
 /// Find the last cursor position within a node's subtree.
 pub(crate) fn find_last_cursor_position(node: &NodeRef) -> Option<Position> {
     if let Node::Text(text_node) = node.node() {
-        return Some(Position::new(node.id(), text_node.text.char_count()));
+        return Some(Position::new(node.id(), text_node.text.len()));
     }
 
     match node.last_child() {
@@ -196,7 +195,7 @@ mod tests {
             root { paragraph { t: text("Hello") } }
         };
         assert_eq!(
-            find_first_cursor_position(&doc.root()),
+            find_first_cursor_position(&doc.root().unwrap()),
             Some(Position::new(t, 0))
         );
     }
@@ -210,7 +209,7 @@ mod tests {
             }
         };
         assert_eq!(
-            find_last_cursor_position(&doc.root()),
+            find_last_cursor_position(&doc.root().unwrap()),
             Some(Position::new(t2, 5))
         );
     }
@@ -221,7 +220,7 @@ mod tests {
             root { image image image }
         };
         assert_eq!(
-            find_first_cursor_position(&doc.root()),
+            find_first_cursor_position(&doc.root().unwrap()),
             Some(Position::new(NodeId::ROOT, 0))
         );
     }
@@ -232,7 +231,7 @@ mod tests {
             root { image image image }
         };
         assert_eq!(
-            find_last_cursor_position(&doc.root()),
+            find_last_cursor_position(&doc.root().unwrap()),
             Some(Position::new(NodeId::ROOT, 3))
         );
     }
@@ -243,7 +242,7 @@ mod tests {
             root { p: paragraph {} }
         };
         assert_eq!(
-            find_first_cursor_position(&doc.root()),
+            find_first_cursor_position(&doc.root().unwrap()),
             Some(Position::new(p, 0))
         );
     }

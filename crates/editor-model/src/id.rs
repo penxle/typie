@@ -1,12 +1,14 @@
 use editor_common::Ffi;
 use editor_macros::ffi;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;
 
 #[ffi(custom(String))]
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
+#[cbor(transparent)]
 pub struct NodeId(u64);
 
 impl NodeId {

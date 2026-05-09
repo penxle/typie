@@ -112,7 +112,7 @@ impl View {
 
     fn build_paginator(&self, doc: &Doc) -> (Paginator, LayoutFingerprint) {
         let layout_mode = match &doc.get_entry(NodeId::ROOT).expect("root must exist").node {
-            Node::Root(r) => r.layout_mode,
+            Node::Root(r) => *r.layout_mode.get(),
             _ => unreachable!("root entry must be Node::Root"),
         };
         let (paginator, effective_viewport_width) = match layout_mode {
@@ -125,13 +125,13 @@ impl View {
                 page_margin_right,
             } => (
                 Paginator::paginated(
-                    page_width,
-                    page_height,
+                    page_width as f32,
+                    page_height as f32,
                     EdgeInsets {
-                        top: page_margin_top,
-                        bottom: page_margin_bottom,
-                        left: page_margin_left,
-                        right: page_margin_right,
+                        top: page_margin_top as f32,
+                        bottom: page_margin_bottom as f32,
+                        left: page_margin_left as f32,
+                        right: page_margin_right as f32,
                     },
                 ),
                 // Paginated layout is viewport-independent; 0.0 keeps the fingerprint
@@ -139,7 +139,7 @@ impl View {
                 0.0,
             ),
             LayoutMode::Continuous { max_width } => {
-                let effective = max_width.min(self.viewport.width);
+                let effective = (max_width as f32).min(self.viewport.width);
                 (
                     Paginator::continuous(effective, 1024.0, EdgeInsets::all(20.0)),
                     effective,
@@ -430,44 +430,43 @@ mod tests {
 
     #[test]
     fn page_width_change_triggers_reflow() {
-        use editor_model::RootNode;
-
-        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let (doc,) = doc! {
+            root (
+                layout_mode: LayoutMode::Paginated {
+                    page_width: 400,
+                    page_height: 600,
+                    page_margin_top: 20,
+                    page_margin_bottom: 20,
+                    page_margin_left: 20,
+                    page_margin_right: 20,
+                }
+            ) {
+                paragraph { text("hello") }
+            }
+        };
         let mut view = View::new_test();
-        let initial_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Paginated {
-                page_width: 400.0,
-                page_height: 600.0,
-                page_margin_top: 20.0,
-                page_margin_bottom: 20.0,
-                page_margin_left: 20.0,
-                page_margin_right: 20.0,
-            },
-        });
-        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = initial_root.clone();
-            e
-        });
         view.layout(&doc);
         assert_eq!(view.pages()[0].size.width, 400.0);
 
-        let new_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Paginated {
-                page_width: 600.0,
-                page_height: 600.0,
-                page_margin_top: 20.0,
-                page_margin_bottom: 20.0,
-                page_margin_left: 20.0,
-                page_margin_right: 20.0,
-            },
-        });
-        let new_doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = new_root.clone();
-            e
-        });
+        let (new_doc,) = doc! {
+            root (
+                layout_mode: LayoutMode::Paginated {
+                    page_width: 600,
+                    page_height: 600,
+                    page_margin_top: 20,
+                    page_margin_bottom: 20,
+                    page_margin_left: 20,
+                    page_margin_right: 20,
+                }
+            ) {
+                paragraph { text("hello") }
+            }
+        };
+        let old_root = doc.get_entry(NodeId::ROOT).unwrap().node.to_plain();
+        let new_root = new_doc.get_entry(NodeId::ROOT).unwrap().node.to_plain();
         let steps = vec![Step::SetNode {
             node_id: NodeId::ROOT,
-            old_node: initial_root,
+            old_node: old_root,
             new_node: new_root,
         }];
         let changed = view.reconcile(&doc, &new_doc, &steps, None);
@@ -477,26 +476,24 @@ mod tests {
 
     #[test]
     fn set_attrs_with_same_layout_mode_produces_same_layout() {
-        use editor_model::RootNode;
-
-        let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Paginated {
-                page_width: 400.0,
-                page_height: 600.0,
-                page_margin_top: 20.0,
-                page_margin_bottom: 20.0,
-                page_margin_left: 20.0,
-                page_margin_right: 20.0,
-            },
-        });
-        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = root.clone();
-            e
-        });
+        let (doc,) = doc! {
+            root (
+                layout_mode: LayoutMode::Paginated {
+                    page_width: 400,
+                    page_height: 600,
+                    page_margin_top: 20,
+                    page_margin_bottom: 20,
+                    page_margin_left: 20,
+                    page_margin_right: 20,
+                }
+            ) {
+                paragraph { text("hello") }
+            }
+        };
         let mut view = View::new_test();
         view.layout(&doc);
 
+        let root = doc.get_entry(NodeId::ROOT).unwrap().node.to_plain();
         let steps = vec![Step::SetNode {
             node_id: NodeId::ROOT,
             old_node: root.clone(),
@@ -509,23 +506,20 @@ mod tests {
 
     #[test]
     fn paginated_viewport_resize_is_noop() {
-        use editor_model::RootNode;
-
-        let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let new_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Paginated {
-                page_width: 400.0,
-                page_height: 600.0,
-                page_margin_top: 20.0,
-                page_margin_bottom: 20.0,
-                page_margin_left: 20.0,
-                page_margin_right: 20.0,
-            },
-        });
-        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = new_root;
-            e
-        });
+        let (doc,) = doc! {
+            root (
+                layout_mode: LayoutMode::Paginated {
+                    page_width: 400,
+                    page_height: 600,
+                    page_margin_top: 20,
+                    page_margin_bottom: 20,
+                    page_margin_left: 20,
+                    page_margin_right: 20,
+                }
+            ) {
+                paragraph { text("hello") }
+            }
+        };
         let mut view = View::new_test();
         view.layout(&doc);
 
@@ -540,16 +534,11 @@ mod tests {
 
     #[test]
     fn continuous_viewport_shrink_triggers_reflow() {
-        use editor_model::RootNode;
-
-        let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let new_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Continuous { max_width: 800.0 },
-        });
-        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = new_root;
-            e
-        });
+        let (doc,) = doc! {
+            root (layout_mode: LayoutMode::Continuous { max_width: 800 }) {
+                paragraph { text("hello") }
+            }
+        };
         let mut view = View::new_test();
         view.layout(&doc);
 
@@ -563,16 +552,11 @@ mod tests {
 
     #[test]
     fn continuous_viewport_growth_above_max_is_noop() {
-        use editor_model::RootNode;
-
-        let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let new_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Continuous { max_width: 400.0 },
-        });
-        let doc = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = new_root;
-            e
-        });
+        let (doc,) = doc! {
+            root (layout_mode: LayoutMode::Continuous { max_width: 400 }) {
+                paragraph { text("hello") }
+            }
+        };
         let mut view = View::new_test();
         view.resize(Viewport::new(800.0, 600.0, 1.0), &doc);
         view.layout(&doc);
@@ -583,34 +567,31 @@ mod tests {
 
     #[test]
     fn mode_switch_paginated_to_continuous_triggers_reflow() {
-        use editor_model::RootNode;
-
-        let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let old_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Paginated {
-                page_width: 400.0,
-                page_height: 600.0,
-                page_margin_top: 20.0,
-                page_margin_bottom: 20.0,
-                page_margin_left: 20.0,
-                page_margin_right: 20.0,
-            },
-        });
-        let doc_old = doc.clone().with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = old_root.clone();
-            e
-        });
+        let (doc_old,) = doc! {
+            root (
+                layout_mode: LayoutMode::Paginated {
+                    page_width: 400,
+                    page_height: 600,
+                    page_margin_top: 20,
+                    page_margin_bottom: 20,
+                    page_margin_left: 20,
+                    page_margin_right: 20,
+                }
+            ) {
+                paragraph { text("hello") }
+            }
+        };
         let mut view = View::new_test();
         view.layout(&doc_old);
         let old_page_width = view.pages()[0].size.width;
 
-        let new_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Continuous { max_width: 600.0 },
-        });
-        let doc_new = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = new_root.clone();
-            e
-        });
+        let (doc_new,) = doc! {
+            root (layout_mode: LayoutMode::Continuous { max_width: 600 }) {
+                paragraph { text("hello") }
+            }
+        };
+        let old_root = doc_old.get_entry(NodeId::ROOT).unwrap().node.to_plain();
+        let new_root = doc_new.get_entry(NodeId::ROOT).unwrap().node.to_plain();
         let steps = vec![Step::SetNode {
             node_id: NodeId::ROOT,
             old_node: old_root,
@@ -623,33 +604,30 @@ mod tests {
 
     #[test]
     fn mode_switch_continuous_to_paginated_triggers_reflow() {
-        use editor_model::RootNode;
-
-        let (doc,) = doc! { root { paragraph { text("hello") } } };
-        let old_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Continuous { max_width: 500.0 },
-        });
-        let doc_old = doc.clone().with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = old_root.clone();
-            e
-        });
+        let (doc_old,) = doc! {
+            root (layout_mode: LayoutMode::Continuous { max_width: 500 }) {
+                paragraph { text("hello") }
+            }
+        };
         let mut view = View::new_test();
         view.layout(&doc_old);
 
-        let new_root = Node::Root(RootNode {
-            layout_mode: LayoutMode::Paginated {
-                page_width: 700.0,
-                page_height: 900.0,
-                page_margin_top: 20.0,
-                page_margin_bottom: 20.0,
-                page_margin_left: 20.0,
-                page_margin_right: 20.0,
-            },
-        });
-        let doc_new = doc.with_node_updated(NodeId::ROOT, |mut e| {
-            e.node = new_root.clone();
-            e
-        });
+        let (doc_new,) = doc! {
+            root (
+                layout_mode: LayoutMode::Paginated {
+                    page_width: 700,
+                    page_height: 900,
+                    page_margin_top: 20,
+                    page_margin_bottom: 20,
+                    page_margin_left: 20,
+                    page_margin_right: 20,
+                }
+            ) {
+                paragraph { text("hello") }
+            }
+        };
+        let old_root = doc_old.get_entry(NodeId::ROOT).unwrap().node.to_plain();
+        let new_root = doc_new.get_entry(NodeId::ROOT).unwrap().node.to_plain();
         let steps = vec![Step::SetNode {
             node_id: NodeId::ROOT,
             old_node: old_root,
@@ -668,17 +646,17 @@ mod tests {
         // resulting numeric widths happen to coincide.
         let paginated_fp = LayoutFingerprint {
             layout_mode: LayoutMode::Paginated {
-                page_width: 440.0,
-                page_height: 600.0,
-                page_margin_top: 20.0,
-                page_margin_bottom: 20.0,
-                page_margin_left: 20.0,
-                page_margin_right: 20.0,
+                page_width: 440,
+                page_height: 600,
+                page_margin_top: 20,
+                page_margin_bottom: 20,
+                page_margin_left: 20,
+                page_margin_right: 20,
             },
             effective_viewport_width: 0.0,
         };
         let continuous_fp = LayoutFingerprint {
-            layout_mode: LayoutMode::Continuous { max_width: 400.0 },
+            layout_mode: LayoutMode::Continuous { max_width: 400 },
             // Match paginated's value so layout_mode is the only discriminator.
             // Realism of this synthetic value vs. what build_paginator would produce is irrelevant —
             // we are unit-testing the type's discrimination contract, not the producer.

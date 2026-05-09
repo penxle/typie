@@ -1,4 +1,14 @@
-use crate::{Doc, Modifier, Node, NodeId};
+use crate::{Doc, Modifier, NodeEntry, NodeId, PlainNode};
+
+fn project_modifiers(entry: &NodeEntry) -> Vec<Modifier> {
+    let mut mods: Vec<Modifier> = entry.modifiers.iter().map(|(_, v)| v.clone()).collect();
+    mods.sort_by_key(|m| m.as_type());
+    mods
+}
+
+fn project_children(entry: &NodeEntry) -> Vec<NodeId> {
+    entry.children.iter().copied().collect()
+}
 
 pub fn default_modifiers() -> Vec<Modifier> {
     vec![
@@ -33,15 +43,13 @@ pub fn default_modifiers_with(overrides: Vec<Modifier>) -> Vec<Modifier> {
 fn collect_entries_dfs(
     doc: &Doc,
     node_id: NodeId,
-    nodes: &mut Vec<Node>,
+    nodes: &mut Vec<PlainNode>,
     modifiers: &mut Vec<Vec<Modifier>>,
 ) {
     if let Some(entry) = doc.get_entry(node_id) {
-        nodes.push(entry.node.clone());
-        let mut mods = entry.modifiers.clone();
-        mods.sort_by_key(|m| m.as_type());
-        modifiers.push(mods);
-        for &child_id in entry.children.iter() {
+        nodes.push(entry.node.to_plain());
+        modifiers.push(project_modifiers(entry));
+        for child_id in project_children(entry) {
             collect_entries_dfs(doc, child_id, nodes, modifiers);
         }
     }

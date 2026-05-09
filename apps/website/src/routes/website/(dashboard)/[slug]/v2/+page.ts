@@ -15,6 +15,9 @@ export const load: PageLoad = async (event) => {
             __typename
             ... on Document {
               id
+              state {
+                __typename
+              }
               ...DocumentEditorV2_document
             }
           }

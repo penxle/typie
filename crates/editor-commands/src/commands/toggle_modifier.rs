@@ -49,11 +49,7 @@ pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> Com
             let node = doc
                 .node(node_id)
                 .ok_or(CommandError::NodeNotFound(node_id))?;
-            if !node
-                .modifiers()
-                .iter()
-                .any(|m| m.as_type() == modifier_type)
-            {
+            if !node.modifiers().any(|m| m.as_type() == modifier_type) {
                 tr.add_modifier(node_id, modifier.clone())?;
             }
         }

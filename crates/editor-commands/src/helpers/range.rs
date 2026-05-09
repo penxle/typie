@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId};
 use editor_state::{Position, Selection};
 use editor_transaction::{Transaction, compact};
@@ -20,7 +19,7 @@ pub(crate) fn collect_text_nodes_in_range(
         .node(to.node_id)
         .ok_or(CommandError::NodeNotFound(to.node_id))?;
     let to_node_len = match to_node.node() {
-        Node::Text(t) => t.text.char_count(),
+        Node::Text(t) => t.text.len(),
         _ => 0,
     };
     let to_needs_split =
@@ -36,7 +35,7 @@ pub(crate) fn collect_text_nodes_in_range(
         .node(from.node_id)
         .ok_or(CommandError::NodeNotFound(from.node_id))?;
     let from_node_len = match from_node.node() {
-        Node::Text(t) => t.text.char_count(),
+        Node::Text(t) => t.text.len(),
         _ => 0,
     };
     let from_needs_split =
@@ -67,7 +66,7 @@ pub(crate) fn collect_text_nodes_in_range(
         .path();
 
     let mut result = Vec::new();
-    for desc in doc.root().descendants() {
+    for desc in doc.root().expect("root must exist").descendants() {
         if !matches!(desc.node(), Node::Text(_)) {
             continue;
         }
@@ -127,7 +126,7 @@ fn selection_offsets_in_textblocks(
     let to_tb = find_ancestor_textblock(doc, last_id)?;
     let from_abs = text_offset_in_textblock(doc, from_tb, first_id, 0)?;
     let node_len = match doc.node(last_id)?.node() {
-        Node::Text(t) => t.text.char_count(),
+        Node::Text(t) => t.text.len(),
         _ => 0,
     };
     let to_abs = text_offset_in_textblock(doc, to_tb, last_id, node_len)?;
@@ -147,7 +146,7 @@ fn text_offset_in_textblock(
             return Some(abs + local_offset);
         }
         if let Node::Text(t) = child.node() {
-            abs += t.text.char_count();
+            abs += t.text.len();
         }
     }
     None
@@ -163,7 +162,7 @@ fn position_from_text_offset(
     let mut remaining = abs_offset;
     for child in tb.children() {
         if let Node::Text(t) = child.node() {
-            let len = t.text.char_count();
+            let len = t.text.len();
             let fits = if end_bias {
                 remaining <= len
             } else {
@@ -177,7 +176,7 @@ fn position_from_text_offset(
     }
     tb.children().last().map(|child| {
         let len = match child.node() {
-            Node::Text(t) => t.text.char_count(),
+            Node::Text(t) => t.text.len(),
             _ => 0,
         };
         Position::new(child.id(), len)

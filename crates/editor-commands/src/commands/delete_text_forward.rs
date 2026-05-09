@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Node, NodeId};
 use editor_resource::Resource;
 use editor_state::{Affinity, Position, Selection};
@@ -22,7 +21,7 @@ pub fn delete_text_forward(tr: &mut Transaction, resource: &Resource) -> Command
         return Ok(false);
     };
 
-    let text_len = text_node.text.char_count();
+    let text_len = text_node.text.len();
 
     if pos.offset < text_len {
         let doc = tr.doc();
@@ -70,7 +69,7 @@ pub fn delete_text_forward(tr: &mut Transaction, resource: &Resource) -> Command
         };
 
         let next_id = next.id();
-        let is_last_char = next_text.text.char_count() == 1;
+        let is_last_char = next_text.text.len() == 1;
 
         if is_last_char {
             tr.remove_subtree(next_id)?;
@@ -118,7 +117,7 @@ fn resolve_cursor_after_removal(
     {
         return Selection::collapsed(Position {
             node_id: prev_id,
-            offset: t.text.char_count(),
+            offset: t.text.len(),
             affinity: Affinity::Upstream,
         });
     }

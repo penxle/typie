@@ -130,6 +130,54 @@ export interface Composition {
 }
 
 /**
+ * Atomic application unit. Wire / db row / FFI boundary.
+ *
+ * `ops` must be in parents-before-children topological order — sender's
+ * responsibility. The receiver (`OpGraph::receive_changeset` Phase A)
+ * rejects out-of-order ops via the per-op parents-known check. Standard
+ * sender APIs (`OpGraph::topo_sort`, `OpGraph::missing_changesets_for`,
+ * sequential `OpGraph::add` followed by `OpGraph::commit`) satisfy this
+ * naturally.
+ */
+export interface Changeset<P> {
+    ops: Op<P>[];
+}
+
+/**
+ * CRDT-standard `(actor, clock)` identity. Used as char-id here; meant to be reused
+ * across future primitives (sequence-CRDT, OR-Set add tokens, LWW register timestamps,
+ * op identity).
+ *
+ * **`clock` is per-actor monotonic — *not a strict Lamport timestamp*.**
+ * We don't bump our clock when observing remote ops, so cross-actor comparison
+ * does not reflect causal precedence. Sufficient for RGA tie-break (deterministic
+ * ordering) but reusing this for LWW winner determination requires the op-generation
+ * layer to provide Lamport semantics (`L = max(L_self, observed_max) + 1`) separately.
+ *
+ * `Ord` / `PartialOrd` are implemented manually — `derive` depends on field
+ * declaration order, which is fragile. Clock-primary is just a setup that *can*
+ * evolve into a Lamport-compatible form later; it is not itself a Lamport guarantee
+ * (see caveat above).
+ */
+export interface Dot {
+    actor: number;
+    clock: number;
+}
+
+/**
+ * One node in the op-DAG. `id` is the op's unique identifier (also reused as
+ * the semantic identifier — RGA element id, OR-Set add token — by the
+ * payload). `parents` are the op-DAG parents of this op (the heads of the
+ * store at the moment this op was created). Stored normalized: sorted
+ * ascending, no duplicates.
+ */
+export interface Op<P> {
+    id: Dot;
+    parents: Dot[];
+    payload: P;
+}
+
+/**
  * The directional bias of a [`Position`](crate::Position) at a boundary.
  *
  * Affinity disambiguates which side of a boundary a position belongs to.
@@ -146,28 +194,6 @@ export interface Composition {
  *   `Downstream` → `child[offset]` (following).
  */
 export type Affinity = "downstream" | "upstream";
-
-/**
- * `CommitContent::hash()` of this struct (via canonical JSON) is its commit hash —
- * any change to `Serialize` shape changes the hash and breaks CAS dedup.
- */
-export interface CommitContent {
-    parent_hash?: string;
-    second_parent_hash?: string;
-    object_hash: string;
-}
-
-/**
- * `ObjectContent::hash()` of this struct (via canonical JSON) is its Object hash —
- * any change to `Serialize` shape changes the hash and breaks CAS dedup.
- */
-export interface ObjectContent {
-    node_id: NodeId;
-    node: Node;
-    parent?: NodeId;
-    modifiers?: Modifier[];
-    children: ChildRef[];
-}
 
 /**
  * chunk별 flat 정수 배열 `[start0, end0, start1, end1, ...]` (inclusive).
@@ -192,17 +218,13 @@ export interface AlignmentValue {
     value: Alignment;
 }
 
-export interface ArchivedNode {
-    id: string | undefined;
-}
-
 export interface BackgroundColorValue {
     value: string;
 }
 
 export interface Block {
     id: NodeId;
-    node: Node;
+    node: PlainNode;
 }
 
 export interface BlockGapValue {
@@ -214,57 +236,11 @@ export interface BlockState {
     nodes: Block[];
 }
 
-export interface BlockquoteNode {
-    variant?: BlockquoteVariant;
-}
-
-export interface BulletListNode {}
-
-export interface CalloutNode {
-    variant?: CalloutVariant;
-}
-
-export interface ChildRef {
-    node_id: NodeId;
-    hash: string;
-}
-
-export interface Commit {
-    root_object_hash: string;
-    objects: CommitObject[];
-    steps: Step[];
-    meta: TransactionMeta;
-    committed_at: number;
-}
-
-export interface CommitObject {
-    hash: string;
-    content: ObjectContent;
-}
-
 export interface CursorMetrics {
     page_idx: number;
     caret: Rect;
     line: Rect;
 }
-
-export interface Doc {
-    nodes: Record<NodeId, NodeEntry>;
-}
-
-export interface EmbedNode {
-    id: string | undefined;
-}
-
-export interface FileNode {
-    id: string | undefined;
-}
-
-export interface FoldContentNode {}
-
-export interface FoldNode {}
-
-export interface FoldTitleNode {}
 
 export interface FontFamily {
     name: string;
@@ -285,20 +261,9 @@ export interface FontWeightValue {
 }
 
 export interface Fragment {
-    node: Node;
+    node: PlainNode;
     modifiers?: Modifier[];
     children?: Fragment[];
-}
-
-export interface HardBreakNode {}
-
-export interface HorizontalRuleNode {
-    variant?: HorizontalRuleVariant;
-}
-
-export interface ImageNode {
-    id: string | undefined;
-    proportion?: number;
 }
 
 export interface Ime {
@@ -341,8 +306,6 @@ export interface LinkValue {
     href: string;
 }
 
-export interface ListItemNode {}
-
 export interface ModifierState {
     bold: Tri<undefined>;
     italic: Tri<undefined>;
@@ -362,22 +325,6 @@ export interface ModifierState {
     alignment: Tri<AlignmentValue>;
 }
 
-export interface NodeEntry {
-    node: Node;
-    parent?: NodeId;
-    children?: NodeId[];
-    modifiers?: Modifier[];
-}
-
-export interface ObjectEntry {
-    hash: string;
-    content: ObjectContent;
-}
-
-export interface OrderedListNode {}
-
-export interface PageBreakNode {}
-
 export interface PageRect {
     page_idx: number;
     rect: Rect;
@@ -387,17 +334,88 @@ export interface ParagraphIndentValue {
     value: number;
 }
 
-export interface ParagraphNode {}
+export interface PlainArchivedNode {
+    id: string | undefined;
+}
+
+export interface PlainBlockquoteNode {
+    variant?: BlockquoteVariant;
+}
+
+export interface PlainBulletListNode {}
+
+export interface PlainCalloutNode {
+    variant?: CalloutVariant;
+}
+
+export interface PlainDoc {
+    nodes: Record<NodeId, PlainNodeEntry>;
+}
+
+export interface PlainEmbedNode {
+    id: string | undefined;
+}
+
+export interface PlainFileNode {
+    id: string | undefined;
+}
+
+export interface PlainFoldContentNode {}
+
+export interface PlainFoldNode {}
+
+export interface PlainFoldTitleNode {}
+
+export interface PlainHardBreakNode {}
+
+export interface PlainHorizontalRuleNode {
+    variant?: HorizontalRuleVariant;
+}
+
+export interface PlainImageNode {
+    id: string | undefined;
+    proportion?: number;
+}
+
+export interface PlainListItemNode {}
+
+export interface PlainNodeEntry {
+    parent: NodeId | undefined;
+    children: NodeId[];
+    modifiers: Record<ModifierType, Modifier>;
+    node: PlainNode;
+}
+
+export interface PlainOrderedListNode {}
+
+export interface PlainPageBreakNode {}
+
+export interface PlainParagraphNode {}
+
+export interface PlainRootNode {
+    layout_mode: LayoutMode;
+}
+
+export interface PlainTableCellNode {
+    col_width: number | undefined;
+}
+
+export interface PlainTableNode {
+    border_style?: TableBorderStyle;
+    proportion?: number;
+}
+
+export interface PlainTableRowNode {}
+
+export interface PlainTextNode {
+    text: string;
+}
 
 export interface Rect {
     x: number;
     y: number;
     width: number;
     height: number;
-}
-
-export interface RootNode {
-    layout_mode: LayoutMode;
 }
 
 export interface RubyValue {
@@ -409,30 +427,8 @@ export interface Size {
     height: number;
 }
 
-export interface Subtree {
-    id: NodeId;
-    node: Node;
-    modifiers: Modifier[];
-    children: Subtree[];
-}
-
-export interface TableCellNode {
-    col_width: number | undefined;
-}
-
-export interface TableNode {
-    border_style?: TableBorderStyle;
-    proportion?: number;
-}
-
-export interface TableRowNode {}
-
 export interface TextColorValue {
     value: string;
-}
-
-export interface TextNode {
-    text: string;
 }
 
 export interface TransactionMeta {
@@ -447,11 +443,19 @@ export interface Viewport {
 
 export type Alignment = "left" | "center" | "right" | "justify";
 
+export type ArchivedNodeAttr = { type: "id" } & string | undefined;
+
 export type Axis = "horizontal" | "vertical";
+
+export type BlockquoteNodeAttr = { type: "variant" } & BlockquoteVariant;
 
 export type BlockquoteVariant = "left_line" | "left_quote" | "message_sent" | "message_received";
 
 export type Break = "line" | "paragraph" | "page";
+
+export type BulletListNodeAttr = void;
+
+export type CalloutNodeAttr = { type: "variant" } & CalloutVariant;
 
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
@@ -463,15 +467,27 @@ export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movem
 
 export type Direction = "forward" | "backward";
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "transaction_committed"; commit: Commit };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
+export type EmbedNodeAttr = { type: "id" } & string | undefined;
+
+export type FileNodeAttr = { type: "id" } & string | undefined;
+
 export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "move_cursor"; delta: number };
+
+export type FoldContentNodeAttr = void;
+
+export type FoldNodeAttr = void;
+
+export type FoldTitleNodeAttr = void;
 
 export type FontData = { type: "base" } | { type: "chunk"; id: number };
 
 export type FontFamilySource = "DEFAULT" | "USER" | "FALLBACK";
+
+export type HardBreakNodeAttr = void;
 
 export type HistoryMeta = { type: "record" } | { type: "tagged"; tag: HistoryTag } | { type: "skip" };
 
@@ -479,13 +495,19 @@ export type HistoryOp = { type: "undo" } | { type: "redo" };
 
 export type HistoryTag = { type: "auto_replacement" } | { type: "paste_html"; plain_text: string };
 
+export type HorizontalRuleNodeAttr = { type: "variant" } & HorizontalRuleVariant;
+
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
+
+export type ImageNodeAttr = ({ type: "id" } & string | undefined) | ({ type: "proportion" } & number);
 
 export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment };
 
 export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
 export type LayoutMode = { type: "paginated"; page_width: number; page_height: number; page_margin_top: number; page_margin_bottom: number; page_margin_left: number; page_margin_right: number } | { type: "continuous"; max_width: number };
+
+export type ListItemNodeAttr = void;
 
 export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "clipboard"; op: ClipboardOp } | { type: "composition"; op: CompositionOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
 
@@ -497,29 +519,47 @@ export type Movement = { type: "grapheme"; direction: Direction } | { type: "wor
 
 export type NavigationOp = { type: "move"; movement: Movement; extend: boolean };
 
-export type Node = ({ type: "root" } & RootNode) | ({ type: "paragraph" } & ParagraphNode) | ({ type: "blockquote" } & BlockquoteNode) | ({ type: "callout" } & CalloutNode) | ({ type: "text" } & TextNode) | ({ type: "bullet_list" } & BulletListNode) | ({ type: "ordered_list" } & OrderedListNode) | ({ type: "list_item" } & ListItemNode) | ({ type: "fold" } & FoldNode) | ({ type: "fold_title" } & FoldTitleNode) | ({ type: "fold_content" } & FoldContentNode) | ({ type: "table" } & TableNode) | ({ type: "table_row" } & TableRowNode) | ({ type: "table_cell" } & TableCellNode) | ({ type: "image" } & ImageNode) | ({ type: "file" } & FileNode) | ({ type: "embed" } & EmbedNode) | ({ type: "archived" } & ArchivedNode) | ({ type: "hard_break" } & HardBreakNode) | ({ type: "horizontal_rule" } & HorizontalRuleNode) | ({ type: "page_break" } & PageBreakNode);
+export type NodeAttr = { type: "root"; attr: RootNodeAttr } | { type: "paragraph"; attr: ParagraphNodeAttr } | { type: "blockquote"; attr: BlockquoteNodeAttr } | { type: "callout"; attr: CalloutNodeAttr } | { type: "text"; attr: TextNodeAttr } | { type: "bullet_list"; attr: BulletListNodeAttr } | { type: "ordered_list"; attr: OrderedListNodeAttr } | { type: "list_item"; attr: ListItemNodeAttr } | { type: "fold"; attr: FoldNodeAttr } | { type: "fold_title"; attr: FoldTitleNodeAttr } | { type: "fold_content"; attr: FoldContentNodeAttr } | { type: "table"; attr: TableNodeAttr } | { type: "table_row"; attr: TableRowNodeAttr } | { type: "table_cell"; attr: TableCellNodeAttr } | { type: "image"; attr: ImageNodeAttr } | { type: "file"; attr: FileNodeAttr } | { type: "embed"; attr: EmbedNodeAttr } | { type: "archived"; attr: ArchivedNodeAttr } | { type: "hard_break"; attr: HardBreakNodeAttr } | { type: "horizontal_rule"; attr: HorizontalRuleNodeAttr } | { type: "page_break"; attr: PageBreakNodeAttr };
 
 export type NodeId = string;
 
-export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: Node } | { type: "table"; id: NodeId; op: TableOp };
+export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: PlainNode } | { type: "table"; id: NodeId; op: TableOp };
+
+export type OrderedListNodeAttr = void;
+
+export type PageBreakNodeAttr = void;
+
+export type ParagraphNodeAttr = void;
 
 export type PendingModifier = { type: "set"; modifier: Modifier } | { type: "unset"; ty: ModifierType };
 
 export type PendingModifiers = PendingModifier[];
 
+export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph" } & PlainParagraphNode) | ({ type: "blockquote" } & PlainBlockquoteNode) | ({ type: "callout" } & PlainCalloutNode) | ({ type: "text" } & PlainTextNode) | ({ type: "bullet_list" } & PlainBulletListNode) | ({ type: "ordered_list" } & PlainOrderedListNode) | ({ type: "list_item" } & PlainListItemNode) | ({ type: "fold" } & PlainFoldNode) | ({ type: "fold_title" } & PlainFoldTitleNode) | ({ type: "fold_content" } & PlainFoldContentNode) | ({ type: "table" } & PlainTableNode) | ({ type: "table_row" } & PlainTableRowNode) | ({ type: "table_cell" } & PlainTableCellNode) | ({ type: "image" } & PlainImageNode) | ({ type: "file" } & PlainFileNode) | ({ type: "embed" } & PlainEmbedNode) | ({ type: "archived" } & PlainArchivedNode) | ({ type: "hard_break" } & PlainHardBreakNode) | ({ type: "horizontal_rule" } & PlainHorizontalRuleNode) | ({ type: "page_break" } & PlainPageBreakNode);
+
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" };
+
+export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
 export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
 
-export type Step = { type: "insert_text"; node_id: NodeId; offset: number; text: string } | { type: "remove_text"; node_id: NodeId; offset: number; text: string } | { type: "insert_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "remove_subtree"; parent_id: NodeId; index: number; subtree: Subtree } | { type: "move_node"; node_id: NodeId; old_parent: NodeId; old_index: number; new_parent: NodeId; new_index: number } | { type: "split_node"; node_id: NodeId; offset: number; new_node_id: NodeId } | { type: "merge_node"; node_id: NodeId; target_id: NodeId; offset: number } | { type: "set_node"; node_id: NodeId; old_node: Node; new_node: Node } | { type: "add_modifier"; node_id: NodeId; modifier: Modifier } | { type: "remove_modifier"; node_id: NodeId; modifier: Modifier } | { type: "set_selection"; old: Selection; new: Selection } | { type: "set_pending_modifiers"; old: PendingModifiers; new: PendingModifiers } | { type: "set_composition"; old: Composition | undefined; new: Composition | undefined };
+export type Step = { InsertText: { node_id: NodeId; offset: number; text: string } } | { RemoveText: { node_id: NodeId; offset: number; text: string } } | { InsertSubtree: { parent_id: NodeId; index: number; subtree: Subtree } } | { RemoveSubtree: { parent_id: NodeId; index: number; subtree: Subtree } } | { MoveNode: { node_id: NodeId; old_parent: NodeId; old_index: number; new_parent: NodeId; new_index: number } } | { SplitNode: { node_id: NodeId; offset: number; new_node_id: NodeId } } | { MergeNode: { node_id: NodeId; target_id: NodeId; offset: number } } | { SetNode: { node_id: NodeId; old_node: PlainNode; new_node: PlainNode } } | { AddModifier: { node_id: NodeId; modifier: Modifier } } | { RemoveModifier: { node_id: NodeId; modifier: Modifier } } | { SetSelection: { old: Selection; new: Selection } } | { SetPendingModifiers: { old: PendingModifiers; new: PendingModifiers } } | { SetComposition: { old: Composition | undefined; new: Composition | undefined } };
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
+export type TableCellNodeAttr = { type: "col_width" } & number | undefined;
+
+export type TableNodeAttr = ({ type: "border_style" } & TableBorderStyle) | ({ type: "proportion" } & number);
+
 export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined } | { type: "set_column_widths"; widths: number[] };
+
+export type TableRowNodeAttr = void;
+
+export type TextNodeAttr = void;
 
 export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
 
@@ -530,17 +570,20 @@ declare class Editor {
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
     block_state(): BlockState;
+    current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
     detach_surface(page: number): void;
     enqueue(message: Message): void;
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
+    local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
     modifier_state(): ModifierState;
     page_sizes(): Size[];
+    receive_remote_changeset(payload: Uint8Array): void;
     render_surface(page: number): void;
     resize_surface(page: number, width: number, height: number, scale_factor: number): void;
-    root_attrs(): RootNode;
+    root_attrs(): PlainRootNode;
     selection(): Selection;
     tick(): EditorEvent[];
 }
@@ -552,9 +595,8 @@ declare class EditorHost {
     add_font_base(family: string, weight: number, data: Uint8Array): void;
     add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): void;
     static create(icu_data: Uint8Array): EditorHost;
-    create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
-    hash_commit_content(content: CommitContent): string;
-    reconstruct_doc_from_objects(root_hash: string, objects: ObjectEntry[]): Doc;
+    create_editor_from_doc(doc: PlainDoc, selection: Selection, viewport: Viewport): Editor;
+    create_editor_from_graph(changesets: Uint8Array, selection: Selection, viewport: Viewport): Editor;
     set_fonts(families: FontFamily[]): void;
 }
 

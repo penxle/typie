@@ -8,25 +8,20 @@ use crate::doc_macro::codegen::build_modifier_expr;
 
 pub fn generate(input: &StateInput) -> TokenStream {
     let parts = doc_macro::codegen::generate_parts(&input.doc_tree);
-    let id_decls = &parts.id_decls;
-    let with_nodes = &parts.with_nodes;
     let bindings = &parts.bindings;
 
+    let scaffold = doc_macro::codegen::emit_doc_construction(&parts);
     let selection_expr = gen_selection(&input.selection);
     let pending_modifiers_expr = gen_pending_modifiers(&input.pending_modifiers);
 
     quote! {
         {
-            use editor_model::*;
+            #scaffold
+            let op_graph = _op_graph;
             use editor_state::*;
 
-            #(#id_decls)*
-
-            let doc = Doc::new_test();
-            #(#with_nodes)*
-
             let selection = #selection_expr;
-            let mut state = State::new(doc, selection);
+            let mut state = State::new(doc, op_graph, selection);
             #pending_modifiers_expr
 
             (state, #(#bindings),*)

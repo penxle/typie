@@ -1,5 +1,5 @@
 use editor_common::StrExt;
-use editor_model::{Node, NodeId, Subtree, TextNode};
+use editor_model::{Modifier, Node, NodeId, PlainNode, PlainTextNode, Subtree};
 use editor_state::{Affinity, PendingModifiers, Position, Selection};
 use editor_transaction::Transaction;
 
@@ -36,7 +36,11 @@ pub fn insert_text(tr: &mut Transaction, text: &str) -> CommandResult {
 
     match node.node() {
         Node::Text(text_node) => {
-            if effective_mods == node.modifiers() {
+            let mut node_mods: Vec<Modifier> = node.modifiers().cloned().collect();
+            node_mods.sort_by_key(|m| m.as_type());
+            let mut effective_sorted = effective_mods.clone();
+            effective_sorted.sort_by_key(|m| m.as_type());
+            if effective_sorted == node_mods {
                 tr.insert_text(pos.node_id, pos.offset, text)?;
                 tr.set_selection(Selection::collapsed(Position {
                     node_id: pos.node_id,
@@ -50,18 +54,19 @@ pub fn insert_text(tr: &mut Transaction, text: &str) -> CommandResult {
                     .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
 
                 let new_id = NodeId::new();
-                let subtree = Subtree::leaf(new_id, Node::Text(TextNode { text: text.into() }))
+                let subtree = Subtree::leaf(new_id, PlainNode::Text(PlainTextNode::default()))
                     .with_modifiers(effective_mods);
 
                 if pos.offset == 0 {
                     tr.insert_subtree(parent.id(), node_index, subtree)?;
-                } else if pos.offset == text_node.text.char_count() {
+                } else if pos.offset == text_node.text.len() {
                     tr.insert_subtree(parent.id(), node_index + 1, subtree)?;
                 } else {
                     let split_id = NodeId::new();
                     tr.split_node(pos.node_id, pos.offset, split_id)?;
                     tr.insert_subtree(parent.id(), node_index + 1, subtree)?;
                 }
+                tr.insert_text(new_id, 0, text)?;
 
                 tr.set_selection(Selection::collapsed(Position {
                     node_id: new_id,
@@ -73,10 +78,11 @@ pub fn insert_text(tr: &mut Transaction, text: &str) -> CommandResult {
         _ => {
             // Case 3: non-text node (empty paragraph, etc.)
             let new_id = NodeId::new();
-            let subtree = Subtree::leaf(new_id, Node::Text(TextNode { text: text.into() }))
+            let subtree = Subtree::leaf(new_id, PlainNode::Text(PlainTextNode::default()))
                 .with_modifiers(effective_mods);
 
             tr.insert_subtree(pos.node_id, pos.offset, subtree)?;
+            tr.insert_text(new_id, 0, text)?;
             tr.set_selection(Selection::collapsed(Position {
                 node_id: new_id,
                 offset: insert_len,

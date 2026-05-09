@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Expand, Modifier, ModifierType, Node, NodeRef};
 use editor_state::{PendingModifier, PendingModifiers};
 
@@ -16,16 +15,15 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
         return vec![];
     };
 
-    let node_len = text_node.text.char_count();
+    let node_len = text_node.text.len();
     let at_start = offset == 0 && node_len > 0;
     let at_end = offset == node_len && node_len > 0;
 
     if !at_start && !at_end {
-        return node.modifiers().to_vec();
+        return node.modifiers().cloned().collect();
     }
 
     node.modifiers()
-        .iter()
         .filter(|m| {
             let expand = &m.spec().expand;
             match expand {
@@ -73,11 +71,9 @@ pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
 }
 
 pub(crate) fn check_range_all_has_modifier(nodes: &[NodeRef], modifier_type: ModifierType) -> bool {
-    nodes.iter().all(|node| {
-        node.modifiers()
-            .iter()
-            .any(|m| m.as_type() == modifier_type)
-    })
+    nodes
+        .iter()
+        .all(|node| node.modifiers().any(|m| m.as_type() == modifier_type))
 }
 
 #[cfg(test)]

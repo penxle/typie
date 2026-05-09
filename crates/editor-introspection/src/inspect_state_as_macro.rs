@@ -12,7 +12,7 @@ pub fn inspect_state_as_macro(state: &State) -> String {
     write_indent(&mut output, 1);
     output.push_str("doc {\n");
 
-    let root = state.doc.root();
+    let root = state.doc.root().unwrap();
     let children: Vec<_> = root.children().collect();
 
     write_indent(&mut output, 2);
@@ -20,7 +20,9 @@ pub fn inspect_state_as_macro(state: &State) -> String {
         write!(output, "{l}: ").unwrap();
     }
     output.push_str("root");
-    write_modifiers_macro(&non_default_root_modifiers(root.modifiers()), &mut output);
+    let mut root_mods: Vec<Modifier> = root.modifiers().cloned().collect();
+    root_mods.sort_by_key(|m| m.as_type());
+    write_modifiers_macro(&non_default_root_modifiers(&root_mods), &mut output);
     if children.is_empty() {
         output.push_str(" {}\n");
     } else {
@@ -63,11 +65,14 @@ fn write_macro_node(
     write!(output, "{type_name}").unwrap();
 
     if let Node::Text(t) = node_ref.node() {
-        write!(output, "(\"{}\")", escape_str(&t.text)).unwrap();
+        let s = t.text.to_string();
+        write!(output, "(\"{}\")", escape_str(&s)).unwrap();
     }
 
     write_node_attrs_macro(node_ref.node(), output);
-    write_modifiers_macro(node_ref.modifiers(), output);
+    let mut mods: Vec<Modifier> = node_ref.modifiers().cloned().collect();
+    mods.sort_by_key(|m| m.as_type());
+    write_modifiers_macro(&mods, output);
 
     let children: Vec<_> = node_ref.children().collect();
     if node_ref.spec().is_leaf() {
@@ -149,51 +154,57 @@ fn write_pending_modifiers(pending: &editor_state::PendingModifiers, output: &mu
 fn write_node_attrs_macro(node: &Node, output: &mut String) {
     let mut attrs = Vec::new();
     match node {
-        Node::Blockquote(bq) if bq.variant != BlockquoteVariant::default() => {
-            attrs.push(format!("variant: BlockquoteVariant::{:?}", bq.variant));
+        Node::Blockquote(bq) if *bq.variant.get() != BlockquoteVariant::default() => {
+            attrs.push(format!(
+                "variant: BlockquoteVariant::{:?}",
+                bq.variant.get()
+            ));
         }
-        Node::Callout(c) if c.variant != CalloutVariant::default() => {
-            attrs.push(format!("variant: CalloutVariant::{:?}", c.variant));
+        Node::Callout(c) if *c.variant.get() != CalloutVariant::default() => {
+            attrs.push(format!("variant: CalloutVariant::{:?}", c.variant.get()));
         }
-        Node::HorizontalRule(hr) if hr.variant != HorizontalRuleVariant::default() => {
-            attrs.push(format!("variant: HorizontalRuleVariant::{:?}", hr.variant));
+        Node::HorizontalRule(hr) if *hr.variant.get() != HorizontalRuleVariant::default() => {
+            attrs.push(format!(
+                "variant: HorizontalRuleVariant::{:?}",
+                hr.variant.get()
+            ));
         }
         Node::Table(t) => {
-            if t.border_style != TableBorderStyle::default() {
+            if *t.border_style.get() != TableBorderStyle::default() {
                 attrs.push(format!(
                     "border_style: TableBorderStyle::{:?}",
-                    t.border_style
+                    t.border_style.get()
                 ));
             }
-            if (t.proportion - 1.0).abs() > f32::EPSILON {
-                attrs.push(format!("proportion: {}", format_f32(t.proportion)));
+            if *t.proportion.get() != 100 {
+                attrs.push(format!("proportion: {}", *t.proportion.get()));
             }
         }
         Node::TableCell(tc) => {
-            if let Some(w) = tc.col_width {
-                attrs.push(format!("col_width: Some({})", format_f32(w)));
+            if let Some(w) = tc.col_width.get() {
+                attrs.push(format!("col_width: Some({w})"));
             }
         }
         Node::Image(img) => {
-            if let Some(id) = &img.id {
+            if let Some(id) = img.id.get() {
                 attrs.push(format!("id: Some(\"{id}\".to_string())"));
             }
-            if (img.proportion - 1.0).abs() > f32::EPSILON {
-                attrs.push(format!("proportion: {}", format_f32(img.proportion)));
+            if *img.proportion.get() != 100 {
+                attrs.push(format!("proportion: {}", *img.proportion.get()));
             }
         }
         Node::File(f) => {
-            if let Some(id) = &f.id {
+            if let Some(id) = f.id.get() {
                 attrs.push(format!("id: Some(\"{id}\".to_string())"));
             }
         }
         Node::Embed(e) => {
-            if let Some(id) = &e.id {
+            if let Some(id) = e.id.get() {
                 attrs.push(format!("id: Some(\"{id}\".to_string())"));
             }
         }
         Node::Archived(a) => {
-            if let Some(id) = &a.id {
+            if let Some(id) = a.id.get() {
                 attrs.push(format!("id: Some(\"{id}\".to_string())"));
             }
         }
@@ -270,14 +281,6 @@ fn non_default_root_modifiers(modifiers: &[Modifier]) -> Vec<Modifier> {
         .filter(|m| !defaults.contains(m))
         .cloned()
         .collect()
-}
-
-fn format_f32(v: f32) -> String {
-    if (v - v.round()).abs() < f32::EPSILON {
-        format!("{:.1}", v)
-    } else {
-        format!("{}", v)
-    }
 }
 
 #[cfg(test)]

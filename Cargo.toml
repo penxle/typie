@@ -33,6 +33,7 @@ icu_segmenter = { version = "2", default-features = false }
 imbl = "7"
 kurbo = "0.13"
 log = "0.4"
+minicbor = { version = "2", features = ["derive", "std"] }
 objc2 = "0.6"
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 objc2-metal = { version = "0.3", features = [

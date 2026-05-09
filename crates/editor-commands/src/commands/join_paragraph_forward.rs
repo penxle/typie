@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::Node;
 use editor_transaction::{Transaction, compact};
 
@@ -18,7 +17,7 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
 
     let paragraph_id = match node.node() {
         Node::Text(text_node) => {
-            let text_len = text_node.text.char_count();
+            let text_len = text_node.text.len();
             if pos.offset < text_len || node.next_sibling().is_some() {
                 return Ok(false);
             }

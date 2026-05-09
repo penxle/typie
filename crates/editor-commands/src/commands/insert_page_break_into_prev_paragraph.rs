@@ -1,4 +1,4 @@
-use editor_model::{Node, NodeId, PageBreakNode, Subtree};
+use editor_model::{Node, NodeId, PlainNode, PlainPageBreakNode, Subtree};
 use editor_transaction::Transaction;
 
 use crate::helpers::find_ancestor_textblock;
@@ -48,7 +48,10 @@ pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandRes
     tr.insert_subtree(
         prev_id,
         insert_index,
-        Subtree::leaf(NodeId::new(), Node::PageBreak(PageBreakNode::default())),
+        Subtree::leaf(
+            NodeId::new(),
+            PlainNode::PageBreak(PlainPageBreakNode::default()),
+        ),
     )?;
 
     Ok(true)

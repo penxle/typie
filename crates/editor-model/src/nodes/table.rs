@@ -1,36 +1,35 @@
-use editor_macros::ffi;
+use editor_crdt::LwwReg;
+use editor_macros::{NodeAttr, ffi};
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, NodeAttr)]
 pub struct TableNode {
-    #[serde(default)]
-    pub border_style: TableBorderStyle,
-    #[ffi(default = "1.0f")]
-    #[serde(default = "default_proportion")]
-    pub proportion: f32,
+    #[plain(serde(default))]
+    pub border_style: LwwReg<TableBorderStyle>,
+    #[node_attr(default = "100u32")]
+    #[plain(ffi(default = "100"), serde(default = "default_proportion"))]
+    pub proportion: LwwReg<u32>,
 }
 
-fn default_proportion() -> f32 {
-    1.0
-}
-
-impl Default for TableNode {
-    fn default() -> Self {
-        Self {
-            border_style: TableBorderStyle::default(),
-            proportion: default_proportion(),
-        }
-    }
+fn default_proportion() -> u32 {
+    100
 }
 
 #[ffi]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Encode, Decode,
+)]
+#[cbor(index_only)]
 #[serde(rename_all = "snake_case")]
 pub enum TableBorderStyle {
     #[default]
+    #[n(0)]
     Solid,
+    #[n(1)]
     Dashed,
+    #[n(2)]
     Dotted,
+    #[n(3)]
     None,
 }

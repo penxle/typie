@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
@@ -25,7 +24,7 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
             let node_index = node
                 .index()
                 .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
-            let text_len = text_node.text.char_count();
+            let text_len = text_node.text.len();
 
             let split_index = if pos.offset == 0 {
                 node_index

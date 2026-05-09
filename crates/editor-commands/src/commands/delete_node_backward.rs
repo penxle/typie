@@ -43,16 +43,13 @@ pub fn delete_node_backward(tr: &mut Transaction) -> CommandResult {
                 return Ok(false);
             }
 
-            let child_id =
-                *node
-                    .entry()
-                    .children
-                    .get(pos.offset - 1)
-                    .ok_or(CommandError::Corrupted(format!(
-                        "child at index {} not found in {:?}",
-                        pos.offset - 1,
-                        pos.node_id
-                    )))?;
+            let child_id = *node.entry().children.iter().nth(pos.offset - 1).ok_or(
+                CommandError::Corrupted(format!(
+                    "child at index {} not found in {:?}",
+                    pos.offset - 1,
+                    pos.node_id
+                )),
+            )?;
 
             let child = doc
                 .node(child_id)

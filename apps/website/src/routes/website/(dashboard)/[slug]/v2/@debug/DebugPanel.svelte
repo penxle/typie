@@ -1,6 +1,5 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import CommitDetailModal from './commit-detail/CommitDetailModal.svelte';
   import GraphSection from './GraphSection.svelte';
   import StateSection from './StateSection.svelte';
   import TimelineSection from './TimelineSection.svelte';
@@ -10,37 +9,11 @@
   type Props = {
     bus: DebugBus;
     snapshot: DebugSnapshot;
-    slug: string;
     open: boolean;
     onClose: () => void;
   };
 
-  let { bus, snapshot, slug, open, onClose }: Props = $props();
-
-  let selectedCommitId = $state<string | null>(null);
-  let selectedHashFromState = $state<string | null>(null);
-  let loadedCommits = $state<{ id: string; hash: string }[]>([]);
-
-  const resolvedFromHash = $derived(
-    selectedHashFromState ? (loadedCommits.find((c) => c.hash === selectedHashFromState)?.id ?? null) : null,
-  );
-
-  const effectiveCommitId = $derived(selectedCommitId ?? resolvedFromHash);
-
-  function selectByHash(h: string) {
-    selectedHashFromState = h;
-    selectedCommitId = null;
-  }
-
-  function selectById(id: string) {
-    selectedCommitId = id;
-    selectedHashFromState = null;
-  }
-
-  function clearSelection() {
-    selectedCommitId = null;
-    selectedHashFromState = null;
-  }
+  let { bus, snapshot, open, onClose }: Props = $props();
 </script>
 
 {#if open}
@@ -90,11 +63,9 @@
     </header>
 
     <div class={css({ flexGrow: '1', flexShrink: '1', display: 'flex', flexDirection: 'column', minHeight: '0', overflow: 'hidden' })}>
-      <StateSection onSelectHash={selectByHash} {snapshot} />
-      <TimelineSection {bus} onSelectHash={selectByHash} />
-      <GraphSection onSelectCommit={selectById} {slug} {snapshot} bind:loadedCommits />
+      <StateSection {snapshot} />
+      <TimelineSection {bus} />
+      <GraphSection />
     </div>
   </aside>
 {/if}
-
-<CommitDetailModal commitId={effectiveCommitId} onClose={clearSelection} {slug} />

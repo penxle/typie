@@ -488,7 +488,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
             match &node {
                 Some(Node::Callout(callout)) => {
-                    let token = callout_token(callout.variant);
+                    let token = callout_token(*callout.variant.get());
                     let color = self.renderer.theme.color_with_alpha(token, 8);
                     let radii = CornerRadii::from_edges(CALLOUT_BORDER_RADIUS, &edges);
                     let path = Path::rrect(inner_rect, radii);
@@ -524,7 +524,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             .translate(frame.local_rect.x, frame.local_rect.y);
 
         if let Some(Node::Callout(callout)) = &frame.node {
-            let token = callout_token(callout.variant);
+            let token = callout_token(*callout.variant.get());
             let border_color = self.renderer.theme.color(token);
             let stroke = Stroke::new(CALLOUT_BORDER_WIDTH);
             let mb = CALLOUT_BORDER_WIDTH / 2.0;
@@ -634,7 +634,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 let cx = w / 2.0;
                 let cy = h / 2.0;
 
-                match hr.variant {
+                match *hr.variant.get() {
                     editor_model::HorizontalRuleVariant::Line => {
                         let y = (h - HR_LINE_HEIGHT) / 2.0;
                         self.sink
@@ -775,20 +775,23 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         match (parent_node, data) {
             (Some(Node::Callout(callout)), _) => {
-                let icon_name = match callout.variant {
+                let icon_name = match *callout.variant.get() {
                     editor_model::CalloutVariant::Info => "lucide/info",
                     editor_model::CalloutVariant::Success => "lucide/circle-check",
                     editor_model::CalloutVariant::Warning => "lucide/circle-alert",
                     editor_model::CalloutVariant::Danger => "lucide/triangle-alert",
                 };
-                let color = self.renderer.theme.color(callout_token(callout.variant));
+                let color = self
+                    .renderer
+                    .theme
+                    .color(callout_token(*callout.variant.get()));
                 if let Some(icon) = ICONS.resolve(icon_name) {
                     self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
                 }
             }
 
             (Some(Node::Blockquote(bq)), _)
-                if bq.variant == editor_model::BlockquoteVariant::LeftQuote =>
+                if *bq.variant.get() == editor_model::BlockquoteVariant::LeftQuote =>
             {
                 let color = self.renderer.theme.color("ui.text.muted");
                 if let Some(icon) = ICONS.resolve("typie/blockquote-quote") {
@@ -797,7 +800,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             }
 
             (Some(Node::Blockquote(bq)), _)
-                if bq.variant == editor_model::BlockquoteVariant::LeftLine =>
+                if *bq.variant.get() == editor_model::BlockquoteVariant::LeftLine =>
             {
                 let color = self.renderer.theme.color("ui.border.default");
                 self.sink.fill_rect(inner_rect, color, t);

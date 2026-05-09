@@ -12,6 +12,7 @@ editor-macros = { path = "../editor-macros" }
 getrandom.workspace = true
 hashbrown = { workspace = true }
 imbl = { workspace = true, features = ["serde"] }
+minicbor = { workspace = true }
 serde.workspace = true
 thiserror.workspace = true
 tsify = { workspace = true, optional = true }

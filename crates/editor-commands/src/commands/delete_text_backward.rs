@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Node, NodeId};
 use editor_resource::Resource;
 use editor_state::{Affinity, Position, Selection};
@@ -23,7 +22,7 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
     };
 
     if pos.offset > 0 {
-        let text_len = text_node.text.char_count();
+        let text_len = text_node.text.len();
         let doc = tr.doc();
         let prev_offset = pos
             .resolve(&doc)
@@ -69,7 +68,7 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
         };
 
         let prev_id = prev.id();
-        let prev_len = prev_text.text.char_count();
+        let prev_len = prev_text.text.len();
         let is_last_char = prev_len == 1;
 
         if is_last_char {
@@ -118,7 +117,7 @@ fn resolve_cursor_after_removal(
     {
         return Selection::collapsed(Position {
             node_id: prev_id,
-            offset: t.text.char_count(),
+            offset: t.text.len(),
             affinity: Affinity::Upstream,
         });
     }

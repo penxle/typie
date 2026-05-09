@@ -35,34 +35,37 @@ impl<'a> NodeRef<'a> {
         self.node().as_type()
     }
 
-    pub fn modifiers(&self) -> &'a [Modifier] {
-        &self.entry().modifiers
+    pub fn modifiers(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
+        self.entry().modifiers.iter().map(|(_, v)| v)
     }
 
     pub fn parent(&self) -> Option<NodeRef<'a>> {
-        let parent_id = self.entry().parent?;
+        let parent_id = self.entry().parent.get().clone()?;
         self.doc.node(parent_id)
     }
 
-    pub fn children(&self) -> impl ExactSizeIterator<Item = NodeRef<'a>> {
-        let children = self.entry().children.clone();
+    pub fn children(&self) -> impl Iterator<Item = NodeRef<'a>> + 'a {
         let doc = self.doc;
-        children.into_iter().map(move |id| NodeRef::new(doc, id))
+        self.entry()
+            .children
+            .iter()
+            .copied()
+            .map(move |id| NodeRef::new(doc, id))
     }
 
     pub fn first_child(&self) -> Option<NodeRef<'a>> {
-        let first_id = self.entry().children.front()?;
-        Some(NodeRef::new(self.doc, *first_id))
+        let id = self.entry().children.iter().next().copied()?;
+        Some(NodeRef::new(self.doc, id))
     }
 
     pub fn last_child(&self) -> Option<NodeRef<'a>> {
-        let last_id = self.entry().children.back()?;
-        Some(NodeRef::new(self.doc, *last_id))
+        let id = self.entry().children.iter().last().copied()?;
+        Some(NodeRef::new(self.doc, id))
     }
 
     pub fn prev_sibling(&self) -> Option<NodeRef<'a>> {
         let parent = self.parent()?;
-        let children = &parent.entry().children;
+        let children: Vec<NodeId> = parent.entry().children.iter().copied().collect();
         let idx = children.iter().position(|&id| id == self.id)?;
         let prev_id = *children.get(idx.checked_sub(1)?)?;
         Some(NodeRef::new(self.doc, prev_id))
@@ -70,7 +73,7 @@ impl<'a> NodeRef<'a> {
 
     pub fn next_sibling(&self) -> Option<NodeRef<'a>> {
         let parent = self.parent()?;
-        let children = &parent.entry().children;
+        let children: Vec<NodeId> = parent.entry().children.iter().copied().collect();
         let idx = children.iter().position(|&id| id == self.id)?;
         let next_id = *children.get(idx + 1)?;
         Some(NodeRef::new(self.doc, next_id))
@@ -84,7 +87,8 @@ impl<'a> NodeRef<'a> {
     }
 
     pub fn descendants(&self) -> DescendantIter<'a> {
-        let stack = self.entry().children.iter().copied().rev().collect();
+        let stack: Vec<NodeId> = self.entry().children.iter().copied().collect();
+        let stack = stack.into_iter().rev().collect();
         DescendantIter {
             doc: self.doc,
             stack,
@@ -93,7 +97,12 @@ impl<'a> NodeRef<'a> {
 
     pub fn index(&self) -> Option<usize> {
         let parent = self.parent()?;
-        parent.entry().children.iter().position(|&id| id == self.id)
+        parent
+            .entry()
+            .children
+            .iter()
+            .copied()
+            .position(|id| id == self.id)
     }
 
     pub fn path(&self) -> Vec<usize> {
@@ -103,7 +112,7 @@ impl<'a> NodeRef<'a> {
             if let Some(idx) = node_ref.index() {
                 path.push(idx);
             }
-            match node_ref.entry().parent {
+            match node_ref.entry().parent.get().clone() {
                 Some(parent_id) => current = parent_id,
                 None => break,
             }
@@ -114,10 +123,13 @@ impl<'a> NodeRef<'a> {
 
     pub fn depth(&self) -> usize {
         let mut d = 0;
-        let mut current = self.entry().parent;
+        let mut current = self.entry().parent.get().clone();
         while let Some(parent_id) = current {
             d += 1;
-            current = self.doc.get_entry(parent_id).and_then(|e| e.parent);
+            current = self
+                .doc
+                .get_entry(parent_id)
+                .and_then(|e| e.parent.get().clone());
         }
         d
     }
@@ -130,10 +142,16 @@ impl fmt::Debug for NodeRef<'_> {
         let mut s = f.debug_struct("NodeRef");
         s.field("id", &self.id);
         s.field("node", &entry.node);
-        s.field("modifiers", &entry.modifiers);
+        s.field(
+            "modifiers",
+            &entry.modifiers.iter().map(|(_, v)| v).collect::<Vec<_>>(),
+        );
         if alternate {
-            s.field("parent", &entry.parent);
-            s.field("children", &entry.children);
+            s.field("parent", &entry.parent.get());
+            s.field(
+                "children",
+                &entry.children.iter().copied().collect::<Vec<_>>(),
+            );
             s.field("depth", &self.depth());
             s.field("index", &self.index());
         }
@@ -152,7 +170,7 @@ impl<'a> Iterator for AncestorIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let id = self.current?;
         let entry = self.doc.get_entry(id)?;
-        self.current = entry.parent;
+        self.current = entry.parent.get().clone();
         Some(NodeRef::new(self.doc, id))
     }
 }
@@ -168,7 +186,8 @@ impl<'a> Iterator for DescendantIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let id = self.stack.pop()?;
         if let Some(entry) = self.doc.get_entry(id) {
-            for child_id in entry.children.iter().copied().rev() {
+            let children: Vec<NodeId> = entry.children.iter().copied().collect();
+            for child_id in children.into_iter().rev() {
                 self.stack.push(child_id);
             }
         }
@@ -215,7 +234,7 @@ mod tests {
     #[test]
     fn root_has_no_parent() {
         let (doc, _, _, _, _, _) = make_doc();
-        let root = doc.root();
+        let root = doc.root().unwrap();
         assert!(root.parent().is_none());
     }
 
@@ -257,7 +276,7 @@ mod tests {
     #[test]
     fn descendants() {
         let (doc, p1, p2, t1, t2, t3) = make_doc();
-        let root = doc.root();
+        let root = doc.root().unwrap();
         let desc_ids: Vec<NodeId> = root.descendants().map(|n| n.id()).collect();
         assert_eq!(desc_ids, vec![p1, t1, t2, p2, t3]);
     }
@@ -272,14 +291,14 @@ mod tests {
     #[test]
     fn depth() {
         let (doc, _, _, t1, _, _) = make_doc();
-        assert_eq!(doc.root().depth(), 0);
+        assert_eq!(doc.root().unwrap().depth(), 0);
         assert_eq!(doc.node(t1).unwrap().depth(), 2);
     }
 
     #[test]
     fn path_of_root() {
         let (doc, _, _, _, _, _) = make_doc();
-        assert_eq!(doc.root().path(), Vec::<usize>::new());
+        assert_eq!(doc.root().unwrap().path(), Vec::<usize>::new());
     }
 
     #[test]

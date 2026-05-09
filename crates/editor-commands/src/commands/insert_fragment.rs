@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Fragment, Node, NodeId};
 use editor_state::Selection;
 use editor_transaction::{Transaction, fulfill};
@@ -54,7 +53,7 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
                     let node_index = node
                         .index()
                         .ok_or(CommandError::orphan_child(pos.node_id, textblock_id))?;
-                    let text_len = text_node.text.char_count();
+                    let text_len = text_node.text.len();
 
                     if pos.offset == 0 && node_index == 0 {
                         tr.insert_subtree(parent_id, textblock_index, subtree)?;
@@ -129,7 +128,7 @@ mod tests {
     use editor_model::*;
 
     fn hr_fragment() -> Fragment {
-        Fragment::leaf(Node::HorizontalRule(HorizontalRuleNode::default()))
+        Fragment::leaf(PlainNode::HorizontalRule(PlainHorizontalRuleNode::default()))
     }
 
     #[test]
@@ -315,7 +314,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_fragment(
             &mut tr,
-            Fragment::leaf(Node::Blockquote(BlockquoteNode::default()))
+            Fragment::leaf(PlainNode::Blockquote(PlainBlockquoteNode::default()))
         ));
         let (expected, ..) = state! {
             doc { root {

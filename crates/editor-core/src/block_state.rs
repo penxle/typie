@@ -1,5 +1,5 @@
 use editor_macros::ffi;
-use editor_model::{Doc, Node, NodeId, NodeRef};
+use editor_model::{Doc, NodeId, NodeRef, PlainNode};
 use editor_state::{ResolvedSelection, State};
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Block {
     pub id: NodeId,
-    pub node: Node,
+    pub node: PlainNode,
 }
 
 #[ffi]
@@ -43,7 +43,7 @@ fn ancestor_chain_from(doc: &Doc, leaf_id: NodeId) -> Vec<Block> {
         if !n.spec().inline {
             chain.push(Block {
                 id: n.id(),
-                node: n.node().clone(),
+                node: n.node().to_plain(),
             });
         }
         current = n.parent();
@@ -80,7 +80,7 @@ fn resolve_nodes(state: &State) -> Vec<Block> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    collect_contained(&state.doc.root(), &rs, &mut out);
+    collect_contained(&state.doc.root().unwrap(), &rs, &mut out);
     out
 }
 
@@ -90,7 +90,7 @@ fn collect_contained<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection, out: &mut V
     if rs.contains_subtree(node) && !node.spec().inline {
         out.push(Block {
             id: node.id(),
-            node: node.node().clone(),
+            node: node.node().to_plain(),
         });
     }
     // Descend even when self is wholly contained: nested non-inline children
@@ -105,7 +105,7 @@ fn collect_contained<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection, out: &mut V
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Node;
+    use editor_model::PlainNode;
 
     use super::*;
 
@@ -117,8 +117,8 @@ mod tests {
         };
         let bs = resolve_block_state(&state);
         assert_eq!(bs.ancestors.len(), 2);
-        assert!(matches!(bs.ancestors[0].node, Node::Paragraph(_)));
-        assert!(matches!(bs.ancestors[1].node, Node::Root(_)));
+        assert!(matches!(bs.ancestors[0].node, PlainNode::Paragraph(_)));
+        assert!(matches!(bs.ancestors[1].node, PlainNode::Root(_)));
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
         };
         let bs = resolve_block_state(&state);
         assert_eq!(bs.ancestors.len(), 1);
-        assert!(matches!(bs.ancestors[0].node, Node::Root(_)));
+        assert!(matches!(bs.ancestors[0].node, PlainNode::Root(_)));
     }
 
     #[test]
@@ -156,7 +156,11 @@ mod tests {
             selection: (t1, 0) -> (t2, 2)
         };
         let bs = resolve_block_state(&state);
-        assert!(bs.nodes.iter().any(|b| matches!(b.node, Node::Image(_))));
+        assert!(
+            bs.nodes
+                .iter()
+                .any(|b| matches!(b.node, PlainNode::Image(_)))
+        );
         assert_eq!(bs.ancestors.len(), 1);
     }
 
@@ -179,11 +183,11 @@ mod tests {
         let has_blockquote = bs
             .nodes
             .iter()
-            .any(|b| matches!(b.node, Node::Blockquote(_)));
+            .any(|b| matches!(b.node, PlainNode::Blockquote(_)));
         let inner_paragraph_count = bs
             .nodes
             .iter()
-            .filter(|b| matches!(b.node, Node::Paragraph(_)))
+            .filter(|b| matches!(b.node, PlainNode::Paragraph(_)))
             .count();
         assert!(has_blockquote, "blockquote must be in nodes");
         assert!(

@@ -10,7 +10,7 @@ pub fn measure_atom(node: &NodeRef<'_>, width: f32, view_state: &ViewState) -> M
 
     let (w, h) = match node.node() {
         Node::Image(img) => {
-            let w = img.proportion * width;
+            let w = (*img.proportion.get() as f32 / 100.0) * width;
             let h = view_state.external_height(node_id).unwrap_or(0.0);
             (w, h)
         }
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn image_with_external_height() {
-        let (doc, i1) = doc! { root { i1: image(proportion: 0.5) } };
+        let (doc, i1) = doc! { root { i1: image(proportion: 50) } };
 
         let node = doc.node(i1).unwrap();
         let mut vs = ViewState::new();
@@ -65,7 +65,7 @@ mod tests {
 
     #[test]
     fn image_without_external_height() {
-        let (doc, i1) = doc! { root { i1: image(proportion: 0.8) } };
+        let (doc, i1) = doc! { root { i1: image(proportion: 80) } };
 
         let node = doc.node(i1).unwrap();
         let result = measure_atom(&node, 400.0, &ViewState::new());

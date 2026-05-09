@@ -1,5 +1,4 @@
-use editor_common::StrExt;
-use editor_model::{Doc, Modifier, Node, NodeId, Subtree};
+use editor_model::{Doc, Modifier, ModifierType, Node, NodeId, PlainNode, Subtree};
 use editor_state::{Composition, PendingModifiers, Selection, State};
 
 use crate::{Effect, Step, StepError, TransactionMeta, Validation, validate};
@@ -127,9 +126,13 @@ impl Transaction {
             _ => return Err(StepError::ExpectedTextNode(node_id)),
         };
 
-        let byte_start = text_node.text.nth_char_byte_offset(offset);
-        let byte_end = text_node.text.nth_char_byte_offset(offset + len);
-        let text = text_node.text[byte_start..byte_end].to_string();
+        let text: String = text_node
+            .text
+            .to_string()
+            .chars()
+            .skip(offset)
+            .take(len)
+            .collect();
 
         self.apply_step(Step::RemoveText {
             node_id,
@@ -157,7 +160,7 @@ impl Transaction {
             .doc
             .get_entry(node_id)
             .ok_or(StepError::NodeNotFound(node_id))?;
-        let parent_id = entry.parent.ok_or(StepError::NodeNotFound(node_id))?;
+        let parent_id = (*entry.parent.get()).ok_or(StepError::NodeNotFound(node_id))?;
         let parent_entry = self
             .state
             .doc
@@ -189,7 +192,7 @@ impl Transaction {
             .doc
             .get_entry(node_id)
             .ok_or(StepError::NodeNotFound(node_id))?;
-        let old_parent = entry.parent.ok_or(StepError::NodeNotFound(node_id))?;
+        let old_parent = (*entry.parent.get()).ok_or(StepError::NodeNotFound(node_id))?;
         let parent_entry = self
             .state
             .doc
@@ -210,13 +213,13 @@ impl Transaction {
         })
     }
 
-    pub fn set_node(&mut self, node_id: NodeId, new_node: Node) -> Result<(), StepError> {
+    pub fn set_node(&mut self, node_id: NodeId, new_node: PlainNode) -> Result<(), StepError> {
         let entry = self
             .state
             .doc
             .get_entry(node_id)
             .ok_or(StepError::NodeNotFound(node_id))?;
-        let old_node = entry.node.clone();
+        let old_node = entry.node.to_plain();
 
         self.apply_step(Step::SetNode {
             node_id,
@@ -246,7 +249,7 @@ impl Transaction {
             .ok_or(StepError::NodeNotFound(target_id))?;
 
         let offset = match &target_entry.node {
-            Node::Text(t) => t.text.char_count(),
+            Node::Text(t) => t.text.len(),
             _ => target_entry.children.len(),
         };
 
@@ -327,11 +330,13 @@ impl Transaction {
     }
 
     fn run_validations(&self, validations: &[Validation]) -> Result<(), StepError> {
-        for v in validations {
+        let dedup = dedupe_validations(validations);
+        for v in &dedup {
             match v {
                 Validation::Node(node_id) => {
                     if self.state.doc.get_entry(*node_id).is_some() {
                         validate::validate_content(&self.state.doc, *node_id)?;
+                        validate::validate_context(&self.state.doc, *node_id)?;
                     }
                 }
                 Validation::Subtree(node_id) => {
@@ -367,9 +372,50 @@ impl Transaction {
         f(&mut self.meta);
     }
 
-    pub fn commit(self) -> (State, Vec<Step>, Vec<Effect>, TransactionMeta) {
+    pub fn commit(mut self) -> (State, Vec<Step>, Vec<Effect>, TransactionMeta) {
+        self.state.graph = self.state.graph.commit();
         (self.state, self.steps, self.effects, self.meta)
     }
+}
+
+fn dedupe_validations(validations: &[Validation]) -> Vec<Validation> {
+    use std::collections::HashSet;
+
+    let mut subtree_ids: HashSet<NodeId> = HashSet::new();
+    for v in validations {
+        if let Validation::Subtree(id) = v {
+            subtree_ids.insert(*id);
+        }
+    }
+
+    let mut seen_node: HashSet<NodeId> = HashSet::new();
+    let mut seen_subtree: HashSet<NodeId> = HashSet::new();
+    let mut seen_modifier: HashSet<(NodeId, ModifierType)> = HashSet::new();
+    let mut result: Vec<Validation> = Vec::new();
+
+    for v in validations {
+        match *v {
+            Validation::Node(id) => {
+                if subtree_ids.contains(&id) {
+                    continue;
+                }
+                if seen_node.insert(id) {
+                    result.push(*v);
+                }
+            }
+            Validation::Subtree(id) => {
+                if seen_subtree.insert(id) {
+                    result.push(*v);
+                }
+            }
+            Validation::Modifier(id, k) => {
+                if seen_modifier.insert((id, k)) {
+                    result.push(*v);
+                }
+            }
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -419,7 +465,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
         tr.insert_text(t1, 5, " Beautiful").unwrap();
 
-        assert_eq!(tr.doc().text(t1).text, "Hello Beautiful World");
+        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello Beautiful World");
 
         let (_, steps, _, _) = tr.commit();
 
@@ -437,7 +483,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
         tr.remove_text(t1, 5, 6).unwrap();
 
-        assert_eq!(tr.doc().text(t1).text, "Hello");
+        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello");
 
         let (_, steps, _, _) = tr.commit();
 
@@ -471,7 +517,7 @@ mod tests {
 
         let mut tr = Transaction::new(&state);
         let new_id = NodeId::new();
-        let subtree = Subtree::leaf(new_id, Node::Paragraph(ParagraphNode::default()));
+        let subtree = Subtree::leaf(new_id, PlainNode::Paragraph(PlainParagraphNode::default()));
         tr.insert_subtree(NodeId::ROOT, 1, subtree).unwrap();
 
         assert!(tr.doc().get_entry(new_id).is_some());
@@ -497,12 +543,12 @@ mod tests {
         let doc = tr.doc();
         let root = doc.get_entry(NodeId::ROOT).unwrap();
         assert_eq!(root.children.len(), 1);
-        assert_eq!(root.children[0], p2);
+        assert_eq!(root.children.iter().next().copied().unwrap(), p2);
 
         let (_, steps, _, _) = tr.commit();
         match &steps[0] {
             Step::RemoveSubtree { subtree, .. } => {
-                assert!(matches!(subtree.node, Node::Paragraph(_)));
+                assert!(matches!(subtree.node, PlainNode::Paragraph(_)));
             }
             _ => panic!("expected RemoveSubtree"),
         }
@@ -526,7 +572,17 @@ mod tests {
                 .iter()
                 .all(|&id| id != t1)
         );
-        assert_eq!(tr.doc().get_entry(p2).unwrap().children[0], t1);
+        assert_eq!(
+            tr.doc()
+                .get_entry(p2)
+                .unwrap()
+                .children
+                .iter()
+                .next()
+                .copied()
+                .unwrap(),
+            t1
+        );
 
         let (_, steps, _, _) = tr.commit();
         match &steps[0] {
@@ -553,8 +609,8 @@ mod tests {
         let t2 = NodeId::new();
         tr.split_node(t1, 5, t2).unwrap();
 
-        assert_eq!(tr.doc().text(t1).text, "Hello");
-        assert_eq!(tr.doc().text(t2).text, " World");
+        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello");
+        assert_eq!(tr.doc().text(t2).text.to_string(), " World");
         assert_eq!(tr.doc().get_entry(p1).unwrap().children.len(), 2);
     }
 
@@ -570,7 +626,7 @@ mod tests {
         tr.split_node(t1, 5, t2).unwrap();
         tr.merge_node(t2, t1).unwrap();
 
-        assert_eq!(tr.doc().text(t1).text, "Hello World");
+        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello World");
         assert!(tr.doc().get_entry(t2).is_none());
         assert_eq!(tr.doc().get_entry(p1).unwrap().children.len(), 1);
 
@@ -594,7 +650,8 @@ mod tests {
 
         let doc = tr.doc();
         let entry = doc.get_entry(t1).unwrap();
-        assert_eq!(entry.modifiers, vec![Modifier::Bold]);
+        let modifiers: Vec<Modifier> = entry.modifiers.iter().map(|(_, m)| m.clone()).collect();
+        assert_eq!(modifiers, vec![Modifier::Bold]);
 
         let (_, steps, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
@@ -650,17 +707,25 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&state);
-        let new_node = Node::Callout(CalloutNode {
+        let new_node = PlainNode::Callout(PlainCalloutNode {
             variant: CalloutVariant::Warning,
         });
         tr.set_node(c1, new_node.clone()).unwrap();
 
-        assert_eq!(tr.doc().get_entry(c1).unwrap().node, new_node);
+        if let Node::Callout(n) = &tr.doc().get_entry(c1).unwrap().node {
+            assert_eq!(*n.variant.get(), CalloutVariant::Warning);
+        } else {
+            panic!("expected Callout node");
+        }
 
         let (_, steps, _, _) = tr.commit();
         match &steps[0] {
             Step::SetNode { old_node, .. } => {
-                assert_eq!(*old_node, Node::Callout(CalloutNode::default()));
+                if let PlainNode::Callout(n) = old_node {
+                    assert_eq!(n.variant, CalloutVariant::Info);
+                } else {
+                    panic!("expected Callout old_node");
+                }
             }
             _ => panic!("expected SetNode"),
         }
@@ -684,11 +749,21 @@ mod tests {
         tr.set_selection(Selection::collapsed(Position::new(t2, 0)))
             .unwrap();
 
-        assert_eq!(tr.doc().text(t1).text, "Hello");
-        assert_eq!(tr.doc().text(t2).text, " World");
+        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello");
+        assert_eq!(tr.doc().text(t2).text.to_string(), " World");
         assert_eq!(tr.doc().get_entry(p1).unwrap().children.len(), 1);
         assert_eq!(tr.doc().get_entry(p2).unwrap().children.len(), 1);
-        assert_eq!(tr.doc().get_entry(p2).unwrap().children[0], t2);
+        assert_eq!(
+            tr.doc()
+                .get_entry(p2)
+                .unwrap()
+                .children
+                .iter()
+                .next()
+                .copied()
+                .unwrap(),
+            t2
+        );
 
         let (_, steps, _, _) = tr.commit();
         assert_eq!(steps.len(), 3);
@@ -712,7 +787,7 @@ mod tests {
         tr.rollback(sp);
         assert_eq!(tr.steps.len(), 1);
 
-        assert_eq!(tr.doc().text(t1).text, "Hello World!");
+        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello World!");
 
         let (_, steps, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
@@ -740,7 +815,7 @@ mod tests {
             current = step.inverse().apply(&current).unwrap().state;
         }
 
-        assert_eq!(current.text(t1).text, "Hello World");
+        assert_eq!(current.text(t1).text.to_string(), "Hello World");
         assert_eq!(current.selection, state.selection);
     }
 
@@ -782,7 +857,7 @@ mod tests {
             tr.insert_subtree(
                 NodeId::ROOT,
                 1,
-                Subtree::leaf(fix_id, Node::Paragraph(ParagraphNode::default())),
+                Subtree::leaf(fix_id, PlainNode::Paragraph(PlainParagraphNode::default())),
             )?;
             Ok(())
         })
@@ -849,7 +924,7 @@ mod tests {
         let steps = vec![Step::InsertSubtree {
             parent_id: NodeId::ROOT,
             index: 1,
-            subtree: Subtree::leaf(p_id, Node::Paragraph(ParagraphNode::default())),
+            subtree: Subtree::leaf(p_id, PlainNode::Paragraph(PlainParagraphNode::default())),
         }];
         tr.apply_steps(steps).unwrap();
 
@@ -890,5 +965,86 @@ mod tests {
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
         let (_, _, _, meta) = tr.commit();
         assert!(matches!(meta.history, HistoryMeta::Skip));
+    }
+
+    #[test]
+    fn dedupe_subtree_subsumes_node() {
+        let id = NodeId::new();
+        let validations = vec![
+            Validation::Node(id),
+            Validation::Subtree(id),
+            Validation::Node(id),
+        ];
+        let dedup = dedupe_validations(&validations);
+        assert_eq!(dedup.len(), 1);
+        assert!(matches!(dedup[0], Validation::Subtree(_)));
+    }
+
+    #[test]
+    fn dedupe_collapses_duplicate_node() {
+        let id = NodeId::new();
+        let validations = vec![Validation::Node(id), Validation::Node(id)];
+        let dedup = dedupe_validations(&validations);
+        assert_eq!(dedup.len(), 1);
+    }
+
+    #[test]
+    fn dedupe_collapses_duplicate_modifier() {
+        let id = NodeId::new();
+        let validations = vec![
+            Validation::Modifier(id, ModifierType::Bold),
+            Validation::Modifier(id, ModifierType::Bold),
+            Validation::Modifier(id, ModifierType::Italic),
+        ];
+        let dedup = dedupe_validations(&validations);
+        assert_eq!(dedup.len(), 2);
+    }
+
+    #[test]
+    fn dedupe_preserves_distinct_kinds() {
+        let id = NodeId::new();
+        let validations = vec![
+            Validation::Node(id),
+            Validation::Modifier(id, ModifierType::Bold),
+        ];
+        let dedup = dedupe_validations(&validations);
+        assert_eq!(dedup.len(), 2);
+    }
+
+    #[test]
+    fn commit_seals_one_changeset() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("") } } }
+            selection: (t, 0)
+        };
+        let baseline = state.graph.changesets().len();
+
+        let mut tr = Transaction::new(&state);
+        tr.insert_text(t, 0, "a").unwrap();
+        tr.insert_text(t, 1, "b").unwrap();
+        let (new_state, _steps, _effects, _meta) = tr.commit();
+        assert_eq!(
+            new_state.graph.changesets().len(),
+            baseline + 1,
+            "1 transact = exactly 1 newly sealed cs (on top of seed)"
+        );
+        assert!(new_state.graph.pending().is_empty());
+    }
+
+    #[test]
+    fn commit_with_no_steps_seals_no_changeset() {
+        let (state, _) = state! {
+            doc { root { paragraph { t: text("") } } }
+            selection: (t, 0)
+        };
+        let baseline = state.graph.changesets().len();
+        let tr = Transaction::new(&state);
+        let (new_state, _, _, _) = tr.commit();
+        assert_eq!(
+            new_state.graph.changesets().len(),
+            baseline,
+            "no steps → commit is a no-op on changesets"
+        );
+        assert!(new_state.graph.pending().is_empty());
     }
 }

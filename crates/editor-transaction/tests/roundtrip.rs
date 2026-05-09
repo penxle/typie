@@ -6,13 +6,13 @@ use editor_transaction::*;
 
 #[test]
 fn paragraph_split_scenario() {
-    let (state, p1, _t1, t2, _t3) = state! {
+    let (state, p1, t2) = state! {
         doc {
             root {
                 p1: paragraph {
-                    t1: text("Hello ") [bold]
+                    text("Hello ") [bold]
                     t2: text("beautiful ") [italic]
-                    t3: text("world")
+                    text("world")
                 }
             }
         }
@@ -31,8 +31,8 @@ fn paragraph_split_scenario() {
     let state2 = split_text.apply(&state).unwrap().state;
 
     // Verify text split
-    assert_eq!(state2.text(t2).text, "beau");
-    assert_eq!(state2.text(t_new).text, "tiful ");
+    assert_eq!(state2.text(t2).text.to_string(), "beau");
+    assert_eq!(state2.text(t_new).text.to_string(), "tiful ");
 
     // Step 2: Split paragraph — t_new and t3 move to new paragraph
     let split_para = Step::SplitNode {
@@ -43,17 +43,17 @@ fn paragraph_split_scenario() {
     let state3 = split_para.apply(&state2).unwrap().state;
 
     // Verify structure: root has 2 paragraphs now
-    assert_eq!(state3.node(NodeId::ROOT).children().len(), 2);
+    assert_eq!(state3.node(NodeId::ROOT).children().count(), 2);
 
     // Undo: reverse order
     let state4 = split_para.inverse().apply(&state3).unwrap().state;
     let state5 = split_text.inverse().apply(&state4).unwrap().state;
 
     // Verify fully restored
-    assert_eq!(state5.node(NodeId::ROOT).children().len(), 1);
+    assert_eq!(state5.node(NodeId::ROOT).children().count(), 1);
     assert!(!state5.has_node(t_new));
     assert!(!state5.has_node(p_new));
-    assert_eq!(state5.node(p1).children().len(), 3);
+    assert_eq!(state5.node(p1).children().count(), 3);
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn insert_text_then_bold_scenario() {
         text: " amazing".to_string(),
     };
     let state2 = insert.apply(&state).unwrap().state;
-    assert_eq!(state2.text(t1).text, "Hello World amazing");
+    assert_eq!(state2.text(t1).text.to_string(), "Hello World amazing");
 
     // Bold the whole node
     let bold = Step::AddModifier {
@@ -85,7 +85,14 @@ fn insert_text_then_bold_scenario() {
     };
     let state3 = bold.apply(&state2).unwrap().state;
     assert_eq!(
-        state3.doc.get_entry(t1).unwrap().modifiers,
+        state3
+            .doc
+            .get_entry(t1)
+            .unwrap()
+            .modifiers
+            .iter()
+            .map(|(_, m)| m.clone())
+            .collect::<Vec<_>>(),
         vec![Modifier::Bold]
     );
 
@@ -93,7 +100,7 @@ fn insert_text_then_bold_scenario() {
     let state4 = bold.inverse().apply(&state3).unwrap().state;
     let state5 = insert.inverse().apply(&state4).unwrap().state;
 
-    assert_eq!(state5.text(t1).text, "Hello World");
+    assert_eq!(state5.text(t1).text.to_string(), "Hello World");
     assert!(state5.doc.get_entry(t1).unwrap().modifiers.is_empty());
 }
 
@@ -115,8 +122,8 @@ fn set_node_and_selection_combined() {
     // Change callout variant
     let set_node = Step::SetNode {
         node_id: c1,
-        old_node: Node::Callout(CalloutNode::default()),
-        new_node: Node::Callout(CalloutNode {
+        old_node: PlainNode::Callout(PlainCalloutNode::default()),
+        new_node: PlainNode::Callout(PlainCalloutNode {
             variant: CalloutVariant::Warning,
         }),
     };
@@ -134,8 +141,9 @@ fn set_node_and_selection_combined() {
     let state5 = set_node.inverse().apply(&state4).unwrap().state;
 
     assert_eq!(state5.selection, state.selection);
-    assert_eq!(
-        *state5.node(c1).node(),
-        Node::Callout(CalloutNode::default())
-    );
+    if let Node::Callout(n) = state5.node(c1).node() {
+        assert_eq!(*n.variant.get(), CalloutVariant::Info);
+    } else {
+        panic!("expected Callout node");
+    }
 }

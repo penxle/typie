@@ -1,100 +1,67 @@
-use editor_macros::ffi;
-use serde::{Deserialize, Serialize};
+use editor_crdt::{Dot, OpGraph, OrMap};
+use hashbrown::HashSet;
+use std::collections::VecDeque;
 
+use crate::apply_doc_op;
+use crate::doc_op::DocOp;
 use crate::entry::NodeEntry;
+use crate::error::ModelError;
 use crate::id::NodeId;
-use crate::modifier::Modifier;
 use crate::node_ref::NodeRef;
-use crate::nodes::{Node, ParagraphNode, RootNode};
+use crate::nodes::{Node, NodeType};
 
-#[ffi]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct Doc {
-    pub nodes: imbl::HashMap<NodeId, NodeEntry>,
-}
-
-impl Default for Doc {
-    fn default() -> Self {
-        Self {
-            nodes: imbl::hashmap! {
-                NodeId::ROOT => NodeEntry {
-                    node: Node::Root(RootNode::default()),
-                    parent: None,
-                    children: imbl::Vector::new(),
-                    modifiers: vec![],
-                }
-            },
-        }
-    }
+    pub(crate) nodes: OrMap<NodeId, NodeType>,
+    pub(crate) entries: imbl::HashMap<NodeId, NodeEntry>,
 }
 
 impl Doc {
-    pub fn node(&self, id: NodeId) -> Option<NodeRef<'_>> {
-        if self.nodes.contains_key(&id) {
-            Some(NodeRef::new(self, id))
-        } else {
-            None
-        }
+    pub fn empty() -> Self {
+        Self::default()
     }
 
-    pub fn root(&self) -> NodeRef<'_> {
-        NodeRef::new(self, NodeId::ROOT)
+    pub fn from_op_graph(graph: &OpGraph<DocOp>) -> Result<Self, ModelError> {
+        let dots: HashSet<Dot> = graph.iter_all().map(|op| op.id).collect();
+        let mut doc = Doc::empty();
+        for op in graph.topo_sort(&dots) {
+            doc = apply_doc_op(doc, &op)?;
+        }
+        Ok(doc)
+    }
+
+    pub fn node(&self, id: NodeId) -> Option<NodeRef<'_>> {
+        self.get_entry(id).map(|_| NodeRef::new(self, id))
+    }
+
+    pub fn root(&self) -> Option<NodeRef<'_>> {
+        self.nodes
+            .iter()
+            .find(|(_, kind)| **kind == NodeType::Root)
+            .map(|(id, _)| NodeRef::new(self, *id))
     }
 
     pub fn get_entry(&self, id: NodeId) -> Option<&NodeEntry> {
-        self.nodes.get(&id)
-    }
-
-    pub fn with_node(&self, id: NodeId, entry: NodeEntry) -> Doc {
-        let mut new = self.clone();
-        new.nodes = new.nodes.update(id, entry);
-        new
-    }
-
-    pub fn with_node_updated(&self, id: NodeId, f: impl FnOnce(NodeEntry) -> NodeEntry) -> Doc {
-        let mut new = self.clone();
-        if let Some(entry) = new.nodes.get(&id).cloned() {
-            new.nodes = new.nodes.update(id, f(entry));
+        if !self.nodes.contains_key(&id) {
+            return None;
         }
-        new
+        self.entries.get(&id)
     }
 
-    pub fn insert_node(&self, id: NodeId, entry: NodeEntry) -> Doc {
-        let mut new = self.clone();
-        new.nodes = new.nodes.update(id, entry);
-        new
+    pub fn nodes_iter(&self) -> impl Iterator<Item = (&NodeId, &NodeType)> + '_ {
+        self.nodes.iter()
     }
 
-    pub fn remove_node(&self, id: NodeId) -> Doc {
-        let mut new = self.clone();
-        new.nodes = new.nodes.without(&id);
-        new
-    }
-
-    pub fn with_preset(root: RootNode, modifiers: Vec<Modifier>) -> Doc {
-        let paragraph_id = NodeId::new();
-        Self {
-            nodes: imbl::hashmap! {
-                NodeId::ROOT => NodeEntry {
-                    node: Node::Root(root),
-                    parent: None,
-                    children: imbl::vector![paragraph_id],
-                    modifiers,
-                },
-                paragraph_id => NodeEntry {
-                    node: Node::Paragraph(ParagraphNode::default()),
-                    parent: Some(NodeId::ROOT),
-                    children: imbl::Vector::new(),
-                    modifiers: vec![],
-                },
-            },
-        }
+    pub fn nodes_tags_for<'a>(&'a self, id: &'a NodeId) -> impl Iterator<Item = &'a Dot> + 'a {
+        self.nodes.tags_for(id)
     }
 
     pub fn extract_text(&self) -> String {
         let mut out = String::new();
-        self.extract_text_recursive(NodeId::ROOT, &mut out);
-        out
+        if let Some(root) = self.root() {
+            self.extract_text_recursive(root.id(), &mut out);
+        }
+        out.trim_end_matches('\n').to_string()
     }
 
     fn extract_text_recursive(&self, node_id: NodeId, out: &mut String) {
@@ -102,7 +69,7 @@ impl Doc {
             return;
         };
         match &entry.node {
-            Node::Text(t) => out.push_str(&t.text),
+            Node::Text(t) => out.push_str(&t.text.to_string()),
             Node::HardBreak(_)
             | Node::PageBreak(_)
             | Node::Image(_)
@@ -110,30 +77,87 @@ impl Doc {
             | Node::Embed(_)
             | Node::Archived(_) => {}
             _ => {
-                for &child in entry.children.iter() {
-                    self.extract_text_recursive(child, out);
+                for child_id in entry.children.iter().copied() {
+                    self.extract_text_recursive(child_id, out);
                 }
                 out.push('\n');
             }
         }
     }
-}
 
-#[cfg(any(test, feature = "test-utils"))]
-impl Doc {
-    pub fn new_test() -> Self {
-        use crate::default_modifiers;
+    pub fn verify(&self) -> Result<(), ModelError> {
+        self.verify_root_uniqueness()?;
+        self.verify_tree_reciprocity()?;
+        Ok(())
+    }
 
-        Self {
-            nodes: imbl::hashmap! {
-                NodeId::ROOT => NodeEntry {
-                    node: Node::Root(RootNode::default()),
-                    parent: None,
-                    children: imbl::Vector::new(),
-                    modifiers: default_modifiers(),
-                }
-            },
+    fn verify_root_uniqueness(&self) -> Result<(), ModelError> {
+        let count = self
+            .nodes_iter()
+            .filter(|(_, k)| **k == NodeType::Root)
+            .count();
+        if count != 1 {
+            return Err(ModelError::RootUniquenessViolation { count });
         }
+        Ok(())
+    }
+
+    fn verify_tree_reciprocity(&self) -> Result<(), ModelError> {
+        let Some(root) = self.root() else {
+            return Ok(());
+        };
+        let root_id = root.id();
+
+        let mut visited: HashSet<NodeId> = HashSet::new();
+        let mut queue: VecDeque<NodeId> = VecDeque::new();
+        queue.push_back(root_id);
+
+        while let Some(id) = queue.pop_front() {
+            if !visited.insert(id) {
+                return Err(ModelError::ParentChildDesync {
+                    parent: id,
+                    child: id,
+                });
+            }
+            let entry = self.get_entry(id).ok_or(ModelError::NodeNotFound(id))?;
+            for child_id in entry.children.iter().copied() {
+                let child_entry =
+                    self.get_entry(child_id)
+                        .ok_or(ModelError::ParentChildDesync {
+                            parent: id,
+                            child: child_id,
+                        })?;
+                if child_entry.parent.get() != &Some(id) {
+                    return Err(ModelError::ParentChildDesync {
+                        parent: id,
+                        child: child_id,
+                    });
+                }
+                queue.push_back(child_id);
+            }
+            if let Some(parent_id) = entry.parent.get().clone() {
+                let parent_entry =
+                    self.get_entry(parent_id)
+                        .ok_or(ModelError::ParentChildDesync {
+                            parent: parent_id,
+                            child: id,
+                        })?;
+                if !parent_entry.children.iter().any(|c| c == &id) {
+                    return Err(ModelError::ParentChildDesync {
+                        parent: parent_id,
+                        child: id,
+                    });
+                }
+            }
+        }
+
+        for (id, _kind) in self.nodes_iter() {
+            if !visited.contains(id) {
+                return Err(ModelError::NodeUnreachable { node_id: *id });
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -143,6 +167,18 @@ mod tests {
 
     use super::*;
     use crate::*;
+
+    #[test]
+    fn empty_doc_has_no_root() {
+        let doc = Doc::empty();
+        assert!(doc.root().is_none());
+    }
+
+    #[test]
+    fn node_returns_none_for_missing() {
+        let doc = Doc::empty();
+        assert!(doc.node(NodeId::new()).is_none());
+    }
 
     fn make_doc() -> Doc {
         let (doc, ..) = doc! {
@@ -156,21 +192,31 @@ mod tests {
     }
 
     #[test]
+    fn verify_accepts_rooted_doc() {
+        let (doc, ..) = doc! { root {} };
+        assert!(doc.verify().is_ok());
+    }
+
+    #[test]
+    fn verify_rejects_zero_roots() {
+        let doc = Doc::empty();
+        let result = doc.verify();
+        assert!(matches!(
+            result,
+            Err(ModelError::RootUniquenessViolation { count: 0 })
+        ));
+    }
+
+    #[test]
     fn node_returns_some_for_existing() {
         let doc = make_doc();
         assert!(doc.node(NodeId::ROOT).is_some());
     }
 
     #[test]
-    fn node_returns_none_for_missing() {
-        let doc = make_doc();
-        assert!(doc.node(NodeId::new()).is_none());
-    }
-
-    #[test]
     fn root_returns_root_node() {
         let doc = make_doc();
-        let root = doc.root();
+        let root = doc.root().unwrap();
         assert!(matches!(root.node(), &Node::Root(_)));
     }
 
@@ -180,42 +226,6 @@ mod tests {
         let doc2 = doc.clone();
         assert!(doc.node(NodeId::ROOT).is_some());
         assert!(doc2.node(NodeId::ROOT).is_some());
-    }
-
-    #[test]
-    fn with_node_returns_new_doc() {
-        let doc = make_doc();
-        let new_id = NodeId::new();
-        let doc2 = doc.insert_node(new_id, NodeEntry::new(Node::HardBreak(HardBreakNode {})));
-        assert!(doc.node(new_id).is_none());
-        assert!(doc2.node(new_id).is_some());
-    }
-
-    #[test]
-    fn with_node_updated() {
-        let doc = make_doc();
-        let root = doc.root();
-        let p1 = root.entry().children[0];
-
-        let doc2 = doc.with_node_updated(p1, |mut entry| {
-            entry.modifiers.push(Modifier::Bold);
-            entry
-        });
-
-        let updated = doc2.node(p1).unwrap();
-        assert!(updated.modifiers().contains(&Modifier::Bold));
-
-        let original = doc.node(p1).unwrap();
-        assert!(!original.modifiers().contains(&Modifier::Bold));
-    }
-
-    #[test]
-    fn remove_node() {
-        let doc = make_doc();
-        let new_id = NodeId::new();
-        let doc2 = doc.insert_node(new_id, NodeEntry::new(Node::HardBreak(HardBreakNode {})));
-        let doc3 = doc2.remove_node(new_id);
-        assert!(doc3.node(new_id).is_none());
     }
 
     #[test]
@@ -243,7 +253,7 @@ mod tests {
             }
         };
         let text = doc.extract_text();
-        assert_eq!(text, "hello world\n\n");
+        assert_eq!(text, "hello world");
     }
 
     #[test]
@@ -258,7 +268,7 @@ mod tests {
             }
         };
         let text = doc.extract_text();
-        assert_eq!(text, "firstsecond\n\n");
+        assert_eq!(text, "firstsecond");
     }
 
     #[test]
@@ -292,75 +302,15 @@ mod tests {
         let doc = make_doc();
         let root = doc.get_entry(NodeId::ROOT).unwrap();
         match &root.node {
-            Node::Root(r) => assert!(matches!(r.layout_mode, LayoutMode::Continuous { .. })),
+            Node::Root(r) => {
+                assert!(matches!(r.layout_mode.get(), LayoutMode::Continuous { .. }))
+            }
             _ => panic!("expected Root"),
         }
         assert!(
             root.modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontFamily { value } if value == "Pretendard"))
+                .any(|(_, m)| matches!(m, Modifier::FontFamily { value } if value == "Pretendard"))
         );
-    }
-
-    #[test]
-    fn with_preset_builds_root_with_paragraph() {
-        let doc = Doc::with_preset(RootNode::default(), vec![]);
-        let root = doc.get_entry(NodeId::ROOT).expect("root must exist");
-        assert!(matches!(root.node, Node::Root(_)));
-        assert!(root.parent.is_none());
-        assert_eq!(root.children.len(), 1, "root must have exactly one child");
-
-        let paragraph_id = root.children[0];
-        let paragraph = doc.get_entry(paragraph_id).expect("paragraph must exist");
-        assert!(matches!(paragraph.node, Node::Paragraph(_)));
-        assert_eq!(paragraph.parent, Some(NodeId::ROOT));
-        assert!(paragraph.children.is_empty());
-        assert!(paragraph.modifiers.is_empty());
-        assert_eq!(doc.nodes.len(), 2, "doc must have exactly root + paragraph");
-    }
-
-    #[test]
-    fn with_preset_applies_modifiers_to_root() {
-        let mods = vec![
-            Modifier::FontFamily {
-                value: "MyFont".into(),
-            },
-            Modifier::FontSize { value: 1800 },
-            Modifier::LineHeight { value: 200 },
-        ];
-        let doc = Doc::with_preset(RootNode::default(), mods.clone());
-        let root = doc.get_entry(NodeId::ROOT).unwrap();
-        assert_eq!(root.modifiers, mods);
-    }
-
-    #[test]
-    fn with_preset_applies_layout_mode() {
-        let root_node = RootNode {
-            layout_mode: LayoutMode::Paginated {
-                page_width: 794.0,
-                page_height: 1123.0,
-                page_margin_top: 50.0,
-                page_margin_bottom: 50.0,
-                page_margin_left: 50.0,
-                page_margin_right: 50.0,
-            },
-        };
-        let doc = Doc::with_preset(root_node.clone(), vec![]);
-        let root_entry = doc.get_entry(NodeId::ROOT).unwrap();
-        match &root_entry.node {
-            Node::Root(r) => assert_eq!(r, &root_node),
-            _ => panic!("expected Root"),
-        }
-    }
-
-    #[test]
-    fn with_preset_round_trip_via_objects() {
-        let mods = vec![Modifier::FontSize { value: 1500 }];
-        let original = Doc::with_preset(RootNode::default(), mods);
-        let (root_hash, derived) = original.derive_all_objects();
-        let pairs: Vec<(String, ObjectContent)> =
-            derived.into_iter().map(|d| (d.hash, d.content)).collect();
-        let reconstructed = Doc::reconstruct_from_objects(&root_hash, &pairs).unwrap();
-        assert_doc_eq!(original, reconstructed);
     }
 }

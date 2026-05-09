@@ -146,11 +146,16 @@ pub(crate) fn collect_font_requests(
 ) -> HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>> {
     let mut result: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>> = HashMap::new();
 
-    for descendant in doc.root().descendants() {
+    for descendant in doc.root().unwrap().descendants() {
         let (family, weight) = resolve_font_for_node(&descendant);
 
         if let Node::Text(text_node) = descendant.node() {
-            let codepoints: HashSet<u32> = text_node.text.chars().map(|c| c as u32).collect();
+            let codepoints: HashSet<u32> = text_node
+                .text
+                .to_string()
+                .chars()
+                .map(|c| c as u32)
+                .collect();
             if !codepoints.is_empty() {
                 result
                     .entry((family, weight))
@@ -989,12 +994,12 @@ mod tests {
             doc {
                 root (
                     layout_mode: LayoutMode::Paginated {
-                        page_width: 400.0,
-                        page_height: 600.0,
-                        page_margin_top: 20.0,
-                        page_margin_bottom: 20.0,
-                        page_margin_left: 20.0,
-                        page_margin_right: 20.0,
+                        page_width: 400,
+                        page_height: 600,
+                        page_margin_top: 20,
+                        page_margin_bottom: 20,
+                        page_margin_left: 20,
+                        page_margin_right: 20,
                     }
                 ) [font_family("TestFont".to_string()), font_weight(400)] {
                     paragraph { t1: text("hello") }
@@ -1035,7 +1040,7 @@ mod tests {
         let (state, _t1) = state! {
             doc {
                 root (
-                    layout_mode: LayoutMode::Continuous { max_width: 800.0 }
+                    layout_mode: LayoutMode::Continuous { max_width: 800 }
                 ) [font_family("TestFont".to_string()), font_weight(400)] {
                     paragraph { t1: text("hello") }
                 }

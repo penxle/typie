@@ -1,16 +1,25 @@
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrSetOp<T> {
-    Add { elem: T },
-    Remove { observed: Dot },
+    #[n(0)]
+    Add {
+        #[n(0)]
+        elem: T,
+    },
+    #[n(1)]
+    Remove {
+        #[n(0)]
+        observed: Dot,
+    },
 }
 
-/// **Standalone-POC representation — do not embed in an editor as-is.**
+/// **Reference impl — do not embed in an editor as-is.**
 /// `iter()` / `len()` / `contains()` are O(n) full-scan over entries.
 /// Editor integration must replace this with an inverted index `T → HashSet<Dot>`
 /// or a cached live element set.

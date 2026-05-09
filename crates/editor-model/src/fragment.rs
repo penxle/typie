@@ -1,15 +1,14 @@
-use editor_macros::ffi;
-use serde::{Deserialize, Serialize};
-
 use crate::id::NodeId;
 use crate::modifier::Modifier;
-use crate::nodes::Node;
+use crate::nodes::PlainNode;
 use crate::subtree::Subtree;
+use editor_macros::ffi;
+use serde::{Deserialize, Serialize};
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Fragment {
-    pub node: Node,
+    pub node: PlainNode,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub modifiers: Vec<Modifier>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -17,7 +16,7 @@ pub struct Fragment {
 }
 
 impl Fragment {
-    pub fn leaf(node: Node) -> Self {
+    pub fn leaf(node: PlainNode) -> Self {
         Self {
             node,
             modifiers: vec![],
@@ -43,7 +42,7 @@ impl Fragment {
             children: self
                 .children
                 .into_iter()
-                .map(|c| c.into_subtree())
+                .map(|f| f.into_subtree())
                 .collect(),
         }
     }

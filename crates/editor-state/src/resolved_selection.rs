@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeRef};
 use std::marker::PhantomData;
 
@@ -132,7 +131,7 @@ impl<'a> ResolvedSelection<'a> {
     /// deeper than `node` in the tree — the selection then starts within the subtree,
     /// leaving the leading content outside.
     ///
-    /// Text-node end uses `text.char_count()` (offset is a character index, not a child
+    /// Text-node end uses `text.len()` (offset is a character index, not a child
     /// index); container nodes use `children().count()`.
     pub fn contains_subtree(&self, node: &NodeRef<'_>) -> bool {
         let from = self.from();
@@ -144,7 +143,7 @@ impl<'a> ResolvedSelection<'a> {
         let to_node_path = to_node.path();
         let node_path = node.path();
         let node_end_offset = match node.node() {
-            Node::Text(t) => t.text.char_count(),
+            Node::Text(t) => t.text.len(),
             _ => node.children().count(),
         };
 
@@ -182,7 +181,7 @@ fn position_before_or_at_node_start(
 
 /// `true` iff the position `(pos_path, pos_offset)` is at or after the boundary
 /// immediately after `node_path`'s subtree. `node_end_offset` is the offset that
-/// represents "end of node's content" — `text.char_count()` for text, or
+/// represents "end of node's content" — `text.len()` for text, or
 /// `children().count()` for containers.
 fn position_after_or_at_node_end(
     pos_path: &[usize],
@@ -216,7 +215,7 @@ impl From<&ResolvedSelection<'_>> for Selection {
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use editor_macros::{doc, state};
     use editor_model::*;
 
     use crate::{Position, Selection};
@@ -354,12 +353,6 @@ mod tests {
         let pos = Position::new(t3, 0).resolve(&doc).unwrap();
         assert!(!resolved.contains(&pos));
     }
-}
-
-#[cfg(test)]
-mod helper_tests {
-    use editor_macros::state;
-    use editor_model::*;
 
     #[test]
     fn common_ancestor_two_text_in_same_paragraph_returns_paragraph() {

@@ -8,60 +8,74 @@ use crate::doc_macro::parse::{
 
 pub struct CodegenParts {
     pub id_decls: Vec<TokenStream>,
-    pub with_nodes: Vec<TokenStream>,
+    pub plain_entries: Vec<TokenStream>,
     pub bindings: Vec<Ident>,
 }
 
 pub fn generate_parts(tree: &DocTree) -> CodegenParts {
     let mut id_decls = Vec::new();
-    let mut with_nodes = Vec::new();
+    let mut plain_entries = Vec::new();
     let mut bindings = Vec::new();
 
     collect_node(
         &tree.root,
-        &quote! {},
-        false,
+        None,
         &mut id_decls,
-        &mut with_nodes,
+        &mut plain_entries,
         &mut bindings,
     );
 
     CodegenParts {
         id_decls,
-        with_nodes,
+        plain_entries,
         bindings,
     }
 }
 
 pub fn generate(tree: &DocTree) -> TokenStream {
     let parts = generate_parts(tree);
-    let id_decls = &parts.id_decls;
-    let with_nodes = &parts.with_nodes;
     let bindings = &parts.bindings;
+    let scaffold = emit_doc_construction(&parts);
 
     quote! {
         {
-            use editor_model::*;
-
-            #(#id_decls)*
-
-            let doc = Doc::new_test();
-            #(#with_nodes)*
+            #scaffold
 
             (doc, #(#bindings),*)
         }
     }
 }
 
+pub(crate) fn emit_doc_construction(parts: &CodegenParts) -> TokenStream {
+    let id_decls = &parts.id_decls;
+    let plain_entries = &parts.plain_entries;
+    quote! {
+        use ::editor_model::*;
+        use ::std::collections::BTreeMap;
+
+        #(#id_decls)*
+
+        let __plain = PlainDoc {
+            nodes: {
+                let mut __m: BTreeMap<NodeId, PlainNodeEntry> = BTreeMap::new();
+                #(#plain_entries)*
+                __m
+            },
+        };
+        let (doc, _op_graph) = Doc::from_plain(__plain);
+    }
+}
+
+// Returns the TokenStream for this node's id ident (e.g. `quote! { __node_0 }`).
 fn collect_node(
     node: &NodeDef,
-    parent_id: &TokenStream,
-    has_parent: bool,
+    parent_id: Option<&TokenStream>,
     id_decls: &mut Vec<TokenStream>,
-    with_nodes: &mut Vec<TokenStream>,
+    plain_entries: &mut Vec<TokenStream>,
     bindings: &mut Vec<Ident>,
 ) -> TokenStream {
     let is_root = node.node_type == "root";
+    let is_text = node.node_type == "text";
 
     let id_ident = if let Some(ref binding) = node.binding {
         binding.clone()
@@ -81,84 +95,134 @@ fn collect_node(
 
     let id_ts = quote! { #id_ident };
 
-    let mut child_ids = Vec::new();
+    // Collect children first (so their id_decls are in DFS order).
+    let child_ids: Vec<TokenStream> = match &node.content {
+        NodeContent::Children(children) => children
+            .iter()
+            .map(|child| collect_node(child, Some(&id_ts), id_decls, plain_entries, bindings))
+            .collect(),
+        NodeContent::Text(_) | NodeContent::Leaf => vec![],
+    };
 
-    match &node.content {
-        NodeContent::Children(children) => {
-            for child in children {
-                let child_id = collect_node(child, &id_ts, true, id_decls, with_nodes, bindings);
-                child_ids.push(child_id);
-            }
-        }
-        NodeContent::Text(_) | NodeContent::Leaf => {}
-    }
+    let parent_expr = match parent_id {
+        Some(pid) => quote! { Some(#pid) },
+        None => quote! { None },
+    };
 
-    let children_vec = quote! { editor_model::imbl::vector![#(#child_ids),*] };
-
-    let parent_expr = if has_parent {
-        quote! { Some(#parent_id) }
+    let children_expr = if child_ids.is_empty() {
+        quote! { vec![] }
     } else {
-        quote! { None }
+        quote! { vec![#(#child_ids),*] }
     };
 
-    let node_expr = build_node_expr(node);
+    let modifiers_expr = build_modifiers_expr(node);
+    let plain_node_expr = build_plain_node_expr(node);
 
-    let modifiers_expr = match &node.modifiers {
-        None if is_root => quote! { default_modifiers() },
-        None => quote! { vec![] },
-        Some(mods) if is_root => {
-            let modifier_exprs: Vec<TokenStream> = mods.iter().map(build_modifier_expr).collect();
-            if modifier_exprs.is_empty() {
-                quote! { vec![] }
-            } else {
-                quote! { default_modifiers_with(vec![#(#modifier_exprs),*]) }
-            }
+    // For text nodes, the text literal is held in the PlainNode directly.
+    let plain_node_with_text = if is_text {
+        if let NodeContent::Text(lit) = &node.content {
+            quote! { PlainNode::Text(PlainTextNode { text: #lit.to_string() }) }
+        } else {
+            plain_node_expr
         }
-        Some(mods) => {
-            let modifier_exprs: Vec<TokenStream> = mods.iter().map(build_modifier_expr).collect();
-            build_entry_modifiers_expr(&modifier_exprs)
-        }
+    } else {
+        plain_node_expr
     };
 
-    let with_node = quote! {
-        let doc = doc.with_node(
-            #id_ident,
-            NodeEntry {
-                node: #node_expr,
-                parent: #parent_expr,
-                children: #children_vec,
-                modifiers: #modifiers_expr,
-            },
-        );
-    };
-    with_nodes.push(with_node);
+    plain_entries.push(quote! {
+        __m.insert(#id_ident, PlainNodeEntry {
+            parent: #parent_expr,
+            children: #children_expr,
+            modifiers: #modifiers_expr,
+            node: #plain_node_with_text,
+        });
+    });
 
     id_ts
 }
 
-fn build_node_expr(node: &NodeDef) -> TokenStream {
+// Produces the PlainNode variant expression (excluding Text, which is inlined in collect_node).
+fn build_plain_node_expr(node: &NodeDef) -> TokenStream {
     let type_str = node.node_type.to_string();
 
-    if type_str == "text" {
-        let text = match &node.content {
-            NodeContent::Text(lit) => lit,
-            _ => unreachable!("text node must have Text content"),
-        };
-        quote! { Node::Text(TextNode { text: #text.into() }) }
-    } else {
-        let variant = Ident::new(&type_str.to_pascal_case(), Span::call_site());
-        let node_struct = format_ident!("{}Node", variant);
+    let variant = Ident::new(&type_str.to_pascal_case(), Span::call_site());
+    let plain_struct = format_ident!("Plain{}Node", variant);
 
-        if node.params.is_empty() {
-            quote! { Node::#variant(#node_struct::default()) }
-        } else {
-            let field_names: Vec<_> = node.params.iter().map(|fv| &fv.name).collect();
-            let field_values: Vec<_> = node.params.iter().map(|fv| &fv.value).collect();
-            quote! {
+    if node.params.is_empty() {
+        quote! { PlainNode::#variant(#plain_struct::default()) }
+    } else {
+        let field_assigns: Vec<TokenStream> = node
+            .params
+            .iter()
+            .map(|fv| {
+                let name = &fv.name;
+                let value = &fv.value;
+                quote! { #name: #value }
+            })
+            .collect();
+        quote! {
+            PlainNode::#variant(#plain_struct {
+                #(#field_assigns,)*
+                ..Default::default()
+            })
+        }
+    }
+}
+
+fn build_modifiers_expr(node: &NodeDef) -> TokenStream {
+    let is_root = node.node_type == "root";
+
+    if is_root {
+        match &node.modifiers {
+            None => quote! {
                 {
-                    let mut __node = #node_struct::default();
-                    #(__node.#field_names = #field_values;)*
-                    Node::#variant(__node)
+                    let mut __mods: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+                    for __m in default_modifiers() {
+                        __mods.insert(Modifier::as_type(&__m), __m);
+                    }
+                    __mods
+                }
+            },
+            Some(mods) if mods.is_empty() => quote! {
+                BTreeMap::new()
+            },
+            Some(mods) => {
+                let modifier_exprs: Vec<TokenStream> =
+                    mods.iter().map(build_modifier_expr).collect();
+                quote! {
+                    {
+                        let mut __mods: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+                        for __m in default_modifiers_with(vec![#(#modifier_exprs),*]) {
+                            __mods.insert(Modifier::as_type(&__m), __m);
+                        }
+                        __mods
+                    }
+                }
+            }
+        }
+    } else {
+        match &node.modifiers {
+            None => quote! { BTreeMap::new() },
+            Some(mods) if mods.is_empty() => quote! { BTreeMap::new() },
+            Some(mods) => {
+                let entries: Vec<TokenStream> = mods
+                    .iter()
+                    .map(|dec| {
+                        let expr = build_modifier_expr(dec);
+                        quote! {
+                            {
+                                let __m = #expr;
+                                __mods.insert(Modifier::as_type(&__m), __m);
+                            }
+                        }
+                    })
+                    .collect();
+                quote! {
+                    {
+                        let mut __mods: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+                        #(#entries)*
+                        __mods
+                    }
                 }
             }
         }
@@ -176,7 +240,6 @@ pub(crate) fn build_modifier_expr(dec: &DecorationDef) -> TokenStream {
             quote! { Modifier::#variant { #(#field_assigns,)* } }
         }
         DecorationParams::Positional(exprs) => {
-            // All single-value tuple variants are now struct variants with `value` field
             assert_eq!(
                 exprs.len(),
                 1,
@@ -197,12 +260,4 @@ fn build_field_assigns(fields: &[FieldValue]) -> Vec<TokenStream> {
             quote! { #name: #value }
         })
         .collect()
-}
-
-fn build_entry_modifiers_expr(shorthand_exprs: &[TokenStream]) -> TokenStream {
-    if shorthand_exprs.is_empty() {
-        quote! { vec![] }
-    } else {
-        quote! { vec![#(#shorthand_exprs),*] }
-    }
 }

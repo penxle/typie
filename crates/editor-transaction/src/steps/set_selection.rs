@@ -1,27 +1,27 @@
-use editor_state::{Selection, State};
+use editor_state::{BatchedState, Selection};
 
-use crate::{Step, StepError, StepOutput};
-
-pub(crate) fn apply(state: &State, new: &Selection) -> Result<StepOutput, StepError> {
-    let mut new_state = state.clone();
-    new_state.selection = *new;
-
-    Ok(StepOutput {
-        state: new_state,
-        validations: vec![],
-    })
-}
+use crate::{Step, StepError, Validation};
 
 pub(crate) fn inverse(old: Selection, new: Selection) -> Step {
     Step::SetSelection { old: new, new: old }
 }
 
+pub(crate) fn apply_to(
+    batched: &mut BatchedState,
+    _validations: &mut Vec<Validation>,
+    _old: Selection,
+    new: Selection,
+) -> Result<(), StepError> {
+    batched.set_selection(new);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::*;
+    use editor_state::{Position, Selection};
 
-    use crate::*;
+    use crate::Step;
 
     #[test]
     fn set_selection_apply() {
@@ -41,7 +41,6 @@ mod tests {
             old: state.selection,
             new: new_sel,
         };
-
         let output = step.apply(&state).unwrap();
 
         assert_eq!(output.state.selection, new_sel);
@@ -65,7 +64,6 @@ mod tests {
             old: state.selection,
             new: new_sel,
         };
-
         let state2 = step.apply(&state).unwrap().state;
         let state3 = step.inverse().apply(&state2).unwrap().state;
 

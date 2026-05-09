@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::Node;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact};
@@ -55,7 +54,7 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
     let prev_was_empty = prev.entry().children.is_empty();
     let join_cursor = if let Some(last_child) = prev.last_child() {
         match last_child.node() {
-            Node::Text(t) => Some((last_child.id(), t.text.char_count())),
+            Node::Text(t) => Some((last_child.id(), t.text.len())),
             _ => None,
         }
     } else {

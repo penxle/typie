@@ -1,34 +1,45 @@
-use editor_macros::ffi;
+use editor_crdt::LwwReg;
+use editor_macros::{NodeAttr, ffi};
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum LayoutMode {
+    #[n(0)]
     #[serde(rename_all = "snake_case")]
     Paginated {
-        page_width: f32,
-        page_height: f32,
-        page_margin_top: f32,
-        page_margin_bottom: f32,
-        page_margin_left: f32,
-        page_margin_right: f32,
+        #[n(0)]
+        page_width: u32,
+        #[n(1)]
+        page_height: u32,
+        #[n(2)]
+        page_margin_top: u32,
+        #[n(3)]
+        page_margin_bottom: u32,
+        #[n(4)]
+        page_margin_left: u32,
+        #[n(5)]
+        page_margin_right: u32,
     },
+    #[n(1)]
     #[serde(rename_all = "snake_case")]
-    Continuous { max_width: f32 },
+    Continuous {
+        #[n(0)]
+        max_width: u32,
+    },
 }
 
 impl Default for LayoutMode {
     fn default() -> Self {
-        Self::Continuous { max_width: 600.0 }
+        Self::Continuous { max_width: 600 }
     }
 }
 
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, NodeAttr)]
 pub struct RootNode {
-    pub layout_mode: LayoutMode,
+    pub layout_mode: LwwReg<LayoutMode>,
 }
 
 #[cfg(test)]
@@ -44,7 +55,10 @@ mod tests {
     #[test]
     fn root_node_default_has_continuous_layout() {
         let r = RootNode::default();
-        assert!(matches!(r.layout_mode, LayoutMode::Continuous { .. }));
+        assert!(matches!(
+            *r.layout_mode.get(),
+            LayoutMode::Continuous { .. }
+        ));
     }
 
     #[test]
@@ -53,13 +67,5 @@ mod tests {
         let json = serde_json::to_string(&m).unwrap();
         let parsed: LayoutMode = serde_json::from_str(&json).unwrap();
         assert_eq!(m, parsed);
-    }
-
-    #[test]
-    fn root_node_serde_roundtrip() {
-        let r = RootNode::default();
-        let json = serde_json::to_string(&r).unwrap();
-        let parsed: RootNode = serde_json::from_str(&json).unwrap();
-        assert_eq!(r, parsed);
     }
 }

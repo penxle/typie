@@ -175,8 +175,8 @@ pub fn measure_table(
         let mut all_some = true;
         for cell in &first_row_cells {
             if let Node::TableCell(tc) = cell.node() {
-                if let Some(w) = tc.col_width {
-                    widths.push(w);
+                if let Some(w) = *tc.col_width.get() {
+                    widths.push(w as f32);
                 } else {
                     all_some = false;
                     break;
@@ -189,7 +189,7 @@ pub fn measure_table(
         if all_some { Some(widths) } else { None }
     };
 
-    let proportion = table_node.proportion.clamp(0.0, 1.0);
+    let proportion = (*table_node.proportion.get() as f32 / 100.0).clamp(0.0, 1.0);
     let target_width = proportion * width;
     let floor = min_table_width(col_count).min(width);
     let table_width = target_width.max(floor);
@@ -268,7 +268,6 @@ pub fn measure_table(
 
     let align = node
         .modifiers()
-        .iter()
         .find_map(|m| match m {
             Modifier::Alignment { value } => Some(*value),
             _ => None,

@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact, fulfill, prune};
@@ -91,10 +90,10 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
                 let doc = tr.doc();
                 let next_id = doc
                     .node(parent_id)
-                    .and_then(|p| p.entry().children.get(idx).copied());
+                    .and_then(|p| p.entry().children.iter().nth(idx).copied());
                 let prev_id = if idx > 0 {
                     doc.node(parent_id)
-                        .and_then(|p| p.entry().children.get(idx - 1).copied())
+                        .and_then(|p| p.entry().children.iter().nth(idx - 1).copied())
                 } else {
                     None
                 };
@@ -126,7 +125,7 @@ fn delete_within_node(
 
     match node.node() {
         Node::Text(text_node) => {
-            let text_len = text_node.text.char_count();
+            let text_len = text_node.text.len();
             if from_offset == 0 && to_offset >= text_len {
                 let parent_id = node.parent().ok_or(CommandError::NoParent(node_id))?.id();
                 let node_index = node
@@ -198,7 +197,7 @@ fn resolve_cursor_after_removal(
     {
         return Position {
             node_id: prev_id,
-            offset: t.text.char_count(),
+            offset: t.text.len(),
             affinity: Affinity::Upstream,
         };
     }
@@ -221,7 +220,7 @@ fn delete_from(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<
         let offset = path[0];
         match node.node() {
             Node::Text(t) => {
-                let text_len = t.text.char_count();
+                let text_len = t.text.len();
                 if offset == 0 {
                     tr.remove_subtree(node_id)?;
                 } else if offset < text_len {
@@ -248,7 +247,7 @@ fn delete_from(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<
         for child_id in children.into_iter().rev() {
             tr.remove_subtree(child_id)?;
         }
-        let child_id = node.entry().children[idx];
+        let child_id = node.entry().children.iter().nth(idx).copied().unwrap();
         delete_from(tr, &path[1..], child_id)?;
     }
 
@@ -266,7 +265,7 @@ fn delete_to(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<()
         let offset = path[0];
         match node.node() {
             Node::Text(t) => {
-                let text_len = t.text.char_count();
+                let text_len = t.text.len();
                 if offset >= text_len {
                     tr.remove_subtree(node_id)?;
                 } else if offset > 0 {
@@ -287,7 +286,7 @@ fn delete_to(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<()
         for child_id in children.into_iter().rev() {
             tr.remove_subtree(child_id)?;
         }
-        let child_id = node.entry().children[idx];
+        let child_id = node.entry().children.iter().nth(idx).copied().unwrap();
         delete_to(tr, &path[1..], child_id)?;
     }
 
@@ -309,7 +308,7 @@ fn delete_range(
         let node = doc
             .node(node_id)
             .ok_or(CommandError::NodeNotFound(node_id))?;
-        let child_id = node.entry().children[from_idx];
+        let child_id = node.entry().children.iter().nth(from_idx).copied().unwrap();
 
         match (from_path.len(), to_path.len()) {
             (1, l) if l > 1 => delete_to(tr, &to_path[1..], child_id)?,
@@ -330,12 +329,12 @@ fn delete_range(
         let children = &node.entry().children;
 
         let from_child_id = if from_path.len() > 1 {
-            Some(children[from_idx])
+            children.iter().nth(from_idx).copied()
         } else {
             None
         };
         let to_child_id = if to_path.len() > 1 {
-            Some(children[to_idx])
+            children.iter().nth(to_idx).copied()
         } else {
             None
         };
@@ -398,7 +397,7 @@ fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<
 
     if is_textblock(node) {
         // Textblock with text children -> recurse into first child
-        if let Some(&first_child_id) = node_ref.entry().children.front()
+        if let Some(&first_child_id) = node_ref.entry().children.iter().next()
             && let Some(pos) = find_first_text_position(doc, first_child_id)
         {
             return Some(pos);
@@ -412,7 +411,7 @@ fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<
     }
 
     // Otherwise -> recurse into first child
-    let first_child_id = *node_ref.entry().children.front()?;
+    let first_child_id = *node_ref.entry().children.iter().next()?;
     find_first_text_position(doc, first_child_id)
 }
 
@@ -427,7 +426,7 @@ fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: u
     // After block-level deletions, cursor may be at a container position like (root, 0).
     // A collapsed selection at a container position in a block-children container is invalid.
     // Try forward child first: node selection for a block-level leaf, or collapsed at first text position.
-    if let Some(&child_id) = children.get(offset)
+    if let Some(&child_id) = children.iter().nth(offset)
         && let Some(child) = doc.node(child_id)
     {
         if is_block_level_leaf(child.node()) {
@@ -451,7 +450,7 @@ fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: u
 
     // Fall back to previous child.
     if offset > 0
-        && let Some(&child_id) = children.get(offset - 1)
+        && let Some(&child_id) = children.iter().nth(offset - 1)
         && let Some(child) = doc.node(child_id)
     {
         if is_block_level_leaf(child.node()) {

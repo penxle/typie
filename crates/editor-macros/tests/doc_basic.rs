@@ -13,23 +13,23 @@ fn doc_basic_tree() {
 
     let root = doc.get_entry(NodeId::ROOT).unwrap();
     assert!(matches!(root.node, Node::Root(_)));
-    assert!(root.parent.is_none());
+    assert!(root.parent.get().is_none());
     assert_eq!(root.children.len(), 1);
-    assert_eq!(root.children[0], p);
+    assert_eq!(root.children.iter().next().copied().unwrap(), p);
 
     let p_entry = doc.get_entry(p).unwrap();
     assert!(matches!(p_entry.node, Node::Paragraph(_)));
-    assert_eq!(p_entry.parent, Some(NodeId::ROOT));
+    assert_eq!(p_entry.parent.get(), &Some(NodeId::ROOT));
     assert_eq!(p_entry.children.len(), 1);
-    assert_eq!(p_entry.children[0], t);
+    assert_eq!(p_entry.children.iter().next().copied().unwrap(), t);
 
     let t_entry = doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
-        assert_eq!(text_node.text, "Hello World");
+        assert_eq!(text_node.text.to_string(), "Hello World");
     } else {
         panic!("expected Text node");
     }
-    assert_eq!(t_entry.parent, Some(p));
+    assert_eq!(t_entry.parent.get(), &Some(p));
     assert!(t_entry.children.is_empty());
     assert!(t_entry.modifiers.is_empty());
 }
@@ -45,13 +45,15 @@ fn doc_styled_text() {
     };
     let t_entry = doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
-        assert_eq!(text_node.text, "Hello");
+        assert_eq!(text_node.text.to_string(), "Hello");
     } else {
         panic!("expected Text node");
     }
     assert_eq!(t_entry.modifiers.len(), 2);
-    assert!(matches!(t_entry.modifiers[0], Modifier::Bold));
-    assert!(matches!(t_entry.modifiers[1], Modifier::Italic));
+    let mod_keys: std::collections::HashSet<ModifierType> =
+        t_entry.modifiers.iter().map(|(k, _)| *k).collect();
+    assert!(mod_keys.contains(&ModifierType::Bold));
+    assert!(mod_keys.contains(&ModifierType::Italic));
 }
 
 #[test]
@@ -66,16 +68,16 @@ fn doc_multi_node_text() {
     };
     let t1_entry = doc.get_entry(t1).unwrap();
     if let Node::Text(ref text_node) = t1_entry.node {
-        assert_eq!(text_node.text, "Hello ");
+        assert_eq!(text_node.text.to_string(), "Hello ");
     } else {
         panic!("expected Text node");
     }
     assert_eq!(t1_entry.modifiers.len(), 1);
-    assert!(matches!(t1_entry.modifiers[0], Modifier::Bold));
+    assert!(t1_entry.modifiers.contains_key(&ModifierType::Bold));
 
     let t2_entry = doc.get_entry(t2).unwrap();
     if let Node::Text(ref text_node) = t2_entry.node {
-        assert_eq!(text_node.text, "World");
+        assert_eq!(text_node.text.to_string(), "World");
     } else {
         panic!("expected Text node");
     }
@@ -93,13 +95,13 @@ fn doc_link_modifier() {
     };
     let t_entry = doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
-        assert_eq!(text_node.text, "Click");
+        assert_eq!(text_node.text.to_string(), "Click");
     } else {
         panic!("expected Text node");
     }
     assert_eq!(t_entry.modifiers.len(), 2);
-    assert!(matches!(t_entry.modifiers[0], Modifier::Bold));
-    if let Modifier::Link { ref href } = t_entry.modifiers[1] {
+    assert!(t_entry.modifiers.contains_key(&ModifierType::Bold));
+    if let Some(Modifier::Link { href }) = t_entry.modifiers.get(&ModifierType::Link).cloned() {
         assert_eq!(href, "https://example.com");
     } else {
         panic!("expected Link modifier");
@@ -116,9 +118,12 @@ fn doc_node_params() {
         }
     };
     let p_entry = doc.get_entry(p).unwrap();
-    assert!(p_entry.modifiers.contains(&Modifier::Alignment {
-        value: Alignment::Center,
-    }));
+    assert_eq!(
+        p_entry.modifiers.get(&ModifierType::Alignment),
+        Some(&Modifier::Alignment {
+            value: Alignment::Center
+        })
+    );
 }
 
 #[test]
@@ -130,7 +135,7 @@ fn doc_leaf_node() {
     };
     let hr_entry = doc.get_entry(hr).unwrap();
     assert!(matches!(hr_entry.node, Node::HorizontalRule(_)));
-    assert_eq!(hr_entry.parent, Some(NodeId::ROOT));
+    assert_eq!(hr_entry.parent.get(), &Some(NodeId::ROOT));
     assert!(hr_entry.children.is_empty());
 }
 
@@ -145,13 +150,13 @@ fn doc_unnamed_node() {
     };
     let t_entry = doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
-        assert_eq!(text_node.text, "Hello");
+        assert_eq!(text_node.text.to_string(), "Hello");
     } else {
         panic!("expected Text node");
     }
     let root = doc.get_entry(NodeId::ROOT).unwrap();
     assert_eq!(root.children.len(), 1);
-    let p_id = root.children[0];
+    let p_id = root.children.iter().next().copied().unwrap();
     let p_entry = doc.get_entry(p_id).unwrap();
     assert!(matches!(p_entry.node, Node::Paragraph(_)));
 }
@@ -167,7 +172,7 @@ fn doc_modifier_shorthand_on_block() {
     };
     let p_entry = doc.get_entry(p).unwrap();
     assert_eq!(p_entry.modifiers.len(), 1);
-    assert!(matches!(p_entry.modifiers[0], Modifier::Bold));
+    assert!(p_entry.modifiers.contains_key(&ModifierType::Bold));
 }
 
 #[test]
@@ -175,12 +180,12 @@ fn doc_root_with_layout_mode_param() {
     let (doc, ..) = doc! {
         root (
             layout_mode: LayoutMode::Paginated {
-                page_width: 595.0,
-                page_height: 842.0,
-                page_margin_top: 50.0,
-                page_margin_bottom: 50.0,
-                page_margin_left: 50.0,
-                page_margin_right: 50.0,
+                page_width: 595,
+                page_height: 842,
+                page_margin_top: 50,
+                page_margin_bottom: 50,
+                page_margin_left: 50,
+                page_margin_right: 50,
             }
         ) {
             paragraph { text("hi") }
@@ -188,7 +193,7 @@ fn doc_root_with_layout_mode_param() {
     };
     let root = doc.get_entry(NodeId::ROOT).unwrap();
     match &root.node {
-        Node::Root(r) => assert!(matches!(r.layout_mode, LayoutMode::Paginated { .. })),
+        Node::Root(r) => assert!(matches!(*r.layout_mode.get(), LayoutMode::Paginated { .. })),
         _ => panic!("expected Root"),
     }
 }

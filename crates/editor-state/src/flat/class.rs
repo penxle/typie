@@ -31,9 +31,7 @@ mod tests {
 
     #[test]
     fn classify_returns_text_for_text_node() {
-        let node = Node::Text(TextNode {
-            text: "hello".into(),
-        });
+        let node = Node::Text(TextNode::default());
         assert_eq!(classify(&node), FlatClass::Text);
     }
 

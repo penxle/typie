@@ -1,47 +1,9 @@
-use editor_model::{Node, NodeId};
-use editor_state::State;
+use editor_model::{DocOp, NodeId, PlainNode};
+use editor_state::BatchedState;
 
-use crate::{Step, StepError, StepOutput, Validation};
+use crate::{Step, StepError, Validation};
 
-pub(crate) fn apply(
-    state: &State,
-    node_id: NodeId,
-    new_node: &Node,
-) -> Result<StepOutput, StepError> {
-    let entry = state
-        .doc
-        .get_entry(node_id)
-        .ok_or(StepError::NodeNotFound(node_id))?;
-
-    let doc = state.doc.with_node_updated(node_id, |mut e| {
-        e.node = new_node.clone();
-        e
-    });
-
-    let mut new_state = state.clone();
-    new_state.doc = doc;
-
-    let old_type = entry.node.as_type();
-    let new_type = new_node.as_type();
-
-    let validations = if old_type != new_type {
-        let mut v = Vec::new();
-        if let Some(parent_id) = entry.parent {
-            v.push(Validation::Node(parent_id));
-        }
-        v.push(Validation::Subtree(node_id));
-        v
-    } else {
-        vec![]
-    };
-
-    Ok(StepOutput {
-        state: new_state,
-        validations,
-    })
-}
-
-pub(crate) fn inverse(node_id: NodeId, old_node: Node, new_node: Node) -> Step {
+pub(crate) fn inverse(node_id: NodeId, old_node: PlainNode, new_node: PlainNode) -> Step {
     Step::SetNode {
         node_id,
         old_node: new_node,
@@ -49,14 +11,47 @@ pub(crate) fn inverse(node_id: NodeId, old_node: Node, new_node: Node) -> Step {
     }
 }
 
+pub(crate) fn apply_to(
+    batched: &mut BatchedState,
+    validations: &mut Vec<Validation>,
+    node_id: NodeId,
+    old_node: &PlainNode,
+    new_node: &PlainNode,
+) -> Result<(), StepError> {
+    if old_node.as_type() != new_node.as_type() {
+        return Err(StepError::ContentViolation {
+            node_id,
+            detail: format!(
+                "SetNode is attr-only; type change ({:?} -> {:?}) requires a separate remove/insert sequence",
+                old_node.as_type(),
+                new_node.as_type(),
+            ),
+        });
+    }
+    if matches!(old_node, PlainNode::Text(_)) && matches!(new_node, PlainNode::Text(_)) {
+        return Err(StepError::ContentViolation {
+            node_id,
+            detail: "SetNode is attr-only; TextNode content changes require InsertText/RemoveText"
+                .into(),
+        });
+    }
+    for attr in new_node.to_attrs() {
+        batched.apply(DocOp::Attr { node_id, op: attr })?;
+    }
+    validations.push(Validation::Node(node_id));
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::*;
+    use editor_model::{
+        CalloutVariant, Node, NodeId, PlainCalloutNode, PlainImageNode, PlainNode,
+        PlainTableRowNode,
+    };
 
-    use crate::Transaction;
     use crate::test_utils::DocTestExt;
-    use crate::*;
+    use crate::{Step, Transaction};
 
     #[test]
     fn set_node_apply() {
@@ -71,50 +66,19 @@ mod tests {
             selection: (c1, 0)
         };
 
-        let old_node = Node::Callout(CalloutNode::default());
-        let new_node = Node::Callout(CalloutNode {
-            variant: CalloutVariant::Warning,
-        });
-
         let step = Step::SetNode {
             node_id: c1,
-            old_node,
-            new_node: new_node.clone(),
-        };
-
-        let output = step.apply(&state).unwrap();
-        let new_state = output.state;
-
-        assert_eq!(*new_state.node(c1).node(), new_node);
-    }
-
-    #[test]
-    fn set_node_inverse_roundtrip() {
-        let (state, c1) = state! {
-            doc {
-                root {
-                    c1: callout {
-                        paragraph { text("Hello") }
-                    }
-                }
-            }
-            selection: (c1, 0)
-        };
-
-        let original_node = state.node(c1).node().clone();
-
-        let step = Step::SetNode {
-            node_id: c1,
-            old_node: Node::Callout(CalloutNode::default()),
-            new_node: Node::Callout(CalloutNode {
+            old_node: PlainNode::Callout(PlainCalloutNode::default()),
+            new_node: PlainNode::Callout(PlainCalloutNode {
                 variant: CalloutVariant::Warning,
             }),
         };
+        let new_state = step.apply(&state).unwrap().state;
 
-        let state2 = step.apply(&state).unwrap().state;
-        let state3 = step.inverse().apply(&state2).unwrap().state;
-
-        assert_eq!(*state3.node(c1).node(), original_node);
+        let Node::Callout(cn) = new_state.node(c1).node() else {
+            panic!("expected Callout")
+        };
+        assert_eq!(*cn.variant.get(), CalloutVariant::Warning);
     }
 
     #[test]
@@ -131,9 +95,10 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&state);
-        let result = tr.set_node(p1, Node::TableRow(TableRowNode {}));
-
-        assert!(result.is_err());
+        assert!(
+            tr.set_node(p1, PlainNode::TableRow(PlainTableRowNode {}))
+                .is_err()
+        );
     }
 
     #[test]
@@ -150,9 +115,10 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&state);
-        let result = tr.set_node(p1, Node::Image(ImageNode::default()));
-
-        assert!(result.is_err());
+        assert!(
+            tr.set_node(p1, PlainNode::Image(PlainImageNode::default()))
+                .is_err()
+        );
     }
 
     #[test]
@@ -171,10 +137,11 @@ mod tests {
         let missing = NodeId::new();
         let step = Step::SetNode {
             node_id: missing,
-            old_node: Node::Paragraph(ParagraphNode::default()),
-            new_node: Node::Paragraph(ParagraphNode::default()),
+            old_node: PlainNode::Callout(PlainCalloutNode::default()),
+            new_node: PlainNode::Callout(PlainCalloutNode {
+                variant: CalloutVariant::Warning,
+            }),
         };
-
         assert!(step.apply(&state).is_err());
     }
 }

@@ -1,9 +1,6 @@
 <script lang="ts">
-  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import dayjs from 'dayjs';
-  import { graphql } from '$mearie';
-  import type { ClientCommitInput, DebugSnapshot } from './types';
 
   type CommitLite = {
     id: string;
@@ -25,101 +22,16 @@
   };
 
   type Props = {
-    slug: string;
-    snapshot: DebugSnapshot;
     onSelectCommit?: (id: string) => void;
-    loadedCommits?: { id: string; hash: string }[];
   };
 
-  /* eslint-disable no-useless-assignment -- $bindable() defaults are used by Svelte */
-  let { slug, snapshot, onSelectCommit, loadedCommits = $bindable([]) }: Props = $props();
-  /* eslint-enable no-useless-assignment */
+  let { onSelectCommit }: Props = $props();
 
-  type Vars = { slug: string; after: string | null; limit: number };
-  const PAGE = 50;
-
-  let commits = $state<CommitLite[]>([]);
-  let vars = $state<Vars>({ slug, after: null, limit: PAGE });
-  let exhausted = $state(false);
-
-  const query = createQuery(
-    graphql(`
-      query DocumentEditorV2_Debug_Commits($slug: String!, $after: ID, $limit: Int!) {
-        document(slug: $slug) {
-          id
-          commits(after: $after, limit: $limit) {
-            id
-            hash
-            parent {
-              id
-              hash
-            }
-            secondParent {
-              id
-              hash
-            }
-            committedAt
-            pushedAt
-            device {
-              id
-              name
-              isCurrent
-            }
-            user {
-              id
-            }
-          }
-        }
-      }
-    `),
-    () => vars,
-  );
-
-  const lastError = $derived(query.error ? String(query.error) : null);
-
-  $effect(() => {
-    const data = query.data;
-    if (!data) return;
-
-    const fetched = data.document.commits as CommitLite[];
-
-    if (vars.after !== null && fetched.length < vars.limit) {
-      exhausted = true;
-    }
-
-    const existing: Record<string, true> = {};
-    for (const c of commits) existing[c.id] = true;
-    const novel = fetched.filter((c) => !existing[c.id]);
-    if (novel.length === 0) return;
-
-    if (vars.after === null) {
-      commits = [...novel, ...commits];
-    } else {
-      commits = [...commits, ...novel];
-    }
-  });
-
-  $effect(() => {
-    loadedCommits = commits.map((c) => ({ id: c.id, hash: c.hash }));
-  });
-
-  let knownHead: string | null = null;
-  $effect(() => {
-    const head = snapshot.serverHeadHash;
-    if (!head || head === knownHead) {
-      if (head) knownHead = head;
-      return;
-    }
-    const isInitial = knownHead === null;
-    knownHead = head;
-    if (isInitial) return; // initial fetch is driven by mount-time vars
-
-    if (vars.after === null) {
-      query.refetch();
-    } else {
-      vars = { slug, after: null, limit: PAGE };
-    }
-  });
+  // Data source intentionally disabled in this cycle.
+  // Lane DAG layout algorithm and visual styling are preserved verbatim;
+  // wire-up to a real changeset/op DAG source is a follow-up cycle.
+  const commits: CommitLite[] = [];
+  const localChainReversed: { commitHash: string; committedAt: string }[] = [];
 
   function assignLanes(commits: readonly CommitLite[]): RowMeta[] {
     const out: RowMeta[] = commits.map((c) => ({
@@ -186,61 +98,9 @@
 
   const rowMetas = $derived(assignLanes(commits));
 
-  function loadMore() {
-    if (query.loading || exhausted) return;
-    const last = commits.at(-1);
-    if (!last) return;
-    vars = { slug, after: last.id, limit: PAGE };
-  }
-
-  let prevLocalChain: readonly ClientCommitInput[] = [];
-  let inflights = $state<readonly ClientCommitInput[]>([]);
-
-  $effect(() => {
-    const cur = snapshot.outbox.map((e) => e.commit);
-    const present: Record<string, true> = {};
-    for (const c of cur) present[c.commitHash] = true;
-    const departed = prevLocalChain.filter((c) => !present[c.commitHash]);
-    prevLocalChain = [...cur];
-    if (departed.length > 0) {
-      inflights = [...inflights, ...departed];
-    }
-  });
-
-  $effect(() => {
-    if (inflights.length === 0) return;
-    const absorbed: Record<string, true> = {};
-    for (const c of commits) absorbed[c.hash] = true;
-    const remaining = inflights.filter((c) => !absorbed[c.commitHash]);
-    if (remaining.length !== inflights.length) {
-      inflights = remaining;
-    }
-  });
-
-  const localChainReversed = $derived([...snapshot.outbox.map((e) => e.commit).toReversed(), ...inflights.toReversed()]);
-
   function fmtTime(iso: string): string {
     return dayjs(iso).format('HH:mm:ss');
   }
-
-  // IntersectionObserver auto-paginate. The default root (viewport) doesn't
-  // notice inner-scroll containers, so we anchor root to the scroll element.
-  let scrollContainerEl = $state<HTMLDivElement>();
-  let sentinelEl = $state<HTMLDivElement>();
-
-  $effect(() => {
-    if (!scrollContainerEl || !sentinelEl) return;
-    const root = scrollContainerEl;
-    const target = sentinelEl;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) loadMore();
-      },
-      { root, rootMargin: '100px' },
-    );
-    observer.observe(target);
-    return () => observer.disconnect();
-  });
 </script>
 
 <section
@@ -261,6 +121,7 @@
     class={css({
       display: 'flex',
       justifyContent: 'space-between',
+      alignItems: 'center',
       fontWeight: 'semibold',
       fontSize: '10px',
       letterSpacing: '0.04em',
@@ -268,10 +129,11 @@
       marginBottom: '6px',
     })}
   >
-    COMMITS
+    <span>GRAPH</span>
+    <span class={css({ fontSize: '10px', color: 'text.faint', fontWeight: 'normal' })}>data source pending</span>
   </header>
 
-  <div bind:this={scrollContainerEl} class={css({ flexGrow: '1', flexShrink: '1', minHeight: '0', overflowY: 'auto' })}>
+  <div class={css({ flexGrow: '1', flexShrink: '1', minHeight: '0', overflowY: 'auto' })}>
     <ul class={css({ listStyle: 'none', paddingLeft: '0' })}>
       {#each localChainReversed as c, localIdx (c.commitHash)}
         <li
@@ -520,29 +382,5 @@
         </li>
       {/each}
     </ul>
-
-    {#if lastError}
-      <div class={css({ color: 'palette.red', fontSize: '10px', paddingY: '4px' })}>
-        {lastError}
-        <button
-          class={css({
-            marginLeft: '8px',
-            cursor: 'pointer',
-            color: 'palette.blue',
-            backgroundColor: 'transparent',
-            border: 'none',
-            padding: '0',
-          })}
-          onclick={loadMore}
-          type="button"
-        >
-          retry
-        </button>
-      </div>
-    {:else if !exhausted}
-      <div bind:this={sentinelEl} class={css({ paddingY: '6px', textAlign: 'center', fontSize: '10px', color: 'text.faint' })}>
-        {query.loading ? '…' : ''}
-      </div>
-    {/if}
   </div>
 </section>

@@ -1,24 +1,14 @@
-use editor_macros::ffi;
-use serde::{Deserialize, Serialize};
+use editor_crdt::LwwReg;
+use editor_macros::NodeAttr;
 
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, NodeAttr)]
 pub struct ImageNode {
-    pub id: Option<String>,
-    #[ffi(default = "1.0f")]
-    #[serde(default = "default_proportion")]
-    pub proportion: f32,
+    pub id: LwwReg<Option<String>>,
+    #[node_attr(default = "100u32")]
+    #[plain(ffi(default = "100"), serde(default = "default_proportion"))]
+    pub proportion: LwwReg<u32>,
 }
 
-fn default_proportion() -> f32 {
-    1.0
-}
-
-impl Default for ImageNode {
-    fn default() -> Self {
-        Self {
-            id: None,
-            proportion: default_proportion(),
-        }
-    }
+fn default_proportion() -> u32 {
+    100
 }

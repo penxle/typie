@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{
     Expand, Modifier, ModifierState, ModifierType, Node, NodeRef, NodeType, Schema,
 };
@@ -33,16 +32,15 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
         return vec![];
     };
 
-    let node_len = text_node.text.char_count();
+    let node_len = text_node.text.len();
     let at_start = offset == 0 && node_len > 0;
     let at_end = offset == node_len && node_len > 0;
 
     if !at_start && !at_end {
-        return node.modifiers().to_vec();
+        return node.modifiers().cloned().collect::<Vec<_>>();
     }
 
     node.modifiers()
-        .iter()
         .filter(|m| {
             let expand = &m.spec().expand;
             match expand {
@@ -224,14 +222,14 @@ fn modifier_allowed_on_any_path(ty: ModifierType, paths: &[Vec<NodeType>]) -> bo
 }
 
 fn effective_modifier_on_node(node: &NodeRef<'_>, ty: ModifierType) -> Option<Modifier> {
-    if let Some(m) = node.modifiers().iter().find(|m| m.as_type() == ty) {
+    if let Some(m) = node.modifiers().find(|m| m.as_type() == ty) {
         return Some(m.clone());
     }
     if !Schema::modifier_spec(ty).inheritable {
         return None;
     }
     for ancestor in node.ancestors().skip(1) {
-        if let Some(m) = ancestor.modifiers().iter().find(|m| m.as_type() == ty) {
+        if let Some(m) = ancestor.modifiers().find(|m| m.as_type() == ty) {
             return Some(m.clone());
         }
     }
@@ -253,7 +251,10 @@ fn collect_nodes_in_range<'a>(
     // (BlockGap, ParagraphIndent) are visited even when the selection lies entirely
     // inside a paragraph. `intersects_subtree` prunes off-spine siblings so the
     // perf cost is negligible.
-    walk_subtree_intersecting(&state.doc.root(), &rs, &mut out);
+    let Some(root) = state.doc.root() else {
+        return out;
+    };
+    walk_subtree_intersecting(&root, &rs, &mut out);
     out
 }
 

@@ -1,6 +1,4 @@
-use editor_macros::ffi;
-use serde::{Deserialize, Serialize};
+use editor_macros::NodeAttr;
 
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, NodeAttr)]
 pub struct BulletListNode {}

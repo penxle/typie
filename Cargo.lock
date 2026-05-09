@@ -613,6 +613,7 @@ version = "0.0.1"
 dependencies = [
  "editor-commands",
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-renderer",
@@ -641,6 +642,7 @@ dependencies = [
  "getrandom 0.4.2",
  "hashbrown 0.17.0",
  "imbl",
+ "minicbor",
  "proptest",
  "serde",
  "thiserror",
@@ -659,6 +661,7 @@ dependencies = [
  "console_log",
  "editor-common",
  "editor-core",
+ "editor-crdt",
  "editor-introspection",
  "editor-macros",
  "editor-model",
@@ -672,6 +675,7 @@ dependencies = [
  "env_logger",
  "hashbrown 0.17.0",
  "log",
+ "minicbor",
  "objc2",
  "objc2-core-foundation",
  "objc2-metal",
@@ -711,6 +715,7 @@ dependencies = [
  "editor-state",
  "heck",
  "imbl",
+ "minicbor",
  "proc-macro2",
  "quote",
  "serde",
@@ -725,12 +730,14 @@ version = "0.0.1"
 dependencies = [
  "base62",
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "enum-map",
  "getrandom 0.4.2",
  "hashbrown 0.17.0",
  "imbl",
  "log",
+ "minicbor",
  "proptest",
  "serde",
  "serde_json",
@@ -826,13 +833,18 @@ name = "editor-state"
 version = "0.0.1"
 dependencies = [
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-resource",
+ "hashbrown 0.17.0",
  "log",
+ "minicbor",
+ "proptest",
  "serde",
  "serde_json",
  "strum",
+ "thiserror",
  "tsify",
  "uniffi",
  "wasm-bindgen",
@@ -843,6 +855,7 @@ name = "editor-transaction"
 version = "0.0.1"
 dependencies = [
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-state",
@@ -1675,6 +1688,26 @@ checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
 dependencies = [
  "mime",
  "unicase",
+]
+
+[[package]]
+name = "minicbor"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e70eae6d4f18f7d76877fe7b13f0bc21f7c2b7239d2041c338335f7b388d0dd7"
+dependencies = [
+ "minicbor-derive",
+]
+
+[[package]]
+name = "minicbor-derive"
+version = "0.19.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "294f0a0c161c510e9746adf546b8b044fbb0b00677d7dfc9a2452f9fdf63439b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

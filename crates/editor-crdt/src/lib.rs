@@ -1,5 +1,6 @@
 editor_macros::preamble!();
 
+pub mod changeset;
 pub mod dot;
 pub mod error;
 pub mod lwwreg;
@@ -11,7 +12,8 @@ pub mod sync;
 pub mod text;
 pub mod to_plain;
 
-pub use dot::Dot;
+pub use changeset::{Changeset, Changesets};
+pub use dot::{Dot, Dots};
 pub use error::CrdtError;
 pub use lwwreg::{LwwReg, LwwRegOp};
 pub use op_graph::{Op, OpGraph};

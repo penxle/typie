@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::Node;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
@@ -19,7 +18,7 @@ pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
 
     match node.node() {
         Node::Text(text_node) => {
-            let text_len = text_node.text.char_count();
+            let text_len = text_node.text.len();
             if pos.offset < text_len {
                 return Ok(false);
             }
@@ -50,7 +49,8 @@ pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
                 *node
                     .entry()
                     .children
-                    .get(pos.offset)
+                    .iter()
+                    .nth(pos.offset)
                     .ok_or(CommandError::Corrupted(format!(
                         "child at index {} not found in {:?}",
                         pos.offset, pos.node_id

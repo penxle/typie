@@ -20,7 +20,6 @@ pub fn measure_paragraph(
     let indent = resolve_paragraph_indent(node);
     let align = node
         .modifiers()
-        .iter()
         .find_map(|m| match m {
             Modifier::Alignment { value } => Some(*value),
             _ => None,

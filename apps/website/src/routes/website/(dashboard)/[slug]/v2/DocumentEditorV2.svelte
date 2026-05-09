@@ -1,52 +1,34 @@
 <script lang="ts">
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
-  import { onDestroy, onMount } from 'svelte';
-  import Editor from '$lib/editor-ffi/components/Editor.svelte';
+  import { onDestroy, untrack } from 'svelte';
+  import EditorComponent from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
   import { DebugBus } from './@debug/debug-bus.svelte';
   import DebugPanel from './@debug/DebugPanel.svelte';
   import BottomToolbar from './BottomToolbar.svelte';
-  import { Outbox } from './sync/outbox.svelte';
   import { Pusher } from './sync/pusher.svelte';
   import TopToolbar from './TopToolbar.svelte';
-  import type { Doc, ObjectContent, Selection } from '@typie/editor-ffi/browser';
+  import type { Selection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_document$key } from '$mearie';
   import type { DebugSnapshot } from './@debug/types';
-  import type { ClientCommitInput, DocumentObjectInput } from './sync/types';
 
   type Props = {
     document$key: DocumentEditorV2_document$key;
-    slug: string;
   };
 
-  let { document$key, slug }: Props = $props();
+  let { document$key }: Props = $props();
 
   const document = createFragment(
     graphql(`
       fragment DocumentEditorV2_document on Document {
         id
         title
-
-        head {
-          id
-          hash
-
-          rootObject {
-            id
-            hash
-            content
-          }
-
-          objects {
-            id
-            hash
-            content
-          }
+        state {
+          graph
+          updatedAt
         }
-
         ...Editor_document
       }
     `),
@@ -54,229 +36,163 @@
   );
 
   const ctx = setupEditorContext();
-
-  // 디버그 스냅샷에 노출되지만 반응적으로 읽히지 않으므로 plain Map.
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  const cacheObjects = new Map<string, ObjectContent>();
-
-  let serverHeadHash = $state<string>('');
-  let sinceCommitHash = $state<string>('');
-  let chainTip = $state<string>('');
-
-  let docState = $state<{ doc: Doc; selection: Selection } | null>(null);
-
-  let outbox = $state<Outbox | null>(null);
-  let pusher = $state<Pusher | null>(null);
-
   const bus = new DebugBus();
+  const clientId = crypto.randomUUID();
+  let pusher = $state<Pusher | null>(null);
   let debugOpen = $state(true);
 
+  // Server-confirmed heads. Tracks dots the server is known to have ingested
+  // (self-pushed bundles + remote bundles received via subscription/poll).
+  // Used as sinceHeads/clientHeads in server queries so the server's strict
+  // missing_for invariant does not trip on optimistic local dots.
+  //
+  // Stays null until the editor mounts and the $effect seeds it with
+  // editor.currentHeads(). Subscription/poll guard on null so server queries
+  // never run with a placeholder — initial subscription connect uses the
+  // editor's actual heads (= server graph heads at mount), avoiding catch-up
+  // re-fetch of the entire graph that was already loaded via state.graph.
+  let lastConfirmedHeads = $state<Uint8Array | null>(null);
+
+  const graph = $derived(document.data.state ? Uint8Array.fromBase64(document.data.state.graph) : null);
+  const initialSelection: Selection = {
+    anchor: { node_id: '0', offset: 0 },
+    head: { node_id: '0', offset: 0 },
+  };
+
+  const hasHeads = $derived(!!lastConfirmedHeads);
+
   const snapshot = $derived<DebugSnapshot>({
-    serverHeadHash,
-    chainTip,
-    outbox: outbox?.entries ?? [],
-    cacheObjects,
     pushStatus: pusher?.status ?? 'idle',
     retryAttempt: pusher?.retryAttempt ?? 0,
-    hasDocState: docState !== null,
+    lastSentHeadsBytes: lastConfirmedHeads?.length ?? 0,
+    hasEditor: ctx.editor !== undefined,
   });
 
-  const [pushDocumentCommits] = createMutation(
+  const [pushDocumentChangesets] = createMutation(
     graphql(`
-      mutation DocumentEditorV2_Push($input: PushDocumentCommitsInput!) {
-        pushDocumentCommits(input: $input) {
-          id
-          hash
+      mutation DocumentEditorV2_PushChangesets($input: PushDocumentChangesetsInput!) {
+        pushDocumentChangesets(input: $input) {
+          serverHeads
         }
       }
     `),
   );
 
-  async function pushFn(input: { documentId: string; commits: ClientCommitInput[]; objects: DocumentObjectInput[] }): Promise<void> {
-    await pushDocumentCommits({ input });
-  }
-
-  createSubscription(
+  const [pullDocumentChangesets] = createMutation(
     graphql(`
-      subscription DocumentEditorV2_Updated($documentId: ID!, $sinceCommitHash: String!) {
-        documentCommitsUpdated(documentId: $documentId, sinceCommitHash: $sinceCommitHash) {
-          commits {
-            id
-            hash
-            rootObject {
-              id
-              hash
-              content
-            }
-            committedAt
-            pushedAt
-          }
-          objects {
-            id
-            hash
-            content
-          }
+      mutation DocumentEditorV2_PullChangesets($input: PullDocumentChangesetsInput!) {
+        pullDocumentChangesets(input: $input) {
+          missingChangesets
+          serverHeads
         }
       }
     `),
-    () => ({ documentId: document.data.id, sinceCommitHash }),
+  );
+
+  createSubscription(
+    graphql(`
+      subscription DocumentEditorV2_ChangesetsUpdated($documentId: ID!, $clientId: String!, $sinceHeads: Binary!) {
+        documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, sinceHeads: $sinceHeads) {
+          changesets
+          serverHeads
+        }
+      }
+    `),
+    // sinceHeads is read via untrack: onData writes lastConfirmedHeads, which
+    // would otherwise re-trigger args evaluation → mearie reconnect → catch-up
+    // emit → onData → loop. Mearie still re-evaluates args on connect/reconnect,
+    // so the value seen at that moment is current — we just don't want every
+    // confirmed-heads write to cause a forced reconnect.
+    //
+    // sinceHeads asserts non-null because skip guards lastConfirmedHeads === null.
     () => ({
-      skip: docState === null || outbox === null,
+      documentId: document.data.id,
+      clientId,
+      sinceHeads: untrack(() => lastConfirmedHeads?.toBase64() ?? ''),
+    }),
+    () => ({
+      // Defer subscription start until the editor has mounted AND the initial
+      // confirmed heads have been seeded — otherwise the first connect would
+      // ship empty heads and trigger a full-graph catch-up that duplicates the
+      // state.graph already loaded by the page query.
+      skip: ctx.editor === undefined || !hasHeads,
       onData: (data) => {
-        void applyEvent(data.documentCommitsUpdated);
+        const editor = ctx.editor;
+        if (!editor) return;
+        const payload = Uint8Array.fromBase64(data.documentChangesetsUpdated.changesets);
+        if (payload.length > 0) {
+          editor.receiveRemoteChangeset(payload);
+          bus.emit({ kind: 'subscription.received', bytes: payload.length });
+        }
+        lastConfirmedHeads = Uint8Array.fromBase64(data.documentChangesetsUpdated.serverHeads);
       },
     }),
   );
 
-  async function applyEvent(event: {
-    commits: readonly { id: string; hash: string; rootObject: { hash: string; content: unknown }; committedAt: string; pushedAt: string }[];
-    objects: readonly { id: string; hash: string; content: unknown }[];
-  }) {
-    if (event.commits.length === 0) return;
-    if (!outbox) return;
+  $effect(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
 
-    const newHead = event.commits.at(-1);
-    if (!newHead) return;
-
-    const isOwnHead = outbox.hasPending(newHead.hash);
-
-    bus.emit({
-      kind: 'subscription.received',
-      commits: event.commits.length,
-      objects: event.objects.length,
-      ownEcho: isOwnHead,
-      newHead: newHead.hash,
-    });
-
-    for (const o of event.objects) {
-      cacheObjects.set(o.hash, o.content as ObjectContent);
-    }
-
-    await outbox.prune(event.commits.map((c) => c.hash));
-    pusher?.notifyEcho(event.commits.map((c) => c.hash));
-
-    serverHeadHash = newHead.hash;
-
-    if (isOwnHead) {
-      pusher?.schedule();
-      return;
-    }
-
-    await outbox.clear();
-    pusher?.notifyClear();
-    chainTip = newHead.hash;
-    docState = buildDocState(newHead.rootObject.hash);
-  }
-
-  function buildDocState(rootHash: string): { doc: Doc; selection: Selection } {
-    const objectEntries = [...cacheObjects.entries()].map(([hash, content]) => ({ hash, content }));
-    const doc = wasm.reconstruct_doc_from_objects(rootHash, objectEntries);
-
-    const rootChildren = (doc.nodes['0'] as { children?: string[] } | undefined)?.children ?? [];
-    const firstChildId = rootChildren[0] ?? '0';
-    const selection: Selection = {
-      anchor: { node_id: firstChildId, offset: 0 },
-      head: { node_id: firstChildId, offset: 0 },
-    };
-
-    return { doc, selection };
-  }
-
-  onMount(async () => {
-    const head = document.data.head;
-    if (!head) return;
-
-    for (const o of head.objects) {
-      cacheObjects.set(o.hash, o.content as ObjectContent);
-    }
-    serverHeadHash = head.hash;
-
-    await initWasm();
-
-    const ob = await Outbox.open(document.data.id);
-
-    for (const e of ob.entries) {
-      for (const o of e.objects) {
-        cacheObjects.set(o.hash, o.content as ObjectContent);
-      }
-    }
-
-    const lastEntry = ob.entries.at(-1);
-    chainTip = lastEntry?.commit.commitHash ?? head.hash;
-    const ownDocRootHash = lastEntry?.commit.rootObjectHash ?? head.rootObject.hash;
-
-    sinceCommitHash = ob.firstParentCommitHash() ?? head.hash;
+    // Initial confirmed heads = the heads of the server graph the editor was
+    // constructed from. Subsequent pushes/receives advance this monotonically.
+    // Use a local var instead of reading lastConfirmedHeads back inside the
+    // effect — read-after-write inside the same effect re-invalidates it.
+    const initialHeads = editor.currentHeads();
+    lastConfirmedHeads = initialHeads;
 
     const ps = new Pusher({
+      editor,
       documentId: document.data.id,
-      outbox: ob,
-      push: pushFn,
+      clientId,
+      initialServerHeads: initialHeads,
+      pushFn: async (changesets) => {
+        const result = await pushDocumentChangesets({
+          input: {
+            documentId: document.data.id,
+            clientId,
+            changesets: changesets.toBase64(),
+          },
+        });
+        lastConfirmedHeads = Uint8Array.fromBase64(result.pushDocumentChangesets.serverHeads);
+      },
       onEvent: (e) => bus.emit(e),
     });
-
-    outbox = ob;
     pusher = ps;
-    docState = buildDocState(ownDocRootHash);
-    ps.flushNow();
-  });
 
-  $effect(() => {
-    if (!ctx.editor || !pusher) return;
-    const ps = pusher;
-
-    const off = ctx.editor.on('transaction_committed', async (_, { commit }) => {
-      const parentCommitHash = chainTip;
-      const commitHash = wasm.hash_commit_content({
-        parent_hash: parentCommitHash,
-        object_hash: commit.root_object_hash,
-      });
-
-      chainTip = commitHash;
-
-      try {
-        await ps.append({
-          commit: {
-            commitHash,
-            parentCommitHash,
-            rootObjectHash: commit.root_object_hash,
-            steps: commit.steps,
-            meta: commit.meta,
-            committedAt: new Date(commit.committed_at).toISOString(),
-          },
-          objects: commit.objects.map((o) => ({ hash: o.hash, content: o.content })),
-        });
-      } catch {
-        // Pusher already set status to 'error'; swallow to avoid unhandled rejection from editor handler.
-      }
-
-      bus.emit({ kind: 'commit.created', hash: commitHash, chainSize: outbox?.pendingSize ?? 0 });
+    const offStateChanged = editor.on('state_changed', (_, { fields }) => {
+      if (fields.includes('doc')) ps.schedule();
     });
 
-    return off;
+    const pollIntervalId = setInterval(async () => {
+      const ed = ctx.editor;
+      const heads = lastConfirmedHeads;
+      if (!ed || heads === null) return;
+      const result = await pullDocumentChangesets({
+        input: { documentId: document.data.id, clientHeads: heads.toBase64() },
+      });
+      const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.missingChangesets);
+      if (missing.length > 0) {
+        ed.receiveRemoteChangeset(missing);
+        bus.emit({ kind: 'poll.applied', bytes: missing.length });
+      }
+      lastConfirmedHeads = Uint8Array.fromBase64(result.pullDocumentChangesets.serverHeads);
+    }, 10_000);
+
+    return () => {
+      clearInterval(pollIntervalId);
+      offStateChanged();
+      ps.stop();
+      pusher = null;
+    };
   });
 
   onDestroy(() => {
     pusher?.stop();
-    outbox?.close();
   });
 </script>
 
-<div
-  class={css({
-    display: 'flex',
-    flexDirection: 'row',
-    height: 'full',
-    width: 'full',
-  })}
->
-  <div
-    class={css({
-      flex: '1',
-      display: 'flex',
-      flexDirection: 'column',
-      minWidth: '0',
-    })}
-  >
+<div class={css({ display: 'flex', flexDirection: 'row', height: 'full', width: 'full' })}>
+  <div class={css({ flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0' })}>
     <header
       class={css({
         display: 'flex',
@@ -291,11 +207,6 @@
       <h1 class={css({ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 'semibold' })}>
         {document.data.title ?? '제목 없음'}
         <span class={css({ color: 'text.muted', fontWeight: 'normal' })}>(v2 dev)</span>
-        {#if serverHeadHash}
-          <span class={css({ fontSize: '11px', color: 'text.faint', fontFamily: 'mono', fontWeight: 'normal' })}>
-            {serverHeadHash.slice(0, 8)}
-          </span>
-        {/if}
         {#if snapshot.pushStatus !== 'idle'}
           <span
             class={css({
@@ -327,10 +238,7 @@
           letterSpacing: '[0.12em]',
           textTransform: 'uppercase',
           transition: '[all 120ms]',
-          _hover: {
-            borderColor: 'border.default',
-            backgroundColor: 'surface.muted',
-          },
+          _hover: { borderColor: 'border.default', backgroundColor: 'surface.muted' },
         })}
         aria-pressed={debugOpen}
         onclick={() => (debugOpen = !debugOpen)}
@@ -349,16 +257,12 @@
       </button>
     </header>
 
-    {#if !document.data.head}
-      <p class={css({ padding: '16px' })}>v1 document</p>
-    {:else if docState}
-      <TopToolbar />
-      <BottomToolbar />
-      {#key docState}
-        <Editor style={css.raw({ flex: '1' })} doc={docState.doc} document$key={document.data} selection={docState.selection} />
-      {/key}
+    <TopToolbar />
+    <BottomToolbar />
+    {#if graph}
+      <EditorComponent style={css.raw({ flex: '1' })} document$key={document.data} {graph} selection={initialSelection} />
     {/if}
   </div>
 
-  <DebugPanel {bus} onClose={() => (debugOpen = false)} open={debugOpen} {slug} {snapshot} />
+  <DebugPanel {bus} onClose={() => (debugOpen = false)} open={debugOpen} {snapshot} />
 </div>

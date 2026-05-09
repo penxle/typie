@@ -6,6 +6,7 @@ mod ffi_macro;
 mod from_discriminant_macro;
 mod modifier_state_macro;
 mod node_attr_macro;
+mod node_companion_macro;
 mod preamble_macro;
 mod state_macro;
 
@@ -57,7 +58,17 @@ pub fn derive_modifier_state(input: TokenStream) -> TokenStream {
     modifier_state_macro::codegen::generate(&parsed).into()
 }
 
-#[proc_macro_derive(NodeAttr, attributes(node_attr))]
+#[proc_macro_derive(NodeCompanion)]
+pub fn node_companion(input: TokenStream) -> TokenStream {
+    let derive_input = syn::parse_macro_input!(input as syn::DeriveInput);
+    let parsed = match node_companion_macro::parse::NodeCompanionInput::from_derive(&derive_input) {
+        Ok(v) => v,
+        Err(e) => return e.to_compile_error().into(),
+    };
+    node_companion_macro::codegen::generate(&parsed).into()
+}
+
+#[proc_macro_derive(NodeAttr, attributes(node_attr, plain))]
 pub fn node_attr(input: TokenStream) -> TokenStream {
     let derive_input = syn::parse_macro_input!(input as syn::DeriveInput);
     let parsed = match node_attr_macro::parse::NodeAttrInput::from_derive(&derive_input) {

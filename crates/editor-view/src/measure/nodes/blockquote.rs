@@ -29,7 +29,7 @@ pub fn measure_blockquote(
         unreachable!()
     };
 
-    match bq.variant {
+    match *bq.variant.get() {
         BlockquoteVariant::LeftLine => {
             let padding = EdgeInsets {
                 left: BQ_LINE_WIDTH + BQ_CONTENT_PADDING,
@@ -99,7 +99,7 @@ pub fn measure_blockquote(
                 .max(BQ_MESSAGE_MIN_WIDTH)
                 .min(width);
             let padding = EdgeInsets::symmetric(BQ_MESSAGE_PADDING_X, BQ_MESSAGE_PADDING_Y);
-            let alignment = if bq.variant == BlockquoteVariant::MessageSent {
+            let alignment = if *bq.variant.get() == BlockquoteVariant::MessageSent {
                 Alignment::End
             } else {
                 Alignment::Start

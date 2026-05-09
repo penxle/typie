@@ -66,15 +66,6 @@ input CheckSpellingDocumentInput {
   text: String!
 }
 
-input ClientCommitInput {
-  commitHash: String!
-  committedAt: DateTime!
-  meta: JSON
-  parentCommitHash: String!
-  rootObjectHash: String!
-  steps: JSON
-}
-
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -183,25 +174,22 @@ type Document implements IDocument {
   assets: [DocumentAsset!]!
   characterCount: Int!
   characterCountChange: CharacterCountChange!
-  commit(id: ID!): DocumentCommit
-  commits(after: ID, limit: Int! = 50): [DocumentCommit!]!
   contentRating: DocumentContentRating!
   createdAt: DateTime!
   entity: Entity!
   excerpt: String!
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   generation: Int!
-  head: DocumentCommit
   id: ID!
   layoutMode: JSON!
   locked: Boolean!
   nullableTitle: String
-  objects(hashes: [String!]!): [DocumentObject!]!
   password: String
   previewUrl: String!
   protectContent: Boolean!
   reactionCount: Int!
   snapshot: Binary!
+  state: DocumentState
   subtitle: String
   thumbnail: Image
   title: String!
@@ -224,43 +212,9 @@ enum DocumentAvailableAction {
   EDIT
 }
 
-type DocumentCommit {
-  committedAt: DateTime!
-  conflicts: [DocumentConflict!]!
-  device: UserDevice
-  hash: String!
-  id: ID!
-  meta: JSON
-  objects: [DocumentObject!]!
-  parent: DocumentCommit
-  pushedAt: DateTime!
-  rootObject: DocumentObject!
-  secondParent: DocumentCommit
-  steps: JSON
-  user: User
-}
-
-type DocumentCommitsUpdatedEvent {
-  commits: [DocumentCommit!]!
-  objects: [DocumentObject!]!
-}
-
-type DocumentConflict {
-  autoResolvedBranch: DocumentConflictBranch
-  baseValue: JSON
-  branches: [DocumentConflictBranch!]!
-  createdAt: DateTime!
-  id: ID!
-  kind: DocumentConflictKind!
-  mergeCommit: DocumentCommit!
-  resolution: DocumentConflictResolution
-  target: JSON!
-}
-
-type DocumentConflictBranch {
-  commit: DocumentCommit!
-  id: ID!
-  value: JSON!
+type DocumentChangesetsUpdatedEvent {
+  changesets: Binary!
+  serverHeads: Binary!
 }
 
 enum DocumentConflictKind {
@@ -269,13 +223,6 @@ enum DocumentConflictKind {
   ORDER
   POSITION
   TEXT
-}
-
-type DocumentConflictResolution {
-  commit: DocumentCommit!
-  createdAt: DateTime!
-  id: ID!
-  value: JSON!
 }
 
 enum DocumentContentRating {
@@ -327,18 +274,6 @@ type DocumentLiteraryFeedbackResult {
   startText: String!
 }
 
-type DocumentObject {
-  content: JSON!
-  createdAt: DateTime!
-  hash: String!
-  id: ID!
-}
-
-input DocumentObjectInput {
-  content: JSON!
-  hash: String!
-}
-
 type DocumentReaction {
   document: DocumentView!
   emoji: String!
@@ -353,6 +288,15 @@ type DocumentSpellingError {
   id: String!
   nodeId: String!
   startOffset: Int!
+}
+
+type DocumentState {
+  blobSize: BigInt!
+  characterCount: Int!
+  graph: Binary!
+  json: JSON!
+  text: String!
+  updatedAt: DateTime!
 }
 
 type DocumentSyncStreamPayload {
@@ -818,9 +762,10 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsFontLegacy(input: PersistBlobAsFontLegacyInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  pullDocumentChangesets(input: PullDocumentChangesetsInput!): PullDocumentChangesetsPayload!
   purchasePaywall(input: PurchasePaywallInput!): Boolean!
   purgeEntities(input: PurgeEntitiesInput!): Site!
-  pushDocumentCommits(input: PushDocumentCommitsInput!): [DocumentCommit!]!
+  pushDocumentChangesets(input: PushDocumentChangesetsInput!): PushDocumentChangesetsPayload!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
@@ -1089,6 +1034,16 @@ enum PreorderPaymentState {
   PENDING
 }
 
+input PullDocumentChangesetsInput {
+  clientHeads: Binary!
+  documentId: ID!
+}
+
+type PullDocumentChangesetsPayload {
+  missingChangesets: Binary!
+  serverHeads: Binary!
+}
+
 input PurchasePaywallInput {
   nodeId: String!
   postId: ID!
@@ -1098,10 +1053,14 @@ input PurgeEntitiesInput {
   entityIds: [ID!]!
 }
 
-input PushDocumentCommitsInput {
-  commits: [ClientCommitInput!]!
+input PushDocumentChangesetsInput {
+  changesets: Binary!
+  clientId: String!
   documentId: ID!
-  objects: [DocumentObjectInput!]!
+}
+
+type PushDocumentChangesetsPayload {
+  serverHeads: Binary!
 }
 
 type Query {
@@ -1321,7 +1280,7 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
-  documentCommitsUpdated(documentId: ID!, sinceCommitHash: String!): DocumentCommitsUpdatedEvent!
+  documentChangesetsUpdated(clientId: String!, documentId: ID!, sinceHeads: Binary!): DocumentChangesetsUpdatedEvent!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

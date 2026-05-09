@@ -9,6 +9,7 @@ uniffi = [
   "dep:uniffi",
   "editor-commands/uniffi",
   "editor-common/uniffi",
+  "editor-crdt/uniffi",
   "editor-model/uniffi",
   "editor-renderer/uniffi",
   "editor-resource/uniffi",
@@ -21,6 +22,7 @@ wasm = [
   "dep:wasm-bindgen",
   "editor-commands/wasm",
   "editor-common/wasm",
+  "editor-crdt/wasm",
   "editor-model/wasm",
   "editor-renderer/wasm",
   "editor-resource/wasm",
@@ -32,6 +34,7 @@ wasm = [
 [dependencies]
 editor-commands = { path = "../editor-commands" }
 editor-common = { path = "../editor-common" }
+editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-renderer = { path = "../editor-renderer" }

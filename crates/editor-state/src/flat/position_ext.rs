@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId};
 
 use super::class::{FlatClass, classify};
@@ -11,11 +10,15 @@ pub trait ResolvedPositionFlatExt<'a>: Sized {
 
 impl<'a> ResolvedPositionFlatExt<'a> for ResolvedPosition<'a> {
     fn to_flat(&self) -> usize {
-        to_flat_walk(self.doc(), NodeId::ROOT, self.node_id(), self.offset()).unwrap_or(0)
+        let Some(root) = self.doc().root() else {
+            return 0;
+        };
+        to_flat_walk(self.doc(), root.id(), self.node_id(), self.offset()).unwrap_or(0)
     }
 
     fn from_flat(doc: &'a Doc, flat: usize) -> Option<Self> {
-        let pos = from_flat_walk(doc, NodeId::ROOT, 0, flat)?;
+        let root_id = doc.root()?.id();
+        let pos = from_flat_walk(doc, root_id, 0, flat)?;
         pos.resolve(doc)
     }
 }
@@ -27,7 +30,7 @@ fn to_flat_walk(doc: &Doc, current: NodeId, target: NodeId, target_offset: usize
             Node::Text(_) => target_offset,
             _ => {
                 let mut acc = 0usize;
-                for (i, &child_id) in entry.children.iter().enumerate() {
+                for (i, child_id) in entry.children.iter().copied().enumerate() {
                     if i == target_offset {
                         return Some(acc);
                     }
@@ -41,7 +44,7 @@ fn to_flat_walk(doc: &Doc, current: NodeId, target: NodeId, target_offset: usize
     let entry = doc.get_entry(current)?;
     let mut acc = 0usize;
 
-    for &child_id in &entry.children {
+    for child_id in entry.children.iter().copied() {
         let child = doc.get_entry(child_id)?;
         let class = classify(&child.node);
 
@@ -85,7 +88,7 @@ fn subtree_flat_size(doc: &Doc, node_id: NodeId) -> usize {
     };
     match classify(&entry.node) {
         FlatClass::Text => match &entry.node {
-            Node::Text(t) => t.text.char_count(),
+            Node::Text(t) => t.text.len(),
             _ => 0,
         },
         FlatClass::Break | FlatClass::Atom => 1,
@@ -93,7 +96,8 @@ fn subtree_flat_size(doc: &Doc, node_id: NodeId) -> usize {
             2 + entry
                 .children
                 .iter()
-                .map(|&child_id| subtree_flat_size(doc, child_id))
+                .copied()
+                .map(|child_id| subtree_flat_size(doc, child_id))
                 .sum::<usize>()
         }
     }
@@ -108,7 +112,7 @@ fn from_flat_walk(
     let entry = doc.get_entry(container)?;
     let mut acc = start_flat;
 
-    for (i, &child_id) in entry.children.iter().enumerate() {
+    for (i, child_id) in entry.children.iter().copied().enumerate() {
         let child = doc.get_entry(child_id)?;
         let class = classify(&child.node);
 
@@ -137,7 +141,7 @@ fn from_flat_walk(
             }
             FlatClass::Text => {
                 let text_size = match &child.node {
-                    Node::Text(t) => t.text.char_count(),
+                    Node::Text(t) => t.text.len(),
                     _ => 0,
                 };
                 if target >= acc && target <= acc + text_size {

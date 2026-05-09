@@ -8,16 +8,21 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
     let attr_ident = &input.attr_ident;
     let plain_ident = &input.plain_ident;
 
-    let attr_variants = input.fields.iter().map(|s| {
+    let attr_variants = input.fields.iter().enumerate().map(|(i, s)| {
         let v = &s.variant;
         let t = &s.inner_ty;
-        quote! { #v(#t) }
+        let i_lit = i as u32;
+        quote! { #[n(#i_lit)] #v(#[n(0)] #t) }
     });
 
     let plain_fields = input.fields.iter().map(|s| {
         let n = &s.name;
         let t = &s.inner_ty;
-        quote! { pub #n: #t }
+        let attrs = &s.plain_attrs;
+        quote! {
+            #( #[#attrs] )*
+            pub #n: #t
+        }
     });
 
     let struct_default_assigns = input.fields.iter().map(|s| {
@@ -37,32 +42,52 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
         }
     });
 
-    let apply_arms = input.fields.iter().map(|s| {
-        let n = &s.name;
-        let v = &s.variant;
-        quote! {
-            #attr_ident::#v(value) => {
-                self.#n = self.#n.apply(
-                    id,
-                    ::editor_crdt::LwwRegOp::Set { value: value.clone() },
-                )?;
-                Ok(())
-            }
-        }
-    });
-
     let to_plain_fields = input.fields.iter().map(|s| {
         let n = &s.name;
         quote! { #n: ::editor_crdt::ToPlain::to_plain(&self.#n) }
     });
 
+    let apply_attr_body = if input.fields.is_empty() {
+        quote! { let _ = (id, attr); Ok(()) }
+    } else {
+        let arms = input.fields.iter().map(|s| {
+            let n = &s.name;
+            let v = &s.variant;
+            quote! {
+                #attr_ident::#v(value) => {
+                    self.#n = self.#n.apply(
+                        id,
+                        ::editor_crdt::LwwRegOp::Set { value: value.clone() },
+                    )?;
+                    Ok(())
+                }
+            }
+        });
+        quote! { match attr { #(#arms),* } }
+    };
+
+    let to_attrs_body = if input.fields.is_empty() {
+        quote! { ::std::vec::Vec::<#attr_ident>::new() }
+    } else {
+        let entries = input.fields.iter().map(|s| {
+            let n = &s.name;
+            let v = &s.variant;
+            quote! { #attr_ident::#v(self.#n.clone()) }
+        });
+        quote! { ::std::vec![#(#entries),*] }
+    };
+
     quote! {
-        #[derive(Debug, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+        #[::editor_macros::ffi]
+        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, ::minicbor::Encode, ::minicbor::Decode)]
+        #[serde(tag = "type", rename_all = "snake_case")]
         pub enum #attr_ident {
             #(#attr_variants),*
         }
 
-        #[derive(Debug, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+        #[::editor_macros::ffi]
+        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+        #[serde(rename_all = "snake_case")]
         pub struct #plain_ident {
             #(#plain_fields),*
         }
@@ -85,13 +110,17 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
                 id: ::editor_crdt::Dot,
                 attr: &#attr_ident,
             ) -> ::std::result::Result<(), ::editor_crdt::CrdtError> {
-                match attr {
-                    #(#apply_arms),*
-                }
+                #apply_attr_body
             }
 
             pub fn to_plain(&self) -> #plain_ident {
                 #plain_ident { #(#to_plain_fields),* }
+            }
+        }
+
+        impl #plain_ident {
+            pub fn to_attrs(&self) -> ::std::vec::Vec<#attr_ident> {
+                #to_attrs_body
             }
         }
     }

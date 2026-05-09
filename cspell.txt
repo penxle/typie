@@ -93,6 +93,8 @@ libx
 llen
 loro
 lpush
+lrange
+ltrim
 ltwh
 lucide
 luthor

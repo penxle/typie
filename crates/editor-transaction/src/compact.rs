@@ -1,4 +1,3 @@
-use editor_common::StrExt;
 use editor_model::*;
 
 use crate::Step;
@@ -10,7 +9,7 @@ pub fn compact(node: &NodeRef) -> Vec<Step> {
     let children: Vec<_> = node.children().collect();
     let mut steps = Vec::new();
 
-    // Phase 1: remove empty text nodes (reverse order for index stability)
+    // Pass 1: remove empty text nodes (reverse order for index stability)
     for i in (0..children.len()).rev() {
         if let Node::Text(t) = children[i].node()
             && t.text.is_empty()
@@ -20,15 +19,15 @@ pub fn compact(node: &NodeRef) -> Vec<Step> {
                 index: i,
                 subtree: Subtree {
                     id: children[i].id(),
-                    node: children[i].node().clone(),
-                    modifiers: children[i].modifiers().to_vec(),
+                    node: children[i].node().to_plain(),
+                    modifiers: children[i].modifiers().cloned().collect(),
                     children: vec![],
                 },
             });
         }
     }
 
-    // Phase 2: merge consecutive same-modifier text nodes among non-empty remainder (reverse)
+    // Pass 2: merge consecutive same-modifier text nodes among non-empty remainder (reverse)
     let remaining: Vec<_> = children
         .iter()
         .filter(|c| !matches!(c.node(), Node::Text(t) if t.text.is_empty()))
@@ -42,14 +41,16 @@ pub fn compact(node: &NodeRef) -> Vec<Step> {
             continue;
         };
 
-        if !modifiers_set_eq(curr.modifiers(), prev.modifiers()) {
+        let curr_mods: Vec<Modifier> = curr.modifiers().cloned().collect();
+        let prev_mods: Vec<Modifier> = prev.modifiers().cloned().collect();
+        if !modifiers_set_eq(&curr_mods, &prev_mods) {
             continue;
         }
 
         steps.push(Step::MergeNode {
             node_id: curr.id(),
             target_id: prev.id(),
-            offset: prev_text.text.char_count(),
+            offset: prev_text.text.len(),
         });
     }
 
@@ -333,14 +334,14 @@ mod tests {
         let steps = compact(&p);
 
         assert_eq!(steps.len(), 2);
-        // Phase 1: RemoveSubtree(t2)
+        // Pass 1: RemoveSubtree(t2)
         match &steps[0] {
             Step::RemoveSubtree { subtree, .. } => {
                 assert_eq!(subtree.id, t2);
             }
             _ => panic!("expected RemoveSubtree for t2"),
         }
-        // Phase 2: MergeNode(t3→t1)
+        // Pass 2: MergeNode(t3→t1)
         match &steps[1] {
             Step::MergeNode {
                 node_id, target_id, ..
@@ -369,14 +370,14 @@ mod tests {
         let steps = compact(&p);
 
         assert_eq!(steps.len(), 3);
-        // Phase 1: RemoveSubtree(t2)
+        // Pass 1: RemoveSubtree(t2)
         match &steps[0] {
             Step::RemoveSubtree { subtree, .. } => {
                 assert_eq!(subtree.id, t2);
             }
             _ => panic!("expected RemoveSubtree"),
         }
-        // Phase 2: MergeNode(t4→t3), MergeNode(t3→t1)
+        // Pass 2: MergeNode(t4→t3), MergeNode(t3→t1)
         match &steps[1] {
             Step::MergeNode {
                 node_id,
@@ -429,11 +430,11 @@ mod tests {
         let (new_state, _, _, _) = tr.commit();
 
         // After compact: t1 = "ABC", t2/t3/t4 removed
-        assert_eq!(new_state.text(t1).text, "ABC");
+        assert_eq!(new_state.text(t1).text.to_string(), "ABC");
         assert!(!new_state.has_node(t2));
         assert!(!new_state.has_node(t3));
         assert!(!new_state.has_node(t4));
-        assert_eq!(new_state.node(p1).children().len(), 1);
+        assert_eq!(new_state.node(p1).children().count(), 1);
 
         // Undo: apply inverse steps in reverse order
         let inverse_steps: Vec<_> = steps.iter().rev().map(|s| s.inverse()).collect();
@@ -442,10 +443,10 @@ mod tests {
         let (restored, _, _, _) = tr2.commit();
 
         // Restored state should match original
-        assert_eq!(restored.text(t1).text, "A");
+        assert_eq!(restored.text(t1).text.to_string(), "A");
         assert!(restored.has_node(t2));
-        assert_eq!(restored.text(t3).text, "B");
-        assert_eq!(restored.text(t4).text, "C");
-        assert_eq!(restored.node(p1).children().len(), 4);
+        assert_eq!(restored.text(t3).text.to_string(), "B");
+        assert_eq!(restored.text(t4).text.to_string(), "C");
+        assert_eq!(restored.node(p1).children().count(), 4);
     }
 }

@@ -1,28 +1,27 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createInstance } from '@typie/editor-ffi/server';
-import type { EditorHost } from '@typie/editor-ffi/server';
+import type { EditorServer } from '@typie/editor-ffi/server';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const WASM_PATH = fileURLToPath(import.meta.resolve!('@typie/editor-ffi/server/wasm'));
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-const ICU_DATA_PATH = fileURLToPath(import.meta.resolve!('@typie/editor-ffi/server/icu.zst'));
+//// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+// const ICU_DATA_PATH = fileURLToPath(import.meta.resolve!('@typie/editor-ffi/server/icu.zst'));
 
 const POOL_SIZE = 10;
 
-let icuDataPromise: Promise<Uint8Array> | null = null;
-function getIcuData(): Promise<Uint8Array> {
-  return (icuDataPromise ??= readFile(ICU_DATA_PATH).then((buf) => new Uint8Array(buf)));
+// let icuDataPromise: Promise<Uint8Array> | null = null;
+// function getIcuData(): Promise<Uint8Array> {
+//   return (icuDataPromise ??= readFile(ICU_DATA_PATH).then((buf) => new Uint8Array(buf)));
+// }
+
+async function createHost(module: WebAssembly.Module): Promise<EditorServer> {
+  const { EditorServer } = await createInstance(module);
+  return EditorServer.create();
 }
 
-async function createHost(module: WebAssembly.Module): Promise<EditorHost> {
-  const icuData = await getIcuData();
-  const { EditorHost } = await createInstance(module);
-  return EditorHost.create(icuData);
-}
-
-const available: EditorHost[] = [];
-const waiting: ((host: EditorHost) => void)[] = [];
+const available: EditorServer[] = [];
+const waiting: ((host: EditorServer) => void)[] = [];
 let poolReady: Promise<void> | null = null;
 let wasmModule: WebAssembly.Module | null = null;
 
@@ -34,13 +33,13 @@ async function initPool(): Promise<void> {
   available.push(...hosts);
 }
 
-function returnToPool(host: EditorHost): void {
+function returnToPool(host: EditorServer): void {
   const next = waiting.shift();
   if (next) next(host);
   else available.push(host);
 }
 
-async function use<T>(fn: (host: EditorHost) => T): Promise<Awaited<T>> {
+async function use<T>(fn: (host: EditorServer) => T): Promise<Awaited<T>> {
   if (!poolReady) {
     poolReady = initPool().catch((err) => {
       poolReady = null;
@@ -49,7 +48,7 @@ async function use<T>(fn: (host: EditorHost) => T): Promise<Awaited<T>> {
   }
   await poolReady;
 
-  const host = available.pop() ?? (await new Promise<EditorHost>((resolve) => waiting.push(resolve)));
+  const host = available.pop() ?? (await new Promise<EditorServer>((resolve) => waiting.push(resolve)));
   try {
     const result = await fn(host);
     returnToPool(host);
@@ -74,7 +73,7 @@ type Async<T> = {
   use<R>(fn: (host: T) => R): Promise<Awaited<R>>;
 };
 
-export const wasm: Async<EditorHost> = new Proxy({} as Async<EditorHost>, {
+export const wasm: Async<EditorServer> = new Proxy({} as Async<EditorServer>, {
   get: (_, prop: string | symbol) => {
     if (prop === 'use') return use;
     return async (...args: unknown[]) =>

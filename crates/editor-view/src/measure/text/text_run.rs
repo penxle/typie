@@ -16,7 +16,7 @@ pub fn collect_text_runs(_doc: &Doc, paragraph: &NodeRef<'_>) -> (String, Vec<Te
     for child in paragraph.children() {
         if let Node::Text(text_node) = child.node() {
             let start = text.len();
-            text.push_str(&text_node.text);
+            text.push_str(&text_node.text.to_string());
             let end = text.len();
 
             if start < end {
