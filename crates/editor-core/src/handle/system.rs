@@ -361,6 +361,73 @@ mod tests {
     }
 
     #[test]
+    fn font_base_loaded_emits_page_sizes_and_cursor_state_change() {
+        // Font load triggers re-layout (soft-wrap can appear once real font metrics
+        // replace the placeholder strut). The host re-queries page_sizes / cursor only
+        // when StateChanged carries those fields, so omitting them leaves the canvas
+        // sized for the pre-load layout while the engine is already painting at the
+        // post-load (taller) layout — bottom of the document gets clipped.
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("TestFont", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
+
+        let has_page_sizes = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::StateChanged { fields }
+                    if fields.contains(&StateField::PageSizes)
+            )
+        });
+        assert!(
+            has_page_sizes,
+            "font load that triggers re-layout must emit StateChanged with PageSizes"
+        );
+
+        let has_cursor = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::StateChanged { fields }
+                    if fields.contains(&StateField::Cursor)
+            )
+        });
+        assert!(
+            has_cursor,
+            "font load that changes line metrics must emit StateChanged with Cursor"
+        );
+    }
+
+    #[test]
     fn font_base_loaded_emits_render_invalidated() {
         let (state, ..) = state! {
             doc {

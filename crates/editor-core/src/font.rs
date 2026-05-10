@@ -7,6 +7,7 @@ use hashbrown::{HashMap, HashSet};
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
+use crate::state_field::StateField;
 
 pub(crate) type FontRequests = HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>;
 
@@ -226,6 +227,12 @@ pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
         .view
         .invalidate_nodes(&editor.state.doc, &affected_nodes)
     {
+        // Real font metrics can introduce soft-wrap (page heights grow) and shift
+        // line ascent/descent (caret coordinates change), so the host must re-query
+        // both — otherwise the canvas stays sized for the pre-load layout.
+        editor.push_event(EditorEvent::StateChanged {
+            fields: vec![StateField::Cursor, StateField::PageSizes],
+        });
         editor.push_event(EditorEvent::RenderInvalidated);
     }
 }
