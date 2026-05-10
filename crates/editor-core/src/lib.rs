@@ -4,6 +4,7 @@ mod block_state;
 mod editor;
 mod error;
 mod event;
+mod font;
 mod handle;
 mod history;
 mod ime;

@@ -1,20 +1,17 @@
-use editor_model::{Doc, Modifier, Node, NodeId};
-use editor_resource::Resolution;
-use editor_transaction::Effect;
 use editor_view::Viewport;
-use hashbrown::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
+use crate::font;
 use crate::message::*;
 use crate::state_field::StateField;
 
 pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<(), EditorError> {
     match event {
         SystemEvent::Initialize => {
-            reresolve_fonts(editor)?;
+            font::reresolve_fonts(editor)?;
             editor.view.layout(&editor.state.doc);
             editor.push_event(EditorEvent::StateChanged {
                 fields: StateField::iter().collect(),
@@ -43,7 +40,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
         }
 
         SystemEvent::FontBaseLoaded { family, weight: _ } => {
-            retry_pending_on_load(editor, &family);
+            font::retry_pending_on_load(editor, &family);
         }
 
         SystemEvent::FontChunkLoaded {
@@ -51,7 +48,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             weight: _,
             chunk_id: _,
         } => {
-            retry_pending_on_load(editor, &family);
+            font::retry_pending_on_load(editor, &family);
         }
 
         SystemEvent::SetExternalHeight { node_id, height } => {
@@ -59,161 +56,15 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
         }
 
         SystemEvent::FontsChanged => {
-            reresolve_fonts(editor)?;
+            font::reresolve_fonts(editor)?;
         }
     }
     Ok(())
 }
 
-fn retry_pending_on_load(editor: &mut Editor, family: &str) {
-    use editor_resource::Resolution;
-
-    let resource = editor.resource.lock().unwrap();
-    if resource.font_registry.intern_id(family).is_none() {
-        return;
-    }
-    let mut affected_nodes = Vec::new();
-
-    for ((req_family, req_weight), nodes) in editor.pending_fonts.iter_mut() {
-        let Some(req_family_id) = resource.font_registry.intern_id(req_family) else {
-            continue;
-        };
-        for (node_id, pending_cps) in nodes.iter_mut() {
-            pending_cps.retain(|cp| {
-                let is_ready = matches!(
-                    resource
-                        .font_registry
-                        .resolve(req_family_id, *req_weight, *cp),
-                    Resolution::Ready(_)
-                );
-                if is_ready {
-                    affected_nodes.push(*node_id);
-                    false
-                } else {
-                    true
-                }
-            });
-        }
-        nodes.retain(|_, cps| !cps.is_empty());
-    }
-    editor.pending_fonts.retain(|_, nodes| !nodes.is_empty());
-    drop(resource);
-
-    if editor
-        .view
-        .invalidate_nodes(&editor.state.doc, &affected_nodes)
-    {
-        editor.push_event(EditorEvent::RenderInvalidated);
-    }
-}
-
-fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
-    {
-        let resource = editor.resource.lock().unwrap();
-        editor.pending_fonts = collect_font_requests(&editor.state.doc, &resource.font_registry);
-    }
-
-    let requests: Vec<_> = editor
-        .pending_fonts
-        .iter()
-        .map(|((family, weight), nodes)| {
-            let all_cps: Vec<u32> = nodes
-                .values()
-                .flatten()
-                .copied()
-                .collect::<HashSet<u32>>()
-                .into_iter()
-                .collect();
-            (family.clone(), *weight, all_cps)
-        })
-        .collect();
-
-    editor.transact(|tr| {
-        for (family, weight, codepoints) in requests {
-            tr.push_effect(Effect::LoadFont {
-                family,
-                weight,
-                codepoints,
-            });
-        }
-        Ok(())
-    })
-}
-
-pub(crate) fn collect_font_requests(
-    doc: &Doc,
-    font_registry: &editor_resource::FontRegistry,
-) -> HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>> {
-    let mut result: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>> = HashMap::new();
-
-    for descendant in doc.root().unwrap().descendants() {
-        let (family, weight) = resolve_font_for_node(&descendant);
-
-        if let Node::Text(text_node) = descendant.node() {
-            let codepoints: HashSet<u32> = text_node
-                .text
-                .to_string()
-                .chars()
-                .map(|c| c as u32)
-                .collect();
-            if !codepoints.is_empty() {
-                result
-                    .entry((family, weight))
-                    .or_default()
-                    .entry(descendant.id())
-                    .or_default()
-                    .extend(codepoints);
-            }
-        } else if descendant.spec().is_textblock() {
-            let Some(family_id) = font_registry.intern_id(&family) else {
-                continue;
-            };
-            if matches!(
-                font_registry.resolve(family_id, weight, ' ' as u32),
-                Resolution::Pending { .. }
-            ) {
-                result
-                    .entry((family, weight))
-                    .or_default()
-                    .entry(descendant.id())
-                    .or_default()
-                    .insert(' ' as u32);
-            }
-        }
-    }
-
-    result
-}
-
-fn resolve_font_for_node(node: &editor_model::NodeRef<'_>) -> (String, u16) {
-    let mut family: Option<String> = None;
-    let mut weight: Option<u16> = None;
-
-    for ancestor in node.ancestors() {
-        for m in ancestor.modifiers() {
-            match m {
-                Modifier::FontFamily { value } if family.is_none() => {
-                    family = Some(value.clone());
-                }
-                Modifier::FontWeight { value } if weight.is_none() => {
-                    weight = Some(*value);
-                }
-                _ => {}
-            }
-        }
-
-        if family.is_some() && weight.is_some() {
-            break;
-        }
-    }
-
-    // Root invariant: FontFamily/FontWeight always present
-    (family.unwrap(), weight.unwrap())
-}
-
 #[cfg(test)]
 mod tests {
-    use editor_macros::{doc, state};
+    use editor_macros::state;
 
     use super::*;
     use crate::event::FontData;
@@ -245,63 +96,6 @@ mod tests {
     fn fake_chunk_bytes() -> Vec<u8> {
         // num_entries = 0 header — no glyph patches. add_font_chunk just marks the chunk loaded.
         editor_resource::compress_zstd(&0u32.to_be_bytes())
-    }
-
-    #[test]
-    fn collect_from_single_text_node() {
-        let (doc, t1) = doc! {
-            root [font_family("Arial".to_string()), font_weight(400)] {
-                paragraph { t1: text("AB") }
-            }
-        };
-
-        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
-
-        let key = ("Arial".to_string(), 400u16);
-        assert!(result.contains_key(&key));
-
-        let nodes = &result[&key];
-        assert!(nodes.contains_key(&t1));
-
-        let cps = &nodes[&t1];
-        assert!(cps.contains(&('A' as u32)));
-        assert!(cps.contains(&('B' as u32)));
-    }
-
-    #[test]
-    fn collect_inherits_font_from_ancestor() {
-        let (doc, t1, t2) = doc! {
-            root [font_family("Pretendard".to_string()), font_weight(400)] {
-                paragraph {
-                    t1: text("A")
-                    t2: text("B") [font_weight(700)]
-                }
-            }
-        };
-
-        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
-
-        assert!(result.contains_key(&("Pretendard".to_string(), 400)));
-        assert!(result.contains_key(&("Pretendard".to_string(), 700)));
-        assert!(result[&("Pretendard".to_string(), 400)].contains_key(&t1));
-        assert!(result[&("Pretendard".to_string(), 700)].contains_key(&t2));
-    }
-
-    #[test]
-    fn collect_groups_codepoints_per_node() {
-        let (doc, t1, t2) = doc! {
-            root [font_family("Arial".to_string()), font_weight(400)] {
-                paragraph { t1: text("AB") }
-                paragraph { t2: text("CD") }
-            }
-        };
-
-        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
-        let nodes = &result[&("Arial".to_string(), 400)];
-
-        assert_eq!(nodes.len(), 2);
-        assert!(nodes[&t1].contains(&('A' as u32)));
-        assert!(nodes[&t2].contains(&('C' as u32)));
     }
 
     #[test]
@@ -752,6 +546,135 @@ mod tests {
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
         assert!(!editor.pending_fonts.contains_key(&key));
+    }
+
+    #[test]
+    fn set_modifier_font_family_emits_font_data_missing_for_new_family() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("Arial".to_string()), font_weight(400)] {
+                    paragraph { t1: text("AB") }
+                }
+            }
+            selection: (t1, 0) -> (t1, 2)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let families = vec![
+                editor_resource::FontFamily {
+                    name: "Arial".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "arial-400".into(),
+                        chunks: vec![vec![0x41, 0x42]],
+                    }],
+                },
+                editor_resource::FontFamily {
+                    name: "Pretendard".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "pretendard-400".into(),
+                        chunks: vec![vec![0x41, 0x42]],
+                    }],
+                },
+            ];
+            resource.set_fonts(families);
+            resource
+                .add_font_base("Arial", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("Arial", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        // Switch the selection's font family to Pretendard. Pretendard has no bytes
+        // loaded — host must be told to fetch them.
+        let events = editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: editor_model::Modifier::FontFamily {
+                    value: "Pretendard".to_string(),
+                },
+            },
+        });
+
+        let has_pretendard_missing = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, weight, required, .. }
+                    if family == "Pretendard"
+                        && *weight == 400
+                        && required.iter().any(|d| matches!(d, FontData::Base))
+            )
+        });
+        assert!(
+            has_pretendard_missing,
+            "set_modifier(FontFamily) must emit FontDataMissing for the newly-required family"
+        );
+    }
+
+    #[test]
+    fn insert_text_emits_font_data_missing_for_new_codepoint_chunk() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 1)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            // chunk 0 covers 'A' (0x41), chunk 1 covers 'B' (0x42).
+            let families = vec![editor_resource::FontFamily {
+                name: "TestFont".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "testfont-400".into(),
+                    chunks: vec![vec![0x41, 0x41], vec![0x42, 0x42]],
+                }],
+            }];
+            resource.set_fonts(families);
+            resource
+                .add_font_base("TestFont", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        // 'A' is now Ready (chunk 0 loaded). Insert 'B' which lives in unloaded chunk 1.
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "B".to_string(),
+            },
+        });
+
+        let has_chunk_1_missing = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, weight, required, .. }
+                    if family == "TestFont"
+                        && *weight == 400
+                        && required.iter().any(|d| matches!(d, FontData::Chunk { id: 1 }))
+            )
+        });
+        assert!(
+            has_chunk_1_missing,
+            "insert_text must emit FontDataMissing for the new codepoint's chunk"
+        );
     }
 
     #[test]

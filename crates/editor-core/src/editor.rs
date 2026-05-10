@@ -161,6 +161,10 @@ impl Editor {
             self.process_message(msg)?;
         }
 
+        if !self.pending_ops.is_empty() {
+            self.augment_font_state_from_ops();
+        }
+
         let effects = std::mem::take(&mut self.pending_effects);
         if !effects.is_empty() {
             self.process_effects(effects);
@@ -337,6 +341,34 @@ impl Editor {
         }
     }
 
+    fn augment_font_state_from_ops(&mut self) {
+        let updates = {
+            let resource = self.resource.lock().unwrap();
+            crate::font::derive_font_updates_from_ops(
+                &self.state.doc,
+                &resource.font_registry,
+                &self.pending_ops,
+            )
+        };
+
+        for ((family, weight), nodes) in updates {
+            let entry = self
+                .pending_fonts
+                .entry((family.clone(), weight))
+                .or_default();
+            let mut all_cps: HashSet<u32> = HashSet::new();
+            for (node_id, cps) in nodes {
+                all_cps.extend(cps.iter().copied());
+                entry.entry(node_id).or_default().extend(cps);
+            }
+            self.pending_effects.insert(Effect::LoadFont {
+                family,
+                weight,
+                codepoints: all_cps.into_iter().collect(),
+            });
+        }
+    }
+
     pub(crate) fn resolve_fonts(&mut self, family: &str, weight: u16, codepoints: &[u32]) {
         use editor_resource::Resolution;
 
@@ -450,7 +482,7 @@ mod tests {
     use editor_crdt::{OpGraph, RgaOp};
     use editor_macros::{doc, state};
     use editor_model::{
-        Doc, DocOp, Modifier, Node, NodeId, PlainDoc, PlainNode, PlainNodeEntry,
+        Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainDoc, PlainNode, PlainNodeEntry,
         PlainParagraphNode, PlainRootNode, PlainTextNode,
     };
     use editor_state::{PendingModifier, PendingModifiers, Position, Selection, State};
@@ -473,6 +505,24 @@ mod tests {
         (seed, replica_b)
     }
 
+    fn root_default_font_modifiers() -> BTreeMap<ModifierType, Modifier> {
+        // The editor's font resolver assumes every node can find a FontFamily and FontWeight
+        // by walking ancestors up to the root. PlainDoc-built fixtures need to honor that
+        // invariant explicitly because they bypass the doc!/state! macros that supply defaults.
+        BTreeMap::from([
+            (
+                ModifierType::FontFamily,
+                Modifier::FontFamily {
+                    value: "Pretendard".into(),
+                },
+            ),
+            (
+                ModifierType::FontWeight,
+                Modifier::FontWeight { value: 400 },
+            ),
+        ])
+    }
+
     fn plain_doc_with_one_text() -> (PlainDoc, NodeId) {
         let para_id = NodeId::new();
         let text_id = NodeId::new();
@@ -483,7 +533,7 @@ mod tests {
             PlainNodeEntry {
                 parent: None,
                 children: vec![para_id],
-                modifiers: BTreeMap::new(),
+                modifiers: root_default_font_modifiers(),
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -522,7 +572,7 @@ mod tests {
             PlainNodeEntry {
                 parent: None,
                 children: vec![para1_id, para2_id],
-                modifiers: BTreeMap::new(),
+                modifiers: root_default_font_modifiers(),
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
