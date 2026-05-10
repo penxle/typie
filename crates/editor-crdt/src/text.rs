@@ -1,22 +1,21 @@
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::{CrdtError, Dot, Rga, RgaOp, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TextOp {
-    #[n(0)]
+    #[wire(n(0))]
     InsertChar {
-        #[n(0)]
+        #[wire(n(0))]
         after: Option<Dot>,
-        #[n(1)]
+        #[wire(n(1))]
         ch: char,
     },
-    #[n(1)]
+    #[wire(n(1))]
     RemoveChar {
-        #[n(0)]
+        #[wire(n(0))]
         observed: Dot,
     },
 }

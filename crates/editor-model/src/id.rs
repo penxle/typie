@@ -1,14 +1,12 @@
 use editor_common::Ffi;
 use editor_macros::ffi;
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;
 
 #[ffi(custom(String))]
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
-#[cbor(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(u64);
 
 impl NodeId {
@@ -18,6 +16,37 @@ impl NodeId {
         let mut buf = [0u8; 8];
         getrandom::fill(&mut buf).expect("failed to generate random bytes");
         Self(u64::from_le_bytes(buf))
+    }
+
+    pub fn raw(&self) -> u64 {
+        self.0
+    }
+}
+
+impl ::editor_crdt::wire::Wire for NodeId {
+    fn encode(
+        &self,
+        _ctx: &::editor_crdt::wire::EncCtx,
+        out: &mut ::std::vec::Vec<u8>,
+    ) -> ::editor_crdt::wire::WireResult<()> {
+        out.extend_from_slice(&self.0.to_le_bytes());
+        Ok(())
+    }
+    fn decode(
+        _ctx: &::editor_crdt::wire::DecCtx,
+        input: &mut &[u8],
+    ) -> ::editor_crdt::wire::WireResult<Self> {
+        if input.len() < 8 {
+            return Err(::editor_crdt::wire::WireError::Truncated {
+                expected: 8,
+                actual: input.len(),
+            });
+        }
+        let (head, tail) = input.split_at(8);
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(head);
+        *input = tail;
+        Ok(Self(u64::from_le_bytes(buf)))
     }
 }
 
@@ -129,5 +158,22 @@ mod tests {
         let json = serde_json::to_string(&id).unwrap();
         let parsed: NodeId = serde_json::from_str(&json).unwrap();
         assert_eq!(id, parsed);
+    }
+
+    #[test]
+    fn wire_round_trip_raw_8_bytes() {
+        use editor_crdt::wire::{DecCtx, EncCtx, Wire};
+        let id = NodeId::new();
+        let ec = EncCtx::from_table(&[], vec![]);
+        let dc = DecCtx {
+            actor_table: vec![],
+            baselines: vec![],
+        };
+        let mut buf = Vec::new();
+        Wire::encode(&id, &ec, &mut buf).unwrap();
+        assert_eq!(buf.len(), 8, "NodeId 는 raw 8 byte");
+        let mut slice = &buf[..];
+        let got = <NodeId as Wire>::decode(&dc, &mut slice).unwrap();
+        assert_eq!(got, id);
     }
 }

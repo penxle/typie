@@ -26,6 +26,5 @@ wasm-bindgen = { workspace = true, optional = true }
 [dev-dependencies]
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
-minicbor = { workspace = true }
 proptest = { workspace = true }
 serde_json.workspace = true

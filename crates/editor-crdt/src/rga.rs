@@ -1,21 +1,20 @@
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RgaOp<T> {
-    #[n(0)]
+    #[wire(n(0))]
     Insert {
-        #[n(0)]
+        #[wire(n(0))]
         after: Option<Dot>,
-        #[n(1)]
+        #[wire(n(1))]
         value: T,
     },
-    #[n(1)]
+    #[wire(n(1))]
     Remove {
-        #[n(0)]
+        #[wire(n(0))]
         observed: Dot,
     },
 }

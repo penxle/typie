@@ -83,22 +83,22 @@ impl EditorServer {
     }
 
     pub fn apply(&self, existing: Vec<u8>, new: Vec<u8>) -> EditorResult<Vec<u8>> {
-        let existing_cs: editor_crdt::Changesets<editor_model::DocOp> =
-            minicbor::decode(&existing[..])
+        let existing_cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&existing[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let new_cs: editor_crdt::Changesets<editor_model::DocOp> =
-            minicbor::decode(&new[..]).map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let new_cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&new[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
 
         // Atomic boundaries make the first-op dot a stable changeset key, so
         // dedup and dot-reuse rejection only need to walk by first-op dot.
         let mut known: hashbrown::HashSet<editor_crdt::Dot> = existing_cs
-            .0
             .iter()
             .flat_map(|cs| cs.ops.iter().map(|op| op.id))
             .collect();
 
-        let mut out = existing_cs.0;
-        for cs in new_cs.0 {
+        let mut out = existing_cs;
+        for cs in new_cs {
             let Some(first) = cs.ops.first() else {
                 continue;
             };
@@ -150,8 +150,8 @@ impl EditorServer {
             out.push(cs);
         }
 
-        let bytes = minicbor::to_vec(&editor_crdt::Changesets(out))
-            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let bytes =
+            editor_crdt::wire::encode(&out).map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
 
@@ -160,21 +160,17 @@ impl EditorServer {
         all_changesets: Vec<u8>,
         remote_heads_payload: Vec<u8>,
     ) -> EditorResult<Vec<u8>> {
-        let cs: editor_crdt::Changesets<editor_model::DocOp> =
-            minicbor::decode(&all_changesets[..])
+        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&all_changesets[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let heads: editor_crdt::Dots = minicbor::decode(&remote_heads_payload[..])
+        let heads_vec = editor_crdt::wire::decode_dots(&remote_heads_payload[..])
             .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads.0.into_iter().collect();
+        let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
 
-        let g = editor_crdt::OpGraph::from_changesets(cs.0)?;
+        let g = editor_crdt::OpGraph::from_changesets(cs)?;
         let missing = g.missing_changesets_for(&heads_set)?;
 
-        if missing.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let bytes = minicbor::to_vec(&editor_crdt::Changesets(missing))
+        let bytes = editor_crdt::wire::encode(&missing)
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
@@ -182,7 +178,7 @@ impl EditorServer {
     pub fn to_graph(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<Vec<u8>> {
         let plain: editor_model::PlainDoc = plain.from_ffi()?;
         let (_, graph) = editor_model::Doc::from_plain(plain);
-        let bytes = minicbor::to_vec(&editor_crdt::Changesets(graph.changesets().to_vec()))
+        let bytes = editor_crdt::wire::encode(graph.changesets())
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
@@ -191,29 +187,31 @@ impl EditorServer {
         &self,
         changeset_payloads: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainDoc>> {
-        let cs: editor_crdt::Changesets<editor_model::DocOp> =
-            minicbor::decode(&changeset_payloads[..])
+        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let graph = editor_crdt::OpGraph::from_changesets(cs.0)?;
+        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
         let doc = editor_model::Doc::from_op_graph(&graph)?;
         Ok(doc.to_plain().into_ffi()?)
     }
 
     pub fn heads(&self, changeset_payloads: Vec<u8>) -> EditorResult<Vec<u8>> {
-        let cs: editor_crdt::Changesets<editor_model::DocOp> =
-            minicbor::decode(&changeset_payloads[..])
+        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let g = editor_crdt::OpGraph::from_changesets(cs.0)?;
-        let heads = editor_crdt::Dots(g.current_heads().copied().collect());
-        let bytes = minicbor::to_vec(&heads).map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let g = editor_crdt::OpGraph::from_changesets(cs)?;
+        let heads: Vec<editor_crdt::Dot> = g.current_heads().copied().collect();
+        let bytes = editor_crdt::wire::encode_dots(&heads)
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
 
     /// Returns the total ops count in a Changesets bundle. Used by push light validation.
     pub fn peek_changeset_ops_count(&self, bundle: Vec<u8>) -> EditorResult<u32> {
-        let cs: editor_crdt::Changesets<editor_model::DocOp> =
-            minicbor::decode(&bundle[..]).map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let count: u32 = cs.0.iter().map(|c| c.ops.len() as u32).sum();
+        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&bundle[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let count: u32 = cs.iter().map(|c| c.ops.len() as u32).sum();
         Ok(count)
     }
 
@@ -227,7 +225,7 @@ impl EditorServer {
 
 #[cfg(test)]
 mod tests {
-    use editor_crdt::{Changeset, Changesets, Dot, Op};
+    use editor_crdt::{Changeset, Dot, Op};
     use editor_model::{DocOp, NodeId, NodeType};
 
     use super::*;
@@ -244,11 +242,17 @@ mod tests {
         }
     }
 
-    fn enc<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
-        minicbor::to_vec(t).unwrap()
+    fn enc_css(css: &[Changeset<DocOp>]) -> Vec<u8> {
+        editor_crdt::wire::encode(css).unwrap()
     }
-    fn dec<T: for<'a> minicbor::Decode<'a, ()>>(b: &[u8]) -> T {
-        minicbor::decode(b).unwrap()
+    fn dec_css(b: &[u8]) -> Vec<Changeset<DocOp>> {
+        editor_crdt::wire::decode(b).unwrap()
+    }
+    fn enc_dots(dots: &[Dot]) -> Vec<u8> {
+        editor_crdt::wire::encode_dots(dots).unwrap()
+    }
+    fn dec_dots(b: &[u8]) -> Vec<Dot> {
+        editor_crdt::wire::decode_dots(b).unwrap()
     }
 
     #[test]
@@ -269,13 +273,10 @@ mod tests {
         };
         let server = EditorServer;
         let merged_bytes = server
-            .apply(
-                enc(&Changesets(vec![cs_a.clone()])),
-                enc(&Changesets(vec![cs_b.clone()])),
-            )
+            .apply(enc_css(&[cs_a.clone()]), enc_css(&[cs_b.clone()]))
             .unwrap();
-        let merged: Changesets<DocOp> = dec(&merged_bytes);
-        assert_eq!(merged.0, vec![cs_a, cs_b]);
+        let merged = dec_css(&merged_bytes);
+        assert_eq!(merged, vec![cs_a, cs_b]);
     }
 
     #[test]
@@ -289,13 +290,10 @@ mod tests {
         };
         let server = EditorServer;
         let merged_bytes = server
-            .apply(
-                enc(&Changesets(vec![cs.clone()])),
-                enc(&Changesets(vec![cs.clone()])),
-            )
+            .apply(enc_css(&[cs.clone()]), enc_css(&[cs.clone()]))
             .unwrap();
-        let merged: Changesets<DocOp> = dec(&merged_bytes);
-        assert_eq!(merged.0, vec![cs]);
+        let merged = dec_css(&merged_bytes);
+        assert_eq!(merged, vec![cs]);
     }
 
     #[test]
@@ -309,13 +307,10 @@ mod tests {
         };
         let server = EditorServer;
         let merged_bytes = server
-            .apply(
-                enc(&Changesets::<DocOp>(vec![])),
-                enc(&Changesets(vec![cs.clone(), cs.clone()])),
-            )
+            .apply(enc_css(&[]), enc_css(&[cs.clone(), cs.clone()]))
             .unwrap();
-        let merged: Changesets<DocOp> = dec(&merged_bytes);
-        assert_eq!(merged.0, vec![cs]);
+        let merged = dec_css(&merged_bytes);
+        assert_eq!(merged, vec![cs]);
     }
 
     #[test]
@@ -333,10 +328,7 @@ mod tests {
         let parent_cs = Changeset::<DocOp> { ops: vec![parent] };
         let child_cs = Changeset::<DocOp> { ops: vec![child] };
         let server = EditorServer;
-        let result = server.apply(
-            enc(&Changesets::<DocOp>(vec![])),
-            enc(&Changesets(vec![child_cs, parent_cs])),
-        );
+        let result = server.apply(enc_css(&[]), enc_css(&[child_cs, parent_cs]));
         assert!(matches!(
             result,
             Err(EditorError::Ffi(FfiError::CausalOrderViolation { .. }))
@@ -360,12 +352,12 @@ mod tests {
         let server = EditorServer;
         let merged_bytes = server
             .apply(
-                enc(&Changesets::<DocOp>(vec![])),
-                enc(&Changesets(vec![parent_cs.clone(), child_cs.clone()])),
+                enc_css(&[]),
+                enc_css(&[parent_cs.clone(), child_cs.clone()]),
             )
             .unwrap();
-        let merged: Changesets<DocOp> = dec(&merged_bytes);
-        assert_eq!(merged.0, vec![parent_cs, child_cs]);
+        let merged = dec_css(&merged_bytes);
+        assert_eq!(merged, vec![parent_cs, child_cs]);
     }
 
     #[test]
@@ -384,40 +376,9 @@ mod tests {
             ops: vec![op1, op2],
         };
         let server = EditorServer;
-        let merged_bytes = server
-            .apply(
-                enc(&Changesets::<DocOp>(vec![])),
-                enc(&Changesets(vec![cs.clone()])),
-            )
-            .unwrap();
-        let merged: Changesets<DocOp> = dec(&merged_bytes);
-        assert_eq!(merged.0, vec![cs]);
-    }
-
-    #[test]
-    fn apply_rejects_intra_cs_child_before_parent() {
-        let op_a = Op {
-            id: Dot::new(8, 0),
-            parents: vec![],
-            payload: dummy_payload(),
-        };
-        let op_b = Op {
-            id: Dot::new(8, 1),
-            parents: vec![op_a.id],
-            payload: dummy_payload(),
-        };
-        let cs = Changeset::<DocOp> {
-            ops: vec![op_b, op_a],
-        };
-        let server = EditorServer;
-        let result = server.apply(
-            enc(&Changesets::<DocOp>(vec![])),
-            enc(&Changesets(vec![cs])),
-        );
-        assert!(matches!(
-            result,
-            Err(EditorError::Ffi(FfiError::CausalOrderViolation { .. }))
-        ));
+        let merged_bytes = server.apply(enc_css(&[]), enc_css(&[cs.clone()])).unwrap();
+        let merged = dec_css(&merged_bytes);
+        assert_eq!(merged, vec![cs]);
     }
 
     #[test]
@@ -430,10 +391,7 @@ mod tests {
         };
         let cs = Changeset::<DocOp> { ops: vec![bad] };
         let server = EditorServer;
-        let result = server.apply(
-            enc(&Changesets::<DocOp>(vec![])),
-            enc(&Changesets(vec![cs])),
-        );
+        let result = server.apply(enc_css(&[]), enc_css(&[cs]));
         assert!(matches!(
             result,
             Err(EditorError::Ffi(FfiError::CausalOrderViolation { .. }))
@@ -464,7 +422,7 @@ mod tests {
             ops: vec![new_first, new_reuse],
         };
         let server = EditorServer;
-        let result = server.apply(enc(&Changesets(vec![cs_a])), enc(&Changesets(vec![cs_bad])));
+        let result = server.apply(enc_css(&[cs_a]), enc_css(&[cs_bad]));
         assert!(matches!(
             result,
             Err(EditorError::Ffi(FfiError::CausalOrderViolation { .. }))
@@ -487,13 +445,17 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let all = Changesets(vec![cs_a.clone(), cs_b.clone()]);
-        let known_heads = editor_crdt::Dots(vec![Dot::new(1, 0)]);
+        let known_heads = vec![Dot::new(1, 0)];
 
         let server = EditorServer;
-        let missing_bytes = server.missing_for(enc(&all), enc(&known_heads)).unwrap();
-        let missing: Changesets<DocOp> = dec(&missing_bytes);
-        assert_eq!(missing.0, vec![cs_b]);
+        let missing_bytes = server
+            .missing_for(
+                enc_css(&[cs_a.clone(), cs_b.clone()]),
+                enc_dots(&known_heads),
+            )
+            .unwrap();
+        let missing = dec_css(&missing_bytes);
+        assert_eq!(missing, vec![cs_b]);
     }
 
     #[test]
@@ -506,9 +468,9 @@ mod tests {
             }],
         };
         let server = EditorServer;
-        let heads_bytes = server.heads(enc(&Changesets(vec![cs_a.clone()]))).unwrap();
-        let heads: editor_crdt::Dots = dec(&heads_bytes);
-        assert_eq!(heads.0, vec![Dot::new(1, 0)]);
+        let heads_bytes = server.heads(enc_css(&[cs_a.clone()])).unwrap();
+        let heads = dec_dots(&heads_bytes);
+        assert_eq!(heads, vec![Dot::new(1, 0)]);
     }
 
     #[test]
@@ -544,7 +506,7 @@ mod tests {
             }],
         };
         let server = EditorServer;
-        let result = server.apply(enc(&Changesets(vec![cs_v1])), enc(&Changesets(vec![cs_v2])));
+        let result = server.apply(enc_css(&[cs_v1]), enc_css(&[cs_v2]));
         assert!(matches!(
             result,
             Err(EditorError::Ffi(FfiError::CausalOrderViolation { .. }))

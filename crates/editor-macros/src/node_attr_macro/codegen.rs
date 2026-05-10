@@ -11,8 +11,8 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
     let attr_variants = input.fields.iter().enumerate().map(|(i, s)| {
         let v = &s.variant;
         let t = &s.inner_ty;
-        let i_lit = i as u32;
-        quote! { #[n(#i_lit)] #v(#[n(0)] #t) }
+        let i_u8 = i as u8;
+        quote! { #[wire(n(#i_u8))] #v(#[wire(n(0))] #t) }
     });
 
     let plain_fields = input.fields.iter().map(|s| {
@@ -79,7 +79,7 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
 
     quote! {
         #[::editor_macros::ffi]
-        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, ::minicbor::Encode, ::minicbor::Decode)]
+        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, ::editor_macros::Wire)]
         #[serde(tag = "type", rename_all = "snake_case")]
         pub enum #attr_ident {
             #(#attr_variants),*

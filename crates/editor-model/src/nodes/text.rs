@@ -1,6 +1,5 @@
 use editor_crdt::{CrdtError, Dot, Text, ToPlain};
 use editor_macros::ffi;
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -9,7 +8,9 @@ pub struct TextNode {
 }
 
 #[ffi]
-#[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, Encode, Decode)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, editor_macros::Wire,
+)]
 pub enum TextNodeAttr {}
 
 #[ffi]

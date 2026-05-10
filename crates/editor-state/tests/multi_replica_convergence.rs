@@ -390,7 +390,7 @@ fn run_actions_and_converge(
 }
 
 /// Same convergence loop as `run_actions_and_converge` but every `Changeset`
-/// is round-tripped through `minicbor::to_vec` → `minicbor::decode` before
+/// is round-tripped through `editor_crdt::wire::encode` → `wire::decode` before
 /// `receive_remote_changeset` — exercises the full wire codec under the same
 /// random action stream.
 fn run_actions_and_converge_via_wire(
@@ -429,10 +429,12 @@ fn run_actions_and_converge_via_wire(
                 let take = ((prefix_hint as usize) % missing.len()) + 1;
                 let mut to_state = replicas[to_idx].clone();
                 for cs in missing.into_iter().take(take) {
-                    let bytes = minicbor::to_vec(&cs)
+                    let bytes = editor_crdt::wire::encode(std::slice::from_ref(&cs))
                         .map_err(|e| TestCaseError::fail(format!("encode: {e:?}")))?;
-                    let decoded: Changeset<DocOp> = minicbor::decode(&bytes[..])
+                    let decoded_vec: Vec<Changeset<DocOp>> = editor_crdt::wire::decode(&bytes)
                         .map_err(|e| TestCaseError::fail(format!("decode: {e:?}")))?;
+                    assert_eq!(decoded_vec.len(), 1);
+                    let decoded = decoded_vec.into_iter().next().unwrap();
                     to_state = to_state
                         .receive_remote_changeset(decoded)
                         .map_err(|e| TestCaseError::fail(format!("receive: {e:?}")))?
@@ -456,10 +458,12 @@ fn run_actions_and_converge_via_wire(
                 if !missing.is_empty() {
                     let mut to_state = replicas[to].clone();
                     for cs in missing {
-                        let bytes = minicbor::to_vec(&cs)
+                        let bytes = editor_crdt::wire::encode(std::slice::from_ref(&cs))
                             .map_err(|e| TestCaseError::fail(format!("encode: {e:?}")))?;
-                        let decoded: Changeset<DocOp> = minicbor::decode(&bytes[..])
+                        let decoded_vec: Vec<Changeset<DocOp>> = editor_crdt::wire::decode(&bytes)
                             .map_err(|e| TestCaseError::fail(format!("decode: {e:?}")))?;
+                        assert_eq!(decoded_vec.len(), 1);
+                        let decoded = decoded_vec.into_iter().next().unwrap();
                         to_state = to_state
                             .receive_remote_changeset(decoded)
                             .map_err(|e| TestCaseError::fail(format!("converge receive: {e:?}")))?

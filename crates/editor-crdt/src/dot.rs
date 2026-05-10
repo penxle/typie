@@ -1,5 +1,4 @@
 use editor_macros::ffi;
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
@@ -18,11 +17,9 @@ use std::cmp::Ordering;
 /// evolve into a Lamport-compatible form later; it is not itself a Lamport guarantee
 /// (see caveat above).
 #[ffi]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Dot {
-    #[n(0)]
     pub actor: u64,
-    #[n(1)]
     pub clock: u64,
 }
 
@@ -32,9 +29,8 @@ impl Dot {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
-#[cbor(transparent)]
-pub struct Dots(#[n(0)] pub Vec<Dot>);
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Dots(pub Vec<Dot>);
 
 impl Ord for Dot {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -76,10 +72,21 @@ mod tests {
     }
 
     #[test]
-    fn minicbor_wire_roundtrip() {
+    fn wire_roundtrip() {
+        use crate::wire::{CollectCtx, DecCtx, EncCtx, Wire};
         let original = Dot::new(42, 1234);
-        let bytes = minicbor::to_vec(&original).expect("encode");
-        let decoded: Dot = minicbor::decode(&bytes[..]).expect("decode");
+        let mut cc = CollectCtx::new();
+        original.collect(&mut cc);
+        let (table, baselines) = cc.finalize();
+        let ec = EncCtx::from_table(&table, baselines.clone());
+        let dc = DecCtx {
+            actor_table: table,
+            baselines,
+        };
+        let mut buf = Vec::new();
+        original.encode(&ec, &mut buf).unwrap();
+        let mut slice = &buf[..];
+        let decoded = Dot::decode(&dc, &mut slice).unwrap();
         assert_eq!(original, decoded);
     }
 }

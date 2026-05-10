@@ -36,8 +36,8 @@ pub fn generate(input: &NodeCompanionInput) -> TokenStream {
     let node_attr_variants = input.variants.iter().enumerate().map(|(i, v)| {
         let n = &v.variant_ident;
         let attr_ty = format_ident!("{}Attr", v.inner_type_ident);
-        let i_lit = i as u32;
-        quote! { #[n(#i_lit)] #n { #[n(0)] attr: #attr_ty } }
+        let i_u8 = i as u8;
+        quote! { #[wire(n(#i_u8))] #n { #[wire(n(0))] attr: #attr_ty } }
     });
 
     let apply_attr_arms = input.variants.iter().map(|v| {
@@ -58,7 +58,7 @@ pub fn generate(input: &NodeCompanionInput) -> TokenStream {
         }
 
         #[::editor_macros::ffi]
-        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, ::minicbor::Encode, ::minicbor::Decode)]
+        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, ::editor_macros::Wire)]
         #[serde(tag = "type", rename_all = "snake_case")]
         pub enum NodeAttr {
             #(#node_attr_variants),*

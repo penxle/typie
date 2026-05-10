@@ -2,6 +2,11 @@
 name = "editor-model"
 version.workspace = true
 edition.workspace = true
+autobenches = false
+
+[[example]]
+name = "wire_size_bench"
+path = "benches/wire_size.rs"
 
 [features]
 test-utils = []
@@ -18,7 +23,6 @@ getrandom.workspace = true
 hashbrown.workspace = true
 imbl = { workspace = true, features = ["serde"] }
 log.workspace = true
-minicbor = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 strum.workspace = true

@@ -1,20 +1,19 @@
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrSetOp<T> {
-    #[n(0)]
+    #[wire(n(0))]
     Add {
-        #[n(0)]
+        #[wire(n(0))]
         elem: T,
     },
-    #[n(1)]
+    #[wire(n(1))]
     Remove {
-        #[n(0)]
+        #[wire(n(0))]
         observed: Dot,
     },
 }

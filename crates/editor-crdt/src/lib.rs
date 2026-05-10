@@ -11,8 +11,9 @@ pub mod rga;
 pub mod sync;
 pub mod text;
 pub mod to_plain;
+pub mod wire;
 
-pub use changeset::{Changeset, Changesets};
+pub use changeset::Changeset;
 pub use dot::{Dot, Dots};
 pub use error::CrdtError;
 pub use lwwreg::{LwwReg, LwwRegOp};

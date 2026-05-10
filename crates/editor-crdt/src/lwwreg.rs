@@ -1,14 +1,13 @@
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LwwRegOp<T> {
-    #[n(0)]
+    #[wire(n(0))]
     Set {
-        #[n(0)]
+        #[wire(n(0))]
         value: T,
     },
 }

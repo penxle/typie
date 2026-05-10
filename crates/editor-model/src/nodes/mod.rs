@@ -61,55 +61,53 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     EnumCount,
     Enum,
     IntoStaticStr,
-    minicbor::Encode,
-    minicbor::Decode,
+    editor_macros::Wire,
 ))]
-#[strum_discriminants(cbor(index_only))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
 #[from_discriminant(NodeType)]
 pub enum Node {
-    #[strum_discriminants(n(0))]
+    #[strum_discriminants(wire(n(0)))]
     Root(RootNode),
-    #[strum_discriminants(n(1))]
+    #[strum_discriminants(wire(n(1)))]
     Paragraph(ParagraphNode),
-    #[strum_discriminants(n(2))]
+    #[strum_discriminants(wire(n(2)))]
     Blockquote(BlockquoteNode),
-    #[strum_discriminants(n(3))]
+    #[strum_discriminants(wire(n(3)))]
     Callout(CalloutNode),
-    #[strum_discriminants(n(4))]
+    #[strum_discriminants(wire(n(4)))]
     Text(TextNode),
-    #[strum_discriminants(n(5))]
+    #[strum_discriminants(wire(n(5)))]
     BulletList(BulletListNode),
-    #[strum_discriminants(n(6))]
+    #[strum_discriminants(wire(n(6)))]
     OrderedList(OrderedListNode),
-    #[strum_discriminants(n(7))]
+    #[strum_discriminants(wire(n(7)))]
     ListItem(ListItemNode),
-    #[strum_discriminants(n(8))]
+    #[strum_discriminants(wire(n(8)))]
     Fold(FoldNode),
-    #[strum_discriminants(n(9))]
+    #[strum_discriminants(wire(n(9)))]
     FoldTitle(FoldTitleNode),
-    #[strum_discriminants(n(10))]
+    #[strum_discriminants(wire(n(10)))]
     FoldContent(FoldContentNode),
-    #[strum_discriminants(n(11))]
+    #[strum_discriminants(wire(n(11)))]
     Table(TableNode),
-    #[strum_discriminants(n(12))]
+    #[strum_discriminants(wire(n(12)))]
     TableRow(TableRowNode),
-    #[strum_discriminants(n(13))]
+    #[strum_discriminants(wire(n(13)))]
     TableCell(TableCellNode),
-    #[strum_discriminants(n(14))]
+    #[strum_discriminants(wire(n(14)))]
     Image(ImageNode),
-    #[strum_discriminants(n(15))]
+    #[strum_discriminants(wire(n(15)))]
     File(FileNode),
-    #[strum_discriminants(n(16))]
+    #[strum_discriminants(wire(n(16)))]
     Embed(EmbedNode),
-    #[strum_discriminants(n(17))]
+    #[strum_discriminants(wire(n(17)))]
     Archived(ArchivedNode),
-    #[strum_discriminants(n(18))]
+    #[strum_discriminants(wire(n(18)))]
     HardBreak(HardBreakNode),
-    #[strum_discriminants(n(19))]
+    #[strum_discriminants(wire(n(19)))]
     HorizontalRule(HorizontalRuleNode),
-    #[strum_discriminants(n(20))]
+    #[strum_discriminants(wire(n(20)))]
     PageBreak(PageBreakNode),
 }
 
@@ -178,5 +176,42 @@ mod tests {
             },
         );
         assert_eq!(result, Err(ModelError::AttrNodeKindMismatch));
+    }
+
+    #[test]
+    fn node_type_wire_round_trip_all_variants() {
+        use editor_crdt::wire::{DecCtx, EncCtx, Wire};
+        use strum::IntoEnumIterator;
+        let ec = EncCtx::from_table(&[], vec![]);
+        let dc = DecCtx {
+            actor_table: vec![],
+            baselines: vec![],
+        };
+        for v in NodeType::iter() {
+            let mut buf = Vec::new();
+            v.encode(&ec, &mut buf).unwrap();
+            let mut slice = &buf[..];
+            let got = <NodeType as Wire>::decode(&dc, &mut slice).unwrap();
+            assert_eq!(got, v);
+        }
+    }
+
+    #[test]
+    fn node_type_wire_unknown_tag_errors() {
+        use editor_crdt::wire::{DecCtx, Wire};
+        let dc = DecCtx {
+            actor_table: vec![],
+            baselines: vec![],
+        };
+        let bad = vec![99u8];
+        let mut slice = &bad[..];
+        let err = <NodeType as Wire>::decode(&dc, &mut slice).unwrap_err();
+        assert!(matches!(
+            err,
+            editor_crdt::wire::WireError::UnknownVariant {
+                ty: "NodeType",
+                tag: 99
+            }
+        ));
     }
 }

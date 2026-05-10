@@ -20,7 +20,6 @@ editor-crdt = { path = "../editor-crdt" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state" }
 imbl.workspace = true
-minicbor = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 smallvec.workspace = true

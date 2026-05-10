@@ -1,6 +1,5 @@
 use editor_crdt::LwwReg;
 use editor_macros::{NodeAttr, ffi};
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, NodeAttr)]
@@ -18,18 +17,17 @@ fn default_proportion() -> u32 {
 
 #[ffi]
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Encode, Decode,
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, editor_macros::Wire,
 )]
-#[cbor(index_only)]
 #[serde(rename_all = "snake_case")]
 pub enum TableBorderStyle {
     #[default]
-    #[n(0)]
+    #[wire(n(0))]
     Solid,
-    #[n(1)]
+    #[wire(n(1))]
     Dashed,
-    #[n(2)]
+    #[wire(n(2))]
     Dotted,
-    #[n(3)]
+    #[wire(n(3))]
     None,
 }

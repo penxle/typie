@@ -75,10 +75,11 @@ impl EditorHost {
         selection: Complex<editor_state::Selection>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let cs: editor_crdt::Changesets<editor_model::DocOp> = minicbor::decode(&changesets[..])
-            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&changesets[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let selection = selection.from_ffi()?;
-        let state = editor_state::State::from_changesets(cs.0, selection)?;
+        let state = editor_state::State::from_changesets(css, selection)?;
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))

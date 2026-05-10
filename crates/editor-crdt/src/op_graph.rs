@@ -1,6 +1,5 @@
 use editor_macros::ffi;
 use hashbrown::HashSet;
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot};
@@ -11,13 +10,10 @@ use crate::{CrdtError, Dot};
 /// store at the moment this op was created). Stored normalized: sorted
 /// ascending, no duplicates.
 #[ffi]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Op<P> {
-    #[n(0)]
     pub id: Dot,
-    #[n(1)]
     pub parents: Vec<Dot>,
-    #[n(2)]
     pub payload: P,
 }
 

@@ -1,5 +1,4 @@
 use editor_crdt::{LwwRegOp, Op, OrMapOp, RgaOp, TextOp};
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -7,49 +6,49 @@ use crate::{
     NodeType,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DocOp {
-    #[n(0)]
+    #[wire(n(0))]
     Presence {
-        #[n(0)]
+        #[wire(n(0))]
         node_id: NodeId,
-        #[n(1)]
+        #[wire(n(1))]
         op: OrMapOp<NodeId, NodeType>,
     },
-    #[n(1)]
+    #[wire(n(1))]
     Parent {
-        #[n(0)]
+        #[wire(n(0))]
         node_id: NodeId,
-        #[n(1)]
+        #[wire(n(1))]
         op: LwwRegOp<Option<NodeId>>,
     },
-    #[n(2)]
+    #[wire(n(2))]
     Children {
-        #[n(0)]
+        #[wire(n(0))]
         node_id: NodeId,
-        #[n(1)]
+        #[wire(n(1))]
         op: RgaOp<NodeId>,
     },
-    #[n(3)]
+    #[wire(n(3))]
     Text {
-        #[n(0)]
+        #[wire(n(0))]
         node_id: NodeId,
-        #[n(1)]
+        #[wire(n(1))]
         op: TextOp,
     },
-    #[n(4)]
+    #[wire(n(4))]
     Modifier {
-        #[n(0)]
+        #[wire(n(0))]
         node_id: NodeId,
-        #[n(1)]
+        #[wire(n(1))]
         op: OrMapOp<ModifierType, Modifier>,
     },
-    #[n(5)]
+    #[wire(n(5))]
     Attr {
-        #[n(0)]
+        #[wire(n(0))]
         node_id: NodeId,
-        #[n(1)]
+        #[wire(n(1))]
         op: NodeAttr,
     },
 }
@@ -588,5 +587,699 @@ mod tests {
         } else {
             panic!("expected Text node");
         }
+    }
+
+    #[test]
+    fn wire_round_trip_text_op() {
+        use editor_crdt::Dot;
+        use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, Wire};
+        let dot = Dot::new(7, 5);
+        let op = DocOp::Text {
+            node_id: NodeId::new(),
+            op: editor_crdt::TextOp::InsertChar {
+                after: Some(dot),
+                ch: '가',
+            },
+        };
+        let mut cc = CollectCtx::new();
+        <DocOp as Wire>::collect(&op, &mut cc);
+        let (table, baselines) = cc.finalize();
+        let ec = EncCtx::from_table(&table, baselines.clone());
+        let dc = DecCtx {
+            actor_table: table,
+            baselines,
+        };
+        let mut buf = Vec::new();
+        <DocOp as Wire>::encode(&op, &ec, &mut buf).unwrap();
+        let mut slice = &buf[..];
+        let got = <DocOp as Wire>::decode(&dc, &mut slice).unwrap();
+        assert_eq!(got, op);
+    }
+}
+
+use editor_crdt::Dot;
+use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, WireChangeset, WireError, WireResult, varint};
+
+const VARIANT_PRESENCE: u8 = 0;
+const VARIANT_PARENT: u8 = 1;
+const VARIANT_CHILDREN: u8 = 2;
+const VARIANT_TEXT: u8 = 3;
+const VARIANT_MODIFIER: u8 = 4;
+const VARIANT_ATTR: u8 = 5;
+
+const ENTRY_TAG_RUN_BIT: u8 = 0b1000_0000;
+const ENTRY_TAG_NODE_ID_EXPLICIT: u8 = 0b0100_0000;
+const ENTRY_TAG_VARIANT_MASK: u8 = 0b0011_1000;
+const ENTRY_TAG_VARIANT_SHIFT: u32 = 3;
+const ENTRY_TAG_SUBFLAG_MASK: u8 = 0b0000_0111;
+
+/// Per-bundle state carried across changesets so the first entry of cs[i>0] can omit
+/// its `node_id` when it matches the last entry of cs[i-1] (cross-cs implicit node_id).
+#[derive(Default)]
+pub struct DocOpBundleState {
+    prev_node_id: Option<NodeId>,
+}
+
+impl WireChangeset for DocOp {
+    type BundleState = DocOpBundleState;
+
+    fn collect_changeset(ops: &[Op<Self>], ctx: &mut CollectCtx) {
+        for op in ops {
+            ctx.observe(&op.id);
+            for p in &op.parents {
+                ctx.observe(p);
+            }
+            <DocOp as editor_crdt::wire::Wire>::collect(&op.payload, ctx);
+        }
+    }
+
+    fn encode_changeset(
+        ops: &[Op<Self>],
+        state: &mut Self::BundleState,
+        ctx: &EncCtx,
+        out: &mut Vec<u8>,
+    ) -> WireResult<u32> {
+        if ops.is_empty() {
+            return Err(WireError::EmptyChangesetOps);
+        }
+        for (i, op) in ops.iter().enumerate().skip(1) {
+            let expected = ops[i - 1].id;
+            if op.parents.len() != 1 || op.parents[0] != expected {
+                return Err(WireError::ParentChainViolation {
+                    cs_idx: 0,
+                    op_idx: i,
+                    parents: op.parents.clone(),
+                    expected,
+                });
+            }
+        }
+
+        let mut prev_node_id = state.prev_node_id;
+        let mut entries: Vec<Entry> = Vec::new();
+        let mut i = 0;
+        while i < ops.len() {
+            if let Some(run_len) = try_match_text_run(ops, i) {
+                entries.push(Entry::Run {
+                    start: i,
+                    len: run_len,
+                });
+                i += run_len;
+            } else {
+                entries.push(Entry::Single { idx: i });
+                i += 1;
+            }
+        }
+
+        for entry in &entries {
+            match entry {
+                Entry::Single { idx } => {
+                    encode_single_op_entry(&ops[*idx], &mut prev_node_id, ctx, out)?;
+                }
+                Entry::Run { start, len } => {
+                    encode_text_run_entry(
+                        &ops[*start..*start + *len],
+                        &mut prev_node_id,
+                        ctx,
+                        out,
+                    )?;
+                }
+            }
+        }
+        state.prev_node_id = prev_node_id;
+        Ok(entries.len() as u32)
+    }
+
+    fn decode_changeset(
+        state: &mut Self::BundleState,
+        ctx: &DecCtx,
+        first_op_parents: Vec<Dot>,
+        entry_count: u32,
+        input: &mut &[u8],
+    ) -> WireResult<Vec<Op<Self>>> {
+        if entry_count == 0 {
+            return Err(WireError::EmptyChangesetEntries);
+        }
+        let mut ops: Vec<Op<DocOp>> = Vec::new();
+        let mut prev_node_id = state.prev_node_id;
+        let mut prev_id: Option<Dot> = None;
+
+        for entry_idx in 0..entry_count {
+            let tag = <u8 as editor_crdt::wire::Wire>::decode(ctx, input)?;
+            let is_run = (tag & ENTRY_TAG_RUN_BIT) != 0;
+            let node_id_explicit = (tag & ENTRY_TAG_NODE_ID_EXPLICIT) != 0;
+            // Implicit only allowed when the bundle has carried over a node_id from a prior cs
+            // or a prior entry within this cs. The very first entry of the bundle (state.prev_node_id == None)
+            // and entry 0 of this cs without prior prev_node_id must be explicit.
+            if !node_id_explicit && prev_node_id.is_none() {
+                return Err(WireError::FirstEntryImplicitNodeId);
+            }
+            if is_run && (tag & 0b0011_1111) != 0 {
+                return Err(WireError::RunTagBitsNonZero { tag });
+            }
+
+            let node_id = if node_id_explicit {
+                let nid = <NodeId as editor_crdt::wire::Wire>::decode(ctx, input)?;
+                prev_node_id = Some(nid);
+                nid
+            } else {
+                prev_node_id.unwrap()
+            };
+
+            if is_run {
+                let run_ops = decode_text_run_entry(
+                    ctx,
+                    node_id,
+                    prev_id,
+                    if entry_idx == 0 {
+                        Some(&first_op_parents)
+                    } else {
+                        None
+                    },
+                    input,
+                )?;
+                if let Some(last) = run_ops.last() {
+                    prev_id = Some(last.id);
+                }
+                ops.extend(run_ops);
+            } else {
+                let variant = (tag & ENTRY_TAG_VARIANT_MASK) >> ENTRY_TAG_VARIANT_SHIFT;
+                let subflag = tag & ENTRY_TAG_SUBFLAG_MASK;
+                let op = decode_single_op_entry(
+                    ctx,
+                    variant,
+                    subflag,
+                    node_id,
+                    if entry_idx == 0 {
+                        Some(&first_op_parents)
+                    } else {
+                        None
+                    },
+                    prev_id,
+                    input,
+                )?;
+                prev_id = Some(op.id);
+                ops.push(op);
+            }
+        }
+
+        state.prev_node_id = prev_node_id;
+        Ok(ops)
+    }
+}
+
+enum Entry {
+    Single { idx: usize },
+    Run { start: usize, len: usize },
+}
+
+fn try_match_text_run(ops: &[Op<DocOp>], start: usize) -> Option<usize> {
+    let first = match &ops[start].payload {
+        DocOp::Text {
+            node_id,
+            op: editor_crdt::TextOp::InsertChar { after, .. },
+        } => (*node_id, *after, ops[start].id),
+        _ => return None,
+    };
+    let actor = first.2.actor;
+    let base_clock = first.2.clock;
+    let mut len = 1;
+    let mut prev_id = first.2;
+    while start + len < ops.len() {
+        let op = &ops[start + len];
+        let DocOp::Text {
+            node_id,
+            op: editor_crdt::TextOp::InsertChar { after, .. },
+        } = &op.payload
+        else {
+            break;
+        };
+        if *node_id != first.0 {
+            break;
+        }
+        let expected_clock = match base_clock.checked_add(len as u64) {
+            Some(c) => c,
+            None => break,
+        };
+        if op.id.actor != actor || op.id.clock != expected_clock {
+            break;
+        }
+        if *after != Some(prev_id) {
+            break;
+        }
+        prev_id = op.id;
+        len += 1;
+    }
+    if len >= 2 { Some(len) } else { None }
+}
+
+fn encode_single_op_entry(
+    op: &Op<DocOp>,
+    prev_node_id: &mut Option<NodeId>,
+    ctx: &EncCtx,
+    out: &mut Vec<u8>,
+) -> WireResult<()> {
+    let (variant, subflag, node_id) = describe_doc_op(&op.payload);
+    let node_id_explicit = !matches!(prev_node_id, Some(prev) if *prev == node_id);
+    let mut tag: u8 = 0;
+    if node_id_explicit {
+        tag |= ENTRY_TAG_NODE_ID_EXPLICIT;
+    }
+    tag |= (variant << ENTRY_TAG_VARIANT_SHIFT) & ENTRY_TAG_VARIANT_MASK;
+    tag |= subflag & ENTRY_TAG_SUBFLAG_MASK;
+    out.push(tag);
+    if node_id_explicit {
+        <NodeId as editor_crdt::wire::Wire>::encode(&node_id, ctx, out)?;
+        *prev_node_id = Some(node_id);
+    }
+    <Dot as editor_crdt::wire::Wire>::encode(&op.id, ctx, out)?;
+    encode_doc_op_payload(&op.payload, ctx, out, node_id)?;
+    Ok(())
+}
+
+fn encode_text_run_entry(
+    run: &[Op<DocOp>],
+    prev_node_id: &mut Option<NodeId>,
+    ctx: &EncCtx,
+    out: &mut Vec<u8>,
+) -> WireResult<()> {
+    let (node_id, first_after) = match &run[0].payload {
+        DocOp::Text {
+            node_id,
+            op: editor_crdt::TextOp::InsertChar { after, .. },
+        } => (*node_id, *after),
+        _ => unreachable!("try_match_text_run guarantees Text/InsertChar"),
+    };
+    let mut chars = String::new();
+    for op in run {
+        let DocOp::Text {
+            op: editor_crdt::TextOp::InsertChar { ch, .. },
+            ..
+        } = &op.payload
+        else {
+            unreachable!("try_match_text_run guarantees Text/InsertChar")
+        };
+        chars.push(*ch);
+    }
+    let node_id_explicit = !matches!(prev_node_id, Some(prev) if *prev == node_id);
+    let mut tag: u8 = ENTRY_TAG_RUN_BIT;
+    if node_id_explicit {
+        tag |= ENTRY_TAG_NODE_ID_EXPLICIT;
+    }
+    out.push(tag);
+    if node_id_explicit {
+        <NodeId as editor_crdt::wire::Wire>::encode(&node_id, ctx, out)?;
+        *prev_node_id = Some(node_id);
+    }
+    <Dot as editor_crdt::wire::Wire>::encode(&run[0].id, ctx, out)?;
+    varint::write_varint(run.len() as u64, out);
+    match first_after {
+        None => out.push(0),
+        Some(d) => {
+            out.push(1);
+            <Dot as editor_crdt::wire::Wire>::encode(&d, ctx, out)?;
+        }
+    }
+    out.extend_from_slice(chars.as_bytes());
+    Ok(())
+}
+
+fn describe_doc_op(p: &DocOp) -> (u8, u8, NodeId) {
+    match p {
+        DocOp::Presence { node_id, op } => {
+            let sub = match op {
+                editor_crdt::OrMapOp::Set { .. } => 0,
+                editor_crdt::OrMapOp::Unset { .. } => 1,
+            };
+            (VARIANT_PRESENCE, sub, *node_id)
+        }
+        DocOp::Parent { node_id, op } => {
+            let editor_crdt::LwwRegOp::Set { value } = op;
+            let sub = if value.is_some() { 1 } else { 0 };
+            (VARIANT_PARENT, sub, *node_id)
+        }
+        DocOp::Children { node_id, op } => {
+            let sub = match op {
+                editor_crdt::RgaOp::Insert { after, .. } => {
+                    if after.is_some() {
+                        0b010
+                    } else {
+                        0
+                    }
+                }
+                editor_crdt::RgaOp::Remove { .. } => 1,
+            };
+            (VARIANT_CHILDREN, sub, *node_id)
+        }
+        DocOp::Text { node_id, op } => {
+            let sub = match op {
+                editor_crdt::TextOp::InsertChar { after, .. } => {
+                    if after.is_some() {
+                        0b010
+                    } else {
+                        0
+                    }
+                }
+                editor_crdt::TextOp::RemoveChar { .. } => 1,
+            };
+            (VARIANT_TEXT, sub, *node_id)
+        }
+        DocOp::Modifier { node_id, op } => {
+            let sub = match op {
+                editor_crdt::OrMapOp::Set { .. } => 0,
+                editor_crdt::OrMapOp::Unset { .. } => 1,
+            };
+            (VARIANT_MODIFIER, sub, *node_id)
+        }
+        DocOp::Attr { node_id, .. } => (VARIANT_ATTR, 0, *node_id),
+    }
+}
+
+fn encode_doc_op_payload(
+    p: &DocOp,
+    ctx: &EncCtx,
+    out: &mut Vec<u8>,
+    outer_node_id: NodeId,
+) -> WireResult<()> {
+    use editor_crdt::wire::Wire;
+    match p {
+        DocOp::Presence { op, .. } => match op {
+            editor_crdt::OrMapOp::Set { key, value } => {
+                if *key != outer_node_id {
+                    return Err(WireError::PresenceKeyMismatch {
+                        key: key.raw(),
+                        node_id: outer_node_id.raw(),
+                    });
+                }
+                <NodeType as Wire>::encode(value, ctx, out)?;
+            }
+            editor_crdt::OrMapOp::Unset { observed } => {
+                <Vec<Dot> as Wire>::encode(observed, ctx, out)?;
+            }
+        },
+        DocOp::Parent { op, .. } => {
+            let editor_crdt::LwwRegOp::Set { value } = op;
+            if let Some(v) = value {
+                <NodeId as Wire>::encode(v, ctx, out)?;
+            }
+        }
+        DocOp::Children { op, .. } => match op {
+            editor_crdt::RgaOp::Insert { after, value } => {
+                if let Some(d) = after {
+                    <Dot as Wire>::encode(d, ctx, out)?;
+                }
+                <NodeId as Wire>::encode(value, ctx, out)?;
+            }
+            editor_crdt::RgaOp::Remove { observed } => {
+                <Dot as Wire>::encode(observed, ctx, out)?;
+            }
+        },
+        DocOp::Text { op, .. } => match op {
+            editor_crdt::TextOp::InsertChar { after, ch } => {
+                if let Some(d) = after {
+                    <Dot as Wire>::encode(d, ctx, out)?;
+                }
+                <char as Wire>::encode(ch, ctx, out)?;
+            }
+            editor_crdt::TextOp::RemoveChar { observed } => {
+                <Dot as Wire>::encode(observed, ctx, out)?;
+            }
+        },
+        DocOp::Modifier { op, .. } => match op {
+            editor_crdt::OrMapOp::Set { key, value } => {
+                <ModifierType as Wire>::encode(key, ctx, out)?;
+                <Modifier as Wire>::encode(value, ctx, out)?;
+            }
+            editor_crdt::OrMapOp::Unset { observed } => {
+                <Vec<Dot> as Wire>::encode(observed, ctx, out)?;
+            }
+        },
+        DocOp::Attr { op, .. } => {
+            <NodeAttr as Wire>::encode(op, ctx, out)?;
+        }
+    }
+    Ok(())
+}
+
+fn decode_single_op_entry(
+    ctx: &DecCtx,
+    variant: u8,
+    subflag: u8,
+    node_id: NodeId,
+    first_op_parents: Option<&[Dot]>,
+    prev_id: Option<Dot>,
+    input: &mut &[u8],
+) -> WireResult<Op<DocOp>> {
+    let id = <Dot as editor_crdt::wire::Wire>::decode(ctx, input)?;
+    let parents = match first_op_parents {
+        Some(p) => p.to_vec(),
+        None => vec![prev_id.expect("non-first op must have prev_id")],
+    };
+    let payload = decode_doc_op_payload(ctx, variant, subflag, node_id, input)?;
+    Ok(Op {
+        id,
+        parents,
+        payload,
+    })
+}
+
+fn decode_doc_op_payload(
+    ctx: &DecCtx,
+    variant: u8,
+    subflag: u8,
+    node_id: NodeId,
+    input: &mut &[u8],
+) -> WireResult<DocOp> {
+    use editor_crdt::wire::Wire;
+    match variant {
+        VARIANT_PRESENCE => {
+            let op = if subflag & 1 == 0 {
+                let value = <NodeType as Wire>::decode(ctx, input)?;
+                editor_crdt::OrMapOp::Set {
+                    key: node_id,
+                    value,
+                }
+            } else {
+                let observed = <Vec<Dot> as Wire>::decode(ctx, input)?;
+                editor_crdt::OrMapOp::Unset { observed }
+            };
+            Ok(DocOp::Presence { node_id, op })
+        }
+        VARIANT_PARENT => {
+            let value = if subflag & 1 != 0 {
+                Some(<NodeId as Wire>::decode(ctx, input)?)
+            } else {
+                None
+            };
+            Ok(DocOp::Parent {
+                node_id,
+                op: editor_crdt::LwwRegOp::Set { value },
+            })
+        }
+        VARIANT_CHILDREN => {
+            if subflag & 1 == 0 {
+                let after = if subflag & 0b010 != 0 {
+                    Some(<Dot as Wire>::decode(ctx, input)?)
+                } else {
+                    None
+                };
+                let value = <NodeId as Wire>::decode(ctx, input)?;
+                Ok(DocOp::Children {
+                    node_id,
+                    op: editor_crdt::RgaOp::Insert { after, value },
+                })
+            } else {
+                let observed = <Dot as Wire>::decode(ctx, input)?;
+                Ok(DocOp::Children {
+                    node_id,
+                    op: editor_crdt::RgaOp::Remove { observed },
+                })
+            }
+        }
+        VARIANT_TEXT => {
+            if subflag & 1 == 0 {
+                let after = if subflag & 0b010 != 0 {
+                    Some(<Dot as Wire>::decode(ctx, input)?)
+                } else {
+                    None
+                };
+                let ch = <char as Wire>::decode(ctx, input)?;
+                Ok(DocOp::Text {
+                    node_id,
+                    op: editor_crdt::TextOp::InsertChar { after, ch },
+                })
+            } else {
+                let observed = <Dot as Wire>::decode(ctx, input)?;
+                Ok(DocOp::Text {
+                    node_id,
+                    op: editor_crdt::TextOp::RemoveChar { observed },
+                })
+            }
+        }
+        VARIANT_MODIFIER => {
+            let op = if subflag & 1 == 0 {
+                let key = <ModifierType as Wire>::decode(ctx, input)?;
+                let value = <Modifier as Wire>::decode(ctx, input)?;
+                editor_crdt::OrMapOp::Set { key, value }
+            } else {
+                let observed = <Vec<Dot> as Wire>::decode(ctx, input)?;
+                editor_crdt::OrMapOp::Unset { observed }
+            };
+            Ok(DocOp::Modifier { node_id, op })
+        }
+        VARIANT_ATTR => {
+            let attr = <NodeAttr as Wire>::decode(ctx, input)?;
+            Ok(DocOp::Attr { node_id, op: attr })
+        }
+        n => Err(WireError::UnknownPayloadVariant { tag: n }),
+    }
+}
+
+fn decode_text_run_entry(
+    ctx: &DecCtx,
+    node_id: NodeId,
+    prev_id_outer: Option<Dot>,
+    first_op_parents: Option<&[Dot]>,
+    input: &mut &[u8],
+) -> WireResult<Vec<Op<DocOp>>> {
+    let first_id = <Dot as editor_crdt::wire::Wire>::decode(ctx, input)?;
+    let run_len = varint::read_varint(input)?;
+    if run_len < 2 {
+        return Err(WireError::InvalidRunLength { got: run_len });
+    }
+    let after_tag = <u8 as editor_crdt::wire::Wire>::decode(ctx, input)?;
+    let first_after = match after_tag {
+        0 => None,
+        1 => Some(<Dot as editor_crdt::wire::Wire>::decode(ctx, input)?),
+        n => {
+            return Err(WireError::UnknownVariant {
+                ty: "RunAfter",
+                tag: n,
+            });
+        }
+    };
+    let mut chars = Vec::with_capacity(run_len as usize);
+    for _ in 0..run_len {
+        let ch = <char as editor_crdt::wire::Wire>::decode(ctx, input)?;
+        chars.push(ch);
+    }
+    let mut ops = Vec::with_capacity(run_len as usize);
+    let mut prev_id_inner: Option<Dot> = None;
+    for i in 0..run_len as usize {
+        let i_u64 = i as u64;
+        let clock = first_id
+            .clock
+            .checked_add(i_u64)
+            .ok_or(WireError::ClockOverflow {
+                context: "Text run expansion",
+                base: first_id.clock,
+                delta: i_u64,
+            })?;
+        let id = Dot::new(first_id.actor, clock);
+        let after = if i == 0 {
+            first_after
+        } else {
+            Some(prev_id_inner.unwrap())
+        };
+        let parents = if i == 0 {
+            match first_op_parents {
+                Some(p) => p.to_vec(),
+                None => vec![prev_id_outer.unwrap()],
+            }
+        } else {
+            vec![prev_id_inner.unwrap()]
+        };
+        ops.push(Op {
+            id,
+            parents,
+            payload: DocOp::Text {
+                node_id,
+                op: editor_crdt::TextOp::InsertChar {
+                    after,
+                    ch: chars[i],
+                },
+            },
+        });
+        prev_id_inner = Some(id);
+    }
+    Ok(ops)
+}
+
+#[cfg(test)]
+mod wire_changeset_tests {
+    use super::*;
+    use editor_crdt::{OpGraph, TextOp};
+
+    fn build_typing(text: &str) -> Vec<editor_crdt::Changeset<DocOp>> {
+        let mut g = OpGraph::with_actor(1);
+        let para = NodeId::new();
+        let mut prev = None;
+        for ch in text.chars() {
+            let payload = DocOp::Text {
+                node_id: para,
+                op: TextOp::InsertChar { after: prev, ch },
+            };
+            let (ng, op) = g.add(payload).unwrap();
+            prev = Some(op.id);
+            g = ng;
+        }
+        g.commit().changesets().to_vec()
+    }
+
+    #[test]
+    fn run_grouping_round_trip() {
+        let css = build_typing("hello, world!");
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert_eq!(decoded, css);
+    }
+
+    #[test]
+    fn run_grouping_collapses_typing_into_one_entry() {
+        let css = build_typing("hello, world!");
+        assert_eq!(css.len(), 1);
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let body = editor_crdt::wire::envelope::unwrap(&bytes).unwrap();
+        let mut input = &body[..];
+        let _dc = editor_crdt::wire::preamble::decode_preamble(&mut input).unwrap();
+        let cs_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        assert_eq!(cs_count, 1);
+        let parent_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        for _ in 0..parent_count {
+            let _ = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+            let _ = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        }
+        let entry_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        assert_eq!(
+            entry_count, 1,
+            "13-char typing should fold into one run entry"
+        );
+    }
+
+    #[test]
+    fn hangul_round_trip() {
+        let css = build_typing("안녕하세요!");
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert_eq!(decoded, css);
+    }
+
+    #[test]
+    fn single_op_round_trip() {
+        let css = build_typing("a");
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert_eq!(decoded, css);
+    }
+
+    #[test]
+    fn empty_bundle_round_trip() {
+        let bytes = editor_crdt::wire::encode::<DocOp>(&[]).unwrap();
+        assert!(bytes.is_empty());
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert!(decoded.is_empty());
     }
 }

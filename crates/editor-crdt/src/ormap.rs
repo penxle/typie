@@ -1,17 +1,16 @@
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrMapOp<K, V> {
-    #[n(0)]
+    #[wire(n(0))]
     Set {
-        #[n(0)]
+        #[wire(n(0))]
         key: K,
-        #[n(1)]
+        #[wire(n(1))]
         value: V,
     },
     /// `observed` — the add-token dots this unset has observed at generation time.
@@ -19,9 +18,9 @@ pub enum OrMapOp<K, V> {
     /// unset cannot kill what it did not see.
     /// `observed` must be ascending-sorted and deduplicated by the op generator
     /// (canonical wire form for hash/equality stability).
-    #[n(1)]
+    #[wire(n(1))]
     Unset {
-        #[n(0)]
+        #[wire(n(0))]
         observed: Vec<Dot>,
     },
 }

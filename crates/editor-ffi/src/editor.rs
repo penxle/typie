@@ -120,10 +120,10 @@ impl Editor {
 
     pub fn receive_remote_changeset(&self, payload: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
-            let cs: editor_crdt::Changesets<editor_model::DocOp> =
-                minicbor::decode(&payload[..])
+            let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+                editor_crdt::wire::decode(&payload[..])
                     .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-            for changeset in cs.0 {
+            for changeset in css {
                 inner.editor.receive_remote_changeset(changeset);
             }
             Ok(())
@@ -132,25 +132,21 @@ impl Editor {
 
     pub fn local_changesets_since(&self, remote_heads_payload: Vec<u8>) -> EditorResult<Vec<u8>> {
         self.with_inner(|inner| {
-            let heads: editor_crdt::Dots = minicbor::decode(&remote_heads_payload[..])
+            let heads_vec = editor_crdt::wire::decode_dots(&remote_heads_payload[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-            let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads.0.into_iter().collect();
+            let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
             let css = inner.editor.local_changesets_since(&heads_set)?;
-            if css.is_empty() {
-                return Ok(Vec::new());
-            }
-            let cs = editor_crdt::Changesets(css);
-            let bytes =
-                minicbor::to_vec(&cs).map_err(|e| FfiError::Serialization(e.to_string()))?;
+            let bytes = editor_crdt::wire::encode(&css)
+                .map_err(|e| FfiError::Serialization(e.to_string()))?;
             Ok(bytes)
         })
     }
 
     pub fn current_heads(&self) -> EditorResult<Vec<u8>> {
         self.with_inner(|inner| {
-            let heads = editor_crdt::Dots(inner.editor.current_heads());
-            let bytes =
-                minicbor::to_vec(&heads).map_err(|e| FfiError::Serialization(e.to_string()))?;
+            let heads = inner.editor.current_heads();
+            let bytes = editor_crdt::wire::encode_dots(&heads)
+                .map_err(|e| FfiError::Serialization(e.to_string()))?;
             Ok(bytes)
         })
     }
