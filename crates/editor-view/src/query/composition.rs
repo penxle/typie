@@ -18,10 +18,14 @@ pub fn composition_rects(
         return vec![];
     }
 
+    let from_owner = super::search::find_line_at(tree, from);
+    let to_owner = super::search::find_line_at(tree, to);
     let mut phase = Phase::Before;
     let mut rects = Vec::new();
 
-    visit_node(&tree.root, from, to, &mut phase, &mut rects, pages);
+    visit_node(
+        &tree.root, from, to, from_owner, to_owner, &mut phase, &mut rects, pages,
+    );
 
     rects
 }
@@ -30,14 +34,18 @@ fn visit_node(
     node: &LayoutNode,
     from: &Position,
     to: &Position,
+    from_owner: Option<&LayoutNode>,
+    to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
     rects: &mut Vec<CompositionRect>,
     pages: &[LayoutPage],
 ) {
     match &node.content {
-        LayoutContent::Box(b) => visit_box(node, b, from, to, phase, rects, pages),
+        LayoutContent::Box(b) => {
+            visit_box(node, b, from, to, from_owner, to_owner, phase, rects, pages)
+        }
         LayoutContent::Line(l) => {
-            visit_line(node, l, from, to, phase, rects, pages);
+            visit_line(node, l, from, to, from_owner, to_owner, phase, rects, pages);
         }
         LayoutContent::Atom(_) | LayoutContent::Spacing(_) => {}
     }
@@ -48,12 +56,14 @@ fn visit_line(
     line: &LayoutLine,
     from: &Position,
     to: &Position,
+    from_owner: Option<&LayoutNode>,
+    to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
     rects: &mut Vec<CompositionRect>,
     pages: &[LayoutPage],
 ) {
-    let contains_from = line_contains_position(line, from);
-    let contains_to = line_contains_position(line, to);
+    let contains_from = from_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
+    let contains_to = to_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
 
     let (x_start, x_end) = match (*phase, contains_from, contains_to) {
         (Phase::Before, true, true) => {
@@ -96,6 +106,8 @@ fn visit_box(
     bx: &LayoutBox,
     from: &Position,
     to: &Position,
+    from_owner: Option<&LayoutNode>,
+    to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
     rects: &mut Vec<CompositionRect>,
     pages: &[LayoutPage],
@@ -104,7 +116,7 @@ fn visit_box(
         if *phase == Phase::After {
             break;
         }
-        visit_node(child, from, to, phase, rects, pages);
+        visit_node(child, from, to, from_owner, to_owner, phase, rects, pages);
     }
 }
 
@@ -155,6 +167,22 @@ mod tests {
         assert_eq!(rects[0].rect.height, 1.0);
         assert_eq!(rects[1].rect.height, 1.0);
         assert!(rects[0].rect.y < rects[1].rect.y);
+    }
+
+    #[test]
+    fn composition_starting_at_lower_soft_wrap_line_emits_rect() {
+        // Same soft-wrap setup as selection.rs's regression test: text wraps
+        // such that offset 6 is the lower visual line's leading boundary.
+        let (doc, t) = doc! {
+            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 80 }) {
+                paragraph { t: text("abcdefgh") }
+            }
+        };
+        let view = layout(&doc);
+        let rects = view.composition_rects(&Position::new(t, 6), &Position::new(t, 7));
+
+        assert_eq!(rects.len(), 1);
+        assert!(rects[0].rect.width > 0.0);
     }
 
     #[test]

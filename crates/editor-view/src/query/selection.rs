@@ -26,10 +26,17 @@ pub fn selection_rects(
 
     let from = Position::from(selection.from());
     let to = Position::from(selection.to());
+    // Resolve which Line/Atom each endpoint belongs to up front so soft-wrap
+    // boundary positions are disambiguated by affinity (via `find_line_at`)
+    // rather than by the permissive per-line `line_contains_position`.
+    let from_owner = super::search::find_line_at(tree, &from);
+    let to_owner = super::search::find_line_at(tree, &to);
     let mut phase = Phase::Before;
     let mut rects = Vec::new();
 
-    visit_node(&tree.root, &from, &to, &mut phase, &mut rects, pages);
+    visit_node(
+        &tree.root, &from, &to, from_owner, to_owner, &mut phase, &mut rects, pages,
+    );
 
     rects
 }
@@ -42,13 +49,19 @@ fn visit_node(
     node: &LayoutNode,
     from: &Position,
     to: &Position,
+    from_owner: Option<&LayoutNode>,
+    to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
 ) -> bool {
     match &node.content {
-        LayoutContent::Box(b) => visit_box(node, b, from, to, phase, rects, pages),
-        LayoutContent::Line(l) => visit_line(node, l, from, to, phase, rects, pages),
+        LayoutContent::Box(b) => {
+            visit_box(node, b, from, to, from_owner, to_owner, phase, rects, pages)
+        }
+        LayoutContent::Line(l) => {
+            visit_line(node, l, from, to, from_owner, to_owner, phase, rects, pages)
+        }
         LayoutContent::Atom(a) => visit_atom(node, a, from, to, phase, rects, pages),
         LayoutContent::Spacing(_) => *phase == Phase::Inside,
     }
@@ -59,12 +72,14 @@ fn visit_line(
     line: &LayoutLine,
     from: &Position,
     to: &Position,
+    from_owner: Option<&LayoutNode>,
+    to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
 ) -> bool {
-    let contains_from = line_contains_position(line, from);
-    let contains_to = line_contains_position(line, to);
+    let contains_from = from_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
+    let contains_to = to_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
 
     let (x_start, x_end, fully_selected) = match (*phase, contains_from, contains_to) {
         (Phase::Before, true, true) => {
@@ -166,6 +181,8 @@ fn visit_box(
     bx: &LayoutBox,
     from: &Position,
     to: &Position,
+    from_owner: Option<&LayoutNode>,
+    to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
@@ -187,7 +204,7 @@ fn visit_box(
             }
         }
 
-        let child_fully = visit_node(child, from, to, phase, rects, pages);
+        let child_fully = visit_node(child, from, to, from_owner, to_owner, phase, rects, pages);
 
         if !is_spacing {
             has_content_child = true;
@@ -403,6 +420,44 @@ mod tests {
         );
         assert!(rects[0].rect.width > 0.0);
         assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
+    fn selection_starting_at_lower_soft_wrap_line_emits_rect() {
+        // Force soft-wrap: max_width=80 with default margin 20 gives content
+        // width 40 — exactly 4 ASCII test chars per line. "abcdefgh" wraps as
+        //   line A (offset 0..4): "abcd"
+        //   line B (offset 4..8): "efgh"
+        // Selecting the lower line's leading character (offset 4 → 5) must
+        // produce one rect over the lower line.
+        let (doc, t) = doc! {
+            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 80 }) {
+                paragraph { t: text("abcdefgh") }
+            }
+        };
+        let view = layout(&doc);
+
+        // Layout dumped via PageVisitor confirms the wrap boundary is at
+        // codepoint offset 6: the last visual line owns offsets 6..8 ("gh").
+        // Selecting from (t, 6) — the first character of that lower line —
+        // exercises the bug: both upper and lower lines claim offset 6 and
+        // visit_line consumes it on the upper line with zero width.
+        let sel = Selection::new(Position::new(t, 6), Position::new(t, 7));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(
+            rects.len(),
+            1,
+            "expected one rect on the lower wrapped line"
+        );
+        assert!(rects[0].rect.width > 0.0);
+        // The lower visual line is well below the upper ones (y ~ 71).
+        assert!(
+            rects[0].rect.y > 50.0,
+            "rect must be on the lower line, got y={}",
+            rects[0].rect.y
+        );
     }
 
     #[test]
