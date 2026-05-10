@@ -79,8 +79,8 @@ fn closest_navigable(
                     return Some(found);
                 }
             }
-            // No containing child found; search all children by edge distance
-            closest_navigable_in_children(&b.children, x, y, y_start, y_end)
+            // No containing child found; pick globally closest leaf in range.
+            closest_navigable_in_range(node, x, y, y_start, y_end).map(|(_, n)| n)
         }
         LayoutContent::Line(_) | LayoutContent::Atom(_) => {
             if node.rect.y >= y_start && node.rect.y < y_end {
@@ -93,36 +93,25 @@ fn closest_navigable(
     }
 }
 
-fn closest_navigable_in_children(
-    children: &[LayoutNode],
+/// Find the navigable descendant (Line or Atom) of `node` whose `rect.y` lies
+/// within `[y_start, y_end)` and is closest to `(x, y)` by squared rect-edge
+/// distance. Returns `(dist_sq, leaf)`.
+fn closest_navigable_in_range(
+    node: &LayoutNode,
     x: f32,
     y: f32,
     y_start: f32,
     y_end: f32,
-) -> Option<&LayoutNode> {
-    children
-        .iter()
-        .filter_map(|child| {
-            find_any_navigable_in_range(child, y_start, y_end).map(|nav| {
-                let dist_sq = rect_distance_sq(&nav.rect, x, y);
-                (dist_sq, nav)
-            })
-        })
-        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(_, nav)| nav)
-}
-
-/// Find ANY navigable descendant (first Line or Atom found) whose `rect.y`
-/// lies within `[y_start, y_end)`.
-fn find_any_navigable_in_range(node: &LayoutNode, y_start: f32, y_end: f32) -> Option<&LayoutNode> {
+) -> Option<(f32, &LayoutNode)> {
     match &node.content {
         LayoutContent::Box(b) => b
             .children
             .iter()
-            .find_map(|c| find_any_navigable_in_range(c, y_start, y_end)),
+            .filter_map(|c| closest_navigable_in_range(c, x, y, y_start, y_end))
+            .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)),
         LayoutContent::Line(_) | LayoutContent::Atom(_) => {
             if node.rect.y >= y_start && node.rect.y < y_end {
-                Some(node)
+                Some((rect_distance_sq(&node.rect, x, y), node))
             } else {
                 None
             }
@@ -347,6 +336,36 @@ mod tests {
         // Click in margin area (x=5, y=5) -- outside all boxes
         let sel = closest_hit_test(&tree, &page, 5.0, 5.0).unwrap();
         assert_eq!(sel.head.node_id, id);
+    }
+
+    #[test]
+    fn closest_hit_below_paragraph_returns_last_line() {
+        // Single paragraph (Box) wraps multiple Lines. Click below the paragraph
+        // rect — but still within the page — must land on the LAST line (closest
+        // by edge distance), not the FIRST.
+        let line1 = NodeId::new();
+        let line2 = NodeId::new();
+        let line3 = NodeId::new();
+        let paragraph = make_box_node(
+            NodeId::new(),
+            0.0,
+            0.0,
+            200.0,
+            60.0,
+            vec![
+                make_line_node(line1, 0.0, 0.0, "hi", 10.0),
+                make_line_node(line2, 0.0, 20.0, "lo", 10.0),
+                make_line_node(line3, 0.0, 40.0, "yo", 10.0),
+            ],
+        );
+        let tree = LayoutTree {
+            root: make_box_node(NodeId::ROOT, 0.0, 0.0, 200.0, 200.0, vec![paragraph]),
+        };
+        let page = make_page(0.0, 200.0);
+
+        // Click at y=100, well below paragraph (ends at y=60).
+        let sel = closest_hit_test(&tree, &page, 5.0, 100.0).unwrap();
+        assert_eq!(sel.head.node_id, line3);
     }
 
     #[test]

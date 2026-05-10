@@ -1,4 +1,4 @@
-use editor_state::Position;
+use editor_state::{Affinity, Position};
 
 use crate::glyph_run::GlyphRun;
 use crate::paginate::LayoutLine;
@@ -9,7 +9,13 @@ pub fn run_codepoint_count(run: &GlyphRun) -> usize {
 
 pub fn last_position_in_line(line: &LayoutLine) -> Position {
     if let Some(run) = line.glyph_runs.last() {
-        Position::new(run.node_id, run.offset + run_codepoint_count(run))
+        // Upstream so soft-wrap boundaries resolve to this (upper) line rather
+        // than the start of the next continuation line.
+        Position {
+            node_id: run.node_id,
+            offset: run.offset + run_codepoint_count(run),
+            affinity: Affinity::Upstream,
+        }
     } else {
         Position::new(line.node_id, 0)
     }
@@ -59,7 +65,12 @@ pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
     }
 
     if local_x >= last.x + last.width {
-        return Position::new(last.node_id, last.offset + run_codepoint_count(last));
+        // Upstream so soft-wrap boundaries resolve to this (upper) line.
+        return Position {
+            node_id: last.node_id,
+            offset: last.offset + run_codepoint_count(last),
+            affinity: Affinity::Upstream,
+        };
     }
 
     for run in &line.glyph_runs {
@@ -354,6 +365,33 @@ mod tests {
         let pos = position_at_x(&line, 50.0);
         assert_eq!(pos.node_id, id);
         assert_eq!(pos.offset, 0);
+    }
+
+    #[test]
+    fn position_at_x_past_line_end_is_upstream() {
+        // Clicking at the right edge of a line lands at the trailing offset
+        // and must lean toward the preceding content; otherwise on a soft-wrap
+        // upper line the click would resolve to the start of the lower line.
+        let id = NodeId::new();
+        let line = LayoutLine {
+            node_id: id,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![GlyphRun::make_test_run(
+                id,
+                0,
+                "abcde",
+                0.0,
+                ascii_spans(5, 10.0),
+            )],
+            text_indent: 0.0,
+        };
+        let pos = position_at_x(&line, 100.0);
+        assert_eq!(pos.offset, 5);
+        assert_eq!(pos.affinity, editor_state::Affinity::Upstream);
     }
 
     #[test]

@@ -116,6 +116,20 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
             }
             let y = line_node.rect.bottom();
             let next = search::find_navigable_below(&tree.root, y)?;
+            // If the next line is a soft-wrap continuation of the same text node,
+            // advance directly into its first grapheme rather than landing at
+            // the same offset (which would visually be the same caret).
+            if let LayoutContent::Line(next_line) = &next.content
+                && let Some(first_run) = next_line.glyph_runs.first()
+                && first_run.node_id == pos.node_id
+                && first_run.offset == pos.offset
+                && let Some(g) = first_run.graphemes.first()
+            {
+                return Some(Selection::collapsed(Position::new(
+                    pos.node_id,
+                    pos.offset + g.codepoints as usize,
+                )));
+            }
             Some(Selection::collapsed(first_position_in(next)))
         }
         LayoutContent::Atom(a) => {
@@ -171,6 +185,20 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
             }
             let y = line_node.rect.y;
             let prev = search::find_navigable_above(&tree.root, y)?;
+            // If the previous line is a soft-wrap continuation of the same
+            // text node, retreat into its last grapheme rather than landing
+            // at the same offset (which would visually be the same caret).
+            if let LayoutContent::Line(prev_line) = &prev.content
+                && let Some(last_run) = prev_line.glyph_runs.last()
+                && last_run.node_id == pos.node_id
+                && last_run.offset + super::grapheme::run_codepoint_count(last_run) == pos.offset
+                && let Some(g) = last_run.graphemes.last()
+            {
+                return Some(Selection::collapsed(Position::new(
+                    pos.node_id,
+                    pos.offset - g.codepoints as usize,
+                )));
+            }
             Some(Selection::collapsed(last_position_in(prev)))
         }
         LayoutContent::Atom(a) => {
@@ -495,6 +523,107 @@ mod tests {
 
     fn mov(tree: &LayoutTree, pos: Position, movement: Movement) -> Option<Selection> {
         resolve_movement(tree, &pos, &movement, &VP, &Resource::new_test(), None).0
+    }
+
+    /// Tree with a single text node `t` soft-wrapped onto two visual lines:
+    ///   line A (y=0..20): glyph_run(t, offset=0, "abcde")
+    ///   line B (y=20..40): glyph_run(t, offset=5, "fghij")
+    fn soft_wrap_tree(t: NodeId) -> LayoutTree {
+        let line_a = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
+                text_indent: 0.0,
+            }),
+        };
+        let line_b = LayoutNode {
+            rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
+                text_indent: 0.0,
+            }),
+        };
+        LayoutTree {
+            root: make_box_node(0.0, 40.0, false, vec![line_a, line_b]),
+        }
+    }
+
+    #[test]
+    fn line_horizontal_forward_in_upper_soft_wrap_renders_at_upper_end() {
+        // After making `find_line_at` affinity-aware, `last_position_in_line`
+        // must produce a position that resolves back to the upper line; otherwise
+        // pressing End in the upper wrapped line silently jumps to the start
+        // of the lower wrapped line.
+        let t = NodeId::new();
+        let tree = soft_wrap_tree(t);
+        let sel = mov(
+            &tree,
+            Position::new(t, 2),
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Horizontal,
+            },
+        )
+        .unwrap();
+        assert_eq!(sel.head.offset, 5);
+        let line_node = search::find_line_at(&tree, &sel.head).unwrap();
+        assert_eq!(line_node.rect.y, 0.0, "must resolve to upper wrapped line");
+    }
+
+    #[test]
+    fn grapheme_backward_at_soft_wrap_start_retreats_into_upper_line() {
+        let t = NodeId::new();
+        let tree = soft_wrap_tree(t);
+        // Start of lower wrapped line: (t, 5, Downstream).
+        let pos = Position {
+            node_id: t,
+            offset: 5,
+            affinity: Affinity::Downstream,
+        };
+        let sel = mov(
+            &tree,
+            pos,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        )
+        .unwrap();
+        assert_eq!(sel.head.node_id, t);
+        assert_eq!(sel.head.offset, 4);
+    }
+
+    #[test]
+    fn grapheme_forward_at_soft_wrap_end_advances_into_lower_line() {
+        let t = NodeId::new();
+        let tree = soft_wrap_tree(t);
+        // End of upper wrapped line: (t, 5, Upstream).
+        let pos = Position {
+            node_id: t,
+            offset: 5,
+            affinity: Affinity::Upstream,
+        };
+        let sel = mov(
+            &tree,
+            pos,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        )
+        .unwrap();
+        assert_eq!(sel.head.node_id, t);
+        assert_eq!(sel.head.offset, 6);
     }
 
     #[test]

@@ -1,43 +1,54 @@
 use editor_model::NodeId;
-use editor_state::Position;
+use editor_state::{Affinity, Position};
 
 use crate::paginate::*;
 
 /// Find the LayoutNode (Line or Atom) containing a given Position.
+///
+/// At soft-wrap boundaries the same `(node_id, offset)` lies at the end of one
+/// LayoutLine and at the start of the next. `pos.affinity` disambiguates:
+/// `Upstream` → preceding (upper) line, `Downstream` → following (lower) line.
 pub fn find_line_at<'a>(tree: &'a LayoutTree, pos: &Position) -> Option<&'a LayoutNode> {
-    find_line_in(&tree.root, pos)
+    let mut candidates: Vec<&'a LayoutNode> = Vec::new();
+    collect_lines(&tree.root, pos, &mut candidates);
+    match (candidates.len(), pos.affinity) {
+        (0, _) => None,
+        (1, _) => Some(candidates[0]),
+        (_, Affinity::Upstream) => Some(candidates[0]),
+        (_, Affinity::Downstream) => candidates.last().copied(),
+    }
 }
 
-fn find_line_in<'a>(node: &'a LayoutNode, pos: &Position) -> Option<&'a LayoutNode> {
+fn collect_lines<'a>(node: &'a LayoutNode, pos: &Position, out: &mut Vec<&'a LayoutNode>) {
     match &node.content {
-        LayoutContent::Box(b) => b.children.iter().find_map(|child| find_line_in(child, pos)),
+        LayoutContent::Box(b) => {
+            for child in &b.children {
+                collect_lines(child, pos, out);
+            }
+        }
         LayoutContent::Line(l) => {
-            // Empty line: match by paragraph node_id at offset 0
             if l.glyph_runs.is_empty() {
-                return if l.node_id == pos.node_id && pos.offset == 0 {
-                    Some(node)
-                } else {
-                    None
-                };
+                if l.node_id == pos.node_id && pos.offset == 0 {
+                    out.push(node);
+                }
+                return;
             }
             for run in &l.glyph_runs {
                 if run.node_id == pos.node_id
                     && pos.offset >= run.offset
                     && pos.offset <= run.offset + super::grapheme::run_codepoint_count(run)
                 {
-                    return Some(node);
+                    out.push(node);
+                    return;
                 }
             }
-            None
         }
         LayoutContent::Atom(a) => {
             if a.parent_id == pos.node_id && pos.offset >= a.index && pos.offset <= a.index + 1 {
-                Some(node)
-            } else {
-                None
+                out.push(node);
             }
         }
-        LayoutContent::Spacing(_) => None,
+        LayoutContent::Spacing(_) => {}
     }
 }
 
@@ -138,7 +149,9 @@ pub fn find_scope_container_at<'a>(node: &'a LayoutNode, pos: &Position) -> Opti
 }
 
 fn contains_position(node: &LayoutNode, pos: &Position) -> bool {
-    find_line_in(node, pos).is_some()
+    let mut hits = Vec::new();
+    collect_lines(node, pos, &mut hits);
+    !hits.is_empty()
 }
 
 #[cfg(test)]
@@ -336,6 +349,96 @@ mod tests {
         let pos = Position::new(para_id, 0);
         let node = find_line_at(&tree, &pos);
         assert!(node.is_some());
+    }
+
+    #[test]
+    fn find_line_at_soft_wrap_boundary_downstream_picks_lower() {
+        // Single text node `t` wrapped onto two visual lines:
+        //   line A: glyph_run(t, offset=0, "abcde")
+        //   line B: glyph_run(t, offset=5, "fghij")
+        // At offset 5 both lines match; affinity disambiguates.
+        let t = NodeId::new();
+        let line_a = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
+                text_indent: 0.0,
+            }),
+        };
+        let line_b = LayoutNode {
+            rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
+                text_indent: 0.0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: make_box_node(0.0, 40.0, vec![line_a, line_b]),
+        };
+
+        let pos = editor_state::Position {
+            node_id: t,
+            offset: 5,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let node = find_line_at(&tree, &pos).unwrap();
+        // Downstream → lower line (rect.y == 20).
+        assert_eq!(node.rect.y, 20.0);
+    }
+
+    #[test]
+    fn find_line_at_soft_wrap_boundary_upstream_picks_upper() {
+        let t = NodeId::new();
+        let line_a = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
+                text_indent: 0.0,
+            }),
+        };
+        let line_b = LayoutNode {
+            rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
+                text_indent: 0.0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: make_box_node(0.0, 40.0, vec![line_a, line_b]),
+        };
+
+        let pos = editor_state::Position {
+            node_id: t,
+            offset: 5,
+            affinity: editor_state::Affinity::Upstream,
+        };
+        let node = find_line_at(&tree, &pos).unwrap();
+        // Upstream → upper line (rect.y == 0).
+        assert_eq!(node.rect.y, 0.0);
     }
 
     #[test]
