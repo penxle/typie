@@ -3,7 +3,7 @@ use editor_resource::{Resource, TextBrush};
 use parley::style::{
     FontFamily, FontFamilyName, FontFeatures, FontVariations, FontWeight, LineHeight, TextStyle,
 };
-use parley::{Alignment as ParleyAlignment, AlignmentOptions, IndentOptions, Layout};
+use parley::{Alignment as ParleyAlignment, AlignmentOptions, IndentOptions, Layout, WordBreak};
 use std::borrow::Cow;
 
 use super::style_run::StyleRun;
@@ -43,6 +43,7 @@ pub fn build_layout(
             },
             font_variations: FontVariations::empty(),
             font_features: FontFeatures::empty(),
+            word_break: WordBreak::BreakAll,
             ..TextStyle::default()
         };
 
