@@ -50,15 +50,15 @@ fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
         .node(node_id)
         .and_then(|node_ref| {
             resolve_inherited(&node_ref, ModifierType::TextColor).and_then(|m| match m {
-                Modifier::TextColor { value } => Some(value.clone()),
+                Modifier::TextColor { value } => Some(format!("text.{value}")),
                 _ => None,
             })
         })
-        .unwrap_or_else(|| "text.default".to_string());
+        .unwrap_or_else(|| "text.black".to_string());
 
     let background_color = doc.node(node_id).and_then(|node_ref| {
         resolve_inherited(&node_ref, ModifierType::BackgroundColor).and_then(|m| match m {
-            Modifier::BackgroundColor { value } if value != "none" => Some(value.clone()),
+            Modifier::BackgroundColor { value } if value != "none" => Some(format!("bg.{value}")),
             _ => None,
         })
     });
@@ -96,10 +96,52 @@ fn segment_graphemes(
 
 #[cfg(test)]
 mod tests {
+    use editor_macros::doc;
+
     use super::*;
 
     fn segmenter() -> GraphemeClusterSegmenter {
         GraphemeClusterSegmenter::new().static_to_owned()
+    }
+
+    #[test]
+    fn resolve_text_colors_default_uses_root_text_color() {
+        let (doc, t1) = doc! {
+            root { paragraph { t1: text("hello") } }
+        };
+        let (color, bg) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.black");
+        assert_eq!(bg, None);
+    }
+
+    #[test]
+    fn resolve_text_colors_prefixes_modifier_values() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("hello") [
+                        text_color("red".to_string()),
+                        background_color("yellow".to_string())
+                    ]
+                }
+            }
+        };
+        let (color, bg) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.red");
+        assert_eq!(bg.as_deref(), Some("bg.yellow"));
+    }
+
+    #[test]
+    fn resolve_text_colors_filters_none_background() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("hello") [background_color("none".to_string())]
+                }
+            }
+        };
+        let (_color, bg) = resolve_text_colors(&doc, t1);
+        assert_eq!(bg, None);
     }
 
     #[test]
