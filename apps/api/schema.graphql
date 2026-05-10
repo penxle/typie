@@ -214,7 +214,7 @@ enum DocumentAvailableAction {
 
 type DocumentChangesetsUpdatedEvent {
   changesets: Binary!
-  serverHeads: Binary!
+  heads: Binary!
 }
 
 enum DocumentConflictKind {
@@ -1035,13 +1035,13 @@ enum PreorderPaymentState {
 }
 
 input PullDocumentChangesetsInput {
-  clientHeads: Binary!
   documentId: ID!
+  heads: Binary!
 }
 
 type PullDocumentChangesetsPayload {
-  missingChangesets: Binary!
-  serverHeads: Binary!
+  changesets: Binary!
+  heads: Binary!
 }
 
 input PurchasePaywallInput {
@@ -1060,7 +1060,7 @@ input PushDocumentChangesetsInput {
 }
 
 type PushDocumentChangesetsPayload {
-  serverHeads: Binary!
+  heads: Binary!
 }
 
 type Query {
@@ -1280,7 +1280,7 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
-  documentChangesetsUpdated(clientId: String!, documentId: ID!, sinceHeads: Binary!): DocumentChangesetsUpdatedEvent!
+  documentChangesetsUpdated(clientId: String!, documentId: ID!, heads: Binary!): DocumentChangesetsUpdatedEvent!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

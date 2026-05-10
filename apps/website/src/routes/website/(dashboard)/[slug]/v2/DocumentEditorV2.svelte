@@ -43,7 +43,7 @@
 
   // Server-confirmed heads. Tracks dots the server is known to have ingested
   // (self-pushed bundles + remote bundles received via subscription/poll).
-  // Used as sinceHeads/clientHeads in server queries so the server's strict
+  // Sent as the `heads` arg in server queries so the server's strict
   // missing_for invariant does not trip on optimistic local dots.
   //
   // Stays null until the editor mounts and the $effect seeds it with
@@ -72,7 +72,7 @@
     graphql(`
       mutation DocumentEditorV2_PushChangesets($input: PushDocumentChangesetsInput!) {
         pushDocumentChangesets(input: $input) {
-          serverHeads
+          heads
         }
       }
     `),
@@ -82,8 +82,8 @@
     graphql(`
       mutation DocumentEditorV2_PullChangesets($input: PullDocumentChangesetsInput!) {
         pullDocumentChangesets(input: $input) {
-          missingChangesets
-          serverHeads
+          changesets
+          heads
         }
       }
     `),
@@ -91,24 +91,24 @@
 
   createSubscription(
     graphql(`
-      subscription DocumentEditorV2_ChangesetsUpdated($documentId: ID!, $clientId: String!, $sinceHeads: Binary!) {
-        documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, sinceHeads: $sinceHeads) {
+      subscription DocumentEditorV2_ChangesetsUpdated($documentId: ID!, $clientId: String!, $heads: Binary!) {
+        documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, heads: $heads) {
           changesets
-          serverHeads
+          heads
         }
       }
     `),
-    // sinceHeads is read via untrack: onData writes lastConfirmedHeads, which
+    // heads is read via untrack: onData writes lastConfirmedHeads, which
     // would otherwise re-trigger args evaluation → mearie reconnect → catch-up
     // emit → onData → loop. Mearie still re-evaluates args on connect/reconnect,
     // so the value seen at that moment is current — we just don't want every
     // confirmed-heads write to cause a forced reconnect.
     //
-    // sinceHeads asserts non-null because skip guards lastConfirmedHeads === null.
+    // heads asserts non-null because skip guards lastConfirmedHeads === null.
     () => ({
       documentId: document.data.id,
       clientId,
-      sinceHeads: untrack(() => lastConfirmedHeads?.toBase64() ?? ''),
+      heads: untrack(() => lastConfirmedHeads?.toBase64() ?? ''),
     }),
     () => ({
       // Defer subscription start until the editor has mounted AND the initial
@@ -124,7 +124,7 @@
           editor.receiveRemoteChangeset(payload);
           bus.emit({ kind: 'subscription.received', bytes: payload.length });
         }
-        lastConfirmedHeads = Uint8Array.fromBase64(data.documentChangesetsUpdated.serverHeads);
+        lastConfirmedHeads = Uint8Array.fromBase64(data.documentChangesetsUpdated.heads);
       },
     }),
   );
@@ -153,7 +153,7 @@
             changesets: changesets.toBase64(),
           },
         });
-        lastConfirmedHeads = Uint8Array.fromBase64(result.pushDocumentChangesets.serverHeads);
+        lastConfirmedHeads = Uint8Array.fromBase64(result.pushDocumentChangesets.heads);
       },
       onEvent: (e) => bus.emit(e),
     });
@@ -168,14 +168,14 @@
       const heads = lastConfirmedHeads;
       if (!ed || heads === null) return;
       const result = await pullDocumentChangesets({
-        input: { documentId: document.data.id, clientHeads: heads.toBase64() },
+        input: { documentId: document.data.id, heads: heads.toBase64() },
       });
-      const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.missingChangesets);
+      const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.changesets);
       if (missing.length > 0) {
         ed.receiveRemoteChangeset(missing);
         bus.emit({ kind: 'poll.applied', bytes: missing.length });
       }
-      lastConfirmedHeads = Uint8Array.fromBase64(result.pullDocumentChangesets.serverHeads);
+      lastConfirmedHeads = Uint8Array.fromBase64(result.pullDocumentChangesets.heads);
     }, 10_000);
 
     return () => {

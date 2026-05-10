@@ -26,8 +26,8 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       return;
     }
 
-    const parsedUpdates: { userId: string; deviceId: string; payload: string }[] = [...updates].toReversed().map((u) => JSON.parse(u));
-    const newBundles = parsedUpdates.map((p) => Uint8Array.fromBase64(p.payload));
+    const parsedUpdates: { userId: string; deviceId: string; changesets: string }[] = [...updates].toReversed().map((u) => JSON.parse(u));
+    const newBundles = parsedUpdates.map((p) => Uint8Array.fromBase64(p.changesets));
 
     const { graph: existing } = await db
       .select({ graph: DocumentStates.graph })

@@ -45,7 +45,7 @@ builder.mutationFields((t) => ({
   pushDocumentChangesets: t.withAuth({ session: true }).fieldWithInput({
     type: builder.simpleObject('PushDocumentChangesetsPayload', {
       fields: (t) => ({
-        serverHeads: t.field({ type: 'Binary' }),
+        heads: t.field({ type: 'Binary' }),
       }),
     }),
     input: {
@@ -76,40 +76,40 @@ builder.mutationFields((t) => ({
           JSON.stringify({
             userId: ctx.session.userId,
             deviceId: ctx.session.deviceId,
-            payload: input.changesets.toBase64(),
+            changesets: input.changesets.toBase64(),
           }),
         );
       }
 
-      // Compute serverHeads after lpush so the merged graph reflects this push.
+      // Compute heads after lpush so the merged graph reflects this push.
       // Receivers of the broadcast see heads that include the just-pushed bundle.
       const graph = await readMergedGraph(input.documentId);
-      const serverHeads = await wasm.use((host) => host.heads(graph));
+      const heads = await wasm.use((host) => host.heads(graph));
 
       if (opsCount > 0) {
         pubsub.publish('document:changesets', input.documentId, {
           target: `!${input.clientId}`,
-          payload: input.changesets.toBase64(),
-          serverHeads: serverHeads.toBase64(),
+          changesets: input.changesets.toBase64(),
+          heads: heads.toBase64(),
         });
 
         await enqueueJob('document:changesets:collect', input.documentId);
       }
 
-      return { serverHeads };
+      return { heads };
     },
   }),
 
   pullDocumentChangesets: t.withAuth({ session: true }).fieldWithInput({
     type: builder.simpleObject('PullDocumentChangesetsPayload', {
       fields: (t) => ({
-        missingChangesets: t.field({ type: 'Binary' }),
-        serverHeads: t.field({ type: 'Binary' }),
+        changesets: t.field({ type: 'Binary' }),
+        heads: t.field({ type: 'Binary' }),
       }),
     }),
     input: {
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-      clientHeads: t.input.field({ type: 'Binary' }),
+      heads: t.input.field({ type: 'Binary' }),
     },
     resolve: async (_, { input }, ctx) => {
       const docEntity = await db
@@ -123,12 +123,12 @@ builder.mutationFields((t) => ({
 
       const graph = await readMergedGraph(input.documentId);
 
-      const { missingChangesets, serverHeads } = await wasm.use((host) => ({
-        missingChangesets: host.missing_for(graph, input.clientHeads),
-        serverHeads: host.heads(graph),
+      const { changesets, heads } = await wasm.use((host) => ({
+        changesets: host.missing_for(graph, input.heads),
+        heads: host.heads(graph),
       }));
 
-      return { missingChangesets, serverHeads };
+      return { changesets, heads };
     },
   }),
 }));
@@ -142,13 +142,13 @@ builder.subscriptionFields((t) => ({
     type: builder.simpleObject('DocumentChangesetsUpdatedEvent', {
       fields: (t) => ({
         changesets: t.field({ type: 'Binary' }),
-        serverHeads: t.field({ type: 'Binary' }),
+        heads: t.field({ type: 'Binary' }),
       }),
     }),
     args: {
       documentId: t.arg.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
       clientId: t.arg.string(),
-      sinceHeads: t.arg({ type: 'Binary' }),
+      heads: t.arg({ type: 'Binary' }),
     },
     subscribe: async (_, args, ctx) => {
       const docEntity = await db
@@ -169,7 +169,7 @@ builder.subscriptionFields((t) => ({
         throw new TypieError({ code: 'document_state_not_found' });
       }
 
-      type Event = { target: string; payload: Uint8Array; serverHeads: Uint8Array };
+      type Event = { target: string; changesets: Uint8Array; heads: Uint8Array };
 
       const repeater = new Repeater<Event>(async (push, stop) => {
         const liveBuffer: Event[] = [];
@@ -181,8 +181,8 @@ builder.subscriptionFields((t) => ({
           for await (const event of liveStream) {
             const decoded: Event = {
               target: event.target,
-              payload: Uint8Array.fromBase64(event.payload),
-              serverHeads: Uint8Array.fromBase64(event.serverHeads),
+              changesets: Uint8Array.fromBase64(event.changesets),
+              heads: Uint8Array.fromBase64(event.heads),
             };
             if (catchupComplete) {
               await push(decoded);
@@ -193,11 +193,11 @@ builder.subscriptionFields((t) => ({
         })();
 
         const graph = await readMergedGraph(args.documentId);
-        const { missing, serverHeads } = await wasm.use((host) => ({
-          missing: host.missing_for(graph, args.sinceHeads),
-          serverHeads: host.heads(graph),
+        const { changesets, heads } = await wasm.use((host) => ({
+          changesets: host.missing_for(graph, args.heads),
+          heads: host.heads(graph),
         }));
-        await push({ target: '*', payload: missing, serverHeads });
+        await push({ target: '*', changesets, heads });
 
         catchupComplete = true;
         for (const event of liveBuffer) {
@@ -217,6 +217,6 @@ builder.subscriptionFields((t) => ({
         }),
       );
     },
-    resolve: (event) => ({ changesets: event.payload, serverHeads: event.serverHeads }),
+    resolve: ({ changesets, heads }) => ({ changesets, heads }),
   }),
 }));

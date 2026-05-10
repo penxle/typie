@@ -14,7 +14,7 @@ export const readMergedGraph = async (documentId: string): Promise<Uint8Array> =
 
   if (pending.length === 0) return persisted;
 
-  const pendingBundles = pending.toReversed().map((p) => Uint8Array.fromBase64((JSON.parse(p) as { payload: string }).payload));
+  const pendingBundles = pending.toReversed().map((p) => Uint8Array.fromBase64((JSON.parse(p) as { changesets: string }).changesets));
 
   return await wasm.use((host) => {
     let merged = persisted;
