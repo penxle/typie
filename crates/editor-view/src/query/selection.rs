@@ -54,7 +54,7 @@ fn visit_node(
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
-) -> bool {
+) {
     match &node.content {
         LayoutContent::Box(b) => {
             visit_box(node, b, from, to, from_owner, to_owner, phase, rects, pages)
@@ -63,7 +63,7 @@ fn visit_node(
             visit_line(node, l, from, to, from_owner, to_owner, phase, rects, pages)
         }
         LayoutContent::Atom(a) => visit_atom(node, a, from, to, phase, rects, pages),
-        LayoutContent::Spacing(_) => *phase == Phase::Inside,
+        LayoutContent::Spacing(_) => {}
     }
 }
 
@@ -77,38 +77,31 @@ fn visit_line(
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
-) -> bool {
+) {
     let contains_from = from_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
     let contains_to = to_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
 
-    let (x_start, x_end, fully_selected) = match (*phase, contains_from, contains_to) {
+    let (x_start, x_end) = match (*phase, contains_from, contains_to) {
         (Phase::Before, true, true) => {
             let x0 = super::grapheme::x_at_offset(line, from);
             let x1 = super::grapheme::x_at_offset(line, to);
-            let ls = line_start_x(line);
-            let le = line_end_x(line);
-            let fully = (x0 - ls).abs() < f32::EPSILON && (x1 - le).abs() < f32::EPSILON;
             *phase = Phase::After;
-            (x0, x1, fully)
+            (x0, x1)
         }
         (Phase::Before, true, false) => {
             let x0 = super::grapheme::x_at_offset(line, from);
             let x1 = line_end_x(line);
             *phase = Phase::Inside;
-            (x0, x1, false)
+            (x0, x1)
         }
-        (Phase::Inside, false, false) => {
-            let x0 = line_start_x(line);
-            let x1 = line_end_x(line);
-            (x0, x1, true)
-        }
+        (Phase::Inside, false, false) => (line_start_x(line), line_end_x(line)),
         (Phase::Inside, false, true) => {
             let x0 = line_start_x(line);
             let x1 = super::grapheme::x_at_offset(line, to);
             *phase = Phase::After;
-            (x0, x1, false)
+            (x0, x1)
         }
-        _ => return false,
+        _ => return,
     };
 
     let width = if x_end > x_start {
@@ -117,7 +110,7 @@ fn visit_line(
         // empty line — show a small placeholder like a virtual space
         node.rect.height * 0.3
     } else {
-        return fully_selected;
+        return;
     };
 
     if let Some(page_idx) = page_for_y(pages, node.rect.y) {
@@ -132,8 +125,6 @@ fn visit_line(
             SelectionRectKind::Text,
         ));
     }
-
-    fully_selected
 }
 
 fn visit_atom(
@@ -144,7 +135,7 @@ fn visit_atom(
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
-) -> bool {
+) {
     let is_from = from.node_id == atom.parent_id && from.offset == atom.index;
     let is_to = to.node_id == atom.parent_id && to.offset == atom.index + 1;
 
@@ -153,7 +144,7 @@ fn visit_atom(
     }
 
     if *phase != Phase::Inside {
-        return false;
+        return;
     }
 
     if let Some(page_idx) = page_for_y(pages, node.rect.y) {
@@ -172,8 +163,6 @@ fn visit_atom(
     if is_to {
         *phase = Phase::After;
     }
-
-    true
 }
 
 fn visit_box(
@@ -186,31 +175,31 @@ fn visit_box(
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
-) -> bool {
+) {
     let from_in_box = from.node_id == bx.node_id;
     let to_in_box = to.node_id == bx.node_id;
 
+    // A container is "fully selected" only when the selection spans across it
+    // from an ancestor's perspective — i.e. phase is already Inside on entry
+    // and remains Inside after visiting all children. If phase transitions
+    // Before→Inside or Inside→After inside this box, then an anchor lives in
+    // a descendant and the box itself is only partially covered.
+    let entry_phase = *phase;
     let rects_before = rects.len();
-    let mut all_fully_selected = true;
     let mut has_content_child = false;
     let mut content_idx = 0usize;
 
     for child in &bx.children {
         let is_spacing = matches!(child.content, LayoutContent::Spacing(_));
 
-        if !is_spacing {
-            if from_in_box && *phase == Phase::Before && content_idx == from.offset {
-                *phase = Phase::Inside;
-            }
+        if !is_spacing && from_in_box && *phase == Phase::Before && content_idx == from.offset {
+            *phase = Phase::Inside;
         }
 
-        let child_fully = visit_node(child, from, to, from_owner, to_owner, phase, rects, pages);
+        visit_node(child, from, to, from_owner, to_owner, phase, rects, pages);
 
         if !is_spacing {
             has_content_child = true;
-            if !child_fully {
-                all_fully_selected = false;
-            }
             content_idx += 1;
             if to_in_box && *phase == Phase::Inside && content_idx == to.offset {
                 *phase = Phase::After;
@@ -218,7 +207,7 @@ fn visit_box(
         }
     }
 
-    let fully = has_content_child && all_fully_selected && *phase == Phase::After;
+    let fully = has_content_child && entry_phase == Phase::Inside && *phase == Phase::Inside;
 
     if fully && has_visual_boundary(&bx.style) {
         rects.truncate(rects_before);
@@ -235,8 +224,6 @@ fn visit_box(
             ));
         }
     }
-
-    fully
 }
 
 #[cfg(test)]
@@ -322,16 +309,19 @@ mod tests {
 
     #[test]
     fn block_fully_selected_emits_block_rect() {
-        let (doc, t) = doc! {
+        let (doc,) = doc! {
             root {
                 blockquote(variant: BlockquoteVariant::LeftLine) {
-                    paragraph { t: text("quoted") }
+                    paragraph { text("quoted") }
                 }
             }
         };
         let view = layout(&doc);
 
-        let sel = Selection::new(Position::new(t, 0), Position::new(t, 6));
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
         let resolved = sel.resolve(&doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
@@ -382,10 +372,8 @@ mod tests {
         let resolved = sel.resolve(&doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
-        assert!(
-            !rects.is_empty(),
-            "fold title selection should produce rects"
-        );
+        assert_eq!(rects.len(), 1);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
         assert!(rects[0].rect.height > 0.0);
     }
@@ -414,10 +402,8 @@ mod tests {
         let resolved = sel.resolve(&doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
-        assert!(
-            !rects.is_empty(),
-            "fold content selection should produce rects"
-        );
+        assert_eq!(rects.len(), 1);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
         assert!(rects[0].rect.height > 0.0);
     }
