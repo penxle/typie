@@ -35,6 +35,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_selection(),
                     commands::delete_text_backward(&resource),
                     commands::delete_node_backward(),
+                    commands::select_node_backward(),
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
                     commands::lift_first_paragraph(),
@@ -46,6 +47,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_selection(),
                     commands::delete_text_forward(&resource),
                     commands::delete_node_forward(),
+                    commands::select_node_forward(),
                     commands::join_paragraph_forward(),
                     commands::lift_paragraph_forward()
                 )?;
