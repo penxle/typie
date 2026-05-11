@@ -106,13 +106,24 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use editor_macros::state;
     use editor_model::NodeId;
-    use editor_state::{Position, Selection};
+    use editor_state::{Position, Selection, StableSelection, State};
 
-    fn sel_step(from: usize, to: usize) -> Step {
+    fn fixture_state() -> State {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("x") } } }
+            selection: (t1, 0)
+        };
+        s
+    }
+
+    fn sel_step(s: &State, from: usize, to: usize) -> Step {
+        let from_sel = Selection::collapsed(Position::new(NodeId::ROOT, from));
+        let to_sel = Selection::collapsed(Position::new(NodeId::ROOT, to));
         Step::SetSelection {
-            old: Selection::collapsed(Position::new(NodeId::ROOT, from)),
-            new: Selection::collapsed(Position::new(NodeId::ROOT, to)),
+            old: StableSelection::freeze(&from_sel, &s.doc),
+            new: StableSelection::freeze(&to_sel, &s.doc),
         }
     }
 
@@ -126,13 +137,14 @@ mod tests {
 
     #[test]
     fn undo_returns_inverse_steps_in_reverse() {
+        let s = fixture_state();
         let mut h = History::new(Duration::from_millis(300));
-        h.push_at(&[text_step(), sel_step(0, 1)], Instant::now());
+        h.push_at(&[text_step(), sel_step(&s, 0, 1)], Instant::now());
 
         let undone = h.undo().unwrap();
         assert_eq!(undone.len(), 2);
         assert!(matches!(&undone[0], Step::SetSelection { old, new }
-            if old.head.offset == 1 && new.head.offset == 0));
+            if old.thaw(&s.doc).head.offset == 1 && new.thaw(&s.doc).head.offset == 0));
         assert!(matches!(&undone[1], Step::RemoveText { .. }));
     }
 

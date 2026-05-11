@@ -1,31 +1,32 @@
-use editor_state::{BatchedState, Selection};
+use editor_state::{BatchedState, StableSelection};
 
 use crate::{Step, StepError, Validation};
 
-pub(crate) fn inverse(old: Selection, new: Selection) -> Step {
+pub(crate) fn inverse(old: StableSelection, new: StableSelection) -> Step {
     Step::SetSelection { old: new, new: old }
 }
 
 pub(crate) fn apply_to(
     batched: &mut BatchedState,
     _validations: &mut Vec<Validation>,
-    _old: Selection,
-    new: Selection,
+    _old: StableSelection,
+    new: StableSelection,
 ) -> Result<(), StepError> {
-    batched.set_selection(new);
+    let live = new.thaw(&batched.doc);
+    batched.set_selection(live);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::{Position, Selection};
+    use editor_state::{Position, Selection, StableSelection};
 
     use crate::Step;
 
     #[test]
     fn set_selection_apply() {
-        let (state, t1) = state! {
+        let (s, t1) = state! {
             doc {
                 root {
                     paragraph {
@@ -36,19 +37,19 @@ mod tests {
             selection: (t1, 0)
         };
 
-        let new_sel = Selection::collapsed(Position::new(t1, 3));
+        let new_live = Selection::collapsed(Position::new(t1, 3));
         let step = Step::SetSelection {
-            old: state.selection,
-            new: new_sel,
+            old: StableSelection::freeze(&s.selection, &s.doc),
+            new: StableSelection::freeze(&new_live, &s.doc),
         };
-        let output = step.apply(&state).unwrap();
+        let output = step.apply(&s).unwrap();
 
-        assert_eq!(output.state.selection, new_sel);
+        assert_eq!(output.state.selection, new_live);
     }
 
     #[test]
     fn set_selection_inverse_roundtrip() {
-        let (state, t1) = state! {
+        let (s, t1) = state! {
             doc {
                 root {
                     paragraph {
@@ -59,14 +60,15 @@ mod tests {
             selection: (t1, 0)
         };
 
-        let new_sel = Selection::collapsed(Position::new(t1, 3));
+        let original_live = s.selection;
+        let new_live = Selection::collapsed(Position::new(t1, 3));
         let step = Step::SetSelection {
-            old: state.selection,
-            new: new_sel,
+            old: StableSelection::freeze(&original_live, &s.doc),
+            new: StableSelection::freeze(&new_live, &s.doc),
         };
-        let state2 = step.apply(&state).unwrap().state;
-        let state3 = step.inverse().apply(&state2).unwrap().state;
+        let s2 = step.apply(&s).unwrap().state;
+        let s3 = step.inverse().apply(&s2).unwrap().state;
 
-        assert_eq!(state3.selection, state.selection);
+        assert_eq!(s3.selection, original_live);
     }
 }

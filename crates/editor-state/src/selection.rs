@@ -88,4 +88,8 @@ impl Selection {
     pub fn resolve<'a>(&self, doc: &'a Doc) -> Option<ResolvedSelection<'a>> {
         ResolvedSelection::resolve(doc, *self)
     }
+
+    pub fn freeze(&self, doc: &Doc) -> crate::StableSelection {
+        crate::StableSelection::freeze(self, doc)
+    }
 }

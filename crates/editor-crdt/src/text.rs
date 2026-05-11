@@ -46,6 +46,18 @@ impl Text {
         self.0.dot_at(char_offset)
     }
 
+    pub fn live_offset_of(&self, dot: Dot) -> Option<usize> {
+        self.0.live_offset_of(dot)
+    }
+
+    pub fn next_live_offset_after(&self, dot: Dot) -> Option<usize> {
+        self.0.next_live_offset_after(dot)
+    }
+
+    pub fn prev_live_offset_before(&self, dot: Dot) -> Option<usize> {
+        self.0.prev_live_offset_before(dot)
+    }
+
     pub fn iter_with_dot(&self) -> impl Iterator<Item = (Dot, char)> + '_ {
         self.0.iter_with_dot().map(|(d, &c)| (d, c))
     }
@@ -208,6 +220,77 @@ mod tests {
             )
             .unwrap();
         assert_eq!(t.to_plain(), "hi");
+    }
+
+    #[test]
+    fn text_live_offset_of_finds_alive_char() {
+        let t = Text::new();
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let t = t
+            .apply(
+                d1,
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'h',
+                },
+            )
+            .unwrap();
+        let t = t
+            .apply(
+                d2,
+                TextOp::InsertChar {
+                    after: Some(d1),
+                    ch: 'i',
+                },
+            )
+            .unwrap();
+
+        assert_eq!(t.live_offset_of(d1), Some(0));
+        assert_eq!(t.live_offset_of(d2), Some(1));
+    }
+
+    #[test]
+    fn text_next_prev_live_offset_walks_past_tombstones() {
+        let t = Text::new();
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let d3 = Dot::new(1, 2);
+        let t = t
+            .apply(
+                d1,
+                TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            )
+            .unwrap();
+        let t = t
+            .apply(
+                d2,
+                TextOp::InsertChar {
+                    after: Some(d1),
+                    ch: 'b',
+                },
+            )
+            .unwrap();
+        let t = t
+            .apply(
+                d3,
+                TextOp::InsertChar {
+                    after: Some(d2),
+                    ch: 'c',
+                },
+            )
+            .unwrap();
+        let t = t
+            .apply(Dot::new(1, 3), TextOp::RemoveChar { observed: d2 })
+            .unwrap();
+
+        assert_eq!(t.next_live_offset_after(d2), Some(1));
+        assert_eq!(t.prev_live_offset_before(d2), Some(0));
+        assert_eq!(t.next_live_offset_after(d3), None);
+        assert_eq!(t.prev_live_offset_before(d1), None);
     }
 
     #[test]

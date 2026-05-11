@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 ///   following child. `Upstream` → `child[offset - 1]` (preceding);
 ///   `Downstream` → `child[offset]` (following).
 #[ffi]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Affinity {
     /// Bias toward the following content (the next char in a text node,

@@ -1,6 +1,6 @@
 use editor_crdt::Op;
 use editor_model::{DocOp, Modifier, ModifierType, NodeId, PlainNode, Subtree};
-use editor_state::{BatchedState, Composition, PendingModifiers, Selection, State};
+use editor_state::{BatchedState, Composition, PendingModifiers, StableSelection, State};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
 use strum::{EnumDiscriminants, IntoStaticStr};
@@ -80,8 +80,8 @@ pub enum Step {
         modifier: Modifier,
     },
     SetSelection {
-        old: Selection,
-        new: Selection,
+        old: StableSelection,
+        new: StableSelection,
     },
     SetPendingModifiers {
         old: PendingModifiers,
@@ -229,7 +229,7 @@ impl Step {
                 steps::remove_modifier::apply_to(batched, validations, *node_id, modifier)
             }
             Step::SetSelection { old, new } => {
-                steps::set_selection::apply_to(batched, validations, *old, *new)
+                steps::set_selection::apply_to(batched, validations, old.clone(), new.clone())
             }
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::apply_to(batched, validations, old, new)
@@ -296,7 +296,9 @@ impl Step {
             Step::RemoveModifier { node_id, modifier } => {
                 steps::remove_modifier::inverse(*node_id, modifier.clone())
             }
-            Step::SetSelection { old, new } => steps::set_selection::inverse(*old, *new),
+            Step::SetSelection { old, new } => {
+                steps::set_selection::inverse(old.clone(), new.clone())
+            }
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::inverse(old.clone(), new.clone())
             }
@@ -308,8 +310,16 @@ impl Step {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use editor_macros::state;
     use editor_model::{PlainNode, PlainParagraphNode};
-    use editor_state::Position;
+
+    fn fixture_stable_selection() -> StableSelection {
+        let (s, _t1) = state! {
+            doc { root { paragraph { _t1: text("x") } } }
+            selection: (_t1, 0)
+        };
+        StableSelection::freeze(&s.selection, &s.doc)
+    }
 
     #[test]
     fn step_type_from_step() {
@@ -333,8 +343,11 @@ mod tests {
 
     #[test]
     fn is_commitable_false_for_set_selection() {
-        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
-        let step = Step::SetSelection { old: sel, new: sel };
+        let sel = fixture_stable_selection();
+        let step = Step::SetSelection {
+            old: sel.clone(),
+            new: sel,
+        };
         assert!(!step.is_commitable());
     }
 
@@ -361,7 +374,7 @@ mod tests {
         let node_id = NodeId::new();
         let parent_id = NodeId::new();
         let other_id = NodeId::new();
-        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
+        let sel = fixture_stable_selection();
         let subtree = Subtree::leaf(
             NodeId::new(),
             PlainNode::Paragraph(PlainParagraphNode::default()),
@@ -369,7 +382,10 @@ mod tests {
 
         // non-commitable (3)
         let non_commitable: Vec<Step> = vec![
-            Step::SetSelection { old: sel, new: sel },
+            Step::SetSelection {
+                old: sel.clone(),
+                new: sel.clone(),
+            },
             Step::SetPendingModifiers {
                 old: PendingModifiers::new(),
                 new: PendingModifiers::new(),

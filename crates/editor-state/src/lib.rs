@@ -2,6 +2,7 @@ editor_macros::preamble!();
 
 mod affinity;
 mod apply;
+mod bind;
 mod composition;
 mod error;
 mod flat;
@@ -11,10 +12,13 @@ mod position;
 mod resolved_position;
 mod resolved_selection;
 mod selection;
+mod stable_position;
+mod stable_selection;
 mod state;
 
 pub use affinity::*;
 pub use apply::*;
+pub use bind::*;
 pub use composition::*;
 pub use error::*;
 pub use flat::*;
@@ -24,6 +28,8 @@ pub use position::*;
 pub use resolved_position::*;
 pub use resolved_selection::*;
 pub use selection::*;
+pub use stable_position::*;
+pub use stable_selection::*;
 pub use state::*;
 
 #[cfg(any(test, feature = "test-utils"))]

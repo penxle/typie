@@ -1,6 +1,6 @@
 use editor_crdt::Op;
 use editor_model::{Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainNode, Subtree};
-use editor_state::{Composition, PendingModifiers, Selection, State};
+use editor_state::{Composition, PendingModifiers, Selection, StableSelection, State};
 
 use crate::{Effect, Step, StepError, TransactionMeta, Validation, validate};
 
@@ -10,6 +10,11 @@ struct Batch {
 
 pub struct Transaction {
     state: State,
+    // Stable form of the last selection set on this transaction. Tracked
+    // separately from `state.selection` because `SetSelection.old` must
+    // freeze against the doc where that selection was canonical, not against
+    // the post-edit doc where its node may already be dead.
+    selection_stable: StableSelection,
     steps: Vec<Step>,
     ops: Vec<Op<DocOp>>,
     effects: Vec<Effect>,
@@ -20,6 +25,7 @@ pub struct Transaction {
 #[derive(Clone)]
 pub struct Savepoint {
     state: State,
+    selection_stable: StableSelection,
     steps_len: usize,
     ops_len: usize,
     effects_len: usize,
@@ -28,8 +34,10 @@ pub struct Savepoint {
 
 impl Transaction {
     pub fn new(state: &State) -> Self {
+        let selection_stable = StableSelection::freeze(&state.selection, &state.doc);
         Self {
             state: state.clone(),
+            selection_stable,
             steps: Vec::new(),
             ops: Vec::new(),
             effects: Vec::new(),
@@ -74,6 +82,9 @@ impl Transaction {
         let output = step.apply(&self.state)?;
         self.state = output.state;
         self.ops.extend(output.ops);
+        if let Step::SetSelection { new, .. } = &step {
+            self.selection_stable = new.clone();
+        }
         self.steps.push(step);
         if let Some(batch) = &mut self.batch {
             batch.validations.extend(output.validations);
@@ -86,6 +97,7 @@ impl Transaction {
     pub fn savepoint(&self) -> Savepoint {
         Savepoint {
             state: self.state.clone(),
+            selection_stable: self.selection_stable.clone(),
             steps_len: self.steps.len(),
             ops_len: self.ops.len(),
             effects_len: self.effects.len(),
@@ -95,6 +107,7 @@ impl Transaction {
 
     pub fn rollback(&mut self, sp: Savepoint) {
         self.state = sp.state;
+        self.selection_stable = sp.selection_stable;
         self.steps.truncate(sp.steps_len);
         self.ops.truncate(sp.ops_len);
         self.effects.truncate(sp.effects_len);
@@ -280,10 +293,9 @@ impl Transaction {
     }
 
     pub fn set_selection(&mut self, selection: Selection) -> Result<(), StepError> {
-        self.apply_step(Step::SetSelection {
-            old: self.state.selection,
-            new: selection,
-        })
+        let old = self.selection_stable.clone();
+        let new = StableSelection::freeze(&selection, &self.state.doc);
+        self.apply_step(Step::SetSelection { old, new })
     }
 
     pub fn set_pending_modifiers(&mut self, modifiers: PendingModifiers) -> Result<(), StepError> {
@@ -712,8 +724,11 @@ mod tests {
         let (_, steps, _, _, _) = tr.commit();
         match &steps[0] {
             Step::SetSelection { old, new } => {
-                assert_eq!(*old, Selection::collapsed(Position::new(t1, 0)));
-                assert_eq!(*new, new_sel);
+                assert_eq!(
+                    old.thaw(&state.doc),
+                    Selection::collapsed(Position::new(t1, 0))
+                );
+                assert_eq!(new.thaw(&state.doc), new_sel);
             }
             _ => panic!("expected SetSelection"),
         }

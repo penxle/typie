@@ -105,6 +105,69 @@ impl<T> Rga<T> {
             })
         }
     }
+
+    pub fn dot_for(&self, value: &T) -> Option<Dot>
+    where
+        T: PartialEq,
+    {
+        self.iter_with_dot()
+            .find(|(_, v)| *v == value)
+            .map(|(d, _)| d)
+    }
+
+    pub fn live_offset_of(&self, dot: Dot) -> Option<usize> {
+        self.iter_with_dot().position(|(d, _)| d == dot)
+    }
+
+    /// Total-order traversal yielding every reachable entry — alive and tombstoned —
+    /// in the same DFS order `iter_with_dot` uses. The third tuple element is the
+    /// `alive` flag. Orphan entries (anchor not yet arrived) are not yielded, matching
+    /// `iter_with_dot`.
+    pub(crate) fn iter_all_in_order(&self) -> impl Iterator<Item = (Dot, &T, bool)> + '_ {
+        AllIterWithDot::new(self)
+    }
+
+    /// Live offset of the next alive entry after `dot` in RGA total order, or `None`
+    /// if `dot` is unknown or has no alive successor. Walks through tombstones.
+    pub fn next_live_offset_after(&self, dot: Dot) -> Option<usize> {
+        if !self.contains_dot(dot) {
+            return None;
+        }
+        let mut live_idx: usize = 0;
+        let mut passed = false;
+        for (entry_dot, _, alive) in self.iter_all_in_order() {
+            if passed && alive {
+                return Some(live_idx);
+            }
+            if entry_dot == dot {
+                passed = true;
+            }
+            if alive {
+                live_idx += 1;
+            }
+        }
+        None
+    }
+
+    /// Live offset of the previous alive entry before `dot` in RGA total order, or
+    /// `None` if `dot` is unknown or has no alive predecessor. Walks through tombstones.
+    pub fn prev_live_offset_before(&self, dot: Dot) -> Option<usize> {
+        if !self.contains_dot(dot) {
+            return None;
+        }
+        let mut last_live: Option<usize> = None;
+        let mut live_idx: usize = 0;
+        for (entry_dot, _, alive) in self.iter_all_in_order() {
+            if entry_dot == dot {
+                return last_live;
+            }
+            if alive {
+                last_live = Some(live_idx);
+                live_idx += 1;
+            }
+        }
+        None
+    }
 }
 
 impl<T> Default for Rga<T> {
@@ -211,6 +274,37 @@ impl<'a, T> Iterator for VisibleIterWithDot<'a, T> {
             }
         }
         None
+    }
+}
+
+/// Same DFS as `VisibleIterWithDot`, but yields tombstoned entries too with their
+/// `alive` flag. Used by `iter_all_in_order` for total-order neighbor lookups.
+struct AllIterWithDot<'a, T> {
+    crdt: &'a Rga<T>,
+    stack: Vec<Dot>,
+}
+
+impl<'a, T> AllIterWithDot<'a, T> {
+    fn new(crdt: &'a Rga<T>) -> Self {
+        Self {
+            crdt,
+            stack: crdt.children_asc(None),
+        }
+    }
+}
+
+impl<'a, T> Iterator for AllIterWithDot<'a, T> {
+    type Item = (Dot, &'a T, bool);
+    fn next(&mut self) -> Option<(Dot, &'a T, bool)> {
+        let id = self.stack.pop()?;
+        let children = self.crdt.children_asc(Some(id));
+        self.stack.extend(children);
+        let entry = self
+            .crdt
+            .entries
+            .get(&id)
+            .expect("popped id must be in entries");
+        Some((id, &entry.value, entry.alive))
     }
 }
 
@@ -1117,6 +1211,207 @@ mod tests {
             .apply(d_remove, RgaOp::Remove { observed: d1 })
             .unwrap();
         assert_eq!(crdt.to_plain(), vec![2]);
+    }
+
+    #[test]
+    fn dot_for_returns_dot_of_matching_alive_value() {
+        let crdt = Rga::<u32>::new();
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let crdt = crdt
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 10,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 20,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(crdt.dot_for(&10), Some(d1));
+        assert_eq!(crdt.dot_for(&20), Some(d2));
+        assert_eq!(crdt.dot_for(&99), None);
+    }
+
+    #[test]
+    fn dot_for_skips_tombstoned_values() {
+        let crdt = Rga::<u32>::new();
+        let d1 = Dot::new(1, 0);
+        let crdt = crdt
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 7,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(Dot::new(1, 1), RgaOp::Remove { observed: d1 })
+            .unwrap();
+
+        assert_eq!(crdt.dot_for(&7), None);
+    }
+
+    #[test]
+    fn live_offset_of_returns_index_of_alive_dot() {
+        let crdt = Rga::<u32>::new();
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let crdt = crdt
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 10,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 20,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(crdt.live_offset_of(d1), Some(0));
+        assert_eq!(crdt.live_offset_of(d2), Some(1));
+    }
+
+    #[test]
+    fn live_offset_of_returns_none_for_tombstoned_dot() {
+        let crdt = Rga::<u32>::new();
+        let d1 = Dot::new(1, 0);
+        let crdt = crdt
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 10,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(Dot::new(1, 1), RgaOp::Remove { observed: d1 })
+            .unwrap();
+
+        assert_eq!(crdt.live_offset_of(d1), None);
+    }
+
+    #[test]
+    fn live_offset_of_returns_none_for_unknown_dot() {
+        let crdt = Rga::<u32>::new();
+        assert_eq!(crdt.live_offset_of(Dot::new(9, 9)), None);
+    }
+
+    #[test]
+    fn next_live_offset_after_walks_forward_past_tombstones() {
+        let crdt = Rga::<u32>::new();
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let d3 = Dot::new(1, 2);
+        let crdt = crdt
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 1,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 2,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(
+                d3,
+                RgaOp::Insert {
+                    after: Some(d2),
+                    value: 3,
+                },
+            )
+            .unwrap();
+        // tombstone d2
+        let crdt = crdt
+            .apply(Dot::new(1, 3), RgaOp::Remove { observed: d2 })
+            .unwrap();
+
+        // From the dead d2, next live is d3 (now at offset 1 in live order).
+        assert_eq!(crdt.next_live_offset_after(d2), Some(1));
+        // From the alive d1, next live after it is d3 at offset 1.
+        assert_eq!(crdt.next_live_offset_after(d1), Some(1));
+        // From the last live d3, nothing follows.
+        assert_eq!(crdt.next_live_offset_after(d3), None);
+    }
+
+    #[test]
+    fn prev_live_offset_before_walks_backward_past_tombstones() {
+        let crdt = Rga::<u32>::new();
+        let d1 = Dot::new(1, 0);
+        let d2 = Dot::new(1, 1);
+        let d3 = Dot::new(1, 2);
+        let crdt = crdt
+            .apply(
+                d1,
+                RgaOp::Insert {
+                    after: None,
+                    value: 1,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(
+                d2,
+                RgaOp::Insert {
+                    after: Some(d1),
+                    value: 2,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(
+                d3,
+                RgaOp::Insert {
+                    after: Some(d2),
+                    value: 3,
+                },
+            )
+            .unwrap();
+        let crdt = crdt
+            .apply(Dot::new(1, 3), RgaOp::Remove { observed: d2 })
+            .unwrap();
+
+        // Before dead d2, prev live is d1 at offset 0.
+        assert_eq!(crdt.prev_live_offset_before(d2), Some(0));
+        // Before alive d3, prev live is d1 at offset 0.
+        assert_eq!(crdt.prev_live_offset_before(d3), Some(0));
+        // Before d1, nothing precedes.
+        assert_eq!(crdt.prev_live_offset_before(d1), None);
+    }
+
+    #[test]
+    fn next_prev_live_offset_unknown_dot_returns_none() {
+        let crdt = Rga::<u32>::new();
+        assert_eq!(crdt.next_live_offset_after(Dot::new(9, 9)), None);
+        assert_eq!(crdt.prev_live_offset_before(Dot::new(9, 9)), None);
     }
 }
 
