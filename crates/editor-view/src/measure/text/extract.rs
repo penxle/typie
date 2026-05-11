@@ -1,5 +1,5 @@
 use editor_common::StrExt;
-use editor_model::{Doc, Modifier, ModifierType, NodeId};
+use editor_model::{BlockquoteVariant, Doc, Modifier, ModifierType, Node, NodeId, NodeRef};
 use editor_resource::TextBrush;
 use icu_segmenter::GraphemeClusterSegmenter;
 use parley::Layout;
@@ -46,24 +46,38 @@ fn resolve_synthesis(doc: &Doc, node_id: NodeId) -> Synthesis {
 }
 
 fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
-    let color = doc
-        .node(node_id)
-        .and_then(|node_ref| {
-            resolve_inherited(&node_ref, ModifierType::TextColor).and_then(|m| match m {
-                Modifier::TextColor { value } => Some(format!("text.{value}")),
-                _ => None,
-            })
-        })
+    let node_ref = doc.node(node_id);
+
+    let color = node_ref
+        .as_ref()
+        .map(resolve_text_color)
         .unwrap_or_else(|| "text.black".to_string());
 
-    let background_color = doc.node(node_id).and_then(|node_ref| {
-        resolve_inherited(&node_ref, ModifierType::BackgroundColor).and_then(|m| match m {
+    let background_color = node_ref.as_ref().and_then(|nr| {
+        resolve_inherited(nr, ModifierType::BackgroundColor).and_then(|m| match m {
             Modifier::BackgroundColor { value } if value != "none" => Some(format!("bg.{value}")),
             _ => None,
         })
     });
 
     (color, background_color)
+}
+
+fn resolve_text_color(node_ref: &NodeRef<'_>) -> String {
+    for ancestor in node_ref.ancestors() {
+        if let Some(Modifier::TextColor { value }) = ancestor
+            .modifiers()
+            .find(|m| matches!(m, Modifier::TextColor { .. }))
+        {
+            return format!("text.{value}");
+        }
+        if let Node::Blockquote(bq) = ancestor.node()
+            && *bq.variant.get() == BlockquoteVariant::MessageSent
+        {
+            return "text.bright".to_string();
+        }
+    }
+    "text.black".to_string()
 }
 
 fn segment_graphemes(
@@ -142,6 +156,88 @@ mod tests {
         };
         let (_color, bg) = resolve_text_colors(&doc, t1);
         assert_eq!(bg, None);
+    }
+
+    #[test]
+    fn text_color_message_sent_with_seeded_root_modifier() {
+        let (doc, t1) = doc! {
+            root {
+                blockquote(variant: BlockquoteVariant::MessageSent) {
+                    paragraph { t1: text("hello") }
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.bright");
+    }
+
+    #[test]
+    fn text_color_message_sent_overrides_explicit_root_modifier() {
+        let (doc, t1) = doc! {
+            root [text_color("red".to_string())] {
+                blockquote(variant: BlockquoteVariant::MessageSent) {
+                    paragraph { t1: text("hello") }
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.bright");
+    }
+
+    #[test]
+    fn text_color_message_sent_respects_explicit_paragraph_modifier() {
+        let (doc, t1) = doc! {
+            root {
+                blockquote(variant: BlockquoteVariant::MessageSent) {
+                    paragraph [text_color("red".to_string())] {
+                        t1: text("hello")
+                    }
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.red");
+    }
+
+    #[test]
+    fn text_color_message_received_uses_root() {
+        let (doc, t1) = doc! {
+            root {
+                blockquote(variant: BlockquoteVariant::MessageReceived) {
+                    paragraph { t1: text("hello") }
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.black");
+    }
+
+    #[test]
+    fn text_color_message_sent_through_nested_container() {
+        let (doc, t1) = doc! {
+            root {
+                blockquote(variant: BlockquoteVariant::MessageSent) {
+                    bullet_list {
+                        list_item {
+                            paragraph { t1: text("hello") }
+                        }
+                    }
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.bright");
+    }
+
+    #[test]
+    fn text_color_inherits_from_root_outside_message_sent() {
+        let (doc, t1) = doc! {
+            root [text_color("red".to_string())] {
+                paragraph { t1: text("hello") }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.red");
     }
 
     #[test]

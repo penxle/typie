@@ -1,4 +1,4 @@
-use editor_model::{Modifier, ModifierType, NodeRef};
+use editor_model::{Modifier, ModifierType, Node, NodeRef};
 use editor_state::{PendingModifier, PendingModifiers};
 
 use crate::measure::resolve::resolve_inherited;
@@ -87,6 +87,13 @@ pub fn apply_pending_to_style(style: &mut ResolvedTextStyle, pending: &PendingMo
 }
 
 pub fn resolve_paragraph_indent(node: &NodeRef<'_>) -> f32 {
+    let parent_is_root = node
+        .parent()
+        .map(|p| matches!(p.node(), Node::Root(_)))
+        .unwrap_or(false);
+    if !parent_is_root {
+        return 0.0;
+    }
     match resolve_inherited(node, ModifierType::ParagraphIndent) {
         Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * DEFAULT_FONT_SIZE_PX,
         _ => 0.0,
@@ -167,5 +174,54 @@ mod tests {
         apply_pending_to_style(&mut style, &pending);
         // 96pt * (96/72) = 128px
         assert!((style.font_size - 128.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn paragraph_indent_applies_only_when_parent_is_root() {
+        let (doc, p1) = doc! {
+            root [paragraph_indent(200)] {
+                p1: paragraph { text("hello") }
+            }
+        };
+
+        let node = doc.node(p1).unwrap();
+        let indent = resolve_paragraph_indent(&node);
+
+        // 200 / 100 * 16.0 = 32.0
+        assert!((indent - 32.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn paragraph_indent_zero_inside_blockquote() {
+        let (doc, p1) = doc! {
+            root [paragraph_indent(200)] {
+                blockquote {
+                    p1: paragraph { text("hello") }
+                }
+            }
+        };
+
+        let node = doc.node(p1).unwrap();
+        let indent = resolve_paragraph_indent(&node);
+
+        assert!(indent.abs() < 0.01);
+    }
+
+    #[test]
+    fn paragraph_indent_zero_inside_list_item() {
+        let (doc, p1) = doc! {
+            root [paragraph_indent(200)] {
+                bullet_list {
+                    list_item {
+                        p1: paragraph { text("hello") }
+                    }
+                }
+            }
+        };
+
+        let node = doc.node(p1).unwrap();
+        let indent = resolve_paragraph_indent(&node);
+
+        assert!(indent.abs() < 0.01);
     }
 }

@@ -50,6 +50,88 @@ fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
     }
 }
 
+fn message_bubble_radii(
+    radius: f32,
+    edges: &Edges<bool>,
+    is_sent: bool,
+    has_tail: bool,
+) -> CornerRadii {
+    let top = if edges.top { radius } else { 0.0 };
+    let bottom = if edges.bottom { radius } else { 0.0 };
+    let mut radii = CornerRadii {
+        top_left: top,
+        top_right: top,
+        bottom_left: bottom,
+        bottom_right: bottom,
+    };
+    if has_tail {
+        if is_sent {
+            radii.bottom_right = 0.0;
+        } else {
+            radii.bottom_left = 0.0;
+        }
+    }
+    radii
+}
+
+fn build_message_tail(width: f32, height: f32, is_sent: bool) -> Path {
+    let s = MESSAGE_TAIL_SIZE;
+    let elements = if is_sent {
+        vec![
+            PathElement::MoveTo {
+                x: width - s * 0.8,
+                y: height,
+            },
+            PathElement::QuadTo {
+                x1: width,
+                y1: height,
+                x: width,
+                y: height - s * 0.5,
+            },
+            PathElement::QuadTo {
+                x1: width,
+                y1: height,
+                x: width + s * 0.4,
+                y: height + s * 0.15,
+            },
+            PathElement::QuadTo {
+                x1: width - s * 0.2,
+                y1: height + s * 0.05,
+                x: width - s * 0.8,
+                y: height,
+            },
+            PathElement::Close,
+        ]
+    } else {
+        vec![
+            PathElement::MoveTo {
+                x: s * 0.8,
+                y: height,
+            },
+            PathElement::QuadTo {
+                x1: 0.0,
+                y1: height,
+                x: 0.0,
+                y: height - s * 0.5,
+            },
+            PathElement::QuadTo {
+                x1: 0.0,
+                y1: height,
+                x: -s * 0.4,
+                y: height + s * 0.15,
+            },
+            PathElement::QuadTo {
+                x1: s * 0.2,
+                y1: height + s * 0.05,
+                x: s * 0.8,
+                y: height,
+            },
+            PathElement::Close,
+        ]
+    };
+    Path { elements }
+}
+
 const CALLOUT_BORDER_RADIUS: f32 = 8.0;
 const CALLOUT_BORDER_WIDTH: f32 = 1.0;
 const ICON_STROKE_WIDTH: f32 = 1.5;
@@ -57,6 +139,8 @@ const HR_LINE_HEIGHT: f32 = 1.0;
 const HR_SHAPE_SIZE_LARGE: f32 = 10.0;
 const HR_SHAPE_SIZE_SMALL: f32 = 8.0;
 const HR_SHAPE_GAP: f32 = 8.0;
+const MESSAGE_BORDER_RADIUS: f32 = 18.0;
+const MESSAGE_TAIL_SIZE: f32 = 10.0;
 
 fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Path {
     let CornerRadii {
@@ -498,6 +582,37 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     let color = self.renderer.theme.color("ui.surface.muted");
                     self.sink.fill_rect(inner_rect, color, t);
                 }
+                Some(Node::Blockquote(bq))
+                    if matches!(
+                        *bq.variant.get(),
+                        editor_model::BlockquoteVariant::MessageSent
+                            | editor_model::BlockquoteVariant::MessageReceived
+                    ) =>
+                {
+                    let is_sent = matches!(
+                        *bq.variant.get(),
+                        editor_model::BlockquoteVariant::MessageSent
+                    );
+                    // 신 아키텍처의 Edges<bool>.bottom = true 는 "박스 하단이 페이지 안 = 잘리지 않음 = 마지막 fragment".
+                    // legacy SplitEdges.bottom = true 와 정반대 의미라 부정 없이 그대로 사용.
+                    let has_tail = edges.bottom;
+                    let token = if is_sent {
+                        "ui.blockquote.message-sent"
+                    } else {
+                        "ui.blockquote.message-received"
+                    };
+                    let color = self.renderer.theme.color(token);
+
+                    let radii =
+                        message_bubble_radii(MESSAGE_BORDER_RADIUS, &edges, is_sent, has_tail);
+                    let path = Path::rrect(inner_rect, radii);
+                    self.sink.fill_path(&path, color, t);
+
+                    if has_tail {
+                        let tail = build_message_tail(inner_rect.width, inner_rect.height, is_sent);
+                        self.sink.fill_path(&tail, color, t);
+                    }
+                }
                 _ => {}
             }
         }
@@ -911,5 +1026,126 @@ mod tests {
     #[test]
     fn mark_data_layer_above_content() {
         assert_eq!(MarkData::Composition.layer(), MarkLayer::AboveContent);
+    }
+
+    #[test]
+    fn message_tail_sent_path_has_moveto_three_quads_and_close() {
+        let path = build_message_tail(100.0, 50.0, true);
+        let move_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::MoveTo { .. }))
+            .count();
+        let quad_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::QuadTo { .. }))
+            .count();
+        let close_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::Close))
+            .count();
+        assert_eq!(move_count, 1);
+        assert_eq!(quad_count, 3);
+        assert_eq!(close_count, 1);
+
+        // Sent 꼬리는 우측 (width 보다 큰 x 좌표) 으로 overflow 한다.
+        let max_x = path
+            .elements
+            .iter()
+            .filter_map(|e| match e {
+                PathElement::MoveTo { x, .. } | PathElement::LineTo { x, .. } => Some(x),
+                PathElement::QuadTo { x, .. } | PathElement::CurveTo { x, .. } => Some(x),
+                PathElement::Close => None,
+            })
+            .copied()
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x > 100.0,
+            "sent tail should overflow right past width, max_x={}",
+            max_x
+        );
+    }
+
+    #[test]
+    fn message_tail_received_path_overflows_to_the_left() {
+        let path = build_message_tail(100.0, 50.0, false);
+        let min_x = path
+            .elements
+            .iter()
+            .filter_map(|e| match e {
+                PathElement::MoveTo { x, .. } | PathElement::LineTo { x, .. } => Some(x),
+                PathElement::QuadTo { x, .. } | PathElement::CurveTo { x, .. } => Some(x),
+                PathElement::Close => None,
+            })
+            .copied()
+            .fold(f32::INFINITY, f32::min);
+        assert!(
+            min_x < 0.0,
+            "received tail should overflow left past 0, min_x={}",
+            min_x
+        );
+    }
+
+    #[test]
+    fn message_bubble_radii_full_box_sent_no_split() {
+        let edges = Edges {
+            top: true,
+            bottom: true,
+            left: true,
+            right: true,
+        };
+        let radii = message_bubble_radii(18.0, &edges, true, true);
+        assert!((radii.top_left - 18.0).abs() < 0.01);
+        assert!((radii.top_right - 18.0).abs() < 0.01);
+        assert!((radii.bottom_left - 18.0).abs() < 0.01);
+        // 꼬리가 있는 sent 면 우하단 직각.
+        assert!(radii.bottom_right.abs() < 0.01);
+    }
+
+    #[test]
+    fn message_bubble_radii_received_kills_bottom_left_when_tail_present() {
+        let edges = Edges {
+            top: true,
+            bottom: true,
+            left: true,
+            right: true,
+        };
+        let radii = message_bubble_radii(18.0, &edges, false, true);
+        assert!((radii.bottom_right - 18.0).abs() < 0.01);
+        assert!(radii.bottom_left.abs() < 0.01);
+    }
+
+    #[test]
+    fn message_bubble_radii_top_split_squares_top_corners() {
+        let edges = Edges {
+            top: false,
+            bottom: true,
+            left: true,
+            right: true,
+        };
+        let radii = message_bubble_radii(18.0, &edges, true, true);
+        assert!(radii.top_left.abs() < 0.01);
+        assert!(radii.top_right.abs() < 0.01);
+        // bottom_left 는 라운드, bottom_right 는 꼬리로 직각.
+        assert!((radii.bottom_left - 18.0).abs() < 0.01);
+        assert!(radii.bottom_right.abs() < 0.01);
+    }
+
+    #[test]
+    fn message_bubble_radii_bottom_split_no_tail_squares_bottom_corners() {
+        let edges = Edges {
+            top: true,
+            bottom: false,
+            left: true,
+            right: true,
+        };
+        // bottom split 이면 호출부에서 has_tail = false 로 넘긴다.
+        let radii = message_bubble_radii(18.0, &edges, true, false);
+        assert!((radii.top_left - 18.0).abs() < 0.01);
+        assert!((radii.top_right - 18.0).abs() < 0.01);
+        assert!(radii.bottom_left.abs() < 0.01);
+        assert!(radii.bottom_right.abs() < 0.01);
     }
 }
