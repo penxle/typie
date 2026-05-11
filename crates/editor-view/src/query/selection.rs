@@ -211,14 +211,21 @@ fn visit_box(
 
     if fully && has_visual_boundary(&bx.style) {
         rects.truncate(rects_before);
-        if let Some(page_idx) = page_for_y(pages, node.rect.y) {
+        let node_top = node.rect.y;
+        let node_bottom = node_top + node.rect.height;
+        for (page_idx, page) in pages.iter().enumerate() {
+            if node_bottom <= page.y_start || node_top >= page.y_end {
+                continue;
+            }
+            let top = node_top.max(page.y_start);
+            let bottom = node_bottom.min(page.y_end);
             rects.push(PageRect::with_meta(
                 page_idx,
                 Rect::from_xywh(
                     node.rect.x,
-                    node.rect.y - pages[page_idx].y_start,
+                    top - page.y_start,
                     node.rect.width,
-                    node.rect.height,
+                    bottom - top,
                 ),
                 SelectionRectKind::Block,
             ));
@@ -443,6 +450,62 @@ mod tests {
             rects[0].rect.y > 50.0,
             "rect must be on the lower line, got y={}",
             rects[0].rect.y
+        );
+    }
+
+    #[test]
+    fn fully_selected_box_spanning_pages_emits_rect_per_page() {
+        // Fully select a fold whose FoldContent spans two pages. FoldContent
+        // has padding > 0, so visit_box's "fully selected" branch fires for it.
+        // The selection rect must appear on every page the box overlaps; if it
+        // is anchored to a single page only, the renderer's per-page mark
+        // filtering hides the selection on the other pages.
+        let (doc,) = doc! {
+            root (
+                layout_mode: editor_model::LayoutMode::Paginated {
+                    page_width: 400,
+                    page_height: 120,
+                    page_margin_top: 10,
+                    page_margin_bottom: 10,
+                    page_margin_left: 10,
+                    page_margin_right: 10,
+                }
+            ) {
+                fold {
+                    fold_title { text("title") }
+                    fold_content {
+                        paragraph { text("a") }
+                        paragraph { text("b") }
+                        paragraph { text("c") }
+                        paragraph { text("d") }
+                        paragraph { text("e") }
+                        paragraph { text("f") }
+                        paragraph { text("g") }
+                        paragraph { text("h") }
+                    }
+                }
+            }
+        };
+        let view = layout(&doc);
+        assert!(
+            view.pages().len() >= 2,
+            "expected >= 2 pages, got {}",
+            view.pages().len()
+        );
+
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        let pages: std::collections::HashSet<_> = rects.iter().map(|r| r.page_idx).collect();
+        assert!(
+            pages.len() >= 2,
+            "fully-selected box spanning pages must emit rects on every overlapped page; pages={:?}, rects={:?}",
+            pages,
+            rects,
         );
     }
 

@@ -37,6 +37,15 @@ pub fn measure_fold_title(
         .map(|p| view_state.fold_expanded(p.id()))
         .unwrap_or(true);
 
+    // 펼친 상태일 때만 title과 content를 가르는 1px separator를 BoxStyle.border로 표현.
+    // 접힌 상태에서는 외곽 Fold border 만으로 충분.
+    let border = EdgeInsets {
+        top: 0.0,
+        left: 0.0,
+        right: 0.0,
+        bottom: if expanded { FOLD_BORDER_WIDTH } else { 0.0 },
+    };
+
     let inner_width = width - padding.left - padding.right;
     let (children, children_height) = measure_inline_text(
         measurer,
@@ -50,13 +59,13 @@ pub fn measure_fold_title(
 
     MeasuredNode {
         width,
-        height: children_height + padding.top + padding.bottom,
+        height: children_height + padding.top + padding.bottom + border.top + border.bottom,
         content: MeasuredContent::Box(MeasuredBox {
             node_id: node.id(),
             style: BoxStyle {
                 direction: Direction::Vertical,
                 padding,
-                border: EdgeInsets::ZERO,
+                border,
                 border_mode: BorderMode::Separate,
                 alignment: LayoutAlignment::Start,
                 scope: false,

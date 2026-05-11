@@ -134,6 +134,8 @@ fn build_message_tail(width: f32, height: f32, is_sent: bool) -> Path {
 
 const CALLOUT_BORDER_RADIUS: f32 = 8.0;
 const CALLOUT_BORDER_WIDTH: f32 = 1.0;
+const FOLD_BORDER_RADIUS: f32 = 8.0;
+const FOLD_BORDER_WIDTH: f32 = 1.0;
 const ICON_STROKE_WIDTH: f32 = 1.5;
 const HR_LINE_HEIGHT: f32 = 1.0;
 const HR_SHAPE_SIZE_LARGE: f32 = 10.0;
@@ -514,6 +516,38 @@ impl<'a> RenderVisitor<'a> {
         }
     }
 
+    fn paint_fold_title_background(&mut self, expanded: bool) {
+        if !self.on(RenderLayer::Background) {
+            return;
+        }
+        let Some(frame) = self.box_stack.last() else {
+            return;
+        };
+        let t = self
+            .root_transform
+            .translate(frame.local_rect.x, frame.local_rect.y);
+        let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
+        // 펼쳐졌으면 아래쪽은 separator 가 이어받으므로 각진 모서리.
+        let top = if frame.edges.top { inner_radius } else { 0.0 };
+        let bottom = if !expanded && frame.edges.bottom {
+            inner_radius
+        } else {
+            0.0
+        };
+        let radii = CornerRadii {
+            top_left: top,
+            top_right: top,
+            bottom_left: bottom,
+            bottom_right: bottom,
+        };
+        let fill_color = self.renderer.theme.color("ui.surface.muted");
+        let fill_path = Path::rrect(
+            Rect::from_xywh(0.0, 0.0, frame.local_rect.width, frame.local_rect.height),
+            radii,
+        );
+        self.sink.fill_path(&fill_path, fill_color, t);
+    }
+
     fn render_glyph_runs(
         &mut self,
         glyph_runs: &[editor_view::glyph_run::GlyphRun],
@@ -578,10 +612,6 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     let path = Path::rrect(inner_rect, radii);
                     self.sink.fill_path(&path, color, t);
                 }
-                Some(Node::Fold(_)) => {
-                    let color = self.renderer.theme.color("ui.surface.muted");
-                    self.sink.fill_rect(inner_rect, color, t);
-                }
                 Some(Node::Blockquote(bq))
                     if matches!(
                         *bq.variant.get(),
@@ -638,6 +668,31 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             .root_transform
             .translate(frame.local_rect.x, frame.local_rect.y);
 
+        if let Some(Node::Fold(_)) = &frame.node {
+            let border_color = self.renderer.theme.color("ui.border.default");
+            let stroke = Stroke::new(FOLD_BORDER_WIDTH);
+            let mb = FOLD_BORDER_WIDTH / 2.0;
+            let inner_radius = (FOLD_BORDER_RADIUS - mb).max(0.0);
+            let radii = CornerRadii::from_edges(inner_radius, &frame.edges);
+
+            let stroke_rect = Rect::from_xywh(
+                mb,
+                mb,
+                frame.local_rect.width - FOLD_BORDER_WIDTH,
+                frame.local_rect.height - FOLD_BORDER_WIDTH,
+            );
+
+            if frame.edges.top && frame.edges.bottom {
+                let path = Path::rrect(stroke_rect, radii);
+                self.sink.stroke_path(&path, border_color, &stroke, t);
+            } else {
+                let path = build_partial_border(stroke_rect, radii, &frame.edges);
+                self.sink.stroke_path(&path, border_color, &stroke, t);
+            }
+
+            return;
+        }
+
         if let Some(Node::Callout(callout)) = &frame.node {
             let token = callout_token(*callout.variant.get());
             let border_color = self.renderer.theme.color(token);
@@ -668,8 +723,8 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         let border_color = match &frame.node {
             Some(Node::Blockquote(_)) => self.renderer.theme.color("ui.border.default"),
-            Some(Node::Fold(_)) => self.renderer.theme.color("ui.border.default"),
             Some(Node::Table(_)) => self.renderer.theme.color("ui.border.default"),
+            Some(Node::FoldTitle(_)) => self.renderer.theme.color("ui.border.default"),
             _ => self.renderer.theme.color("ui.border"),
         };
 
@@ -879,6 +934,12 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
     }
 
     fn decoration(&mut self, local_rect: Rect, data: &DecorationData) {
+        let parent_node = self.box_stack.last().and_then(|f| f.node.as_ref());
+
+        if let (Some(Node::FoldTitle(_)), DecorationData::Bool(expanded)) = (parent_node, data) {
+            self.paint_fold_title_background(*expanded);
+        }
+
         if !self.on(RenderLayer::Content) {
             return;
         }
@@ -928,7 +989,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 } else {
                     "lucide/chevron-down"
                 };
-                let color = self.renderer.theme.color("ui.text.muted");
+                let color = self.renderer.theme.color("ui.text.faint");
                 if let Some(icon) = ICONS.resolve(icon_name) {
                     self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
                 }
