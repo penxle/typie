@@ -14,6 +14,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             (Key::Enter, m) if m.shift => {
                 commands::chain!(
                     tr,
+                    commands::optional!(commands::ensure_paragraph()),
                     commands::optional!(commands::delete_selection()),
                     commands::insert_hard_break(),
                 )?;
