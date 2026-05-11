@@ -96,6 +96,12 @@ pub(crate) fn find_last_cursor_position(node: &NodeRef) -> Option<Position> {
     }
 }
 
+/// True when the node is a block-level container — a non-text, non-textblock node
+/// that holds block-level children (e.g. the doc root, blockquote, list_item).
+pub(crate) fn is_block_container(node: &Node) -> bool {
+    !matches!(node, Node::Text(_)) && !node.spec().is_textblock()
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::doc;

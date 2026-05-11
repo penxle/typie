@@ -65,7 +65,8 @@ fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str
     commands::chain!(
         tr,
         commands::set_selection(Selection::new((&start_pos).into(), (&end_pos).into())),
-        commands::when!(start != end, commands::delete_selection()),
+        commands::optional!(commands::ensure_paragraph()),
+        commands::optional!(commands::delete_selection()),
         commands::when!(!text.is_empty(), commands::insert_text(text)),
     )
 }
@@ -1381,6 +1382,31 @@ mod tests {
                 paragraph {}
             } }
             selection: (t1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn composition_replaces_node_selection() {
+        let (s, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { text("c") }
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "b".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                paragraph { t1: text("b") }
+                paragraph { text("c") }
+            } }
+            selection: (t1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }

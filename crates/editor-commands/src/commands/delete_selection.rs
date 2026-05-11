@@ -2,7 +2,9 @@ use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact, fulfill, prune};
 
-use crate::helpers::{find_ancestor_textblock, find_lowest_common_ancestor, path_from_ancestor};
+use crate::helpers::{
+    find_ancestor_textblock, find_lowest_common_ancestor, is_block_container, path_from_ancestor,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
@@ -20,13 +22,11 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
     let to = Position::from(resolved.to());
 
     if from.node_id == to.node_id {
-        let is_block_container = {
-            let doc = tr.doc();
-            doc.node(from.node_id)
-                .is_some_and(|n| !matches!(n.node(), Node::Text(_)) && !is_textblock(n.node()))
-        };
-
-        if is_block_container {
+        if tr
+            .doc()
+            .node(from.node_id)
+            .is_some_and(|n| is_block_container(n.node()))
+        {
             tr.batch::<_, CommandError>(|tr| {
                 delete_within_node(tr, from.node_id, from.offset, to.offset)?;
                 let doc = tr.doc();
@@ -374,13 +374,6 @@ fn is_block_level_leaf(node: &Node) -> bool {
     spec.selectable && !spec.inline
 }
 
-/// Check if a node is a textblock (content allows only inline types, not leaf).
-fn is_textblock(node: &Node) -> bool {
-    let spec = node.spec();
-    let all_inline = spec.content.allowed_types().iter().all(|t| t.spec().inline);
-    !spec.content.is_leaf() && all_inline
-}
-
 /// Walk into a node to find the first valid text-level position.
 fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<Position> {
     let node_ref = doc.node(node_id)?;
@@ -395,7 +388,7 @@ fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<
         });
     }
 
-    if is_textblock(node) {
+    if node.spec().is_textblock() {
         // Textblock with text children -> recurse into first child
         if let Some(&first_child_id) = node_ref.entry().children.iter().next()
             && let Some(pos) = find_first_text_position(doc, first_child_id)
