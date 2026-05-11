@@ -1,3 +1,4 @@
+use editor_model::{NodeType, Schema};
 use editor_state::{BatchedState, PendingModifiers};
 
 use crate::{Step, StepError, Validation};
@@ -12,6 +13,13 @@ pub(crate) fn apply_to(
     _old: &PendingModifiers,
     new: &PendingModifiers,
 ) -> Result<(), StepError> {
+    for entry in new {
+        let ty = entry.as_type();
+        let targets = Schema::modifier_spec(ty).context.rightmost_node_types();
+        if !targets.contains(&NodeType::Text) {
+            return Err(StepError::InvalidPendingModifier { modifier_type: ty });
+        }
+    }
     batched.set_pending_modifiers(new.clone());
     Ok(())
 }
@@ -61,5 +69,52 @@ mod tests {
         let state3 = step.inverse().apply(&state2).unwrap().state;
 
         assert_eq!(state3.pending_modifiers, state.pending_modifiers);
+    }
+
+    #[test]
+    fn rejects_non_text_applicable_pending_entry() {
+        use editor_model::ModifierType;
+
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+
+        let modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::LineHeight { value: 160 },
+        }];
+        let step = Step::SetPendingModifiers {
+            old: vec![],
+            new: modifiers,
+        };
+        let result = step.apply(&state);
+        assert!(matches!(
+            result,
+            Err(crate::StepError::InvalidPendingModifier {
+                modifier_type: ModifierType::LineHeight
+            })
+        ));
+    }
+
+    #[test]
+    fn accepts_text_applicable_pending_entries() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+
+        let modifiers = vec![
+            PendingModifier::Set {
+                modifier: Modifier::Bold,
+            },
+            PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 1600 },
+            },
+        ];
+        let step = Step::SetPendingModifiers {
+            old: vec![],
+            new: modifiers.clone(),
+        };
+        assert!(step.apply(&state).is_ok());
     }
 }

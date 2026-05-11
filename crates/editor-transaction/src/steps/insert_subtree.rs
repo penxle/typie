@@ -39,7 +39,17 @@ pub(crate) fn apply_to(
 
     validations.push(Validation::Subtree(subtree.id));
     validations.push(Validation::Node(parent_id));
+    push_modifier_validations(subtree, validations);
     Ok(())
+}
+
+fn push_modifier_validations(subtree: &Subtree, validations: &mut Vec<Validation>) {
+    for modifier in &subtree.modifiers {
+        validations.push(Validation::Modifier(subtree.id, modifier.as_type()));
+    }
+    for child in &subtree.children {
+        push_modifier_validations(child, validations);
+    }
 }
 
 fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepError> {
@@ -274,5 +284,61 @@ mod tests {
         assert!(new_state.has_node(item_id));
         assert!(new_state.has_node(para_id));
         assert_eq!(new_state.node(NodeId::ROOT).children().count(), 2);
+    }
+
+    #[test]
+    fn rejects_subtree_with_line_height_on_text_node() {
+        use editor_model::{Modifier, NodeId, PlainNode, PlainTextNode, Subtree};
+
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+
+        let new_text_id = NodeId::new();
+        let subtree = Subtree::leaf(new_text_id, PlainNode::Text(PlainTextNode::default()))
+            .with_modifiers(vec![Modifier::LineHeight { value: 160 }]);
+
+        let mut tr = Transaction::new(&state);
+        let p1 = state.doc.root().unwrap().first_child().unwrap().id();
+        assert!(tr.insert_subtree(p1, 0, subtree).is_err());
+    }
+
+    #[test]
+    fn accepts_subtree_with_line_height_on_paragraph() {
+        use editor_model::{Modifier, NodeId, PlainNode, PlainParagraphNode, Subtree};
+
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+
+        let new_para_id = NodeId::new();
+        let subtree = Subtree::leaf(
+            new_para_id,
+            PlainNode::Paragraph(PlainParagraphNode::default()),
+        )
+        .with_modifiers(vec![Modifier::LineHeight { value: 160 }]);
+
+        let mut tr = Transaction::new(&state);
+        assert!(tr.insert_subtree(NodeId::ROOT, 1, subtree).is_ok());
+    }
+
+    #[test]
+    fn accepts_subtree_with_bold_on_text_node() {
+        use editor_model::{Modifier, NodeId, PlainNode, PlainTextNode, Subtree};
+
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+
+        let new_text_id = NodeId::new();
+        let subtree = Subtree::leaf(new_text_id, PlainNode::Text(PlainTextNode::default()))
+            .with_modifiers(vec![Modifier::Bold]);
+
+        let mut tr = Transaction::new(&state);
+        let p1 = state.doc.root().unwrap().first_child().unwrap().id();
+        assert!(tr.insert_subtree(p1, 0, subtree).is_ok());
     }
 }

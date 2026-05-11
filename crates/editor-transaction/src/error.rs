@@ -36,6 +36,9 @@ pub enum StepError {
         detail: String,
     },
 
+    #[error("pending modifier {modifier_type:?} is not applicable to Text and cannot be staged")]
+    InvalidPendingModifier { modifier_type: ModifierType },
+
     #[error(transparent)]
     State(#[from] StateError),
 }
