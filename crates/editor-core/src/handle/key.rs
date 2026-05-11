@@ -39,6 +39,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
                     commands::lift_first_paragraph(),
+                    commands::delete_empty_paragraph_backward(),
                 )?;
             }
             (Key::Delete, _) => {
@@ -49,7 +50,8 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_node_forward(),
                     commands::select_node_forward(),
                     commands::join_paragraph_forward(),
-                    commands::lift_paragraph_forward()
+                    commands::lift_paragraph_forward(),
+                    commands::delete_empty_paragraph_forward(),
                 )?;
             }
             (Key::Escape, _) | (Key::Tab, _) => {}
@@ -162,6 +164,63 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("helo") } } }
             selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_removes_empty_paragraph_before_fold() {
+        let (state, ..) = state! {
+            doc { root {
+                p1: paragraph {}
+                fold {
+                    fold_title { t1: text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            } }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_removes_empty_paragraph_after_fold() {
+        let (state, ..) = state! {
+            doc { root {
+                paragraph {}
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { t1: text("content") } }
+                }
+                p2: paragraph {}
+            } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph {}
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { t1: text("content") } }
+                }
+                paragraph {}
+            } }
+            selection: (t1, 7)
         };
         assert_state_eq!(editor.state(), &expected);
     }
