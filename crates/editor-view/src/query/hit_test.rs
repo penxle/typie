@@ -57,7 +57,73 @@ pub fn closest_hit_test(
 ) -> Option<Selection> {
     let abs_y = page_y + page.y_start;
     let nav = closest_navigable(&tree.root, x, abs_y, page.y_start, page.y_end)?;
+    if let Some(promoted) = promote_outside_y(&tree.root, nav, abs_y) {
+        return Some(Selection::collapsed(promoted));
+    }
     Some(navigate_to_node(nav, x))
+}
+
+/// When the click sits outside the vertical range of `leaf`'s ancestor boxes,
+/// snap the head up the structural ancestry to the outermost non-root box that
+/// the click is fully above (or fully below). Without this, dragging the
+/// selection past the top of a block-level container (e.g. fold) stalls at the
+/// container's innermost text position, making it impossible to select the
+/// container as a unit.
+fn promote_outside_y(root: &LayoutNode, leaf: &LayoutNode, click_y: f32) -> Option<Position> {
+    let mut path: Vec<(&LayoutNode, usize)> = Vec::new();
+    if !build_path(root, leaf, &mut path) {
+        return None;
+    }
+    // path[k].0 is a box on the descent from root to leaf; path[k].1 is the
+    // content-child index of the next-deeper node. Non-root ancestors of leaf
+    // sit at k = 1..len. Walking outer-to-inner and taking the first match
+    // gives the outermost ancestor the click escapes.
+    for k in 1..path.len() {
+        let ancestor = path[k].0;
+        let LayoutContent::Box(ancestor_box) = &ancestor.content else {
+            continue;
+        };
+        // Only promote past a box that visually delimits itself; otherwise the
+        // click is in ordinary inter-paragraph margin and should snap to the
+        // nearest leaf in the usual way.
+        if !super::selection::has_visual_boundary(&ancestor_box.style) {
+            continue;
+        }
+        if click_y < ancestor.rect.y || click_y >= ancestor.rect.y + ancestor.rect.height {
+            let (parent_box_node, idx) = path[k - 1];
+            if let LayoutContent::Box(parent_box) = &parent_box_node.content {
+                return Some(Position::new(parent_box.node_id, idx));
+            }
+        }
+    }
+    None
+}
+
+fn build_path<'a>(
+    node: &'a LayoutNode,
+    target: &LayoutNode,
+    path: &mut Vec<(&'a LayoutNode, usize)>,
+) -> bool {
+    if std::ptr::eq(node, target) {
+        return true;
+    }
+    let LayoutContent::Box(b) = &node.content else {
+        return false;
+    };
+    let mut content_idx = 0usize;
+    for child in &b.children {
+        let is_spacing = matches!(child.content, LayoutContent::Spacing(_));
+        if is_spacing {
+            continue;
+        }
+        path.push((node, content_idx));
+        if build_path(child, target, path) {
+            return true;
+        }
+        path.pop();
+        content_idx += 1;
+    }
+    false
 }
 
 /// Find the closest navigable node by squared euclidean rect-edge distance.
@@ -410,6 +476,32 @@ mod tests {
 
         let sel = closest_hit_test(&tree, &page_0, 5.0, 1000.0).unwrap();
         assert_eq!(sel.head.node_id, id_p0);
+    }
+
+    #[test]
+    fn drag_above_top_promotes_past_outermost_container() {
+        use crate::view::View;
+        use editor_macros::doc;
+
+        let (doc,) = doc! {
+            root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        // Drag far above the page top — closest leaf is fold_title's line, but
+        // click is structurally above fold, so head must promote past fold to
+        // root's slot for fold.
+        let sel = view.hit_test(0, 20.0, -100.0).unwrap();
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(sel.head.offset, 0);
     }
 
     #[test]

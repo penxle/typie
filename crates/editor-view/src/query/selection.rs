@@ -41,7 +41,7 @@ pub fn selection_rects(
     rects
 }
 
-fn has_visual_boundary(style: &crate::style::BoxStyle) -> bool {
+pub(super) fn has_visual_boundary(style: &crate::style::BoxStyle) -> bool {
     style.padding != EdgeInsets::ZERO || style.border != EdgeInsets::ZERO
 }
 
