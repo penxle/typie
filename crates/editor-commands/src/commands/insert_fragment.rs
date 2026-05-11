@@ -166,11 +166,11 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
-            doc { r: root {
+            doc { root {
                 horizontal_rule
-                paragraph {}
+                p1: paragraph {}
             } }
-            selection: (r, 0, >) -> (r, 1, <)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -183,11 +183,11 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
-            doc { r: root {
+            doc { root {
                 horizontal_rule
-                paragraph { text("Hello") }
+                paragraph { t1: text("Hello") }
             } }
-            selection: (r, 0, >) -> (r, 1, <)
+            selection: (t1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -203,12 +203,12 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
-            doc { r: root {
+            doc { root {
                 paragraph { text("Hello") }
                 horizontal_rule
-                paragraph {}
+                p1: paragraph {}
             } }
-            selection: (r, 1, >) -> (r, 2, <)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -222,13 +222,13 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
             doc {
-                r: root {
+                root {
                     paragraph { text("Hello") }
                     horizontal_rule
-                    paragraph { text("World") }
+                    paragraph { t1: text("World") }
                 }
             }
-            selection: (r, 1, >) -> (r, 2, <)
+            selection: (t1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -242,13 +242,13 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
             doc {
-                r: root {
+                root {
                     paragraph { text("Hello") hard_break }
                     horizontal_rule
-                    paragraph { text("World") }
+                    paragraph { t1: text("World") }
                 }
             }
-            selection: (r, 1, >) -> (r, 2, <)
+            selection: (t1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -273,11 +273,11 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
-            doc { r: root {
+            doc { root {
                 horizontal_rule
-                paragraph {}
+                p2: paragraph {}
             } }
-            selection: (r, 0, >) -> (r, 1, <)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -290,12 +290,12 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
-            doc { r: root {
+            doc { root {
                 paragraph { text("Hello") }
                 horizontal_rule
-                paragraph {}
+                p1: paragraph {}
             } }
-            selection: (r, 1, >) -> (r, 2, <)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -312,14 +312,14 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
         let (expected, ..) = state! {
             doc {
-                r: root {
+                root {
                     paragraph { hard_break }
                     horizontal_rule
-                    paragraph { hard_break }
+                    p2: paragraph { hard_break }
                     paragraph {}
                 }
             }
-            selection: (r, 1, >) -> (r, 2, <)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
