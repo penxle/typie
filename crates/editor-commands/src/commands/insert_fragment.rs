@@ -1,5 +1,5 @@
 use editor_model::{Fragment, Node, NodeId};
-use editor_state::Selection;
+use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
 use crate::helpers::{find_ancestor_textblock, find_first_cursor_position};
@@ -100,19 +100,37 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
         Ok(())
     })?;
 
-    // Cursor positioning
     let doc = tr.doc();
     let inserted = doc
         .node(subtree_id)
         .ok_or(CommandError::NodeNotFound(subtree_id))?;
 
-    let cursor_pos = find_first_cursor_position(&inserted).or_else(|| {
-        inserted
-            .next_sibling()
-            .and_then(|next| find_first_cursor_position(&next))
-    });
-
-    if let Some(pos) = cursor_pos {
+    if inserted.spec().is_leaf() {
+        if let Some(next) = inserted.next_sibling()
+            && let Some(pos) = find_first_cursor_position(&next)
+        {
+            tr.set_selection(Selection::collapsed(pos))?;
+        } else {
+            let parent = inserted
+                .parent()
+                .ok_or(CommandError::NoParent(subtree_id))?;
+            let idx = inserted
+                .index()
+                .ok_or(CommandError::orphan_child(subtree_id, parent.id()))?;
+            tr.set_selection(Selection::new(
+                Position {
+                    node_id: parent.id(),
+                    offset: idx,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: parent.id(),
+                    offset: idx + 1,
+                    affinity: Affinity::Upstream,
+                },
+            ))?;
+        }
+    } else if let Some(pos) = find_first_cursor_position(&inserted) {
         tr.set_selection(Selection::collapsed(pos))?;
     }
 
@@ -152,7 +170,7 @@ mod tests {
                 horizontal_rule
                 paragraph {}
             } }
-            selection: (r, 0)
+            selection: (r, 0, >) -> (r, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -169,7 +187,7 @@ mod tests {
                 horizontal_rule
                 paragraph { text("Hello") }
             } }
-            selection: (r, 0)
+            selection: (r, 0, >) -> (r, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -190,7 +208,7 @@ mod tests {
                 horizontal_rule
                 paragraph {}
             } }
-            selection: (r, 1)
+            selection: (r, 1, >) -> (r, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -210,7 +228,7 @@ mod tests {
                     paragraph { text("World") }
                 }
             }
-            selection: (r, 1)
+            selection: (r, 1, >) -> (r, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -230,7 +248,7 @@ mod tests {
                     paragraph { text("World") }
                 }
             }
-            selection: (r, 1)
+            selection: (r, 1, >) -> (r, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -259,7 +277,7 @@ mod tests {
                 horizontal_rule
                 paragraph {}
             } }
-            selection: (r, 0)
+            selection: (r, 0, >) -> (r, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -277,7 +295,7 @@ mod tests {
                 horizontal_rule
                 paragraph {}
             } }
-            selection: (r, 1)
+            selection: (r, 1, >) -> (r, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -301,7 +319,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (r, 1)
+            selection: (r, 1, >) -> (r, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }
