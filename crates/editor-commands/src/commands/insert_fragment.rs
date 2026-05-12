@@ -1,8 +1,8 @@
 use editor_model::{Fragment, Node, NodeId};
-use editor_state::{Affinity, Position, Selection};
+use editor_state::{Affinity, NodeRefCursorExt, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::{find_ancestor_textblock, find_first_cursor_position};
+use crate::helpers::find_ancestor_textblock;
 use crate::{CommandError, CommandResult};
 
 pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResult {
@@ -107,7 +107,7 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
 
     if inserted.spec().is_leaf() {
         if let Some(next) = inserted.next_sibling()
-            && let Some(pos) = find_first_cursor_position(&next)
+            && let Some(pos) = next.first_cursor_position()
         {
             tr.set_selection(Selection::collapsed(pos))?;
         } else {
@@ -130,7 +130,7 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
                 },
             ))?;
         }
-    } else if let Some(pos) = find_first_cursor_position(&inserted) {
+    } else if let Some(pos) = inserted.first_cursor_position() {
         tr.set_selection(Selection::collapsed(pos))?;
     }
 

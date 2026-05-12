@@ -1,8 +1,7 @@
 use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
-use editor_state::Selection;
+use editor_state::{NodeRefCursorExt, Selection};
 use editor_transaction::{Transaction, compact, dissolve, prune};
 
-use crate::helpers::find_first_cursor_position;
 use crate::{CommandError, CommandResult};
 
 pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
@@ -98,7 +97,7 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
     if cursor_on_empty_paragraph {
         let doc = tr.doc();
         if let Some(p) = doc.node(paragraph_id) {
-            if let Some(pos) = find_first_cursor_position(&p) {
+            if let Some(pos) = p.first_cursor_position() {
                 tr.set_selection(Selection::collapsed(pos))?;
                 return Ok(true);
             }

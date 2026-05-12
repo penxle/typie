@@ -1,5 +1,4 @@
-use editor_model::{Doc, Node, NodeId, NodeRef};
-use editor_state::Position;
+use editor_model::{Doc, Node, NodeId};
 
 /// Find the lowest common ancestor of two nodes.
 pub(crate) fn find_lowest_common_ancestor(doc: &Doc, a: NodeId, b: NodeId) -> Option<NodeId> {
@@ -53,46 +52,6 @@ pub(crate) fn find_ancestor_textblock(doc: &Doc, node_id: NodeId) -> Option<Node
             return Some(current);
         }
         current = node.parent()?.id();
-    }
-}
-
-/// Find the first cursor position within a node's subtree.
-pub(crate) fn find_first_cursor_position(node: &NodeRef) -> Option<Position> {
-    if let Node::Text(_) = node.node() {
-        return Some(Position::new(node.id(), 0));
-    }
-
-    match node.first_child() {
-        Some(child) => find_first_cursor_position(&child),
-        None => {
-            if node.spec().content.is_leaf() {
-                let parent = node.parent()?;
-                let idx = node.index()?;
-                Some(Position::new(parent.id(), idx))
-            } else {
-                Some(Position::new(node.id(), 0))
-            }
-        }
-    }
-}
-
-/// Find the last cursor position within a node's subtree.
-pub(crate) fn find_last_cursor_position(node: &NodeRef) -> Option<Position> {
-    if let Node::Text(text_node) = node.node() {
-        return Some(Position::new(node.id(), text_node.text.len()));
-    }
-
-    match node.last_child() {
-        Some(child) => find_last_cursor_position(&child),
-        None => {
-            if node.spec().content.is_leaf() {
-                let parent = node.parent()?;
-                let idx = node.index()?;
-                Some(Position::new(parent.id(), idx + 1))
-            } else {
-                Some(Position::new(node.id(), 0))
-            }
-        }
     }
 }
 
@@ -193,63 +152,5 @@ mod tests {
             }
         };
         assert_eq!(path_from_ancestor(&doc, t2, NodeId::ROOT), Some(vec![1, 0]));
-    }
-
-    #[test]
-    fn first_cursor_position_in_paragraph() {
-        let (doc, t) = doc! {
-            root { paragraph { t: text("Hello") } }
-        };
-        assert_eq!(
-            find_first_cursor_position(&doc.root().unwrap()),
-            Some(Position::new(t, 0))
-        );
-    }
-
-    #[test]
-    fn last_cursor_position_in_paragraph() {
-        let (doc, _, t2) = doc! {
-            root {
-                paragraph { _t1: text("Hello") }
-                paragraph { t2: text("World") }
-            }
-        };
-        assert_eq!(
-            find_last_cursor_position(&doc.root().unwrap()),
-            Some(Position::new(t2, 5))
-        );
-    }
-
-    #[test]
-    fn first_cursor_position_images_only() {
-        let (doc,) = doc! {
-            root { image image image }
-        };
-        assert_eq!(
-            find_first_cursor_position(&doc.root().unwrap()),
-            Some(Position::new(NodeId::ROOT, 0))
-        );
-    }
-
-    #[test]
-    fn last_cursor_position_images_only() {
-        let (doc,) = doc! {
-            root { image image image }
-        };
-        assert_eq!(
-            find_last_cursor_position(&doc.root().unwrap()),
-            Some(Position::new(NodeId::ROOT, 3))
-        );
-    }
-
-    #[test]
-    fn first_cursor_position_empty_paragraph() {
-        let (doc, p) = doc! {
-            root { p: paragraph {} }
-        };
-        assert_eq!(
-            find_first_cursor_position(&doc.root().unwrap()),
-            Some(Position::new(p, 0))
-        );
     }
 }

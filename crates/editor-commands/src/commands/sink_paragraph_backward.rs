@@ -1,8 +1,7 @@
 use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
-use editor_state::{Affinity, Position, Selection};
+use editor_state::{Affinity, NodeRefCursorExt, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::find_last_cursor_position;
 use crate::{CommandError, CommandResult};
 
 pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
@@ -66,8 +65,9 @@ pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         let target = doc
             .node(target_id)
             .ok_or(CommandError::NodeNotFound(target_id))?;
-        let cursor_pos =
-            find_last_cursor_position(&target).ok_or(CommandError::NodeNotFound(target_id))?;
+        let cursor_pos = target
+            .last_cursor_position()
+            .ok_or(CommandError::NodeNotFound(target_id))?;
 
         tr.batch::<_, CommandError>(|tr| {
             tr.remove_subtree(paragraph_id)?;

@@ -10,7 +10,6 @@
   import BottomToolbar from './BottomToolbar.svelte';
   import { Pusher } from './sync/pusher.svelte';
   import TopToolbar from './TopToolbar.svelte';
-  import type { Selection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_document$key } from '$mearie';
   import type { DebugSnapshot } from './@debug/types';
 
@@ -54,10 +53,6 @@
   let lastConfirmedHeads = $state<Uint8Array | null>(null);
 
   const graph = $derived(document.data.state ? Uint8Array.fromBase64(document.data.state.graph) : null);
-  const initialSelection: Selection = {
-    anchor: { node_id: '0', offset: 0 },
-    head: { node_id: '0', offset: 0 },
-  };
 
   const hasHeads = $derived(!!lastConfirmedHeads);
 
@@ -260,7 +255,7 @@
     <TopToolbar />
     <BottomToolbar />
     {#if graph}
-      <EditorComponent style={css.raw({ flex: '1' })} document$key={document.data} {graph} selection={initialSelection} />
+      <EditorComponent style={css.raw({ flex: '1' })} document$key={document.data} {graph} />
     {/if}
   </div>
 

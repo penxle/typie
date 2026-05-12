@@ -1,15 +1,14 @@
-use editor_state::Selection;
+use editor_state::{NodeRefCursorExt, Selection};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::{find_first_cursor_position, find_last_cursor_position};
 
 pub fn select_all(tr: &mut Transaction) -> CommandResult {
     let doc = tr.doc();
     let root = doc.root().expect("root must exist");
 
-    let start = find_first_cursor_position(&root);
-    let end = find_last_cursor_position(&root);
+    let start = root.first_cursor_position();
+    let end = root.last_cursor_position();
 
     match (start, end) {
         (Some(start), Some(end)) => {

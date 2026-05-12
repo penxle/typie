@@ -26,7 +26,6 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorView
-import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 
@@ -37,7 +36,6 @@ private val DebugExtensionFillColor = Color(0x2200B8D4)
 @Composable
 internal fun EditorBody(
   graph: ByteArray,
-  initialSelection: Selection,
   geometry: EditorBodyGeometry,
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
@@ -110,7 +108,6 @@ internal fun EditorBody(
             ) {
               EditorView(
                 graph = graph,
-                initialSelection = initialSelection,
                 layoutSpec = layoutSpec,
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,

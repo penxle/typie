@@ -16,6 +16,9 @@ pub enum FfiError {
 
     #[error("lock poisoned")]
     LockPoisoned,
+
+    #[error("no initial cursor position: doc root has no descendant cursor target")]
+    NoInitialCursorPosition,
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -362,14 +362,13 @@ internal constructor(
   companion object {
     suspend fun create(
       graph: ByteArray,
-      selection: Selection,
       viewport: Viewport,
       scope: CoroutineScope,
       dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
       onError: (Editor, Throwable) -> Unit = { _, _ -> },
     ): Editor =
       withContext(Dispatchers.Default) {
-        val inner = PlatformModule.editorHost.createEditorFromGraph(graph, selection, viewport)
+        val inner = PlatformModule.editorHost.createEditorFromGraph(graph, viewport)
         val editor = Editor(inner, scope, dispatcher, onError)
 
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)

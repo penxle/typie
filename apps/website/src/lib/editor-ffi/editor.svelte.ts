@@ -62,12 +62,12 @@ export class Editor {
     // no-op
   }
 
-  static async create(graph: Uint8Array, selection: Selection, viewport: Viewport) {
+  static async create(graph: Uint8Array, viewport: Viewport) {
     await ensureWasmInitialized();
 
     const self = new this();
 
-    self.#wasm = wasm.create_editor_from_graph(graph, selection, viewport);
+    self.#wasm = wasm.create_editor_from_graph(graph, viewport);
     self.#viewport = viewport;
 
     self.on('state_changed', self.#stateChangedHandler);

@@ -15,18 +15,16 @@
   import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
   import Scrollbar from './Scrollbar.svelte';
-  import type { Selection } from '@typie/editor-ffi/browser';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Editor_document$key } from '$mearie';
 
   type Props = {
     document$key: Editor_document$key;
     graph: Uint8Array;
-    selection: Selection;
     style?: SystemStyleObject;
   };
 
-  let { document$key, graph, selection, style }: Props = $props();
+  let { document$key, graph, style }: Props = $props();
 
   const ctx = getEditorContext();
 
@@ -63,7 +61,7 @@
     try {
       await initWasm();
       loadFonts(document.data.fontFamilies);
-      ctx.editor = await Editor.create(graph, selection, { width, height, scale_factor: window.devicePixelRatio });
+      ctx.editor = await Editor.create(graph, { width, height, scale_factor: window.devicePixelRatio });
       status = 'initialized';
     } catch (err) {
       console.error(err);

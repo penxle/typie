@@ -6,8 +6,6 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.editor.FontLoader
-import co.typie.editor.ffi.Position
-import co.typie.editor.ffi.Selection
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_Query
 import co.typie.graphql.EditorScreen_UpdateDocument_Mutation
@@ -71,8 +69,6 @@ class EditorViewModel(val entityId: String) : ViewModel() {
         .onDocument
         ?.state
         ?.graph
-
-  val initialSelection = Selection(anchor = Position("0", 0), head = Position("0", 0))
 
   val headingTitle: String
     get() = if (loadingState && serverTitle.isEmpty() && !isTitleDirty) "" else titleDraft

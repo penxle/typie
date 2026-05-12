@@ -472,7 +472,6 @@ fun EditorScreen(entityId: String) {
           if (graph != null) {
             EditorBody(
               graph = graph,
-              initialSelection = model.initialSelection,
               geometry = bodyGeometry,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,

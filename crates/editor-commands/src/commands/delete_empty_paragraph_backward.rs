@@ -1,8 +1,7 @@
 use editor_model::Node;
-use editor_state::Selection;
+use editor_state::{NodeRefCursorExt, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::find_last_cursor_position;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_empty_paragraph_backward(tr: &mut Transaction) -> CommandResult {
@@ -52,7 +51,7 @@ pub fn delete_empty_paragraph_backward(tr: &mut Transaction) -> CommandResult {
     let prev = doc
         .node(prev_id)
         .ok_or(CommandError::NodeNotFound(prev_id))?;
-    let cursor = find_last_cursor_position(&prev).ok_or(CommandError::Corrupted(
+    let cursor = prev.last_cursor_position().ok_or(CommandError::Corrupted(
         "no cursor position in prev sibling".into(),
     ))?;
 

@@ -593,8 +593,8 @@ declare class EditorHost {
     add_font_base(family: string, weight: number, data: Uint8Array): void;
     add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): void;
     static create(icu_data: Uint8Array): EditorHost;
-    create_editor_from_doc(doc: PlainDoc, selection: Selection, viewport: Viewport): Editor;
-    create_editor_from_graph(changesets: Uint8Array, selection: Selection, viewport: Viewport): Editor;
+    create_editor_from_doc(doc: PlainDoc, viewport: Viewport): Editor;
+    create_editor_from_graph(changesets: Uint8Array, viewport: Viewport): Editor;
     set_fonts(families: FontFamily[]): void;
 }
 

@@ -55,12 +55,11 @@ impl EditorHost {
     pub fn create_editor_from_doc(
         &self,
         doc: Complex<editor_model::PlainDoc>,
-        selection: Complex<editor_state::Selection>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let plain: editor_model::PlainDoc = doc.from_ffi()?;
         let (doc, op_graph) = editor_model::Doc::from_plain(plain);
-        let selection = selection.from_ffi()?;
+        let selection = doc_start_selection(&doc)?;
         let state = editor_state::State::new(doc, op_graph, selection);
 
         let viewport = viewport.from_ffi()?;
@@ -72,14 +71,15 @@ impl EditorHost {
     pub fn create_editor_from_graph(
         &self,
         changesets: Vec<u8>,
-        selection: Complex<editor_state::Selection>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
             editor_crdt::wire::decode(&changesets[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let selection = selection.from_ffi()?;
-        let state = editor_state::State::from_changesets(css, selection)?;
+        let graph = editor_crdt::OpGraph::from_changesets(css)?;
+        let doc = editor_model::Doc::from_op_graph(&graph)?;
+        let selection = doc_start_selection(&doc)?;
+        let state = editor_state::State::new(doc, graph, selection);
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))
@@ -124,4 +124,13 @@ impl EditorHost {
         let mut resource = self.resource.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut resource)
     }
+}
+
+fn doc_start_selection(doc: &editor_model::Doc) -> EditorResult<editor_state::Selection> {
+    use editor_state::NodeRefCursorExt;
+    let root = doc.root().ok_or(FfiError::NoInitialCursorPosition)?;
+    let pos = root
+        .first_cursor_position()
+        .ok_or(FfiError::NoInitialCursorPosition)?;
+    Ok(editor_state::Selection::collapsed(pos))
 }

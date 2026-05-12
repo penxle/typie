@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
-import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.editorGestures
 import co.typie.editor.input.editorInput
@@ -37,7 +36,6 @@ import kotlinx.coroutines.CancellationException
 @Composable
 internal fun EditorView(
   graph: ByteArray,
-  initialSelection: Selection,
   layoutSpec: EditorDocumentLayoutSpec,
   viewportWidth: Float,
   viewportHeight: Float,
@@ -73,7 +71,6 @@ internal fun EditorView(
         val editor =
           Editor.create(
             graph = graph,
-            selection = initialSelection,
             viewport = viewport,
             scope = scope,
             onError = { editor, error -> runtime.reportError(editor, error) },

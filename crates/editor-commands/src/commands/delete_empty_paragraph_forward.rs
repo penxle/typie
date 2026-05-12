@@ -1,8 +1,7 @@
 use editor_model::Node;
-use editor_state::Selection;
+use editor_state::{NodeRefCursorExt, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::find_first_cursor_position;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_empty_paragraph_forward(tr: &mut Transaction) -> CommandResult {
@@ -52,7 +51,7 @@ pub fn delete_empty_paragraph_forward(tr: &mut Transaction) -> CommandResult {
     let next = doc
         .node(next_id)
         .ok_or(CommandError::NodeNotFound(next_id))?;
-    let cursor = find_first_cursor_position(&next).ok_or(CommandError::Corrupted(
+    let cursor = next.first_cursor_position().ok_or(CommandError::Corrupted(
         "no cursor position in next sibling".into(),
     ))?;
 
