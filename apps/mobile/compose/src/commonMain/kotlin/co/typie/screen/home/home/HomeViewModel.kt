@@ -24,6 +24,7 @@ import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
 import co.typie.storage.Preference
+import com.apollographql.apollo.api.Optional
 
 class HomeViewModel : ViewModel() {
   var isCreatingDocument by mutableStateOf(false)
@@ -56,7 +57,9 @@ class HomeViewModel : ViewModel() {
     loading({ isCreatingDocument = it }) {
       val response =
         Apollo.executeMutation(
-          EntityContainer_CreateDocument_Mutation(CreateDocumentInput(siteId = Preference.siteId!!))
+          EntityContainer_CreateDocument_Mutation(
+            CreateDocumentInput(siteId = Preference.siteId!!, v2 = Optional.present(true))
+          )
         )
 
       response.createDocument.entity.id

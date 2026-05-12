@@ -30,6 +30,7 @@ class EntityCreateViewModel : ViewModel() {
               this.parentEntityId(parentEntityId)
             }
           }
+          .v2(true)
           .build()
 
       Apollo.executeMutation(EntityContainer_CreateDocument_Mutation(input = input))
