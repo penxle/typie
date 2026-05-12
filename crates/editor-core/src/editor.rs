@@ -700,6 +700,32 @@ mod tests {
     }
 
     #[test]
+    fn undo_after_typing_over_multi_paragraph_selection_restores_initial_selection() {
+        use editor_state::assert_state_eq;
+
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("a") }
+                    paragraph { text("b") }
+                    paragraph { t2: text("c") }
+                }
+            }
+            selection: (t1, 0) -> (t2, 1)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "a".into() },
+        });
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
     fn perf_undo_20_chars() {
         struct StderrLogger;
         impl log::Log for StderrLogger {

@@ -349,8 +349,11 @@ impl Transaction {
     pub fn apply_steps(&mut self, steps: Vec<Step>) -> Result<(), StepError> {
         // State-only steps (SetSelection/SetComposition/SetPendingModifiers)
         // write a single field nothing else reads during step replay, so only
-        // the last of each kind affects the final state. Skip the redundant
-        // intermediates — they still go into `self.steps` for history.
+        // the last of each kind affects the final state. Defer them until after
+        // all doc steps have replayed: SetSelection.apply_to thaws against the
+        // current doc, and during undo the relevant selection sits between doc
+        // edits whose inverses are applied later in the same batch — running it
+        // in place would resolve against a half-restored doc.
         let mut last_selection: Option<usize> = None;
         let mut last_composition: Option<usize> = None;
         let mut last_pending: Option<usize> = None;
@@ -365,17 +368,17 @@ impl Transaction {
 
         let mut validations: Vec<Validation> = Vec::new();
         let ops = self.state.batch_with_ops_mut::<_, StepError>(|batched| {
-            for (i, step) in steps.iter().enumerate() {
-                let apply = match step {
-                    Step::SetSelection { .. } => last_selection == Some(i),
-                    Step::SetComposition { .. } => last_composition == Some(i),
-                    Step::SetPendingModifiers { .. } => last_pending == Some(i),
-                    _ => true,
-                };
-                if !apply {
+            for step in steps.iter() {
+                if !step.is_doc_step() {
                     continue;
                 }
                 step.apply_to(batched, &mut validations)?;
+            }
+            for i in [last_selection, last_composition, last_pending]
+                .into_iter()
+                .flatten()
+            {
+                steps[i].apply_to(batched, &mut validations)?;
             }
             Ok(())
         })?;
