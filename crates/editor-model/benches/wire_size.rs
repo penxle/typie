@@ -52,25 +52,25 @@ fn measure(label: &str, css: Vec<Changeset<DocOp>>) {
 fn typing_ascii_1k() {
     let para = NodeId::new();
     let g = build_typing(1, para, &"a".repeat(1000));
-    measure("typing-ascii-1k", g.changesets().to_vec());
+    measure("typing-ascii-1k", g.changesets_as_vec());
 }
 
 fn typing_hangul_1k() {
     let para = NodeId::new();
     let g = build_typing(1, para, &"가".repeat(1000));
-    measure("typing-hangul-1k", g.changesets().to_vec());
+    measure("typing-hangul-1k", g.changesets_as_vec());
 }
 
 fn paste_10k() {
     let para = NodeId::new();
     let g = build_typing(1, para, &"a".repeat(10_000));
-    measure("paste-10k", g.changesets().to_vec());
+    measure("paste-10k", g.changesets_as_vec());
 }
 
 fn accumulated_100k() {
     let para = NodeId::new();
     let g = build_typing(1, para, &"x".repeat(100_000));
-    measure("accumulated-100k", g.changesets().to_vec());
+    measure("accumulated-100k", g.changesets_as_vec());
 }
 
 fn mixed_edit() {
@@ -107,11 +107,11 @@ fn mixed_edit() {
         prev = Some(op.id);
         g = ng;
     }
-    measure("mixed-edit", g.commit().changesets().to_vec());
+    measure("mixed-edit", g.commit().changesets_as_vec());
 }
 
 fn single_keystroke_push() {
     let para = NodeId::new();
     let g = build_typing(1, para, "a");
-    measure("single-keystroke-push", g.changesets().to_vec());
+    measure("single-keystroke-push", g.changesets_as_vec());
 }

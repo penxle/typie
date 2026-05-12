@@ -149,7 +149,7 @@ impl<P: Clone + Eq> Replica<P> {
     /// — the new graph starts with no in-flight messages.
     pub fn restart_with_actor(&mut self, new_actor: u64) {
         self.actor_id = new_actor;
-        let css = self.op_graph.changesets().to_vec();
+        let css = self.op_graph.changesets_as_vec();
         self.op_graph = css
             .into_iter()
             .try_fold(OpGraph::with_actor(new_actor), |g, cs| {
@@ -1460,7 +1460,7 @@ mod proptests {
 
             // Force re-delivery: replay the server's sealed changesets to both
             // clients. After quiesce, each replica's OpGraph must remain unchanged.
-            let all_css: Vec<crate::Changeset<u32>> = sim.server.op_graph().changesets().to_vec();
+            let all_css: Vec<crate::Changeset<u32>> = sim.server.op_graph().changesets_as_vec();
             sim.client_a.inbox.push_back(SyncMessage::Changesets(all_css.clone()));
             sim.client_b.inbox.push_back(SyncMessage::Changesets(all_css));
             sim.quiesce();

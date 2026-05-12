@@ -154,7 +154,10 @@ impl Editor {
     }
 
     pub fn tick(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
-        let old_state = self.state.clone();
+        let old_doc = self.state.doc.clone();
+        let old_selection = self.state.selection;
+        let old_pending_modifiers = self.state.pending_modifiers.clone();
+        let old_composition = self.state.composition;
 
         let messages = std::mem::take(&mut self.message_queue);
         for msg in messages {
@@ -175,7 +178,7 @@ impl Editor {
         let dirty = !ops.is_empty()
             && self
                 .view
-                .reconcile_with_ops(&old_state.doc, &self.state.doc, &ops, pending_style);
+                .reconcile_with_ops(&old_doc, &self.state.doc, &ops, pending_style);
 
         let mut fields: HashSet<StateField> = HashSet::new();
 
@@ -199,7 +202,7 @@ impl Editor {
             fields.insert(StateField::RootAttrs);
         }
 
-        if old_state.selection != self.state.selection {
+        if old_selection != self.state.selection {
             fields.insert(StateField::Cursor);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Selection);
@@ -208,11 +211,11 @@ impl Editor {
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
-        if old_state.pending_modifiers != self.state.pending_modifiers {
+        if old_pending_modifiers != self.state.pending_modifiers {
             fields.insert(StateField::Modifiers);
         }
 
-        if old_state.composition != self.state.composition {
+        if old_composition != self.state.composition {
             fields.insert(StateField::Ime);
         }
 
@@ -296,7 +299,6 @@ impl Editor {
     ) -> Result<(), EditorError> {
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
-
         let (state, steps, ops, effects, meta) = tr.commit();
 
         if !steps.is_empty() {
@@ -499,7 +501,7 @@ mod tests {
         let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
         let seed = State::new(doc, graph, sel);
 
-        let seed_css = seed.graph.changesets().to_vec();
+        let seed_css = seed.graph.changesets_as_vec();
         let replica_b =
             State::from_changesets(seed_css, sel).expect("from_changesets on bootstrap");
         (seed, replica_b)
@@ -695,6 +697,44 @@ mod tests {
             op: HistoryOp::Undo,
         });
         assert_eq!(editor.state().selection, before);
+    }
+
+    #[test]
+    fn perf_undo_20_chars() {
+        struct StderrLogger;
+        impl log::Log for StderrLogger {
+            fn enabled(&self, _m: &log::Metadata) -> bool {
+                true
+            }
+            fn log(&self, record: &log::Record) {
+                eprintln!("{}", record.args());
+            }
+            fn flush(&self) {}
+        }
+        let _ = log::set_logger(Box::leak(Box::new(StderrLogger)));
+        log::set_max_level(log::LevelFilter::Info);
+
+        let (state, _) = state! {
+            doc { root { paragraph { t: text("") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        for ch in "abcdefghijklmnopqrst".chars() {
+            editor.apply(Message::Insertion {
+                op: InsertionOp::Text {
+                    text: ch.to_string(),
+                },
+            });
+        }
+
+        eprintln!("==== UNDO STARTS ====");
+        let t = editor_common::time::Instant::now();
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        eprintln!("==== UNDO TICK TOTAL: {:?} ====", t.elapsed());
     }
 
     #[test]

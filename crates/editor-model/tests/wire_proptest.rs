@@ -18,7 +18,7 @@ fn build_changesets(payloads: Vec<DocOp>) -> Vec<editor_crdt::Changeset<DocOp>> 
             g = ng;
         }
     }
-    g.commit().changesets().to_vec()
+    g.commit().changesets_as_vec()
 }
 
 fn arb_doc_op() -> impl Strategy<Value = DocOp> {

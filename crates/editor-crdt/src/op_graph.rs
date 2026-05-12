@@ -23,7 +23,7 @@ pub struct OpGraph<P> {
     actor: u64,
     next_clock: u64,
 
-    changesets: Vec<crate::Changeset<P>>,
+    changesets: imbl::Vector<crate::Changeset<P>>,
 
     /// Local-write accumulator. `add` pushes here; `commit` drains into
     /// `changesets`. Remote ingestion (`receive_changeset`) never touches
@@ -64,7 +64,7 @@ impl<P> OpGraph<P> {
         Self {
             actor,
             next_clock: 0,
-            changesets: Vec::new(),
+            changesets: imbl::Vector::new(),
             pending: Vec::new(),
             ops: imbl::HashMap::new(),
             heads: imbl::HashSet::new(),
@@ -93,7 +93,7 @@ impl<P> OpGraph<P> {
         self.ops.is_empty()
     }
 
-    pub fn changesets(&self) -> &[crate::Changeset<P>] {
+    pub fn changesets(&self) -> &imbl::Vector<crate::Changeset<P>> {
         &self.changesets
     }
 
@@ -173,7 +173,21 @@ impl<P> Default for OpGraph<P> {
 }
 
 impl<P: Clone> OpGraph<P> {
+    pub fn changesets_as_vec(&self) -> Vec<crate::Changeset<P>> {
+        self.changesets.iter().cloned().collect()
+    }
+
     pub fn add(&self, payload: P) -> Result<(Self, Op<P>), CrdtError> {
+        let mut next = self.clone();
+        let op = next.add_mut(payload)?;
+        Ok((next, op))
+    }
+
+    /// In-place variant of `add`. Skips the per-call `self.clone()` so callers
+    /// that already own a mutable OpGraph (e.g. `BatchedState` for the duration
+    /// of a batch) pay the persistent-collection clone cost once across many
+    /// ops instead of per op.
+    pub fn add_mut(&mut self, payload: P) -> Result<Op<P>, CrdtError> {
         let id = Dot::new(self.actor, self.next_clock);
         let next_clock = self
             .next_clock
@@ -189,14 +203,13 @@ impl<P: Clone> OpGraph<P> {
             payload,
         };
 
-        let mut next = self.clone();
-        next.next_clock = next_clock;
-        next.ops.insert(id, op.clone());
+        self.next_clock = next_clock;
+        self.ops.insert(id, op.clone());
         for p in &parents {
-            next.heads.remove(p);
-            next.children.entry(*p).or_default().insert(id);
+            self.heads.remove(p);
+            self.children.entry(*p).or_default().insert(id);
         }
-        next.heads.insert(id);
+        self.heads.insert(id);
         // After server-side data loss, `debug_remove` re-promotes a non-SC
         // ancestor into `heads` so the frontier walk can still see it. A new
         // op built on such a head inherits its broken ancestry, so derive SC
@@ -204,12 +217,12 @@ impl<P: Clone> OpGraph<P> {
         // The op stays in `self.ops` either way; once the missing ancestor is
         // restored, `receive_changeset`'s `try_promote_self_contained` cascade
         // lifts it through `self.children` automatically.
-        if parents.iter().all(|p| next.self_contained.contains(p)) {
-            next.self_contained.insert(id);
+        if parents.iter().all(|p| self.self_contained.contains(p)) {
+            self.self_contained.insert(id);
         }
-        next.pending.push(op.clone());
+        self.pending.push(op.clone());
 
-        Ok((next, op))
+        Ok(op)
     }
 
     /// No-op when `pending` is empty so a transact that emits zero ops does
@@ -219,11 +232,19 @@ impl<P: Clone> OpGraph<P> {
     /// parents-before-children topological-order contract on `Changeset`.
     pub fn commit(&self) -> Self {
         let mut next = self.clone();
-        if !next.pending.is_empty() {
-            let ops = std::mem::take(&mut next.pending);
-            next.changesets.push(crate::Changeset { ops });
-        }
+        next.commit_mut();
         next
+    }
+
+    /// In-place variant of `commit`. Skips the per-call `self.clone()` that
+    /// would otherwise copy the entire `changesets` Vec on every transaction
+    /// boundary — substantial under heavy typing where each commit pays
+    /// O(history_size).
+    pub fn commit_mut(&mut self) {
+        if !self.pending.is_empty() {
+            let ops = std::mem::take(&mut self.pending);
+            self.changesets.push_back(crate::Changeset { ops });
+        }
     }
 
     /// Atomicity invariant: each changeset in `self.changesets` is either
@@ -492,7 +513,7 @@ impl<P: Clone + Eq> OpGraph<P> {
         for op in &cs.ops {
             next = next.try_promote_self_contained(op.id);
         }
-        next.changesets.push(cs);
+        next.changesets.push_back(cs);
         Ok(next)
     }
 
@@ -1337,9 +1358,9 @@ mod tests {
         let (g, _) = g.add(3).unwrap();
         let g = g.commit();
 
-        let css = g.changesets().to_vec();
+        let css = g.changesets_as_vec();
         let g2 = OpGraph::<u32>::from_changesets(css.clone()).unwrap();
-        assert_eq!(g2.changesets(), css.as_slice());
+        assert_eq!(g2.changesets_as_vec(), css);
         assert_eq!(g2.len(), 3);
         assert!(g2.graph_state_eq(&g));
     }

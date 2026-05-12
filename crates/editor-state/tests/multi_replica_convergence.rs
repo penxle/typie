@@ -80,7 +80,7 @@ fn bootstrap_replicas(plain: PlainDoc, replica_count: usize) -> Vec<State> {
 
     // `Doc::from_plain` returns a committed graph, so the seed ops are already
     // sealed into changesets that can be replayed verbatim.
-    let seed_css = seed.graph.changesets().to_vec();
+    let seed_css = seed.graph.changesets_as_vec();
     let mut replicas = Vec::with_capacity(replica_count);
     replicas.push(seed);
     for _ in 1..replica_count {
@@ -548,7 +548,7 @@ proptest! {
         // changeset is already fully known by both replicas after convergence,
         // so `receive_remote_changeset` must accept every re-delivery without
         // mutation (idempotent).
-        let all_css = replicas_a[0].graph.changesets().to_vec();
+        let all_css = replicas_a[0].graph.changesets_as_vec();
         let before_graph = replicas_a[1].graph.clone();
         let before_plain = replicas_a[1].doc.to_plain();
         let mut after = replicas_a[1].clone();
@@ -616,7 +616,7 @@ proptest! {
 
         // Backstop: full-cs equality after canonical sort.
         let canon = |s: &State| -> Vec<Changeset<DocOp>> {
-            let mut v = s.graph.changesets().to_vec();
+            let mut v = s.graph.changesets_as_vec();
             v.sort_by_key(|cs| cs.ops.first().map(|op| op.id));
             v
         };
@@ -726,7 +726,7 @@ proptest! {
         let mut source_replicas = bootstrap_replicas(plain, count as usize);
         run_actions_and_converge(&mut source_replicas, actions)?;
 
-        let css: Vec<Changeset<DocOp>> = source_replicas[0].graph.changesets().to_vec();
+        let css: Vec<Changeset<DocOp>> = source_replicas[0].graph.changesets_as_vec();
 
         let perm1 = causal_permute_changesets(&css, seed1);
         let perm2 = causal_permute_changesets(&css, seed2);

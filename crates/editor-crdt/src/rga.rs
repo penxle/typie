@@ -19,15 +19,15 @@ pub enum RgaOp<T> {
     },
 }
 
-/// **Reference impl — do not embed in an editor as-is.**
-/// Without a child-index, `iter()` / `len()` are O(n²) over the document size.
-/// Editor integration must replace this with a child-index or a cached projection
-/// before exposing `Rga<T>` (or any wrapper of it) to user-facing operations on
-/// large documents.
+/// `iter()` walks reachable entries in O(N) via `children_index` (parent dot →
+/// asc children dots), maintained incrementally by `apply_insert` /
+/// `apply_remove`. The index is derivable from `entries` so PartialEq on all
+/// fields only matches consistent states.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rga<T> {
     entries: imbl::HashMap<Dot, Entry<T>>,
     pending_tombstones: imbl::HashSet<Dot>,
+    children_index: imbl::HashMap<Option<Dot>, imbl::OrdSet<Dot>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,18 +42,16 @@ impl<T> Rga<T> {
         Self {
             entries: imbl::HashMap::new(),
             pending_tombstones: imbl::HashSet::new(),
+            children_index: imbl::HashMap::new(),
         }
     }
 
-    /// Count of reachable + alive entries — guaranteed to equal
-    /// `iter().count()` at any moment, including transient out-of-order
-    /// states. Orphan entries (anchor not yet arrived) are not counted.
     pub fn len(&self) -> usize {
         self.iter().count()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.iter().next().is_none()
     }
 
     /// Iterative pre-order DFS over reachable+alive entries.
@@ -65,14 +63,10 @@ impl<T> Rga<T> {
 
     /// Asc-sorted `Vec<Dot>` of `parent`'s children — popping yields desc order.
     fn children_asc(&self, parent: Option<Dot>) -> Vec<Dot> {
-        let mut ids: Vec<Dot> = self
-            .entries
-            .iter()
-            .filter(|(_, e)| e.after == parent)
-            .map(|(id, _)| *id)
-            .collect();
-        ids.sort();
-        ids
+        self.children_index
+            .get(&parent)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default()
     }
 
     pub fn iter_with_dot(&self) -> impl Iterator<Item = (Dot, &T)> + '_ {
@@ -208,9 +202,12 @@ impl<T: Clone + Eq> Rga<T> {
             after,
             alive,
         };
+        let mut siblings = self.children_index.get(&after).cloned().unwrap_or_default();
+        siblings.insert(id);
         Ok(Self {
             entries: self.entries.update(id, entry),
             pending_tombstones: self.pending_tombstones.without(&id),
+            children_index: self.children_index.update(after, siblings),
         })
     }
 
@@ -227,11 +224,13 @@ impl<T: Clone + Eq> Rga<T> {
             return Self {
                 entries: self.entries.update(observed, new_entry),
                 pending_tombstones: self.pending_tombstones.clone(),
+                children_index: self.children_index.clone(),
             };
         }
         Self {
             entries: self.entries.clone(),
             pending_tombstones: self.pending_tombstones.update(observed),
+            children_index: self.children_index.clone(),
         }
     }
 }

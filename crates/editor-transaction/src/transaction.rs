@@ -79,17 +79,22 @@ impl Transaction {
     }
 
     fn apply_step(&mut self, step: Step) -> Result<(), StepError> {
-        let output = step.apply(&self.state)?;
-        self.state = output.state;
-        self.ops.extend(output.ops);
+        let mut validations: Vec<Validation> = Vec::new();
+        let ops = self.state.batch_with_ops_mut::<_, StepError>(|batched| {
+            step.apply_to(batched, &mut validations)
+        })?;
+        self.ops.extend(ops);
         if let Step::SetSelection { new, .. } = &step {
             self.selection_stable = new.clone();
         }
         self.steps.push(step);
-        if let Some(batch) = &mut self.batch {
-            batch.validations.extend(output.validations);
+        if validations.is_empty() {
+            // No-op fast path. Lets non-doc steps (SetSelection, etc.) skip
+            // the dedupe + match + per-validation cost entirely.
+        } else if let Some(batch) = &mut self.batch {
+            batch.validations.extend(validations);
         } else {
-            self.run_validations(&output.validations)?;
+            self.run_validations(&validations)?;
         }
         Ok(())
     }
@@ -342,9 +347,56 @@ impl Transaction {
     }
 
     pub fn apply_steps(&mut self, steps: Vec<Step>) -> Result<(), StepError> {
-        for step in steps {
-            self.apply_step(step)?;
+        // State-only steps (SetSelection/SetComposition/SetPendingModifiers)
+        // write a single field nothing else reads during step replay, so only
+        // the last of each kind affects the final state. Skip the redundant
+        // intermediates — they still go into `self.steps` for history.
+        let mut last_selection: Option<usize> = None;
+        let mut last_composition: Option<usize> = None;
+        let mut last_pending: Option<usize> = None;
+        for (i, step) in steps.iter().enumerate() {
+            match step {
+                Step::SetSelection { .. } => last_selection = Some(i),
+                Step::SetComposition { .. } => last_composition = Some(i),
+                Step::SetPendingModifiers { .. } => last_pending = Some(i),
+                _ => {}
+            }
         }
+
+        let mut validations: Vec<Validation> = Vec::new();
+        let ops = self.state.batch_with_ops_mut::<_, StepError>(|batched| {
+            for (i, step) in steps.iter().enumerate() {
+                let apply = match step {
+                    Step::SetSelection { .. } => last_selection == Some(i),
+                    Step::SetComposition { .. } => last_composition == Some(i),
+                    Step::SetPendingModifiers { .. } => last_pending == Some(i),
+                    _ => true,
+                };
+                if !apply {
+                    continue;
+                }
+                step.apply_to(batched, &mut validations)?;
+            }
+            Ok(())
+        })?;
+
+        self.ops.extend(ops);
+
+        for step in &steps {
+            if let Step::SetSelection { new, .. } = step {
+                self.selection_stable = new.clone();
+            }
+        }
+        self.steps.extend(steps);
+
+        if !validations.is_empty() {
+            if let Some(batch) = &mut self.batch {
+                batch.validations.extend(validations);
+            } else {
+                self.run_validations(&validations)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -400,7 +452,7 @@ impl Transaction {
         Vec<Effect>,
         TransactionMeta,
     ) {
-        self.state.graph = self.state.graph.commit();
+        self.state.graph.commit_mut();
         (self.state, self.steps, self.ops, self.effects, self.meta)
     }
 

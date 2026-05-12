@@ -38,16 +38,14 @@ impl<'a> BatchedState<'a> {
 
 impl State {
     fn apply_internal(&mut self, payload: DocOp) -> Result<Op<DocOp>, StateError> {
-        let (graph, op) = match self.graph.add(payload) {
-            Ok(pair) => pair,
+        let op = match self.graph.add_mut(payload) {
+            Ok(op) => op,
             Err(CrdtError::ClockOverflow { dot }) => {
                 return Err(StateError::Crdt(CrdtError::ClockOverflow { dot }));
             }
             Err(other) => panic!("local create: {other:?}"),
         };
         let new_doc = apply_doc_op(self.doc.clone(), &op)?;
-
-        self.graph = graph;
         self.doc = new_doc;
         Ok(op)
     }
@@ -107,6 +105,35 @@ impl State {
         };
         next.verify().map_err(E::from)?;
         Ok((next, ops))
+    }
+
+    /// In-place variant of `batch_with_ops` for callers that already own a
+    /// mutable State (e.g. inside `Transaction`). Skips the per-call
+    /// `self.clone()` since the caller's state is already isolated from any
+    /// other owner. On verify error the state is left in a mutated condition;
+    /// callers are responsible for discarding it (Transaction is dropped
+    /// without commit, so the editor's authoritative state is unaffected).
+    pub fn batch_with_ops_mut<F, E>(&mut self, f: F) -> Result<Vec<Op<DocOp>>, E>
+    where
+        F: FnOnce(&mut BatchedState) -> Result<(), E>,
+        E: From<StateError>,
+    {
+        let ops = {
+            let mut batched = BatchedState {
+                inner: self,
+                emitted_ops: Vec::new(),
+            };
+            f(&mut batched)?;
+            std::mem::take(&mut batched.emitted_ops)
+        };
+        // Doc-invariant verification only matters when the closure mutated
+        // the doc. State-only writes (set_selection/set_composition/etc.) emit
+        // no ops, so the Doc is bit-identical to the pre-batch state and the
+        // verify walk would re-check the same tree it just passed.
+        if !ops.is_empty() {
+            self.verify().map_err(E::from)?;
+        }
+        Ok(ops)
     }
 
     pub fn batch<F, E>(&self, f: F) -> Result<Self, E>
@@ -534,7 +561,7 @@ mod tests {
         // echo A's changeset back to the server, producing the N-fold
         // duplication observed in production.
         let baseline = rooted_state();
-        let baseline_css = baseline.graph.changesets().to_vec();
+        let baseline_css = baseline.graph.changesets_as_vec();
         let sel = baseline.selection;
 
         let replica_a = baseline;

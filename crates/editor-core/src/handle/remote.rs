@@ -34,7 +34,7 @@ mod tests {
             doc { root { paragraph { t1: text("ab") } } }
             selection: (t1, 1)
         };
-        let css_a = replica_a.graph.changesets().to_vec();
+        let css_a = replica_a.graph.changesets_as_vec();
         let replica_b = State::from_changesets(css_a, replica_a.selection).unwrap();
 
         let baseline: HashSet<_> = replica_a.graph.current_heads().copied().collect();
@@ -75,7 +75,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let css_a = replica_a.graph.changesets().to_vec();
+        let css_a = replica_a.graph.changesets_as_vec();
         let replica_b = State::from_changesets(css_a, replica_a.selection).unwrap();
 
         use editor_crdt::{OrMapOp, RgaOp};

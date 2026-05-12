@@ -1222,7 +1222,7 @@ mod wire_changeset_tests {
             prev = Some(op.id);
             g = ng;
         }
-        g.commit().changesets().to_vec()
+        g.commit().changesets_as_vec()
     }
 
     #[test]

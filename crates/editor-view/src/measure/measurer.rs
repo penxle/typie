@@ -40,14 +40,26 @@ impl Measurer {
         new_doc: &Doc,
         ops: &[Op<DocOp>],
     ) -> bool {
-        let mut invalidated = false;
+        // Many ops in a single batch typically target the same handful of
+        // nodes (e.g. one IME-driven text). Deduplicating node ids before the
+        // ancestor walk turns 200 redundant cache-invalidate cascades into one
+        // per unique node.
+        let mut affected: hashbrown::HashSet<NodeId> = hashbrown::HashSet::new();
+        let mut affected_in_old: hashbrown::HashSet<NodeId> = hashbrown::HashSet::new();
         for op in ops {
             for id in affected_node_ids_for_doc_op(&op.payload, old_doc) {
-                invalidated = self.invalidate_with_ancestors(new_doc, id) || invalidated;
                 if new_doc.node(id).is_none() {
-                    invalidated = self.invalidate_with_ancestors(old_doc, id) || invalidated;
+                    affected_in_old.insert(id);
                 }
+                affected.insert(id);
             }
+        }
+        let mut invalidated = false;
+        for id in &affected {
+            invalidated = self.invalidate_with_ancestors(new_doc, *id) || invalidated;
+        }
+        for id in &affected_in_old {
+            invalidated = self.invalidate_with_ancestors(old_doc, *id) || invalidated;
         }
         invalidated
     }

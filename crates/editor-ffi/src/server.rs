@@ -178,7 +178,7 @@ impl EditorServer {
     pub fn to_graph(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<Vec<u8>> {
         let plain: editor_model::PlainDoc = plain.from_ffi()?;
         let (_, graph) = editor_model::Doc::from_plain(plain);
-        let bytes = editor_crdt::wire::encode(graph.changesets())
+        let bytes = editor_crdt::wire::encode(&graph.changesets_as_vec())
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }

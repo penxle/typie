@@ -166,7 +166,7 @@ impl Step {
         })
     }
 
-    fn apply_to(
+    pub(crate) fn apply_to(
         &self,
         batched: &mut BatchedState,
         validations: &mut Vec<Validation>,
