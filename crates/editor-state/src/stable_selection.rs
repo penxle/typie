@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn invariant_violation_collapses_to_head() {
-        let (state, p1, t1, t2) = state! {
+        let (state, p1, _, t2) = state! {
             doc {
                 root {
                     p1: paragraph { t1: text("hello") }
