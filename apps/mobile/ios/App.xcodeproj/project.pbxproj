@@ -434,7 +434,7 @@
 			repositoryURL = "https://github.com/getsentry/sentry-cocoa.git";
 			requirement = {
 				kind = exactVersion;
-				version = 8.57.3;
+				version = 8.58.2;
 			};
 		};
 		B63A87BE2F95335200781191 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {

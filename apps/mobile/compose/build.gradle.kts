@@ -90,6 +90,8 @@ kotlin {
   compilerOptions {
     freeCompilerArgs.add("-Xexpect-actual-classes")
     freeCompilerArgs.add("-Xcontext-parameters")
+    freeCompilerArgs.add("-Xexplicit-context-arguments")
+    freeCompilerArgs.add("-Xcollection-literals")
     freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
   }
 

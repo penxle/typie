@@ -33,20 +33,34 @@ fn generate_ios_wrapper(
 ) -> String {
     let mut w = CodeWriter::new();
 
+    let needs_byte_array_return = iface
+        .methods
+        .iter()
+        .any(|m| matches!(&m.return_type, FfiReturnType::Vec(FfiScalarReturn::Primitive(p)) if p == "u8"));
+
     w.line("@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)");
     w.line("");
     w.line(&format!("package {}", PACKAGE));
     w.line("");
+    if needs_byte_array_return {
+        w.line("import kotlinx.cinterop.addressOf");
+    }
     w.line("import kotlinx.cinterop.ObjCObjectVar");
     w.line("import kotlinx.cinterop.alloc");
     w.line("import kotlinx.cinterop.allocArrayOf");
     w.line("import kotlinx.cinterop.memScoped");
     w.line("import kotlinx.cinterop.ptr");
+    if needs_byte_array_return {
+        w.line("import kotlinx.cinterop.usePinned");
+    }
     w.line("import kotlinx.cinterop.value");
     w.line("import kotlinx.serialization.json.Json");
     w.line("import platform.Foundation.NSData");
     w.line("import platform.Foundation.NSError");
     w.line("import platform.Foundation.create");
+    if needs_byte_array_return {
+        w.line("import platform.posix.memcpy");
+    }
     w.line("import co.typie.editor.EditorException");
     w.line(&format!(
         "import swiftPMImport.co.typie.compose.Native{} as Swift{}",
@@ -127,6 +141,18 @@ fn generate_ios_wrapper(
 
     w.close_block();
 
+    if needs_byte_array_return {
+        w.line("");
+        w.line("private fun NSData.toByteArray(): ByteArray {");
+        w.indent += 1;
+        w.line("if (length == 0uL) return ByteArray(0)");
+        w.line("val byteArray = ByteArray(length.toInt())");
+        w.line("byteArray.usePinned { pinned -> memcpy(pinned.addressOf(0), bytes, length) }");
+        w.line("return byteArray");
+        w.indent -= 1;
+        w.line("}");
+    }
+
     w.finish()
 }
 
@@ -196,6 +222,12 @@ fn generate_method(
             w.line("json.decodeFromString(result!!)");
         }
         FfiReturnType::Vec(inner) => match inner {
+            FfiScalarReturn::Primitive(p) if p == "u8" => {
+                emit_pre_call_conversions(w, &method.params);
+                w.line(&format!("val result = {}", native_call));
+                w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
+                w.line("result!!.toByteArray()");
+            }
             FfiScalarReturn::Primitive(_) => {
                 emit_pre_call_conversions(w, &method.params);
                 w.line(&format!("val result = {}", native_call));
@@ -662,6 +694,58 @@ mod tests {
         assert!(output.contains("@Suppress(\"UNCHECKED_CAST\")"));
         assert!(output.contains("result!! as List<String>"));
         assert!(output.contains(".map { json.decodeFromString(it) }"));
+    }
+
+    #[test]
+    fn vec_u8_return_generates_to_byte_array_conversion() {
+        let iface = FfiInterface {
+            name: "Editor".into(),
+            methods: vec![make_method(
+                "current_heads",
+                vec![],
+                FfiReturnType::Vec(FfiScalarReturn::Primitive("u8".into())),
+            )],
+        };
+        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        assert!(
+            output.contains("result!!.toByteArray()"),
+            "Expected NSData→ByteArray conversion call:\n{}",
+            output
+        );
+        assert!(
+            output.contains("private fun NSData.toByteArray(): ByteArray"),
+            "Expected NSData.toByteArray helper:\n{}",
+            output
+        );
+        assert!(
+            output.contains("import platform.posix.memcpy"),
+            "Expected memcpy import:\n{}",
+            output
+        );
+        assert!(
+            output.contains("import kotlinx.cinterop.usePinned"),
+            "Expected usePinned import:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn no_byte_array_return_skips_helper() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![make_method("tick", vec![], FfiReturnType::Unit)],
+        };
+        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        assert!(
+            !output.contains("private fun NSData.toByteArray"),
+            "Helper should be omitted when no Vec<u8> return:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("import platform.posix.memcpy"),
+            "memcpy import should be omitted when unused:\n{}",
+            output
+        );
     }
 
     #[test]

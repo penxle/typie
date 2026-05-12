@@ -212,9 +212,11 @@ xcargs
 xcconfig
 xcframework
 xcodeproj
+xcollection
 xcontext
 xcworkspace
 xexpect
+xexplicit
 xlarge
 xlink
 xsmall

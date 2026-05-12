@@ -1,5 +1,5 @@
 {
-  "originHash" : "ec3413bae3caf1f154e08b8f24259f59fb0bc380d5016da0acfa16c5d0b4983e",
+  "originHash" : "b07ae0efba7fd16df548195d29bd1d6da0f67c286bae830c46faf048a7c5ce3e",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -177,8 +177,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/getsentry/sentry-cocoa.git",
       "state" : {
-        "revision" : "8627bbc0e663238d516b541d8fc7edd62a627fde",
-        "version" : "8.57.3"
+        "revision" : "cf44aa8cb4147f39e698c1f28be0b6b2c89f79d2",
+        "version" : "8.58.2"
       }
     }
   ],
