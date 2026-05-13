@@ -6,6 +6,7 @@
   import { Button, Icon, RingSpinner } from '@typie/ui/components';
   import { nanoid } from 'nanoid';
   import { onMount, tick } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { fly } from 'svelte/transition';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
   import CircleCheckIcon from '~icons/lucide/circle-check';
@@ -64,6 +65,15 @@
     mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[];
   } | null>(null);
   let trackedEntries: { id: string; nodeId: string; startOffset: number; endOffset: number }[] = [];
+  let nodeBlockPos = new SvelteMap<string, number>();
+  let feedbackSortKey = new SvelteMap<string, [number, number]>();
+
+  const compareFeedbacks = (a: { id: string }, b: { id: string }) => {
+    const ka = feedbackSortKey.get(a.id) ?? [Number.MAX_SAFE_INTEGER, 0];
+    const kb = feedbackSortKey.get(b.id) ?? [Number.MAX_SAFE_INTEGER, 0];
+    if (ka[0] !== kb[0]) return ka[0] - kb[0];
+    return ka[1] - kb[1];
+  };
 
   createSubscription(
     graphql(`
@@ -95,6 +105,8 @@
         if (payload.type === 'feedback' && payload.feedback) {
           const item = payload.feedback;
           const newId = nanoid();
+          const blockPos = nodeBlockPos.get(item.nodeId) ?? Number.MAX_SAFE_INTEGER;
+          feedbackSortKey.set(newId, [blockPos, item.startOffset]);
 
           editor.aiFeedbacks = [
             ...editor.aiFeedbacks,
@@ -106,7 +118,7 @@
               category: item.category ?? null,
               active: false,
             },
-          ];
+          ].toSorted(compareFeedbacks);
 
           trackedEntries.push({
             id: newId,
@@ -159,6 +171,14 @@
     editor.setTrackedItems(1, []);
     trackedEntries = [];
     progress = null;
+
+    nodeBlockPos.clear();
+    for (const m of spellcheckData.mappings) {
+      if (!nodeBlockPos.has(m.nodeId)) {
+        nodeBlockPos.set(m.nodeId, m.textStart);
+      }
+    }
+    feedbackSortKey.clear();
 
     analysisVars = { text: spellcheckData.text, mappings: spellcheckData.mappings };
   };
@@ -372,7 +392,7 @@
         </div>
       {/if}
 
-      {#each editor.aiFeedbacks as feedback, i (i)}
+      {#each editor.aiFeedbacks as feedback (feedback.id)}
         <div
           class={css({
             position: 'relative',
