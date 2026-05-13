@@ -119,6 +119,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
+                            child_range: None,
                         }),
                     }],
                 }),
@@ -190,6 +191,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
+                            child_range: None,
                         }),
                     }],
                 }),
@@ -236,6 +238,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
+                            child_range: None,
                         }),
                     }],
                 }),
@@ -292,6 +295,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![],
                             text_indent: 32.0,
+                            child_range: Some(0..0),
                         }),
                     }],
                 }),
@@ -337,6 +341,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
+                            child_range: None,
                         }),
                     }],
                 }),
@@ -417,6 +422,73 @@ mod tests {
     }
 
     #[test]
+    fn cursor_metrics_on_trailing_empty_line_after_hard_break() {
+        let p1 = NodeId::new();
+        let t1 = NodeId::new();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: Direction::Vertical,
+                        padding: EdgeInsets::ZERO,
+                        border: EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                    },
+                    children: vec![
+                        LayoutNode {
+                            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+                            content: LayoutContent::Line(LayoutLine {
+                                node_id: p1,
+                                baseline: 16.0,
+                                ascent: 14.0,
+                                descent: 4.0,
+                                cursor_ascent: 14.0,
+                                cursor_descent: 4.0,
+                                glyph_runs: vec![GlyphRun::make_test_run(t1, 0, "a", 0.0, gs(1))],
+                                text_indent: 0.0,
+                                child_range: Some(0..2),
+                            }),
+                        },
+                        LayoutNode {
+                            rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
+                            content: LayoutContent::Line(LayoutLine {
+                                node_id: p1,
+                                baseline: 16.0,
+                                ascent: 14.0,
+                                descent: 4.0,
+                                cursor_ascent: 14.0,
+                                cursor_descent: 4.0,
+                                glyph_runs: vec![],
+                                text_indent: 0.0,
+                                child_range: Some(2..2),
+                            }),
+                        },
+                    ],
+                }),
+            },
+        };
+        let pages = [LayoutPage {
+            y_start: 0.0,
+            y_end: 800.0,
+            size: Size::new(200.0, 800.0),
+        }];
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 2,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let CursorMetrics { caret, line, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        assert!(caret.y >= 20.0);
+        assert_eq!(line.y, 20.0);
+        assert_eq!(caret.x, 0.0);
+    }
+
+    #[test]
     fn cursor_metrics_page_relative_line_on_second_page() {
         let id = NodeId::new();
         let tree = LayoutTree {
@@ -444,6 +516,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
+                            child_range: None,
                         }),
                     }],
                 }),

@@ -27,12 +27,20 @@ fn collect_lines<'a>(node: &'a LayoutNode, pos: &Position, out: &mut Vec<&'a Lay
             }
         }
         LayoutContent::Line(l) => {
-            if l.glyph_runs.is_empty() {
-                if l.node_id == pos.node_id && pos.offset == 0 {
-                    out.push(node);
-                }
+            // Container-paragraph cursor: matches inclusive-both on child_range
+            // when present. None means the line is a soft-wrap interior that
+            // owns no paragraph boundary. This branch also subsumes the legacy
+            // "empty line at offset 0" special case (empty paragraph yields
+            // child_range = Some(0..0)).
+            if let Some(range) = &l.child_range
+                && l.node_id == pos.node_id
+                && pos.offset >= range.start
+                && pos.offset <= range.end
+            {
+                out.push(node);
                 return;
             }
+            // Text-node cursor: existing glyph_run code path.
             for run in &l.glyph_runs {
                 if run.node_id == pos.node_id
                     && pos.offset >= run.offset
@@ -156,6 +164,8 @@ fn contains_position(node: &LayoutNode, pos: &Position) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Range;
+
     use crate::style::Alignment;
     use editor_common::{EdgeInsets, Rect};
     use editor_model::NodeId;
@@ -186,6 +196,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(id, 0, "test", 0.0, gs(4))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         }
     }
@@ -342,6 +353,7 @@ mod tests {
                         cursor_descent: 4.0,
                         glyph_runs: vec![], // empty line
                         text_indent: 0.0,
+                        child_range: Some(0..0),
                     }),
                 }],
             ),
@@ -369,6 +381,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let line_b = LayoutNode {
@@ -382,6 +395,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let tree = LayoutTree {
@@ -412,6 +426,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let line_b = LayoutNode {
@@ -425,6 +440,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let tree = LayoutTree {
@@ -455,5 +471,57 @@ mod tests {
         let scope = find_scope_container_at(&tree.root, &pos).unwrap();
         // Should be the inner scope (rect height 20), not the outer (40)
         assert_eq!(scope.rect.height, 20.0);
+    }
+
+    fn make_empty_line_node(para_id: NodeId, y: f32, child_range: Range<usize>) -> LayoutNode {
+        LayoutNode {
+            rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: para_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![],
+                text_indent: 0.0,
+                child_range: Some(child_range),
+            }),
+        }
+    }
+
+    #[test]
+    fn find_line_at_hard_break_boundary_upstream_picks_upper() {
+        let p1 = NodeId::new();
+        // Mimics paragraph { hard_break } → two empty lines at offsets 0..1 and 1..1.
+        let line_a = make_empty_line_node(p1, 0.0, 0..1);
+        let line_b = make_empty_line_node(p1, 20.0, 1..1);
+        let tree = LayoutTree {
+            root: make_box_node(0.0, 40.0, vec![line_a, line_b]),
+        };
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 1,
+            affinity: editor_state::Affinity::Upstream,
+        };
+        let node = find_line_at(&tree, &pos).unwrap();
+        assert_eq!(node.rect.y, 0.0);
+    }
+
+    #[test]
+    fn find_line_at_hard_break_boundary_downstream_picks_lower() {
+        let p1 = NodeId::new();
+        let line_a = make_empty_line_node(p1, 0.0, 0..1);
+        let line_b = make_empty_line_node(p1, 20.0, 1..1);
+        let tree = LayoutTree {
+            root: make_box_node(0.0, 40.0, vec![line_a, line_b]),
+        };
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 1,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let node = find_line_at(&tree, &pos).unwrap();
+        assert_eq!(node.rect.y, 20.0);
     }
 }

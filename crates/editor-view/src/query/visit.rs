@@ -158,6 +158,7 @@ mod tests {
                 cursor_descent: height * 0.1,
                 glyph_runs: vec![],
                 text_indent: 0.0,
+                child_range: None,
             }),
         }
     }

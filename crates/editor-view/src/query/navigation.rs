@@ -323,10 +323,10 @@ fn move_document_backward(tree: &LayoutTree) -> Option<Selection> {
 
 fn first_position_in_line(line: &LayoutLine) -> Position {
     if let Some(run) = line.glyph_runs.first() {
-        Position::new(run.node_id, run.offset)
-    } else {
-        Position::new(line.node_id, 0)
+        return Position::new(run.node_id, run.offset);
     }
+    let offset = line.child_range.as_ref().map(|r| r.start).unwrap_or(0);
+    Position::new(line.node_id, offset)
 }
 
 fn last_position_in_line(line: &LayoutLine) -> Position {
@@ -414,6 +414,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         }
     }
@@ -540,6 +541,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let line_b = LayoutNode {
@@ -553,11 +555,31 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         LayoutTree {
             root: make_box_node(0.0, 40.0, false, vec![line_a, line_b]),
         }
+    }
+
+    #[test]
+    fn first_position_in_line_empty_uses_child_range_start() {
+        let p1 = NodeId::new();
+        let line = LayoutLine {
+            node_id: p1,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![],
+            text_indent: 0.0,
+            child_range: Some(2..2),
+        };
+        let pos = first_position_in_line(&line);
+        assert_eq!(pos.node_id, p1);
+        assert_eq!(pos.offset, 2);
     }
 
     #[test]
@@ -957,6 +979,7 @@ mod tests {
                     GlyphRun::make_test_run(t2, 0, "World", 50.0, gs(5)),
                 ],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let tree = LayoutTree {
@@ -1000,6 +1023,7 @@ mod tests {
                     GlyphRun::make_test_run(t2, 0, "World", 50.0, gs(5)),
                 ],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let tree = LayoutTree {

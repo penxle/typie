@@ -1,4 +1,5 @@
 use editor_model::NodeId;
+use std::ops::Range;
 use std::sync::Arc;
 
 use crate::glyph_run::GlyphRun;
@@ -42,6 +43,12 @@ pub struct MeasuredLine {
     pub cursor_descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
     pub text_indent: f32,
+    /// Paragraph child-offset interval this visual line owns for matching
+    /// container-anchored cursor positions. Matching is inclusive of both
+    /// endpoints (`start <= offset && offset <= end`, not `Range::contains`).
+    /// `None` for soft-wrap interior lines of a multi-line text segment —
+    /// those lines own no paragraph boundary.
+    pub child_range: Option<Range<usize>>,
 }
 
 #[derive(Debug, Clone)]

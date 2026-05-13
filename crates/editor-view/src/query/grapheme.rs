@@ -9,16 +9,25 @@ pub fn run_codepoint_count(run: &GlyphRun) -> usize {
 
 pub fn last_position_in_line(line: &LayoutLine) -> Position {
     if let Some(run) = line.glyph_runs.last() {
-        // Upstream so soft-wrap boundaries resolve to this (upper) line rather
-        // than the start of the next continuation line.
-        Position {
+        return Position {
             node_id: run.node_id,
             offset: run.offset + run_codepoint_count(run),
             affinity: Affinity::Upstream,
-        }
-    } else {
-        Position::new(line.node_id, 0)
+        };
     }
+    if let Some(range) = &line.child_range {
+        let affinity = if range.start == range.end {
+            Affinity::Downstream
+        } else {
+            Affinity::Upstream
+        };
+        return Position {
+            node_id: line.node_id,
+            offset: range.end,
+            affinity,
+        };
+    }
+    Position::new(line.node_id, 0)
 }
 
 pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
@@ -54,7 +63,8 @@ pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
 
 pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
     if line.glyph_runs.is_empty() {
-        return Position::new(line.node_id, 0);
+        let offset = line.child_range.as_ref().map(|r| r.start).unwrap_or(0);
+        return Position::new(line.node_id, offset);
     }
 
     let first = &line.glyph_runs[0];
@@ -147,6 +157,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 0.0);
     }
@@ -169,6 +180,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 3)), 30.0);
     }
@@ -191,6 +203,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 5)), 50.0);
     }
@@ -213,6 +226,7 @@ mod tests {
                 vec![gs(20.0, 3), gs(10.0, 1), gs(10.0, 1)],
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         // offset 1 is inside the first grapheme (3 codepoints) => snaps to start
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 0.0);
@@ -240,6 +254,7 @@ mod tests {
                 ascii_spans(2, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 60.0);
     }
@@ -262,6 +277,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         let pos = position_at_x(&line, -5.0);
         assert_eq!(pos.node_id, id);
@@ -286,6 +302,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         let pos = position_at_x(&line, 100.0);
         assert_eq!(pos.node_id, id);
@@ -310,6 +327,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         // x=4 is < 5.0 (half of first advance), so snaps to offset 0
         let pos = position_at_x(&line, 4.0);
@@ -337,6 +355,7 @@ mod tests {
                 vec![gs(20.0, 3), gs(10.0, 1), gs(10.0, 1)],
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         // x=9 is < 10.0 (half of 20.0 advance) => offset 0
         let pos = position_at_x(&line, 9.0);
@@ -361,6 +380,7 @@ mod tests {
             cursor_descent: 4.0,
             glyph_runs: vec![],
             text_indent: 0.0,
+            child_range: None,
         };
         let pos = position_at_x(&line, 50.0);
         assert_eq!(pos.node_id, id);
@@ -388,6 +408,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         let pos = position_at_x(&line, 100.0);
         assert_eq!(pos.offset, 5);
@@ -412,6 +433,7 @@ mod tests {
                 ascii_spans(5, 10.0),
             )],
             text_indent: 0.0,
+            child_range: None,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -430,6 +452,7 @@ mod tests {
             cursor_descent: 4.0,
             glyph_runs: vec![],
             text_indent: 0.0,
+            child_range: None,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -452,6 +475,7 @@ mod tests {
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
             ],
             text_indent: 0.0,
+            child_range: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id2, 1)), 30.0);
     }
@@ -472,6 +496,7 @@ mod tests {
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
             ],
             text_indent: 0.0,
+            child_range: None,
         };
         let pos = position_at_x(&line, 25.0);
         assert_eq!(pos.node_id, id2);
@@ -490,7 +515,67 @@ mod tests {
             cursor_descent: 4.0,
             glyph_runs: vec![],
             text_indent: 32.0,
+            child_range: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 32.0);
+    }
+
+    #[test]
+    fn last_position_in_line_empty_non_degenerate_is_upstream_at_end() {
+        let p1 = NodeId::new();
+        let line = LayoutLine {
+            node_id: p1,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![],
+            text_indent: 0.0,
+            child_range: Some(0..1),
+        };
+        let pos = last_position_in_line(&line);
+        assert_eq!(pos.node_id, p1);
+        assert_eq!(pos.offset, 1);
+        assert_eq!(pos.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn last_position_in_line_empty_degenerate_is_downstream() {
+        let p1 = NodeId::new();
+        let line = LayoutLine {
+            node_id: p1,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![],
+            text_indent: 0.0,
+            child_range: Some(2..2),
+        };
+        let pos = last_position_in_line(&line);
+        assert_eq!(pos.node_id, p1);
+        assert_eq!(pos.offset, 2);
+        assert_eq!(pos.affinity, Affinity::Downstream);
+    }
+
+    #[test]
+    fn position_at_x_empty_returns_range_start() {
+        let p1 = NodeId::new();
+        let line = LayoutLine {
+            node_id: p1,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![],
+            text_indent: 0.0,
+            child_range: Some(2..2),
+        };
+        let pos = position_at_x(&line, 50.0);
+        assert_eq!(pos.node_id, p1);
+        assert_eq!(pos.offset, 2);
     }
 }

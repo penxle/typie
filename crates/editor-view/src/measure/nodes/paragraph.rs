@@ -142,4 +142,40 @@ mod tests {
         assert_eq!(all_runs[1].text, "World");
         assert_eq!(all_runs[2].text, "!");
     }
+
+    #[test]
+    fn paragraph_with_hard_break_produces_two_lines() {
+        let (doc, p1, _t1) = doc! {
+            root { p1: paragraph { text("hel") hard_break t1: text("lo") } }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        assert_eq!(b.children.len(), 2);
+        for c in &b.children {
+            assert!(matches!(c.content, MeasuredContent::Line(_)));
+        }
+        assert!(m.height > 0.0);
+    }
+
+    #[test]
+    fn trailing_hard_break_produces_empty_trailing_line() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        assert_eq!(b.children.len(), 2);
+        let MeasuredContent::Line(trailing) = &b.children[1].content else {
+            panic!("expected Line")
+        };
+        assert!(trailing.glyph_runs.is_empty());
+        assert!(b.children[1].height > 0.0);
+        assert_eq!(trailing.child_range, Some(2..2));
+    }
 }

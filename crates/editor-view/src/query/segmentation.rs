@@ -110,20 +110,28 @@ pub fn select_word_at(
 
     if line.glyph_runs.is_empty() {
         let para = pos.doc().node(line.node_id)?;
-        let parent_id = para.parent()?.id();
-        let index = para.index()?;
-        return Some(Selection::new(
-            Position {
-                node_id: parent_id,
-                offset: index,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: parent_id,
-                offset: index + 1,
-                affinity: Affinity::Upstream,
-            },
-        ));
+        let paragraph_has_no_text = para.children().all(|c| match c.node() {
+            editor_model::Node::Text(t) => t.text.is_empty(),
+            _ => true,
+        });
+        if paragraph_has_no_text {
+            let parent_id = para.parent()?.id();
+            let index = para.index()?;
+            return Some(Selection::new(
+                Position {
+                    node_id: parent_id,
+                    offset: index,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: parent_id,
+                    offset: index + 1,
+                    affinity: Affinity::Upstream,
+                },
+            ));
+        }
+        let offset = line.child_range.as_ref().map(|r| r.start).unwrap_or(0);
+        return Some(Selection::collapsed(Position::new(line.node_id, offset)));
     }
 
     let char_idx = line_char_index(line, &position)?;
@@ -290,6 +298,7 @@ mod tests {
             cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
             text_indent: 0.0,
+            child_range: None,
         }
     }
 
@@ -308,6 +317,7 @@ mod tests {
                 GlyphRun::make_test_run(id2, 0, "world", 60.0, gs(5)),
             ],
             text_indent: 0.0,
+            child_range: None,
         };
         (line, id1, id2)
     }
@@ -412,6 +422,7 @@ mod tests {
                     gs(n),
                 )],
                 text_indent: 0.0,
+                child_range: None,
             }),
         };
         let tree = LayoutTree {
@@ -510,6 +521,139 @@ mod tests {
         assert_ne!(sel.anchor, sel.head);
     }
 
+    use std::ops::Range;
+
+    fn make_empty_line_node(para_id: NodeId, y: f32, child_range: Range<usize>) -> LayoutNode {
+        LayoutNode {
+            rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: para_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![],
+                text_indent: 0.0,
+                child_range: Some(child_range),
+            }),
+        }
+    }
+
+    fn make_text_line_node(
+        para_id: NodeId,
+        text_id: NodeId,
+        y: f32,
+        text: &str,
+        child_range: Range<usize>,
+    ) -> LayoutNode {
+        let advances: Vec<crate::glyph_run::GraphemeSpan> = text
+            .chars()
+            .map(|_| crate::glyph_run::GraphemeSpan {
+                advance: 10.0,
+                codepoints: 1,
+            })
+            .collect();
+        LayoutNode {
+            rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: para_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(text_id, 0, text, 0.0, advances)],
+                text_indent: 0.0,
+                child_range: Some(child_range),
+            }),
+        }
+    }
+
+    #[test]
+    fn select_word_at_on_empty_hard_break_line_collapses() {
+        use editor_macros::doc;
+        let (doc_, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
+        let t1 = doc_.node(p1).unwrap().children().next().unwrap().id();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: LayoutDirection::Vertical,
+                        padding: editor_common::EdgeInsets::ZERO,
+                        border: editor_common::EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                    },
+                    children: vec![
+                        make_text_line_node(p1, t1, 0.0, "a", 0..2),
+                        make_empty_line_node(p1, 20.0, 2..2),
+                    ],
+                }),
+            },
+        };
+        let resource = editor_resource::Resource::new_test();
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 2,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let resolved = pos.resolve(&doc_).unwrap();
+        let sel = select_word_at(&tree, &resolved, &resource.segmenters).unwrap();
+        assert!(
+            sel.is_collapsed(),
+            "expected collapsed selection, got: {:?}",
+            sel
+        );
+        assert_eq!(sel.head.node_id, p1);
+        assert_eq!(sel.head.offset, 2);
+    }
+
+    #[test]
+    fn select_word_at_on_empty_text_paragraph_selects_paragraph_as_unit() {
+        use editor_macros::doc;
+        let (doc_, p1) = doc! { root { p1: paragraph { text("") } } };
+        let root_id = doc_.root().unwrap().id();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: root_id,
+                    style: BoxStyle {
+                        direction: LayoutDirection::Vertical,
+                        padding: editor_common::EdgeInsets::ZERO,
+                        border: editor_common::EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                    },
+                    children: vec![make_empty_line_node(p1, 0.0, 0..1)],
+                }),
+            },
+        };
+        let resource = editor_resource::Resource::new_test();
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 0,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let resolved = pos.resolve(&doc_).unwrap();
+        let sel = select_word_at(&tree, &resolved, &resource.segmenters).unwrap();
+        assert!(
+            !sel.is_collapsed(),
+            "expected non-collapsed paragraph selection"
+        );
+        assert_eq!(sel.anchor.node_id, root_id);
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.node_id, root_id);
+        assert_eq!(sel.head.offset, 1);
+    }
+
     #[test]
     fn select_word_at_empty_line() {
         let (doc, p1, ..) = doc! {
@@ -528,6 +672,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![],
                 text_indent: 0.0,
+                child_range: Some(0..0),
             }),
         };
         let tree = LayoutTree {
