@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use editor_common::EdgeInsets;
 
 use crate::style::Alignment as LayoutAlignment;
-use editor_model::{Alignment, Doc, Modifier, NodeRef};
+use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::text::measure::measure_inline_text;
@@ -26,8 +28,22 @@ pub fn measure_paragraph(
         })
         .unwrap_or_default();
 
-    let (children, total_height) =
+    let (mut children, total_height) =
         measure_inline_text(measurer, doc, node, width, align, indent, view_state);
+
+    // The segmenter skips `page_break` from the inline flow; emit a marker
+    // here so the paginator's forced-break branch can see it.
+    let has_trailing_page_break = node
+        .last_child()
+        .is_some_and(|c| matches!(c.node(), Node::PageBreak(_)));
+    if has_trailing_page_break {
+        children.push(Arc::new(MeasuredNode {
+            width: 0.0,
+            height: 0.0,
+            content: MeasuredContent::PageBreak,
+        }));
+    }
+
     let alignment = align_to_layout(align);
 
     MeasuredNode {
@@ -177,5 +193,106 @@ mod tests {
         assert!(trailing.glyph_runs.is_empty());
         assert!(b.children[1].height > 0.0);
         assert_eq!(trailing.child_range, Some(2..2));
+    }
+
+    #[test]
+    fn paragraph_with_trailing_page_break_emits_marker_child() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") page_break } } };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        assert_eq!(b.children.len(), 2);
+        assert!(
+            matches!(b.children[0].content, MeasuredContent::Line(_)),
+            "first child must be the text line",
+        );
+        assert!(
+            matches!(b.children[1].content, MeasuredContent::PageBreak),
+            "second child must be the PageBreak marker",
+        );
+        assert_eq!(b.children[1].width, 0.0);
+        assert_eq!(b.children[1].height, 0.0);
+    }
+
+    #[test]
+    fn page_break_only_paragraph_emits_strut_line_then_marker() {
+        let (doc, p1) = doc! { root { p1: paragraph { page_break } } };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        assert_eq!(b.children.len(), 2);
+        let MeasuredContent::Line(strut) = &b.children[0].content else {
+            panic!("expected Line as first child")
+        };
+        assert!(
+            strut.glyph_runs.is_empty(),
+            "first child must be a strut-only line for caret anchoring",
+        );
+        assert!(
+            b.children[0].height > 0.0,
+            "strut-only line must have non-zero height so the caret has vertical room",
+        );
+        assert!(
+            matches!(b.children[1].content, MeasuredContent::PageBreak),
+            "second child must be the PageBreak marker",
+        );
+    }
+
+    #[test]
+    fn paragraph_without_page_break_has_no_marker() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") } } };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        assert!(
+            b.children
+                .iter()
+                .all(|c| !matches!(c.content, MeasuredContent::PageBreak)),
+            "paragraph without a trailing page_break must not emit a marker",
+        );
+    }
+
+    #[test]
+    fn paragraph_with_trailing_hard_break_has_no_page_break_marker() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        assert!(
+            b.children
+                .iter()
+                .all(|c| !matches!(c.content, MeasuredContent::PageBreak)),
+            "hard_break and page_break must not be conflated — trailing hard_break emits no marker",
+        );
+    }
+
+    #[test]
+    fn paragraph_with_hard_break_then_page_break_emits_marker_after_lines() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break page_break } } };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        assert_eq!(b.children.len(), 3);
+        assert!(matches!(b.children[0].content, MeasuredContent::Line(_)));
+        assert!(matches!(b.children[1].content, MeasuredContent::Line(_)));
+        assert!(
+            matches!(b.children[2].content, MeasuredContent::PageBreak),
+            "marker must sit at the very end, after the empty line produced by the hard_break",
+        );
     }
 }

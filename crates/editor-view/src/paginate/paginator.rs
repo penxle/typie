@@ -491,8 +491,12 @@ fn place_node_at(
 mod tests {
     use super::*;
     use editor_common::EdgeInsets;
+    use editor_macros::doc;
     use editor_model::NodeId;
     use std::sync::Arc;
+
+    use crate::measure::Measurer;
+    use crate::view_state::ViewState;
 
     fn make_line(height: f32) -> Arc<MeasuredNode> {
         Arc::new(MeasuredNode {
@@ -807,13 +811,6 @@ mod tests {
     fn continuous_no_fill_inserted() {
         let root = make_box(vec![make_atom(800.0), make_spacing(16.0), make_atom(400.0)]);
         let (tree, _pages) = paginate_c(root, 400.0, 1024.0, 0.0);
-        fn has_fill(node: &LayoutNode) -> bool {
-            match &node.content {
-                LayoutContent::Spacing(SpacingKind::Fill) => true,
-                LayoutContent::Box(b) => b.children.iter().any(has_fill),
-                _ => false,
-            }
-        }
         assert!(!has_fill(&tree.root));
         // All 3 children present (no absorption in continuous mode)
         let LayoutContent::Box(root_box) = &tree.root.content else {
@@ -844,6 +841,174 @@ mod tests {
                 .children
                 .iter()
                 .any(|c| matches!(c.content, LayoutContent::Spacing(SpacingKind::Fill)))
+        );
+    }
+
+    // Match production: `view.rs::compute` unwraps the `Arc` before handing
+    // the tree to the paginator.
+    fn measured_tree(root: Arc<MeasuredNode>) -> MeasuredTree {
+        MeasuredTree {
+            root: Arc::unwrap_or_clone(root),
+        }
+    }
+
+    // Fill lands in whichever container's local children fired `break_page`,
+    // which is not necessarily the root box — recurse to decouple the test
+    // from that nesting.
+    fn has_fill(node: &LayoutNode) -> bool {
+        match &node.content {
+            LayoutContent::Spacing(SpacingKind::Fill) => true,
+            LayoutContent::Box(b) => b.children.iter().any(has_fill),
+            _ => false,
+        }
+    }
+
+    #[test]
+    fn trailing_page_break_forces_paginated_break_via_measure_pipeline() {
+        let (doc, _p1, _p2) = doc! {
+            root {
+                p1: paragraph { text("a") page_break }
+                p2: paragraph { text("b") }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
+
+        let (tree, pages) = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
+            .paginate(measured_tree(root));
+
+        assert_eq!(
+            pages.len(),
+            2,
+            "trailing page_break must force a page break in paginated mode",
+        );
+        assert!(
+            has_fill(&tree.root),
+            "paginated forced break should emit a Fill spacing somewhere in the layout tree",
+        );
+    }
+
+    #[test]
+    fn trailing_page_break_does_not_break_in_continuous_mode() {
+        let (doc, _p1, _p2) = doc! {
+            root {
+                p1: paragraph { text("a") page_break }
+                p2: paragraph { text("b") }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
+
+        let (tree, pages) = Paginator::continuous(400.0, 1024.0, EdgeInsets::all(10.0))
+            .paginate(measured_tree(root));
+
+        assert_eq!(
+            pages.len(),
+            1,
+            "continuous mode must ignore the page_break marker",
+        );
+        assert!(
+            !has_fill(&tree.root),
+            "continuous mode must not emit Fill spacing for a page_break marker",
+        );
+    }
+
+    #[test]
+    fn trailing_page_break_in_middle_paragraph_routes_following_paragraphs_to_next_page() {
+        // The page is large enough to hold all three paragraphs vertically;
+        // the only thing that splits the document into two pages is p2's
+        // trailing `page_break`. This verifies multi-paragraph routing: the
+        // marker pushes the *following* paragraph(s) to the next page, not
+        // just one paragraph at a time.
+        let (doc, _p1, _p2, _p3) = doc! {
+            root {
+                p1: paragraph { text("a") }
+                p2: paragraph { text("b") page_break }
+                p3: paragraph { text("c") }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
+
+        let (tree, pages) = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
+            .paginate(measured_tree(root));
+
+        assert_eq!(
+            pages.len(),
+            2,
+            "p1 and p2 share page 1; p2's trailing page_break sends p3 to page 2",
+        );
+
+        let LayoutContent::Box(root_box) = &tree.root.content else {
+            panic!("expected root box")
+        };
+        // The default root modifiers inject `BlockGap` between paragraphs,
+        // which materialises as `Spacing` children of the root box, so the
+        // raw children count is not 3. Filter to paragraph LayoutBoxes.
+        let paragraph_boxes: Vec<&LayoutNode> = root_box
+            .children
+            .iter()
+            .filter(|c| matches!(c.content, LayoutContent::Box(_)))
+            .collect();
+        assert_eq!(
+            paragraph_boxes.len(),
+            3,
+            "all three paragraph LayoutBoxes must be present in the root box",
+        );
+        let LayoutContent::Box(p2_box) = &paragraph_boxes[1].content else {
+            panic!("expected p2 to be a Box")
+        };
+        let p2_has_fill = p2_box
+            .children
+            .iter()
+            .any(|c| matches!(c.content, LayoutContent::Spacing(SpacingKind::Fill)));
+        assert!(
+            p2_has_fill,
+            "p2's trailing page_break must emit a Fill inside p2's LayoutBox",
+        );
+    }
+
+    #[test]
+    fn page_break_only_paragraph_breaks_after_strut_line() {
+        let (doc, _p1, _p2) = doc! {
+            root {
+                p1: paragraph { page_break }
+                p2: paragraph { text("a") }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
+
+        let (tree, pages) = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
+            .paginate(measured_tree(root));
+
+        assert_eq!(
+            pages.len(),
+            2,
+            "page_break-only paragraph must emit a strut-only line and then break",
+        );
+
+        // The first paragraph LayoutBox contains exactly one Line (strut-only)
+        // before the page break — the PageBreak marker itself is consumed, not
+        // emitted into the layout tree.
+        let LayoutContent::Box(root_box) = &tree.root.content else {
+            panic!("expected root box")
+        };
+        let LayoutContent::Box(p1_box) = &root_box.children[0].content else {
+            panic!("expected p1 to be a Box")
+        };
+        let p1_line_count = p1_box
+            .children
+            .iter()
+            .filter(|c| matches!(c.content, LayoutContent::Line(_)))
+            .count();
+        assert_eq!(
+            p1_line_count, 1,
+            "p1 must contribute exactly one strut-only line",
         );
     }
 }

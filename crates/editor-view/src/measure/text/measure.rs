@@ -419,13 +419,14 @@ mod tests {
         let MeasuredContent::Box(b) = &m.content else {
             panic!()
         };
-        assert_eq!(b.children.len(), 1);
+        assert_eq!(b.children.len(), 2);
         let MeasuredContent::Line(l) = &b.children[0].content else {
             panic!()
         };
         assert!(l.glyph_runs.is_empty());
         assert_eq!(l.child_range, Some(0..1));
         assert!(b.children[0].height > 0.0);
+        assert!(matches!(b.children[1].content, MeasuredContent::PageBreak,));
     }
 
     #[test]
