@@ -33,6 +33,7 @@
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../FontUploadModal.svelte';
   import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
+  import TrialPopupExperimentModal from '../TrialPopupExperimentModal.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
   import CloseButton from './@pane/CloseButton.svelte';
   import { getPane, getPaneGroup } from './@pane/context.svelte';
@@ -66,8 +67,14 @@
         me @required {
           id
           role
+          canStartTrial
+          surveys
+          subscription {
+            id
+          }
           ...EditorContext_user
           ...DocumentPanel_user
+          ...TrialPopupExperimentModal_user
           sites {
             id
             ...DocumentTemplateModal_site
@@ -400,6 +407,18 @@
   let subtitleFocused = $state(false);
   let titleDirty = $state(false);
   let subtitleDirty = $state(false);
+  let trialPopupExperimentOpen = $state(false);
+
+  const shouldOfferTrialPopupExperiment = $derived(
+    Boolean(
+      documentId &&
+      entity &&
+      entity.user.id === query.data.me.id &&
+      query.data.me.canStartTrial &&
+      !query.data.me.subscription &&
+      query.data.me.surveys.includes('trial_popup_content_entry_202605'),
+    ),
+  );
 
   $effect(() => {
     if (document) {
@@ -420,6 +439,14 @@
         localSubtitle = serverSubtitle;
       }
     }
+  });
+
+  $effect(() => {
+    if (trialPopupExperimentOpen || !focused || !editor.isFocused || !shouldOfferTrialPopupExperiment || PlanUpgradeDialog.current) {
+      return;
+    }
+
+    trialPopupExperimentOpen = true;
   });
 
   function flushTitleUpdate() {
@@ -1464,6 +1491,10 @@
   <EditorV2NoticeModal {focused} />
 
   <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
+
+  {#if documentId}
+    <TrialPopupExperimentModal {documentId} user$key={query.data.me} bind:open={trialPopupExperimentOpen} />
+  {/if}
 
   {#if currentSite}
     <DocumentTemplateModal {editor} {focused} site$key={currentSite} />

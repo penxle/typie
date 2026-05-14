@@ -453,9 +453,20 @@ User.implement({
         const existingSurveys = await db
           .select({ name: UserSurveys.name })
           .from(UserSurveys)
-          .where(and(eq(UserSurveys.userId, self.id), inArray(UserSurveys.name, ['202509_ir', 'trial_expired_modal_shown'])));
+          .where(
+            and(
+              eq(UserSurveys.userId, self.id),
+              inArray(UserSurveys.name, ['202509_ir', 'trial_expired_modal_shown', 'trial_popup_content_entry_202605']),
+            ),
+          );
 
         const shownSurveys = new Set(existingSurveys.map((s) => s.name));
+        const trial = await db.select({ id: UserTrials.id }).from(UserTrials).where(eq(UserTrials.userId, self.id)).then(first);
+        const subscriptionHistory = await db
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(eq(Subscriptions.userId, self.id))
+          .then(first);
 
         const activeSubscription = await db
           .select({ id: Subscriptions.id })
@@ -468,26 +479,26 @@ User.implement({
           )
           .then(first);
 
-        if (!shownSurveys.has('trial_expired_modal_shown')) {
-          const trial = await db.select({ id: UserTrials.id }).from(UserTrials).where(eq(UserTrials.userId, self.id)).then(first);
+        if (!shownSurveys.has('trial_expired_modal_shown') && trial && !activeSubscription) {
+          const paidSubscription = await db
+            .select({ id: Subscriptions.id })
+            .from(Subscriptions)
+            .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+            .where(
+              and(
+                eq(Subscriptions.userId, self.id),
+                inArray(Plans.availability, [PlanAvailability.BILLING_KEY, PlanAvailability.IN_APP_PURCHASE]),
+              ),
+            )
+            .then(first);
 
-          if (trial && !activeSubscription) {
-            const paidSubscription = await db
-              .select({ id: Subscriptions.id })
-              .from(Subscriptions)
-              .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-              .where(
-                and(
-                  eq(Subscriptions.userId, self.id),
-                  inArray(Plans.availability, [PlanAvailability.BILLING_KEY, PlanAvailability.IN_APP_PURCHASE]),
-                ),
-              )
-              .then(first);
-
-            if (!paidSubscription) {
-              results.push('trial_expired_modal');
-            }
+          if (!paidSubscription) {
+            results.push('trial_expired_modal');
           }
+        }
+
+        if (!shownSurveys.has('trial_popup_content_entry_202605') && !trial && !subscriptionHistory) {
+          results.push('trial_popup_content_entry_202605');
         }
 
         if (!shownSurveys.has('202509_ir') && activeSubscription && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
