@@ -134,6 +134,15 @@ const bindings: KeyBinding[] = [
     action: (ed) => ed.enqueue({ type: 'insertion', op: { type: 'break', kind: 'page' } }),
   },
 
+  { key: 'Tab', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'tab' } }) },
+  {
+    key: 'Tab',
+    modifiers: ['shift'],
+    action: (ed) => ed.enqueue({ type: 'key', event: { key: 'tab', modifiers: { shift: true } } }),
+  },
+
+  { key: 'Escape', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'escape' } }) },
+
   { key: 'Backspace', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'backspace' } }) },
   { key: 'Backspace', modifiers: word, action: (ed) => ed.enqueue(del({ type: 'word', direction: 'backward' })) },
   {

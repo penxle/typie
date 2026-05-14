@@ -527,6 +527,35 @@ fn merge_after_delete(
                 // Same-type next sibling → merge and walk up
                 let next_id = next.id();
                 let parent_id = from_node.parent().map(|p| p.id());
+
+                // When merging two adjacent list_items, combine their sublists into one
+                // so the merged list_item still has at most one trailing sublist. Identify
+                // sublists by node type rather than child index because the prior
+                // textblock merge has already removed next_list_item's paragraph child.
+                if matches!(from_node.node(), Node::ListItem(_)) {
+                    let target_sublist_id = from_node
+                        .children()
+                        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
+                        .map(|c| c.id());
+                    let moved_sublist_id = next
+                        .children()
+                        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
+                        .map(|c| c.id());
+
+                    if let Some(moved_id) = moved_sublist_id {
+                        let doc = tr.doc();
+                        let from_li = doc
+                            .node(from_id)
+                            .ok_or(CommandError::NodeNotFound(from_id))?;
+                        let from_len = from_li.entry().children.len();
+                        tr.move_node(moved_id, from_id, from_len)?;
+
+                        if let Some(target_id) = target_sublist_id {
+                            tr.merge_node(moved_id, target_id)?;
+                        }
+                    }
+                }
+
                 tr.merge_node(next_id, from_id)?;
                 from_current = parent_id;
             }
@@ -1314,6 +1343,100 @@ mod tests {
                 p1: paragraph {}
             } }
             selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_across_list_items_with_both_sublists_combines_into_single_sublist() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { t_a: text("AAA") }
+                            bullet_list {
+                                list_item { paragraph { t_sub_a: text("a1") } }
+                            }
+                        }
+                        list_item {
+                            paragraph { t_b: text("BBB") }
+                            bullet_list {
+                                list_item { paragraph { text("b1") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t_sub_a, 1) -> (t_b, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { t_a: text("AAA") }
+                            bullet_list {
+                                list_item { paragraph { t_sub_a: text("aBBB") } }
+                                list_item { paragraph { text("b1") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t_sub_a, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_across_list_items_with_different_type_sublists_combines() {
+        // Not reachable from keyboard input alone; assumes a paste/import
+        // producing the mixed-type sublist state. merge_node preserves the
+        // target's type, so the result is a single bullet sublist containing
+        // both items.
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { t_a: text("AAA") }
+                            bullet_list {
+                                list_item { paragraph { t_sub_a: text("a1") } }
+                            }
+                        }
+                        list_item {
+                            paragraph { t_b: text("BBB") }
+                            ordered_list {
+                                list_item { paragraph { text("b1") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t_sub_a, 1) -> (t_b, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { t_a: text("AAA") }
+                            bullet_list {
+                                list_item { paragraph { t_sub_a: text("aBBB") } }
+                                list_item { paragraph { text("b1") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t_sub_a, 1)
         };
         assert_state_eq!(&actual, &expected);
     }

@@ -1,5 +1,3 @@
-use crate::NodeType;
-
 use super::Schema;
 use super::content::ContentExpr;
 use super::context::ContextExpr;
@@ -21,7 +19,6 @@ pub struct NodeSpec {
     /// When true, the node is a structural part of its parent and cannot be deleted alone; only its content can be cleared.
     pub structural: bool,
     pub external: bool,
-    pub promote_item_type_on_delete: Option<NodeType>,
     pub block_selection_boundary_mode: Option<BlockSelectionBoundaryMode>,
 }
 
@@ -49,7 +46,6 @@ impl Default for NodeSpec {
             isolating: false,
             structural: false,
             external: false,
-            promote_item_type_on_delete: None,
             block_selection_boundary_mode: None,
         }
     }
@@ -85,6 +81,7 @@ pub enum Expand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NodeType;
 
     #[test]
     fn is_leaf_classifies_nodes() {

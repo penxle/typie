@@ -25,6 +25,8 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::optional!(commands::delete_selection()),
                     |tr| commands::first!(
                         tr,
+                        commands::lift_empty_list_item(),
+                        commands::split_list_item(),
                         commands::lift_last_paragraph(),
                         commands::split_paragraph(),
                     ),
@@ -38,6 +40,9 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_node_backward(),
                     commands::select_node_backward(),
                     commands::delete_page_break_backward(),
+                    commands::lift_empty_list_item(),
+                    commands::merge_list_item_backward(),
+                    commands::lift_first_list_item(),
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
                     commands::lift_first_paragraph(),
@@ -52,12 +57,19 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_node_forward(),
                     commands::select_node_forward(),
                     commands::delete_page_break_forward(),
+                    commands::merge_list_item_forward(),
                     commands::join_paragraph_forward(),
                     commands::lift_paragraph_forward(),
                     commands::delete_empty_paragraph_forward(),
                 )?;
             }
-            (Key::Escape, _) | (Key::Tab, _) => {}
+            (Key::Tab, m) if m.shift => {
+                commands::lift_list_item(tr)?;
+            }
+            (Key::Tab, _) => {
+                commands::sink_list_item(tr)?;
+            }
+            (Key::Escape, _) => {}
         }
         Ok(())
     })
@@ -324,6 +336,338 @@ mod tests {
                 }
             }
             selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_splits_list_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { paragraph { t1: text("Hello") } } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p2: paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_on_empty_list_item_lifts_out() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p1: paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { paragraph { text("A") } } }
+                    p1: paragraph {}
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_merges_list_items() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { paragraph { t2: text("World") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("HelloWorld") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_lifts_first_list_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("A") } }
+                        list_item { paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("A") }
+                    bullet_list { list_item { paragraph { text("B") } } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_on_empty_nested_list_item_unindents() {
+        // An empty list_item at any nesting level should unindent on Backspace
+        // (matches Google Docs / Notion). The presence of a prev sibling does
+        // not change this — empty list_items always lift; merge is reserved
+        // for non-empty content that has somewhere to flow into.
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("a") }
+                            bullet_list {
+                                list_item {
+                                    paragraph { text("b") }
+                                    bullet_list {
+                                        list_item { paragraph { text("c") } }
+                                    }
+                                }
+                                list_item { p1: paragraph {} }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("a") }
+                            bullet_list {
+                                list_item {
+                                    paragraph { text("b") }
+                                    bullet_list {
+                                        list_item { paragraph { text("c") } }
+                                    }
+                                }
+                            }
+                        }
+                        list_item { p1: paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_merges_list_items_forward() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { paragraph { text("World") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("HelloWorld") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_at_end_of_last_list_item_pulls_next_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    paragraph { text("B") }
+                }
+            }
+            selection: (t1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { paragraph { t1: text("AB") } } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn tab_indents_list_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { paragraph { t1: text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Tab));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list { list_item { paragraph { t1: text("B") } } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn shift_tab_unindents_list_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list { list_item { paragraph { t1: text("B") } } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key_shift(Key::Tab));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { paragraph { t1: text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn tab_outside_list_no_op() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Tab));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn tab_first_item_no_op() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Tab));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }

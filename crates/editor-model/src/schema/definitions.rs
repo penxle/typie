@@ -82,16 +82,14 @@ impl Default for SchemaInner {
                 },
                 NodeType::BulletList => NodeSpec {
                     content: content_expr!(ListItem+),
-                    promote_item_type_on_delete: Some(NodeType::ListItem),
                     ..Default::default()
                 },
                 NodeType::OrderedList => NodeSpec {
                     content: content_expr!(ListItem+),
-                    promote_item_type_on_delete: Some(NodeType::ListItem),
                     ..Default::default()
                 },
                 NodeType::ListItem => NodeSpec {
-                    content: content_expr!(Paragraph, (BulletList | OrderedList)*),
+                    content: content_expr!(Paragraph, (BulletList | OrderedList)?),
                     structural: true,
                     block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
                     ..Default::default()
