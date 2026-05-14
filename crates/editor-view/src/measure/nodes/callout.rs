@@ -9,6 +9,8 @@ use crate::measure::{MeasuredContent, MeasuredNode};
 use crate::style::{Decoration, DecorationData};
 use crate::view_state::ViewState;
 
+use super::line_geometry::first_line_info;
+
 const CALLOUT_PADDING_X: f32 = 12.0;
 const CALLOUT_PADDING_Y: f32 = 16.0;
 const CALLOUT_ICON_WIDTH: f32 = 20.0;
@@ -42,8 +44,8 @@ pub fn measure_callout(
         },
     );
 
-    let icon_y = first_line_offset(&measured)
-        .map(|(line_top, line_height)| line_top + (line_height - CALLOUT_ICON_WIDTH) / 2.0)
+    let icon_y = first_line_info(&measured)
+        .map(|info| info.top + (info.height - CALLOUT_ICON_WIDTH) / 2.0)
         .unwrap_or(CALLOUT_PADDING_Y);
 
     if let MeasuredContent::Box(ref mut b) = measured.content {
@@ -60,23 +62,6 @@ pub fn measure_callout(
     }
 
     measured
-}
-
-fn first_line_offset(node: &MeasuredNode) -> Option<(f32, f32)> {
-    match &node.content {
-        MeasuredContent::Line(_) => Some((0.0, node.height)),
-        MeasuredContent::Box(b) => {
-            let mut y = b.style.padding.top + b.style.border.top;
-            for child in &b.children {
-                if let Some((rel_y, h)) = first_line_offset(child) {
-                    return Some((y + rel_y, h));
-                }
-                y += child.height;
-            }
-            None
-        }
-        _ => None,
-    }
 }
 
 #[cfg(test)]

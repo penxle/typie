@@ -143,6 +143,7 @@ const HR_SHAPE_SIZE_SMALL: f32 = 8.0;
 const HR_SHAPE_GAP: f32 = 8.0;
 const MESSAGE_BORDER_RADIUS: f32 = 18.0;
 const MESSAGE_TAIL_SIZE: f32 = 10.0;
+const BULLET_RADIUS_RATIO: f32 = 0.125;
 
 fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Path {
     let CornerRadii {
@@ -995,23 +996,22 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 }
             }
 
-            (Some(Node::ListItem(_)), _) => match data {
-                DecorationData::Glyphs(glyph_runs) => {
-                    let color = self.renderer.theme.color("ui.text.default");
-                    let total_width: f32 = glyph_runs.iter().map(|r| r.width).sum();
-                    let x_offset = inner_rect.width - total_width;
-                    let offset_t = t.translate(x_offset, 0.0);
-                    self.render_glyph_runs(glyph_runs, color, offset_t);
-                }
-                _ => {
-                    let color = self.renderer.theme.color("ui.text");
-                    self.sink.fill_rect(inner_rect, color, t);
-                }
-            },
+            (Some(Node::ListItem(_)), DecorationData::Glyphs(glyph_runs)) => {
+                let color = self.renderer.theme.color("ui.text.default");
+                let total_width: f32 = glyph_runs.iter().map(|r| r.width).sum();
+                let x_offset = inner_rect.width - total_width;
+                let offset_t = t.translate(x_offset, 0.0);
+                self.render_glyph_runs(glyph_runs, color, offset_t);
+            }
 
-            (Some(Node::BulletList(_)), _) => {
-                let color = self.renderer.theme.color("ui.text");
-                self.sink.fill_rect(inner_rect, color, t);
+            (Some(Node::ListItem(_)), DecorationData::Bullet) => {
+                // Bullets center on the line box; ordered markers align to baseline (set in measure).
+                let color = self.renderer.theme.color("ui.text.default");
+                let r = inner_rect.height * BULLET_RADIUS_RATIO;
+                let cx = inner_rect.width - r;
+                let cy = inner_rect.height / 2.0;
+                let path = circle_path(cx, cy, r);
+                self.sink.fill_path(&path, color, t);
             }
 
             _ => {}

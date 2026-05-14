@@ -45,6 +45,6 @@ pub enum DecorationData {
     None,
     Bool(bool),
     Number(f32),
-    Text(String),
+    Bullet,
     Glyphs(Vec<GlyphRun>),
 }

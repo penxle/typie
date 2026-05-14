@@ -3,6 +3,7 @@ use editor_state::{PendingModifier, PendingModifiers};
 
 use crate::measure::resolve::resolve_inherited;
 
+#[derive(Clone)]
 pub struct ResolvedTextStyle {
     pub font_family: String,
     pub font_weight: u16,
