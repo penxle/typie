@@ -129,6 +129,7 @@ pub fn measure_table_cell(
             border: EdgeInsets::all(TABLE_BORDER_WIDTH),
             scope: true,
             alignment: LayoutAlignment::Start,
+            is_visual_container: true,
         },
     )
 }
@@ -160,6 +161,7 @@ pub fn measure_table(
                     alignment: LayoutAlignment::Start,
                     scope: false,
                     decorations: vec![],
+                    is_visual_container: true,
                 },
                 children: vec![],
             }),
@@ -248,6 +250,7 @@ pub fn measure_table(
                     alignment: LayoutAlignment::Start,
                     scope: false,
                     decorations: vec![],
+                    is_visual_container: true,
                 },
                 children: row_children,
             }),
@@ -293,6 +296,7 @@ pub fn measure_table(
                 alignment,
                 scope: false,
                 decorations: vec![],
+                is_visual_container: true,
             },
             children: row_measurements,
         }),

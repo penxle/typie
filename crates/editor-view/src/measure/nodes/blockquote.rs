@@ -46,6 +46,7 @@ pub fn measure_blockquote(
                     border: EdgeInsets::ZERO,
                     scope: false,
                     alignment: Alignment::Start,
+                    is_visual_container: true,
                 },
             );
             if let MeasuredContent::Box(ref mut b) = measured.content {
@@ -78,6 +79,7 @@ pub fn measure_blockquote(
                     border: EdgeInsets::ZERO,
                     scope: false,
                     alignment: Alignment::Start,
+                    is_visual_container: true,
                 },
             );
             if let MeasuredContent::Box(ref mut b) = measured.content {
@@ -139,6 +141,7 @@ pub fn measure_blockquote(
                         alignment,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children,
                 }),

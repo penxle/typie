@@ -397,6 +397,7 @@ mod tests {
             alignment: Alignment::Start,
             scope: false,
             decorations: vec![],
+            is_visual_container: true,
         }
     }
 
@@ -588,6 +589,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![
                         make_text_line_node(p1, t1, 0.0, "a", 0..2),
@@ -631,6 +633,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![make_empty_line_node(p1, 0.0, 0..1)],
                 }),

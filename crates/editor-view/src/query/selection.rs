@@ -42,7 +42,8 @@ pub fn selection_rects(
 }
 
 pub(super) fn has_visual_boundary(style: &crate::style::BoxStyle) -> bool {
-    style.padding != EdgeInsets::ZERO || style.border != EdgeInsets::ZERO
+    style.is_visual_container
+        && (style.padding != EdgeInsets::ZERO || style.border != EdgeInsets::ZERO)
 }
 
 fn visit_node(
@@ -176,32 +177,47 @@ fn visit_box(
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
 ) {
-    let from_in_box = from.node_id == bx.node_id;
-    let to_in_box = to.node_id == bx.node_id;
+    // Box-level phase transitions fire only for endpoints anchored at a
+    // structural container boundary — positions like `(bullet_list, 0)` that
+    // no line owns. When a descendant line owns the endpoint, visit_line is
+    // responsible for the transition; firing here too would double-count and
+    // break collapsed selections that sit on the same physical boundary
+    // expressed at different container levels (e.g. end of text `t` vs.
+    // offset 0 of the following sibling container).
+    let from_at_box_level = from.node_id == bx.node_id && from_owner.is_none();
+    let to_at_box_level = to.node_id == bx.node_id && to_owner.is_none();
 
-    // A container is "fully selected" only when the selection spans across it
-    // from an ancestor's perspective — i.e. phase is already Inside on entry
-    // and remains Inside after visiting all children. If phase transitions
-    // Before→Inside or Inside→After inside this box, then an anchor lives in
-    // a descendant and the box itself is only partially covered.
+    // `entry_phase` is captured before any of this box's own boundary
+    // transitions fire. A container is "fully selected" only when phase was
+    // Inside on entry and remains Inside on exit — that is, the selection
+    // envelopes the box from an ancestor's perspective rather than anchoring
+    // inside it.
     let entry_phase = *phase;
     let rects_before = rects.len();
     let mut has_content_child = false;
     let mut content_idx = 0usize;
 
+    // Position 0 (box entry). Handles `from.offset == 0` and `to.offset == 0`.
+    if from_at_box_level && *phase == Phase::Before && from.offset == 0 {
+        *phase = Phase::Inside;
+    }
+    if to_at_box_level && *phase == Phase::Inside && to.offset == 0 {
+        *phase = Phase::After;
+    }
+
     for child in &bx.children {
         let is_spacing = matches!(child.content, LayoutContent::Spacing(_));
-
-        if !is_spacing && from_in_box && *phase == Phase::Before && content_idx == from.offset {
-            *phase = Phase::Inside;
-        }
 
         visit_node(child, from, to, from_owner, to_owner, phase, rects, pages);
 
         if !is_spacing {
             has_content_child = true;
             content_idx += 1;
-            if to_in_box && *phase == Phase::Inside && content_idx == to.offset {
+            // Position `content_idx` — the gap between this child and the next.
+            if from_at_box_level && *phase == Phase::Before && content_idx == from.offset {
+                *phase = Phase::Inside;
+            }
+            if to_at_box_level && *phase == Phase::Inside && content_idx == to.offset {
                 *phase = Phase::After;
             }
         }
@@ -235,7 +251,7 @@ fn visit_box(
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use editor_macros::{doc, state};
     use editor_model::NodeId;
     use editor_state::{Position, Selection};
 
@@ -505,6 +521,101 @@ mod tests {
             pages.len() >= 2,
             "fully-selected box spanning pages must emit rects on every overlapped page; pages={:?}, rects={:?}",
             pages,
+            rects,
+        );
+    }
+
+    #[test]
+    fn nested_bullet_lists_with_external_endpoint_emit_text_rects() {
+        // Selection runs from inside the outer list_item's paragraph down through
+        // nested list_items and ends at the start of a sibling paragraph outside
+        // the bullet_list. The middle and innermost list_items are enveloped by
+        // the selection (entry_phase=Inside on entry, phase=Inside on exit). Their
+        // padding.left is structural — it reserves the bullet marker slot, not a
+        // visual envelope. Selection rendering must NOT collapse them into block
+        // rects covering the marker slot. Each line emits its own text rect.
+        let (doc, t1, p1) = doc! {
+            root {
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            t1: text("a")
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text("b")
+                                }
+                                bullet_list {
+                                    list_item {
+                                        paragraph {
+                                            text("c")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                p1: paragraph {}
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(t1, 0), Position::new(p1, 0));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(
+            rects.len(),
+            4,
+            "expected text rects for a/b/c plus an empty-line placeholder for p1, got {:?}",
+            rects,
+        );
+        assert!(
+            rects.iter().all(|r| r.meta == SelectionRectKind::Text),
+            "list_item's structural padding must not promote rects to Block kind: {:?}",
+            rects,
+        );
+    }
+
+    #[test]
+    fn selection_ending_at_offset_zero_of_container_does_not_leak_to_following_siblings() {
+        // `to` lands at offset 0 of a container box (`bl1`) — i.e. immediately
+        // before its first child. The selection's `from` sits at the end of `t1`,
+        // which is the same physical boundary at a different level. Nothing
+        // should be drawn: neither inside `bl1` nor in the bottom paragraph
+        // that follows the outer bullet_list.
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph {
+                                t1: text("a")
+                            }
+                            bl1: bullet_list {
+                                list_item {
+                                    paragraph {
+                                        text("b")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1, <) -> (bl1, 0, >)
+        };
+        let view = layout(&state.doc);
+        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(
+            rects.len(),
+            0,
+            "selection collapsed at the boundary just outside t1 / just inside bl1 must emit no rects, got {:?}",
             rects,
         );
     }

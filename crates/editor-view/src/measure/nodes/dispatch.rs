@@ -55,6 +55,7 @@ pub(crate) fn measure_node(
                 border: EdgeInsets::ZERO,
                 scope: false,
                 alignment: Alignment::Start,
+                is_visual_container: true,
             },
         ),
     }

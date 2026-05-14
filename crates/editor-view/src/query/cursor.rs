@@ -107,6 +107,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
@@ -179,6 +180,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(20.0, 0.0, 200.0, 20.0),
@@ -226,6 +228,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
@@ -282,6 +285,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
@@ -328,6 +332,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 30.0),
@@ -388,6 +393,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(10.0, 5.0, 150.0, 40.0),
@@ -437,6 +443,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![
                         LayoutNode {
@@ -503,6 +510,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
+                        is_visual_container: true,
                     },
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),

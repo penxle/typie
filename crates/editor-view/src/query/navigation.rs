@@ -443,6 +443,7 @@ mod tests {
                     alignment: Alignment::Start,
                     scope,
                     decorations: vec![],
+                    is_visual_container: true,
                 },
                 children,
             }),

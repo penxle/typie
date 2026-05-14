@@ -70,6 +70,9 @@ pub fn measure_list_item(
             border: EdgeInsets::ZERO,
             scope: false,
             alignment: Alignment::Start,
+            // padding.left is the bullet marker slot, not a visual envelope —
+            // selection rendering must not include it in a block rect.
+            is_visual_container: false,
         },
     );
 
