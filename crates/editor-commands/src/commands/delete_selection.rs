@@ -465,7 +465,8 @@ fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: u
         }
     }
 
-    Selection::collapsed(Position::new(container_id, offset))
+    // Clamp to children.len() in case the offset became stale after child removals.
+    Selection::collapsed(Position::new(container_id, offset.min(children.len())))
 }
 
 /// After deletion, merge boundary textblocks and clean up containers.
@@ -486,6 +487,17 @@ fn merge_after_delete(
     }
 
     let to_tb_parent = doc.node(to_tb).and_then(|n| n.parent()).map(|p| p.id());
+
+    // PageBreak is schema-restricted to the trailing child of a paragraph.
+    // Merging into a paragraph whose last child is a PageBreak would place
+    // that PageBreak in the middle of the resulting child list.
+    if let Some(target) = doc.node(from_tb)
+        && let Some(last) = target.last_child()
+        && matches!(last.node(), Node::PageBreak(_))
+    {
+        let last_id = last.id();
+        tr.remove_subtree(last_id)?;
+    }
 
     tr.merge_node(to_tb, from_tb)?;
 
@@ -1302,6 +1314,34 @@ mod tests {
                 p1: paragraph {}
             } }
             selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn cross_paragraph_range_delete_drops_trailing_page_break() {
+        // `from` is the paragraph-anchored cursor at offset 2 (past p1's
+        // trailing page_break), so delete_from's sibling sweep would leave
+        // the marker in place. Without the fix, merging p2 into p1 produces
+        // `[text("a"), page_break, text("c")]`, which violates the
+        // trailing-only PageBreak rule.
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") page_break }
+                    paragraph { t2: text("bc") }
+                }
+            }
+            selection: (p1, 2) -> (t2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("ac") }
+                }
+            }
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }

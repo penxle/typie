@@ -1,5 +1,5 @@
 use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
-use editor_state::{NodeRefCursorExt, Selection};
+use editor_state::{NodeRefCursorExt, Position, Selection};
 use editor_transaction::{Transaction, compact, dissolve, prune};
 
 use crate::{CommandError, CommandResult};
@@ -64,11 +64,64 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         .ok_or(CommandError::NoParent(source_paragraph_id))?
         .id();
 
-    let cursor_selection = tr.selection();
-    let cursor_on_empty_paragraph =
-        matches!(node.node(), Node::Paragraph(_)) && node.entry().children.is_empty();
+    let raw_cursor_selection = tr.selection();
+    // If the target paragraph carries a trailing PageBreak, the pre-batch
+    // cleanup will strip it. Adjust the captured selection now so the
+    // post-batch restore sees a still-valid offset.
+    let (target_trailing_page_break, target_children_count) = {
+        let doc = tr.doc();
+        let target = doc.node(paragraph_id);
+        let last_is_pb = target
+            .and_then(|t| t.last_child())
+            .is_some_and(|c| matches!(c.node(), Node::PageBreak(_)));
+        let count = target.map(|t| t.entry().children.len()).unwrap_or(0);
+        (last_is_pb, count)
+    };
+    let cursor_selection = if target_trailing_page_break {
+        let new_target_count = target_children_count - 1;
+        let adjust = |p: Position| {
+            if p.node_id == paragraph_id && p.offset > new_target_count {
+                Position {
+                    node_id: p.node_id,
+                    offset: new_target_count,
+                    affinity: p.affinity,
+                }
+            } else {
+                p
+            }
+        };
+        Selection::new(
+            adjust(raw_cursor_selection.anchor),
+            adjust(raw_cursor_selection.head),
+        )
+    } else {
+        raw_cursor_selection
+    };
+    let cursor_on_empty_paragraph = matches!(node.node(), Node::Paragraph(_)) && {
+        // After the planned PageBreak removal the paragraph is empty iff its
+        // only child was the marker (or it was already empty).
+        let count = node.entry().children.len();
+        let last_is_page_break = node
+            .last_child()
+            .is_some_and(|c| matches!(c.node(), Node::PageBreak(_)));
+        let post_cleanup_count = if last_is_page_break { count - 1 } else { count };
+        post_cleanup_count == 0
+    };
 
     tr.batch::<_, CommandError>(|tr| {
+        // Strip a trailing PageBreak from the target before merging.
+        // PageBreak is schema-restricted to the trailing slot; once the
+        // source's children are appended the marker would land in the
+        // middle and merge_node would reject the result.
+        let doc = tr.doc();
+        if let Some(target) = doc.node(paragraph_id)
+            && let Some(last) = target.last_child()
+            && matches!(last.node(), Node::PageBreak(_))
+        {
+            let last_id = last.id();
+            tr.remove_subtree(last_id)?;
+        }
+
         tr.merge_node(source_paragraph_id, paragraph_id)?;
 
         let doc = tr.doc();
@@ -296,6 +349,65 @@ mod tests {
                 }
             }
             selection: (t1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn trailing_page_break_dropped_during_lift() {
+        // Without the inline cleanup the lift's merge places PageBreak in the
+        // middle of p1's children and merge_node would reject the result.
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") page_break }
+                    bullet_list {
+                        list_item {
+                            paragraph { text("b") }
+                        }
+                    }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_paragraph_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("ab") }
+                }
+            }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn page_break_only_paragraph_lifts_into_merged_text() {
+        // p1 has only a page_break, so the recomputed `cursor_on_empty_paragraph`
+        // branch fires after cleanup: cursor restores via `first_cursor_position`
+        // on the merged paragraph, landing at the start of the source's text.
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { page_break }
+                    bullet_list {
+                        list_item {
+                            paragraph { t_b: text("b") }
+                        }
+                    }
+                }
+            }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_paragraph_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { t_b: text("b") }
+                }
+            }
+            selection: (t_b, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

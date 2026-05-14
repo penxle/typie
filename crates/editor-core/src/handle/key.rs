@@ -37,6 +37,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_text_backward(&resource),
                     commands::delete_node_backward(),
                     commands::select_node_backward(),
+                    commands::delete_page_break_backward(),
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
                     commands::lift_first_paragraph(),
@@ -50,6 +51,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_text_forward(&resource),
                     commands::delete_node_forward(),
                     commands::select_node_forward(),
+                    commands::delete_page_break_forward(),
                     commands::join_paragraph_forward(),
                     commands::lift_paragraph_forward(),
                     commands::delete_empty_paragraph_forward(),
@@ -222,6 +224,106 @@ mod tests {
                 paragraph {}
             } }
             selection: (t1, 7)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_at_start_of_paragraph_after_page_break_paragraph_removes_marker() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { page_break }
+                    paragraph { t1: text("1234") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph {}
+                    paragraph { t1: text("1234") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn two_backspaces_merge_page_break_paragraph_into_text_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { page_break }
+                    paragraph { t1: text("1234") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("1234") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_at_paragraph_end_with_trailing_page_break_removes_marker() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") page_break }
+                    paragraph { text("b") }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") }
+                    paragraph { text("b") }
+                }
+            }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn two_deletes_merge_text_paragraph_with_page_break_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") page_break }
+                    paragraph { text("b") }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("ab") }
+                }
+            }
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
