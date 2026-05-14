@@ -41,10 +41,10 @@ pub fn cursor_metrics(
             let (cursor_ascent, cursor_descent) =
                 metrics_override.unwrap_or((l.cursor_ascent, l.cursor_descent));
             let cursor_height = cursor_ascent + cursor_descent;
-            let leading = (line_node.rect.height - cursor_height).max(0.0);
+            // Anchor to baseline so mixed-font lines keep the caret aligned with the run's glyphs.
             let caret = Rect::from_xywh(
                 line_node.rect.x + x,
-                line_node.rect.y + leading / 2.0 - y_start,
+                line_node.rect.y + l.baseline - cursor_ascent - y_start,
                 1.0,
                 cursor_height,
             );
@@ -141,10 +141,10 @@ mod tests {
             page_idx, caret, ..
         } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
-        // Cursor is centered in the line box: leading = 20 - (14+4) = 2, leading/2 = 1.
+        // Caret anchored to baseline: caret.y = baseline(16) - cursor_ascent(14) = 2.
         assert_eq!(page_idx, 0);
         assert_eq!(caret.x, 0.0);
-        assert_eq!(caret.y, 1.0);
+        assert_eq!(caret.y, 2.0);
         assert_eq!(caret.height, 18.0);
     }
 
@@ -262,9 +262,8 @@ mod tests {
         } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
         assert_eq!(page_idx, 1);
-        // y is relative to page start: 500 + leading/2 - 400 = 500 + 1 - 400 = 101
-        // where leading = line_height(20) - cursor_height(14+4) = 2.
-        assert_eq!(caret.y, 101.0);
+        // Page-local baseline-anchored y: line.y(500) + baseline(16) - cursor_ascent(14) - page_start(400) = 102.
+        assert_eq!(caret.y, 102.0);
     }
 
     #[test]
@@ -314,7 +313,7 @@ mod tests {
 
     #[test]
     fn cursor_metrics_line_covers_full_line_box() {
-        // line-height=30, cursor_height=18 → leading=12 → caret.y=6
+        // line-height=30, baseline=22, cursor_ascent=14 → caret.y = 22 - 14 = 8.
         let id = NodeId::new();
         let tree = LayoutTree {
             root: LayoutNode {
@@ -360,8 +359,8 @@ mod tests {
         } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
         assert_eq!(page_idx, 0);
-        // caret: cursor_height(18)를 라인 박스(30) 중앙에 배치 → leading/2 = 6
-        assert_eq!(caret.y, 6.0);
+        // caret: baseline(22) - cursor_ascent(14) = 8 (top), height = 18.
+        assert_eq!(caret.y, 8.0);
         assert_eq!(caret.height, 18.0);
         // line: line_node.rect 전체
         assert_eq!(line.x, 0.0);

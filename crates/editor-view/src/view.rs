@@ -373,6 +373,43 @@ mod tests {
     }
 
     #[test]
+    fn cursor_on_small_text_in_mixed_font_line_aligns_to_baseline() {
+        let (doc, small, big) = doc! {
+            root {
+                paragraph {
+                    small: text("a")
+                    big: text("A") [font_size(4800)]
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let small_caret = view
+            .cursor_metrics(&doc, &Position::new(small, 0))
+            .unwrap()
+            .caret;
+        let big_caret = view
+            .cursor_metrics(&doc, &Position::new(big, 0))
+            .unwrap()
+            .caret;
+
+        assert!(
+            big_caret.height > small_caret.height,
+            "big caret height {} should exceed small caret height {}",
+            big_caret.height,
+            small_caret.height,
+        );
+        let small_bottom = small_caret.y + small_caret.height;
+        let big_bottom = big_caret.y + big_caret.height;
+        assert!(
+            (small_bottom - big_bottom).abs() < big_caret.height * 0.25,
+            "small caret bottom {small_bottom} should be baseline-aligned with big caret \
+             bottom {big_bottom}",
+        );
+    }
+
+    #[test]
     fn cursor_metrics_pending_grows_line_on_empty_paragraph() {
         use crate::view_state::PendingStyle;
         use editor_model::Modifier;
