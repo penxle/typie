@@ -24,7 +24,8 @@ impl<'a> BatchedState<'a> {
     }
 
     pub fn set_selection(&mut self, selection: Selection) {
-        self.inner.selection = selection;
+        let normalized = selection.normalize(&self.inner.doc).unwrap_or(selection);
+        self.inner.selection = normalized;
     }
 
     pub fn set_pending_modifiers(&mut self, pending: PendingModifiers) {
@@ -623,5 +624,54 @@ mod tests {
              changesets into push candidates (got {} cs)",
             echoed.len(),
         );
+    }
+
+    #[test]
+    fn set_selection_canonicalizes_text_text_boundary_input() {
+        use crate::Affinity;
+        use editor_macros::state;
+
+        let (state, ta, tb) = state! {
+            doc {
+                root { paragraph {
+                    ta: text("Hello")
+                    tb: text("World")
+                } }
+            }
+            selection: (ta, 0)
+        };
+
+        let input = Selection::collapsed(Position {
+            node_id: ta,
+            offset: 5,
+            affinity: Affinity::Downstream,
+        });
+        let result: Result<State, StateError> = state.batch(|b| {
+            b.set_selection(input);
+            Ok(())
+        });
+        let next = result.unwrap();
+        assert_eq!(next.selection.anchor.node_id, tb);
+        assert_eq!(next.selection.anchor.offset, 0);
+        assert_eq!(next.selection.anchor.affinity, Affinity::Downstream);
+        assert!(next.selection.is_collapsed());
+    }
+
+    #[test]
+    fn set_selection_invalid_input_falls_back_to_raw() {
+        use editor_macros::state;
+
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("hi") } } }
+            selection: (t, 0)
+        };
+
+        let bad = Selection::collapsed(Position::new(t, 99));
+        let result: Result<State, StateError> = state.batch(|b| {
+            b.set_selection(bad);
+            Ok(())
+        });
+        let next = result.unwrap();
+        assert_eq!(next.selection.anchor.offset, 99);
     }
 }

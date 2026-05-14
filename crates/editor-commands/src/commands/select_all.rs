@@ -22,7 +22,7 @@ pub fn select_all(tr: &mut Transaction) -> CommandResult {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::Position;
+    use editor_state::{Affinity, Position};
 
     use super::*;
     use crate::test_utils::*;
@@ -38,7 +38,14 @@ mod tests {
 
         assert_eq!(
             actual.selection,
-            Selection::new(Position::new(t, 0), Position::new(t, 5))
+            Selection::new(
+                Position::new(t, 0),
+                Position {
+                    node_id: t,
+                    offset: 5,
+                    affinity: Affinity::Upstream,
+                },
+            )
         );
     }
 
@@ -58,7 +65,14 @@ mod tests {
         let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
         assert_eq!(actual.selection.anchor, Position::new(t1, 0));
-        assert_eq!(actual.selection.head, Position::new(t3, 1));
+        assert_eq!(
+            actual.selection.head,
+            Position {
+                node_id: t3,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
     }
 
     #[test]
@@ -71,7 +85,14 @@ mod tests {
         let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
         assert_eq!(actual.selection.anchor, Position::new(r, 0));
-        assert_eq!(actual.selection.head, Position::new(r, 3));
+        assert_eq!(
+            actual.selection.head,
+            Position {
+                node_id: r,
+                offset: 3,
+                affinity: Affinity::Upstream,
+            },
+        );
     }
 
     #[test]

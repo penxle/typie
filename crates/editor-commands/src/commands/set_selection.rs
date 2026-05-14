@@ -11,7 +11,7 @@ pub fn set_selection(tr: &mut Transaction, selection: Selection) -> CommandResul
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::Position;
+    use editor_state::{Affinity, Position};
 
     use super::*;
     use crate::test_utils::*;
@@ -39,6 +39,16 @@ mod tests {
         let target = Selection::new(Position::new(t, 2), Position::new(t, 8));
         let (actual, ..) = transact!(state, |tr| set_selection(&mut tr, target));
 
-        assert_eq!(actual.selection, target);
+        assert_eq!(
+            actual.selection,
+            Selection::new(
+                Position::new(t, 2),
+                Position {
+                    node_id: t,
+                    offset: 8,
+                    affinity: Affinity::Upstream,
+                },
+            ),
+        );
     }
 }

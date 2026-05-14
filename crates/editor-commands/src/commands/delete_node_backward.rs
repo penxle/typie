@@ -133,12 +133,12 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    p1: paragraph {
+                    paragraph {
                         t1: text("Hello")
                     }
                 }
             }
-            selection: (p1, 1)
+            selection: (t1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }

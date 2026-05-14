@@ -8,6 +8,7 @@ mod cursor_position;
 mod error;
 mod flat;
 mod modifier_resolution;
+mod normalize;
 mod pending_modifier;
 mod position;
 mod resolved_position;

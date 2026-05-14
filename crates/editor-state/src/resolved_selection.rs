@@ -1,5 +1,4 @@
 use editor_model::{Doc, Node, NodeRef};
-use std::marker::PhantomData;
 
 use crate::position::Position;
 use crate::resolved_position::ResolvedPosition;
@@ -20,7 +19,7 @@ use crate::selection::Selection;
 /// (node_id, offset, affinity) — same semantics as
 /// [`Selection::is_collapsed`](crate::Selection::is_collapsed).
 pub struct ResolvedSelection<'a> {
-    _marker: PhantomData<&'a Doc>,
+    doc: &'a Doc,
     anchor: ResolvedPosition<'a>,
     head: ResolvedPosition<'a>,
 }
@@ -29,11 +28,11 @@ impl<'a> ResolvedSelection<'a> {
     pub(crate) fn resolve(doc: &'a Doc, selection: Selection) -> Option<Self> {
         let anchor = ResolvedPosition::resolve(doc, selection.anchor)?;
         let head = ResolvedPosition::resolve(doc, selection.head)?;
-        Some(Self {
-            _marker: PhantomData,
-            anchor,
-            head,
-        })
+        Some(Self { doc, anchor, head })
+    }
+
+    pub fn doc(&self) -> &'a Doc {
+        self.doc
     }
 
     pub fn anchor(&self) -> &ResolvedPosition<'a> {
@@ -73,7 +72,7 @@ impl<'a> ResolvedSelection<'a> {
     /// Walks the two ancestor chains from the root downward and returns the last node
     /// they share. Both endpoints always share at least the document root.
     pub fn common_ancestor(&self) -> NodeRef<'a> {
-        let doc = self.anchor.doc();
+        let doc = self.doc;
         let anchor_node = doc.node(self.anchor.node_id()).expect("anchor node exists");
         let head_node = doc.node(self.head.node_id()).expect("head node exists");
 

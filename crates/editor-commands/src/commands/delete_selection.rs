@@ -1012,7 +1012,7 @@ mod tests {
                 t1: text("qw")
                 t2: text("cv")
             } } }
-            selection: (t1, 2)
+            selection: (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -1461,10 +1461,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    p1: paragraph { text("ac") }
+                    paragraph { t1: text("ac") }
                 }
             }
-            selection: (p1, 1)
+            selection: (t1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
