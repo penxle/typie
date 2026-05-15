@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
@@ -9,8 +10,33 @@
   import UndoIcon from '~icons/lucide/undo';
   import { values } from '$lib/editor/values';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { graphql } from '$mearie';
   import ToolbarButton from './ToolbarButton.svelte';
   import type { LayoutMode, Message, Modifier, ModifierType } from '@typie/editor-ffi/browser';
+  import type { BottomToolbar_document$key } from '$mearie';
+
+  type Props = {
+    document$key: BottomToolbar_document$key;
+  };
+
+  let { document$key }: Props = $props();
+
+  const document = createFragment(
+    graphql(`
+      fragment BottomToolbar_document on Document {
+        id
+        selectableFontFamilies: fontFamilies(sources: [DEFAULT, USER]) {
+          id
+          familyName
+          displayName
+          state
+        }
+      }
+    `),
+    () => document$key,
+  );
+
+  const fontFamilies = $derived(document.data.selectableFontFamilies.filter((f) => f.state === 'ACTIVE'));
 
   const ctx = getEditorContext();
 
@@ -88,16 +114,23 @@
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'font_size', value: Number(e.currentTarget.value) })}>
-    <option disabled selected value="">글꼴 크기</option>
-    {#each values.fontSize as { label, value } (value)}
-      <option {value}>{label}</option>
+  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'font_family', value: e.currentTarget.value })}>
+    <option disabled selected value="">글꼴</option>
+    {#each fontFamilies as f (f.id)}
+      <option value={f.familyName}>{f.displayName}</option>
     {/each}
   </select>
 
   <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'font_weight', value: Number(e.currentTarget.value) })}>
     <option disabled selected value="">글꼴 굵기</option>
     {#each values.fontWeight as { label, value } (value)}
+      <option {value}>{label}</option>
+    {/each}
+  </select>
+
+  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'font_size', value: Number(e.currentTarget.value) })}>
+    <option disabled selected value="">글꼴 크기</option>
+    {#each values.fontSize as { label, value } (value)}
       <option {value}>{label}</option>
     {/each}
   </select>

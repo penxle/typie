@@ -29,6 +29,7 @@
           updatedAt
         }
         ...Editor_document
+        ...BottomToolbar_document
       }
     `),
     () => document$key,
@@ -253,7 +254,7 @@
     </header>
 
     <TopToolbar />
-    <BottomToolbar />
+    <BottomToolbar document$key={document.data} />
     {#if graph}
       <EditorComponent style={css.raw({ flex: '1' })} document$key={document.data} {graph} />
     {/if}
