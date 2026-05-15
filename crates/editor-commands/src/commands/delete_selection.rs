@@ -18,6 +18,14 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
         .resolve(&doc)
         .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
 
+    // A cell-rect is a non-collapsed selection over TableRow boundaries.
+    // Generic range-delete here would remove TableCell children and corrupt
+    // the table. Refuse (no-op); clearing cell *contents* is a future cell
+    // command, out of scope for the representation layer.
+    if resolved.as_cell_rect().is_some() {
+        return Ok(false);
+    }
+
     let from = Position::from(resolved.from());
     let to = Position::from(resolved.to());
 
@@ -1467,5 +1475,73 @@ mod tests {
             selection: (t1, 2)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_selection_noops_on_1x1_cell_rect() {
+        let (state, _, c00, c01) = state! {
+            doc { root { table { tr0: table_row {
+                c00: table_cell { paragraph { text("a") } }
+                c01: table_cell { paragraph { text("b") } }
+            } } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&state.doc, c00, c00).unwrap();
+        let initial = editor_state::State {
+            selection: sel,
+            ..state
+        };
+        let (after, ..) = transact_fail!(initial, |tr| delete_selection(&mut tr));
+        // Both cells still present — the table was not corrupted.
+        assert!(after.doc.node(c00).is_some());
+        assert!(after.doc.node(c01).is_some());
+    }
+
+    #[test]
+    fn delete_selection_noops_on_1xn_cell_rect() {
+        let (state, _, c00, c01) = state! {
+            doc { root { table { tr0: table_row {
+                c00: table_cell { paragraph { text("a") } }
+                c01: table_cell { paragraph { text("b") } }
+            } } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&state.doc, c00, c01).unwrap();
+        let initial = editor_state::State {
+            selection: sel,
+            ..state
+        };
+        let (after, ..) = transact_fail!(initial, |tr| delete_selection(&mut tr));
+        assert!(after.doc.node(c00).is_some());
+        assert!(after.doc.node(c01).is_some());
+    }
+
+    #[test]
+    fn delete_selection_noops_on_mxn_cell_rect() {
+        let (state, _, c00, c01, _, c10, c11) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        // M×N cell-rect: endpoints in DIFFERENT TableRows → absent the guard
+        // this hits the cross-node delete branch. Guard must no-op it.
+        let sel = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
+        let initial = editor_state::State {
+            selection: sel,
+            ..state
+        };
+        let (after, ..) = transact_fail!(initial, |tr| delete_selection(&mut tr));
+        assert!(after.doc.node(c00).is_some());
+        assert!(after.doc.node(c01).is_some());
+        assert!(after.doc.node(c10).is_some());
+        assert!(after.doc.node(c11).is_some());
     }
 }
