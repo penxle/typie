@@ -12,7 +12,7 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { LayoutMode, Message, Modifier, ModifierType } from '@typie/editor-ffi/browser';
+  import type { LayoutMode, Message, Modifier, ModifierType, Tri } from '@typie/editor-ffi/browser';
   import type { BottomToolbar_document$key } from '$mearie';
 
   type Props = {
@@ -40,7 +40,80 @@
 
   const ctx = getEditorContext();
 
-  const boldState = $derived(ctx.editor?.modifierState?.bold);
+  const MIXED = '__mixed__';
+
+  type ToggleState = { active: boolean; indeterminate: boolean };
+
+  const toggleState = (tri: Tri<undefined> | undefined): ToggleState => {
+    if (tri?.type === 'uniform') return { active: true, indeterminate: false };
+    if (tri?.type === 'mixed') return { active: false, indeterminate: true };
+    return { active: false, indeterminate: false };
+  };
+
+  type SelectState =
+    | { kind: 'placeholder'; selected: string }
+    | { kind: 'mixed'; selected: string }
+    | { kind: 'preset'; selected: string | number }
+    | { kind: 'orphan'; selected: string | number; scalar: string | number };
+
+  // `<select value>` matches options via Object.is against their typed value, with no
+  // string coercion. Numeric `<option>` values must be compared as numbers, so `selected`
+  // carries the raw scalar; only the string placeholder/mixed sentinels stay strings.
+  const selectState = (tri: Tri<{ value: string | number }> | undefined, presets: readonly (string | number)[]): SelectState => {
+    if (tri?.type !== 'uniform') {
+      return tri?.type === 'mixed' ? { kind: 'mixed', selected: MIXED } : { kind: 'placeholder', selected: '' };
+    }
+    const scalar = tri.value.value;
+    return presets.includes(scalar) ? { kind: 'preset', selected: scalar } : { kind: 'orphan', selected: scalar, scalar };
+  };
+
+  const boldS = $derived(toggleState(ctx.editor?.modifierState?.bold));
+  const italicS = $derived(toggleState(ctx.editor?.modifierState?.italic));
+  const strikethroughS = $derived(toggleState(ctx.editor?.modifierState?.strikethrough));
+  const underlineS = $derived(toggleState(ctx.editor?.modifierState?.underline));
+
+  const fontFamilyS = $derived(
+    selectState(
+      ctx.editor?.modifierState?.font_family,
+      fontFamilies.map((f) => f.familyName),
+    ),
+  );
+  const fontWeightS = $derived(
+    selectState(
+      ctx.editor?.modifierState?.font_weight,
+      values.fontWeight.map((v) => v.value),
+    ),
+  );
+  const fontSizeS = $derived(
+    selectState(
+      ctx.editor?.modifierState?.font_size,
+      values.fontSize.map((v) => v.value),
+    ),
+  );
+  const textColorS = $derived(
+    selectState(
+      ctx.editor?.modifierState?.text_color,
+      values.textColor.map((v) => v.value),
+    ),
+  );
+  const backgroundColorS = $derived(
+    selectState(
+      ctx.editor?.modifierState?.background_color,
+      values.textBackgroundColor.map((v) => v.value),
+    ),
+  );
+  const lineHeightS = $derived(
+    selectState(
+      ctx.editor?.modifierState?.line_height,
+      values.lineHeight.map((v) => v.value),
+    ),
+  );
+  const letterSpacingS = $derived(
+    selectState(
+      ctx.editor?.modifierState?.letter_spacing,
+      values.letterSpacing.map((v) => v.value),
+    ),
+  );
 
   const enqueue = (message: Message) => {
     ctx.editor?.enqueue(message);
@@ -102,34 +175,81 @@
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
   <ToolbarButton
-    active={boldState?.type === 'uniform'}
+    active={boldS.active}
     icon={BoldIcon}
-    indeterminate={boldState?.type === 'mixed'}
+    indeterminate={boldS.indeterminate}
     label="굵게"
     onclick={() => toggleModifier('bold')}
   />
-  <ToolbarButton icon={ItalicIcon} label="기울임" onclick={() => toggleModifier('italic')} />
-  <ToolbarButton icon={StrikethroughIcon} label="취소선" onclick={() => toggleModifier('strikethrough')} />
-  <ToolbarButton icon={UnderlineIcon} label="밑줄" onclick={() => toggleModifier('underline')} />
+  <ToolbarButton
+    active={italicS.active}
+    icon={ItalicIcon}
+    indeterminate={italicS.indeterminate}
+    label="기울임"
+    onclick={() => toggleModifier('italic')}
+  />
+  <ToolbarButton
+    active={strikethroughS.active}
+    icon={StrikethroughIcon}
+    indeterminate={strikethroughS.indeterminate}
+    label="취소선"
+    onclick={() => toggleModifier('strikethrough')}
+  />
+  <ToolbarButton
+    active={underlineS.active}
+    icon={UnderlineIcon}
+    indeterminate={underlineS.indeterminate}
+    label="밑줄"
+    onclick={() => toggleModifier('underline')}
+  />
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'font_family', value: e.currentTarget.value })}>
-    <option disabled selected value="">글꼴</option>
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setModifier({ type: 'font_family', value: e.currentTarget.value })}
+    value={fontFamilyS.selected}
+  >
+    <option disabled value="">글꼴</option>
+    {#if fontFamilyS.kind === 'mixed'}
+      <option disabled value={MIXED}>(여러 값)</option>
+    {:else if fontFamilyS.kind === 'orphan'}
+      <option value={fontFamilyS.selected}>
+        {document.data.selectableFontFamilies.find((f) => f.familyName === fontFamilyS.selected)?.displayName ?? fontFamilyS.selected}
+      </option>
+    {/if}
     {#each fontFamilies as f (f.id)}
       <option value={f.familyName}>{f.displayName}</option>
     {/each}
   </select>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'font_weight', value: Number(e.currentTarget.value) })}>
-    <option disabled selected value="">글꼴 굵기</option>
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setModifier({ type: 'font_weight', value: Number(e.currentTarget.value) })}
+    value={fontWeightS.selected}
+  >
+    <option disabled value="">글꼴 굵기</option>
+    {#if fontWeightS.kind === 'mixed'}
+      <option disabled value={MIXED}>(여러 값)</option>
+    {:else if fontWeightS.kind === 'orphan'}
+      <option value={fontWeightS.selected}>{fontWeightS.scalar}</option>
+    {/if}
     {#each values.fontWeight as { label, value } (value)}
       <option {value}>{label}</option>
     {/each}
   </select>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'font_size', value: Number(e.currentTarget.value) })}>
-    <option disabled selected value="">글꼴 크기</option>
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setModifier({ type: 'font_size', value: Number(e.currentTarget.value) })}
+    value={fontSizeS.selected}
+  >
+    <option disabled value="">글꼴 크기</option>
+    {#if fontSizeS.kind === 'mixed'}
+      <option disabled value={MIXED}>(여러 값)</option>
+    {:else if fontSizeS.kind === 'orphan'}
+      <option value={fontSizeS.selected}>{Number(fontSizeS.scalar) / 100}</option>
+    {/if}
     {#each values.fontSize as { label, value } (value)}
       <option {value}>{label}</option>
     {/each}
@@ -137,15 +257,33 @@
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'text_color', value: e.currentTarget.value })}>
-    <option disabled selected value="">글씨 색</option>
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setModifier({ type: 'text_color', value: e.currentTarget.value })}
+    value={textColorS.selected}
+  >
+    <option disabled value="">글씨 색</option>
+    {#if textColorS.kind === 'mixed'}
+      <option disabled value={MIXED}>(여러 값)</option>
+    {:else if textColorS.kind === 'orphan'}
+      <option value={textColorS.selected}>{textColorS.scalar}</option>
+    {/if}
     {#each values.textColor as { label, value } (value)}
       <option {value}>{label}</option>
     {/each}
   </select>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'background_color', value: e.currentTarget.value })}>
-    <option disabled selected value="">배경색</option>
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setModifier({ type: 'background_color', value: e.currentTarget.value })}
+    value={backgroundColorS.selected}
+  >
+    <option disabled value="">배경색</option>
+    {#if backgroundColorS.kind === 'mixed'}
+      <option disabled value={MIXED}>(여러 값)</option>
+    {:else if backgroundColorS.kind === 'orphan'}
+      <option value={backgroundColorS.selected}>{backgroundColorS.scalar}</option>
+    {/if}
     {#each values.textBackgroundColor as { label, value } (value)}
       <option {value}>{label}</option>
     {/each}
@@ -153,15 +291,33 @@
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'line_height', value: Number(e.currentTarget.value) })}>
-    <option disabled selected value="">행간</option>
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setModifier({ type: 'line_height', value: Number(e.currentTarget.value) })}
+    value={lineHeightS.selected}
+  >
+    <option disabled value="">행간</option>
+    {#if lineHeightS.kind === 'mixed'}
+      <option disabled value={MIXED}>(여러 값)</option>
+    {:else if lineHeightS.kind === 'orphan'}
+      <option value={lineHeightS.selected}>{lineHeightS.scalar}%</option>
+    {/if}
     {#each values.lineHeight as { label, value } (value)}
       <option {value}>{label}</option>
     {/each}
   </select>
 
-  <select class={css(selectStyle)} onchange={(e) => setModifier({ type: 'letter_spacing', value: Number(e.currentTarget.value) })}>
-    <option disabled selected value="">자간</option>
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setModifier({ type: 'letter_spacing', value: Number(e.currentTarget.value) })}
+    value={letterSpacingS.selected}
+  >
+    <option disabled value="">자간</option>
+    {#if letterSpacingS.kind === 'mixed'}
+      <option disabled value={MIXED}>(여러 값)</option>
+    {:else if letterSpacingS.kind === 'orphan'}
+      <option value={letterSpacingS.selected}>{letterSpacingS.scalar}%</option>
+    {/if}
     {#each values.letterSpacing as { label, value } (value)}
       <option {value}>{label}</option>
     {/each}
