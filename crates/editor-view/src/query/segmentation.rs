@@ -214,12 +214,23 @@ fn next_word_boundary(
     segmenter: &WordSegmenter,
 ) -> Option<usize> {
     let text = line_text(line);
-    let byte_idx = text.nth_char_byte_offset(char_index);
-    segmenter
+    let boundaries: Vec<_> = segmenter
         .as_borrowed()
         .segment_str(&text)
-        .find(|&b| b > byte_idx)
         .map(|b| text.nth_byte_char_offset(b))
+        .collect();
+    if boundaries.len() < 2 {
+        return None;
+    }
+
+    let idx = boundaries.partition_point(|&b| b <= char_index).max(1);
+    (idx..boundaries.len())
+        .find(|&i| {
+            let start = boundaries[i - 1];
+            let end = boundaries[i];
+            !is_whitespace_segment(&text, start, end)
+        })
+        .map(|i| boundaries[i])
 }
 
 fn prev_word_boundary(
@@ -228,13 +239,39 @@ fn prev_word_boundary(
     segmenter: &WordSegmenter,
 ) -> Option<usize> {
     let text = line_text(line);
-    let byte_idx = text.nth_char_byte_offset(char_index);
-    segmenter
+    if char_index == 0 {
+        return None;
+    }
+
+    let boundaries: Vec<_> = segmenter
         .as_borrowed()
         .segment_str(&text)
-        .filter(|&b| b < byte_idx)
-        .last()
         .map(|b| text.nth_byte_char_offset(b))
+        .collect();
+    if boundaries.len() < 2 {
+        return None;
+    }
+
+    let idx = boundaries.partition_point(|&b| b < char_index);
+    if idx == 0 {
+        return None;
+    }
+
+    (0..idx)
+        .rev()
+        .find(|&i| {
+            let start = boundaries[i];
+            let end = *boundaries.get(i + 1).unwrap_or(&text.char_count());
+            !is_whitespace_segment(&text, start, end)
+        })
+        .map(|i| boundaries[i])
+        .or(Some(boundaries[0]))
+}
+
+fn is_whitespace_segment(text: &str, start: usize, end: usize) -> bool {
+    let byte_start = text.nth_char_byte_offset(start);
+    let byte_end = text.nth_char_byte_offset(end);
+    text[byte_start..byte_end].chars().all(char::is_whitespace)
 }
 
 fn next_sentence_boundary(
@@ -362,12 +399,32 @@ mod tests {
     }
 
     #[test]
+    fn word_forward_skips_whitespace_between_words() {
+        let id = NodeId::new();
+        let tree = make_single_line_tree(make_line(id, "hello  world"));
+        let segmenters = TextSegmenters::new_test();
+        let selection = move_word_forward(&tree, &Position::new(id, 5), &segmenters).unwrap();
+        assert_eq!(selection.head.node_id, id);
+        assert_eq!(selection.head.offset, 12);
+    }
+
+    #[test]
     fn word_backward() {
         let id = NodeId::new();
         let line = make_line(id, "hello world");
         let segmenters = TextSegmenters::new_test();
         let boundary = prev_word_boundary(&line, 11, &segmenters.word).unwrap();
         assert!((5..=6).contains(&boundary));
+    }
+
+    #[test]
+    fn word_backward_skips_whitespace_between_words() {
+        let id = NodeId::new();
+        let tree = make_single_line_tree(make_line(id, "hello  world"));
+        let segmenters = TextSegmenters::new_test();
+        let selection = move_word_backward(&tree, &Position::new(id, 7), &segmenters).unwrap();
+        assert_eq!(selection.head.node_id, id);
+        assert_eq!(selection.head.offset, 0);
     }
 
     #[test]
@@ -398,6 +455,23 @@ mod tests {
             scope: false,
             decorations: vec![],
             is_visual_container: true,
+        }
+    }
+
+    fn make_single_line_tree(line: LayoutLine) -> LayoutTree {
+        let width = line.glyph_runs.iter().map(|run| run.width).sum::<f32>();
+        LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    children: vec![LayoutNode {
+                        rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
+                        content: LayoutContent::Line(line),
+                    }],
+                }),
+            },
         }
     }
 
