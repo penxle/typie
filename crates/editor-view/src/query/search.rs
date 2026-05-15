@@ -201,6 +201,86 @@ fn find_navigable_before_inner<'a>(
     }
 }
 
+fn collect_navigable<'a>(node: &'a LayoutNode, out: &mut Vec<&'a LayoutNode>) {
+    match &node.content {
+        LayoutContent::Box(b) => {
+            for child in &b.children {
+                collect_navigable(child, out);
+            }
+        }
+        LayoutContent::Line(_) | LayoutContent::Atom(_) => out.push(node),
+        LayoutContent::Spacing(_) => {}
+    }
+}
+
+fn contains_x(node: &LayoutNode, x: f32) -> bool {
+    x >= node.rect.x && x <= node.rect.x + node.rect.width
+}
+
+fn horizontal_distance(node: &LayoutNode, x: f32) -> f32 {
+    let clamped = x.clamp(node.rect.x, node.rect.x + node.rect.width);
+    (x - clamped).abs()
+}
+
+/// Find the navigable node visually below `y_threshold` that best matches the
+/// horizontal position `x`.
+///
+/// Nodes whose horizontal extent contains `x` are preferred so that vertical
+/// movement stays in the same table column instead of collapsing to the
+/// document-order-first cell of the next row; the closest such node (smallest
+/// `rect.y`) wins, with document order breaking ties. When no node contains
+/// `x`, the horizontally nearest one is used so the caret never gets stuck.
+pub fn find_navigable_below_at_x(
+    root: &LayoutNode,
+    y_threshold: f32,
+    x: f32,
+) -> Option<&LayoutNode> {
+    let mut nodes = Vec::new();
+    collect_navigable(root, &mut nodes);
+    nodes
+        .into_iter()
+        .filter(|n| n.rect.y >= y_threshold)
+        .min_by(|p, q| {
+            let key = |n: &LayoutNode| {
+                if contains_x(n, x) {
+                    (0u8, n.rect.y, 0.0)
+                } else {
+                    (1u8, horizontal_distance(n, x), n.rect.y)
+                }
+            };
+            let (pg, pa, pb) = key(p);
+            let (qg, qa, qb) = key(q);
+            pg.cmp(&qg).then(pa.total_cmp(&qa)).then(pb.total_cmp(&qb))
+        })
+}
+
+/// The upward counterpart of [`find_navigable_below_at_x`]: among nodes whose
+/// bottom edge is at or above `y_threshold`, prefer those containing `x` and
+/// take the closest one (largest `rect.bottom()`).
+pub fn find_navigable_above_at_x(
+    root: &LayoutNode,
+    y_threshold: f32,
+    x: f32,
+) -> Option<&LayoutNode> {
+    let mut nodes = Vec::new();
+    collect_navigable(root, &mut nodes);
+    nodes
+        .into_iter()
+        .filter(|n| n.rect.bottom() <= y_threshold)
+        .min_by(|p, q| {
+            let key = |n: &LayoutNode| {
+                if contains_x(n, x) {
+                    (0u8, -n.rect.bottom(), 0.0)
+                } else {
+                    (1u8, horizontal_distance(n, x), -n.rect.bottom())
+                }
+            };
+            let (pg, pa, pb) = key(p);
+            let (qg, qa, qb) = key(q);
+            pg.cmp(&qg).then(pa.total_cmp(&qa)).then(pb.total_cmp(&qb))
+        })
+}
+
 /// Find the innermost scope container (style.scope == true) that contains a given position.
 pub fn find_scope_container_at<'a>(node: &'a LayoutNode, pos: &Position) -> Option<&'a LayoutNode> {
     match &node.content {
@@ -252,6 +332,23 @@ mod tests {
     fn make_line_node(id: NodeId, y: f32) -> LayoutNode {
         LayoutNode {
             rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(id, 0, "test", 0.0, gs(4))],
+                text_indent: 0.0,
+                child_range: None,
+            }),
+        }
+    }
+
+    fn make_line_node_at(id: NodeId, x: f32, y: f32, w: f32) -> LayoutNode {
+        LayoutNode {
+            rect: Rect::from_xywh(x, y, w, 20.0),
             content: LayoutContent::Line(LayoutLine {
                 node_id: id,
                 baseline: 16.0,
@@ -392,6 +489,69 @@ mod tests {
         let nav = find_navigable_above(&root, 20.0).unwrap();
         match &nav.content {
             LayoutContent::Line(l) => assert_eq!(l.node_id, id1),
+            _ => panic!("expected Line"),
+        }
+    }
+
+    /// Two rows of two columns (table-like). The y-only search would return
+    /// the document-order-first cell of the next row; the x-aware search must
+    /// instead stay in the column whose horizontal extent contains `x`.
+    fn two_by_two() -> (NodeId, NodeId, NodeId, NodeId, LayoutNode) {
+        let (r0c0, r0c1, r1c0, r1c1) = (NodeId::new(), NodeId::new(), NodeId::new(), NodeId::new());
+        let root = make_box_node(
+            0.0,
+            40.0,
+            vec![
+                make_box_node(
+                    0.0,
+                    20.0,
+                    vec![
+                        make_line_node_at(r0c0, 0.0, 0.0, 100.0),
+                        make_line_node_at(r0c1, 100.0, 0.0, 100.0),
+                    ],
+                ),
+                make_box_node(
+                    20.0,
+                    20.0,
+                    vec![
+                        make_line_node_at(r1c0, 0.0, 20.0, 100.0),
+                        make_line_node_at(r1c1, 100.0, 20.0, 100.0),
+                    ],
+                ),
+            ],
+        );
+        (r0c0, r0c1, r1c0, r1c1, root)
+    }
+
+    #[test]
+    fn find_navigable_below_at_x_stays_in_column() {
+        let (_, _, _, r1c1, root) = two_by_two();
+        // Below row 0, with x inside the second column (>= 100).
+        let nav = find_navigable_below_at_x(&root, 20.0, 150.0).unwrap();
+        match &nav.content {
+            LayoutContent::Line(l) => assert_eq!(l.node_id, r1c1),
+            _ => panic!("expected Line"),
+        }
+    }
+
+    #[test]
+    fn find_navigable_above_at_x_stays_in_column() {
+        let (_, r0c1, _, _, root) = two_by_two();
+        // Above row 1, with x inside the second column (>= 100).
+        let nav = find_navigable_above_at_x(&root, 20.0, 150.0).unwrap();
+        match &nav.content {
+            LayoutContent::Line(l) => assert_eq!(l.node_id, r0c1),
+            _ => panic!("expected Line"),
+        }
+    }
+
+    #[test]
+    fn find_navigable_below_at_x_falls_back_to_nearest_when_no_overlap() {
+        let (_, _, r1c0, _, root) = two_by_two();
+        // x past the right edge of every node: nearest column wins, not None.
+        let nav = find_navigable_below_at_x(&root, 20.0, -50.0).unwrap();
+        match &nav.content {
+            LayoutContent::Line(l) => assert_eq!(l.node_id, r1c0),
             _ => panic!("expected Line"),
         }
     }

@@ -235,7 +235,7 @@ fn move_line_vertical_forward(
     };
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.bottom();
-    let target = search::find_navigable_below(&tree.root, y);
+    let target = search::find_navigable_below_at_x(&tree.root, y, x);
     (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
@@ -249,7 +249,7 @@ fn move_line_vertical_backward(
     };
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.y;
-    let target = search::find_navigable_above(&tree.root, y);
+    let target = search::find_navigable_above_at_x(&tree.root, y, x);
     (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
@@ -288,7 +288,7 @@ fn move_page_forward(
     };
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.y + viewport.height;
-    let target = search::find_navigable_below(&tree.root, y);
+    let target = search::find_navigable_below_at_x(&tree.root, y, x);
     (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
@@ -303,7 +303,7 @@ fn move_page_backward(
     };
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.bottom() - viewport.height;
-    let target = search::find_navigable_above(&tree.root, y);
+    let target = search::find_navigable_above_at_x(&tree.root, y, x);
     (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
@@ -1576,6 +1576,102 @@ mod integration_tests {
         assert_eq!(
             sel.head.node_id, t2,
             "word movement outside tables must still cross paragraph boundaries"
+        );
+    }
+
+    #[test]
+    fn line_vertical_forward_in_table_stays_in_same_column() {
+        let (state, p1, below) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { p1: paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { below: paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(p1, 0),
+                &Movement::Line {
+                    direction: Direction::Forward,
+                    axis: Axis::Vertical,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            sel.head.node_id, below,
+            "ArrowDown must move to the cell directly below in the same column"
+        );
+    }
+
+    #[test]
+    fn line_vertical_backward_in_table_stays_in_same_column() {
+        let (state, above, p1) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { above: paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { p1: paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(p1, 0),
+                &Movement::Line {
+                    direction: Direction::Backward,
+                    axis: Axis::Vertical,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            sel.head.node_id, above,
+            "ArrowUp must move to the cell directly above in the same column"
         );
     }
 }
