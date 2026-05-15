@@ -1,7 +1,11 @@
+use editor_common::Rect;
 use editor_model::NodeId;
 use editor_state::{Affinity, Position};
 
+use crate::page::{LayoutPage, PageRect};
 use crate::paginate::*;
+
+use super::selection::{SelectionRect, SelectionRectKind};
 
 /// Find the LayoutNode (Line or Atom) containing a given Position.
 ///
@@ -90,6 +94,60 @@ pub fn find_box_by_node_id<'a>(node: &'a LayoutNode, target: NodeId) -> Option<&
         }
         _ => None,
     }
+}
+
+pub fn nearest_node_box(
+    tree: &LayoutTree,
+    page: &LayoutPage,
+    x: f32,
+    page_y: f32,
+    ids: &[NodeId],
+) -> Option<NodeId> {
+    let abs_y = page_y + page.y_start;
+    let mut best: Option<(f32, NodeId)> = None;
+    for &id in ids {
+        let Some(node) = find_box_by_node_id(&tree.root, id) else {
+            continue;
+        };
+        let d = super::hit_test::rect_distance_sq(&node.rect, x, abs_y);
+        if best.is_none_or(|(bd, _)| d < bd) {
+            best = Some((d, id));
+        }
+    }
+    best.map(|(_, id)| id)
+}
+
+pub fn node_box_rects(
+    tree: &LayoutTree,
+    pages: &[LayoutPage],
+    ids: &[NodeId],
+) -> Vec<SelectionRect> {
+    let mut rects = Vec::new();
+    for &id in ids {
+        let Some(node) = find_box_by_node_id(&tree.root, id) else {
+            continue;
+        };
+        let node_top = node.rect.y;
+        let node_bottom = node_top + node.rect.height;
+        for (page_idx, page) in pages.iter().enumerate() {
+            if node_bottom <= page.y_start || node_top >= page.y_end {
+                continue;
+            }
+            let top = node_top.max(page.y_start);
+            let bottom = node_bottom.min(page.y_end);
+            rects.push(PageRect::with_meta(
+                page_idx,
+                Rect::from_xywh(
+                    node.rect.x,
+                    top - page.y_start,
+                    node.rect.width,
+                    bottom - top,
+                ),
+                SelectionRectKind::Block,
+            ));
+        }
+    }
+    rects
 }
 
 /// Find the first navigable node whose bottom edge is below `y`.
@@ -750,5 +808,188 @@ mod tests {
         };
         let node = find_line_at(&tree, &pos).unwrap();
         assert_eq!(node.rect.y, 20.0);
+    }
+
+    fn cell_box(id: NodeId, x: f32, y: f32, w: f32, h: f32) -> LayoutNode {
+        LayoutNode {
+            rect: editor_common::Rect::from_xywh(x, y, w, h),
+            content: LayoutContent::Box(LayoutBox {
+                node_id: id,
+                style: BoxStyle {
+                    direction: Direction::Vertical,
+                    padding: editor_common::EdgeInsets::ZERO,
+                    border: editor_common::EdgeInsets::ZERO,
+                    border_mode: BorderMode::Separate,
+                    alignment: Alignment::Start,
+                    scope: false,
+                    decorations: vec![],
+                    monolithic: false,
+                },
+                children: vec![],
+            }),
+        }
+    }
+
+    fn wrap(id: NodeId, x: f32, y: f32, w: f32, h: f32, children: Vec<LayoutNode>) -> LayoutNode {
+        LayoutNode {
+            rect: editor_common::Rect::from_xywh(x, y, w, h),
+            content: LayoutContent::Box(LayoutBox {
+                node_id: id,
+                style: BoxStyle {
+                    direction: Direction::Vertical,
+                    padding: editor_common::EdgeInsets::ZERO,
+                    border: editor_common::EdgeInsets::ZERO,
+                    border_mode: BorderMode::Separate,
+                    alignment: Alignment::Start,
+                    scope: false,
+                    decorations: vec![],
+                    monolithic: false,
+                },
+                children,
+            }),
+        }
+    }
+
+    fn cell_page() -> LayoutPage {
+        LayoutPage {
+            y_start: 0.0,
+            y_end: 1000.0,
+            size: editor_common::Size::new(200.0, 1000.0),
+        }
+    }
+
+    fn cell_tree() -> (LayoutTree, NodeId, NodeId, NodeId, NodeId) {
+        let c00 = NodeId::new();
+        let c01 = NodeId::new();
+        let c10 = NodeId::new();
+        let c11 = NodeId::new();
+        let row0 = wrap(
+            NodeId::new(),
+            0.0,
+            0.0,
+            200.0,
+            20.0,
+            vec![
+                cell_box(c00, 0.0, 0.0, 100.0, 20.0),
+                cell_box(c01, 100.0, 0.0, 100.0, 20.0),
+            ],
+        );
+        let row1 = wrap(
+            NodeId::new(),
+            0.0,
+            20.0,
+            200.0,
+            20.0,
+            vec![
+                cell_box(c10, 0.0, 20.0, 100.0, 20.0),
+                cell_box(c11, 100.0, 20.0, 100.0, 20.0),
+            ],
+        );
+        let table = wrap(NodeId::new(), 0.0, 0.0, 200.0, 40.0, vec![row0, row1]);
+        let root = wrap(NodeId::ROOT, 0.0, 0.0, 200.0, 40.0, vec![table]);
+        (LayoutTree { root }, c00, c01, c10, c11)
+    }
+
+    #[test]
+    fn nearest_node_box_inside_returns_that_cell() {
+        let (tree, c00, c01, c10, c11) = cell_tree();
+        let ids = [c00, c01, c10, c11];
+        let page = cell_page();
+        assert_eq!(
+            super::nearest_node_box(&tree, &page, 150.0, 30.0, &ids),
+            Some(c11)
+        );
+    }
+
+    #[test]
+    fn nearest_node_box_outside_clamps_to_edge_cell() {
+        let (tree, c00, c01, c10, c11) = cell_tree();
+        let ids = [c00, c01, c10, c11];
+        let page = cell_page();
+        assert_eq!(
+            super::nearest_node_box(&tree, &page, 500.0, 500.0, &ids),
+            Some(c11)
+        );
+        assert_eq!(
+            super::nearest_node_box(&tree, &page, -50.0, 10.0, &ids),
+            Some(c00)
+        );
+    }
+
+    #[test]
+    fn nearest_node_box_between_cells_picks_nearest_not_none() {
+        let (tree, c00, c01, c10, c11) = cell_tree();
+        let ids = [c00, c01, c10, c11];
+        let page = cell_page();
+        assert_eq!(
+            super::nearest_node_box(&tree, &page, 100.0, 10.0, &ids),
+            Some(c00)
+        );
+    }
+
+    #[test]
+    fn nearest_node_box_empty_ids_is_none() {
+        let (tree, ..) = cell_tree();
+        let page = cell_page();
+        assert_eq!(super::nearest_node_box(&tree, &page, 10.0, 10.0, &[]), None);
+    }
+
+    #[test]
+    fn node_box_rects_one_rect_per_cell_single_page() {
+        let (tree, c00, _c01, _c10, c11) = cell_tree();
+        let pages = vec![cell_page()];
+        let rects = super::node_box_rects(&tree, &pages, &[c00, c11]);
+        assert_eq!(rects.len(), 2);
+        assert_eq!(rects[0].page_idx, 0);
+        assert_eq!(
+            rects[0].rect,
+            editor_common::Rect::from_xywh(0.0, 0.0, 100.0, 20.0)
+        );
+        assert_eq!(
+            rects[1].rect,
+            editor_common::Rect::from_xywh(100.0, 20.0, 100.0, 20.0)
+        );
+    }
+
+    #[test]
+    fn node_box_rects_splits_a_cell_spanning_two_pages() {
+        let (tree, c00, ..) = cell_tree();
+        let pages = vec![
+            LayoutPage {
+                y_start: 0.0,
+                y_end: 10.0,
+                size: editor_common::Size::new(200.0, 10.0),
+            },
+            LayoutPage {
+                y_start: 10.0,
+                y_end: 1000.0,
+                size: editor_common::Size::new(200.0, 990.0),
+            },
+        ];
+        let rects = super::node_box_rects(&tree, &pages, &[c00]);
+        assert_eq!(
+            rects.len(),
+            2,
+            "cell crossing a page boundary must emit a rect per page"
+        );
+        assert_eq!(rects[0].page_idx, 0);
+        assert_eq!(
+            rects[0].rect,
+            editor_common::Rect::from_xywh(0.0, 0.0, 100.0, 10.0)
+        );
+        assert_eq!(rects[1].page_idx, 1);
+        assert_eq!(
+            rects[1].rect,
+            editor_common::Rect::from_xywh(0.0, 0.0, 100.0, 10.0)
+        );
+    }
+
+    #[test]
+    fn node_box_rects_skips_missing_ids() {
+        let (tree, c00, ..) = cell_tree();
+        let pages = vec![cell_page()];
+        let missing = NodeId::new();
+        let rects = super::node_box_rects(&tree, &pages, &[c00, missing]);
+        assert_eq!(rects.len(), 1);
     }
 }

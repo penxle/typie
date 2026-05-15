@@ -240,6 +240,35 @@ pub fn cell_rect_selection(doc: &Doc, anchor_cell: NodeId, head_cell: NodeId) ->
     .normalize(doc)
 }
 
+pub fn enclosing_table_cell(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
+    doc.node(node_id)?
+        .ancestors()
+        .find(|n| matches!(n.node(), Node::TableCell(_)))
+        .map(|n| n.id())
+}
+
+pub fn table_cell_ids(doc: &Doc, cell_id: NodeId) -> Vec<NodeId> {
+    let Some(node) = doc.node(cell_id) else {
+        return Vec::new();
+    };
+    if !matches!(node.node(), Node::TableCell(_)) {
+        return Vec::new();
+    }
+    let Some(table) = node
+        .ancestors()
+        .find(|n| matches!(n.node(), Node::Table(_)))
+    else {
+        return Vec::new();
+    };
+    table
+        .children()
+        .filter(|row| matches!(row.node(), Node::TableRow(_)))
+        .flat_map(|row| row.children().collect::<Vec<_>>())
+        .filter(|cell| matches!(cell.node(), Node::TableCell(_)))
+        .map(|cell| cell.id())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
@@ -878,5 +907,61 @@ mod tests {
                 .as_node_selection()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn enclosing_table_cell_finds_cell_from_descendant_and_self() {
+        let (state, _, c00, t00, _) = state! {
+            doc { root { table { tr0: table_row {
+                c00: table_cell { paragraph { t00: text("a") } }
+                c01: table_cell { paragraph { text("b") } }
+            } } } }
+            selection: (t00, 0)
+        };
+        assert_eq!(super::enclosing_table_cell(&state.doc, t00), Some(c00));
+        assert_eq!(super::enclosing_table_cell(&state.doc, c00), Some(c00));
+    }
+
+    #[test]
+    fn enclosing_table_cell_none_outside_table() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("x") } } }
+            selection: (t, 0)
+        };
+        assert_eq!(super::enclosing_table_cell(&state.doc, t), None);
+    }
+
+    #[test]
+    fn table_cell_ids_row_major() {
+        let (state, _, c00, c01, _, c10, c11) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00: table_cell { paragraph {} }
+                    c01: table_cell { paragraph {} }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph {} }
+                    c11: table_cell { paragraph {} }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        assert_eq!(
+            super::table_cell_ids(&state.doc, c00),
+            vec![c00, c01, c10, c11]
+        );
+        assert_eq!(
+            super::table_cell_ids(&state.doc, c11),
+            vec![c00, c01, c10, c11]
+        );
+    }
+
+    #[test]
+    fn table_cell_ids_empty_for_non_cell() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("x") } } }
+            selection: (t, 0)
+        };
+        assert!(super::table_cell_ids(&state.doc, t).is_empty());
     }
 }

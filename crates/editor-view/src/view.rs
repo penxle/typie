@@ -254,6 +254,25 @@ impl View {
         query::selection::selection_rects(&result.tree, &result.pages, selection)
     }
 
+    pub fn node_box_rects(&self, ids: &[NodeId]) -> Vec<SelectionRect> {
+        let Some(ref result) = self.layout else {
+            return vec![];
+        };
+        query::search::node_box_rects(&result.tree, &result.pages, ids)
+    }
+
+    pub fn nearest_node_box(
+        &self,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        ids: &[NodeId],
+    ) -> Option<NodeId> {
+        let result = self.layout.as_ref()?;
+        let page = result.pages.get(page_idx)?;
+        query::search::nearest_node_box(&result.tree, page, x, y, ids)
+    }
+
     pub fn composition_rects(
         &self,
         from: &Position,
@@ -781,5 +800,40 @@ mod tests {
             effective_viewport_width: 0.0,
         };
         assert_ne!(paginated_fp, continuous_fp);
+    }
+
+    #[test]
+    fn view_node_box_rects_and_nearest_for_table() {
+        use editor_macros::doc;
+        let (d, c00, c11) = doc! {
+            root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    table_cell { paragraph { text("b") } }
+                }
+                table_row {
+                    table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } }
+        };
+        let mut view = View::new_test();
+        view.layout(&d);
+
+        let rects = view.node_box_rects(&[c00, c11]);
+        assert_eq!(rects.len(), 2);
+        assert!(
+            rects
+                .iter()
+                .all(|r| r.rect.width > 0.0 && r.rect.height > 0.0)
+        );
+
+        let c11_rect = view.node_box_rects(&[c11])[0].rect;
+        let cx = c11_rect.x + c11_rect.width / 2.0;
+        let cy = c11_rect.y + c11_rect.height / 2.0;
+        assert_eq!(view.nearest_node_box(0, cx, cy, &[c00, c11]), Some(c11));
+
+        assert!(view.node_box_rects(&[]).is_empty());
+        assert_eq!(view.nearest_node_box(0, cx, cy, &[]), None);
     }
 }

@@ -5,7 +5,7 @@ use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
 use editor_state::{DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, State};
 use editor_transaction::{Effect, HistoryMeta, Transaction};
-use editor_view::{PendingStyle, View, Viewport};
+use editor_view::{PageRect, PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -228,22 +228,33 @@ impl Editor {
         Ok(std::mem::take(&mut self.pending_events))
     }
 
+    fn selection_mark_rects(&self) -> Option<Vec<PageRect>> {
+        let resolved = self.state.selection.resolve(&self.state.doc)?;
+        if resolved.is_collapsed() {
+            return None;
+        }
+        let rects = if let Some(cr) = resolved.as_cell_rect() {
+            let ids: Vec<NodeId> = cr.cells().map(|c| c.id()).collect();
+            self.view.node_box_rects(&ids)
+        } else {
+            self.view.selection_rects(&resolved)
+        };
+        Some(rects.iter().map(|r| r.without_meta()).collect())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cell_selection_rects_for_test(&self) -> Vec<PageRect> {
+        self.selection_mark_rects().unwrap_or_default()
+    }
+
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
         let mut marks: Vec<Mark> = Vec::new();
 
-        if let Some(resolved) = self.state.selection.resolve(&self.state.doc) {
-            if !resolved.is_collapsed() {
-                let rects = self
-                    .view
-                    .selection_rects(&resolved)
-                    .iter()
-                    .map(|r| r.without_meta())
-                    .collect();
-                marks.push(Mark {
-                    data: MarkData::Selection,
-                    rects,
-                });
-            }
+        if let Some(rects) = self.selection_mark_rects() {
+            marks.push(Mark {
+                data: MarkData::Selection,
+                rects,
+            });
         }
 
         if let Some(composition) = self.state.composition {
@@ -1407,6 +1418,58 @@ mod tests {
         assert!(
             !still_present,
             "para2 must no longer be a live child of root after removal"
+        );
+    }
+}
+
+#[cfg(test)]
+mod cell_render_tests {
+    use crate::editor::Editor;
+    use editor_macros::state;
+
+    #[test]
+    fn render_uses_node_box_rects_for_cell_rect_selection() {
+        let (state, _, c00, _, _, _, c11) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        let sel = editor_state::cell_rect_selection(&editor.state.doc, c00, c11).unwrap();
+        editor.state.selection = sel;
+
+        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        assert!(
+            resolved.as_cell_rect().is_some(),
+            "precondition: selection is a cell-rect"
+        );
+
+        let ids: Vec<_> = resolved
+            .as_cell_rect()
+            .unwrap()
+            .cells()
+            .map(|c| c.id())
+            .collect();
+        let expected = editor.view.node_box_rects(&ids);
+        assert_eq!(expected.len(), 4, "4 cells → 4 rects");
+
+        let cell_path = editor.cell_selection_rects_for_test();
+        assert_eq!(
+            cell_path,
+            expected
+                .iter()
+                .map(|r| r.without_meta())
+                .collect::<Vec<_>>()
         );
     }
 }
