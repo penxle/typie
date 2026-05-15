@@ -29,7 +29,7 @@
   <div
     class={css({
       paddingX: '8px',
-      paddingTop: '8px',
+      paddingY: '8px',
       backgroundColor: 'surface.muted',
     })}
   >
@@ -54,7 +54,7 @@
           <InfoIcon class={css({ color: { base: 'amber.400', _dark: 'amber.700' }, width: '20px', height: '20px' })} />
           <div class={css({ fontSize: '14px', color: 'text.default' })}>
             <span class={css({ fontWeight: 'medium' })}>서비스 점검 안내:</span>
-            <span class={css({ marginLeft: '8px' })}>2026년 2월 23일 오전 2시부터 오전 7시까지 서버 점검이 예정되어 있어요.</span>
+            <span class={css({ marginLeft: '8px' })}>2026년 5월 18일 오전 2시부터 오전 7시까지 서버 점검이 예정되어 있어요.</span>
           </div>
         </div>
 
