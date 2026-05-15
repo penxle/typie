@@ -515,6 +515,49 @@ mod tests {
     }
 
     #[test]
+    fn exact_hit_in_monolithic_box_returns_leaf_while_closest_above_promotes() {
+        let line_id = NodeId::new();
+        let line = make_line_node(line_id, 0.0, 100.0, "hello", 10.0);
+        let mono = LayoutNode {
+            rect: Rect::from_xywh(0.0, 100.0, 200.0, 20.0),
+            content: LayoutContent::Box(LayoutBox {
+                node_id: NodeId::new(),
+                style: BoxStyle {
+                    direction: Direction::Vertical,
+                    padding: EdgeInsets::ZERO,
+                    border: EdgeInsets::ZERO,
+                    border_mode: BorderMode::Separate,
+                    alignment: Alignment::Start,
+                    scope: false,
+                    decorations: vec![],
+                    monolithic: true,
+                },
+                children: vec![line],
+            }),
+        };
+        let tree = LayoutTree {
+            root: make_box_node(NodeId::ROOT, 0.0, 0.0, 200.0, 200.0, vec![mono]),
+        };
+        let page = make_page(0.0, 200.0);
+
+        let exact = exact_hit_test(&tree, &page, 25.0, 110.0).unwrap();
+        assert!(exact.is_collapsed());
+        assert_eq!(
+            exact.head.node_id, line_id,
+            "exact hit inside a monolithic box must return the text leaf"
+        );
+
+        let promoted = closest_hit_test_extending(&tree, &page, 25.0, -50.0).unwrap();
+        assert!(promoted.is_collapsed());
+        assert_eq!(
+            promoted.head.node_id,
+            NodeId::ROOT,
+            "above the monolithic box, the extending closest path must promote"
+        );
+        assert_eq!(promoted.head.offset, 0);
+    }
+
+    #[test]
     fn extending_drag_below_bottom_promotes_to_back_slot() {
         let (doc,) = doc! {
             root {
