@@ -8,6 +8,21 @@ use crate::paginate::*;
 use super::navigation::{first_position_in, last_position_in};
 use super::search;
 
+/// Word and sentence movement must not cross a scope-container boundary:
+/// when `from` is inside a scope container, a `target` that lands outside
+/// that same container is rejected so the caret stays put instead of
+/// jumping out. When `from` is not inside any scope container the target
+/// passes through unchanged.
+fn confined_to_scope(tree: &LayoutTree, from: &Position, target: Position) -> Option<Selection> {
+    if let Some(from_scope) = search::find_scope_container_at(&tree.root, from) {
+        let target_scope = search::find_scope_container_at(&tree.root, &target)?;
+        if !std::ptr::eq(from_scope, target_scope) {
+            return None;
+        }
+    }
+    Some(Selection::collapsed(target))
+}
+
 pub fn move_word_forward(
     tree: &LayoutTree,
     pos: &Position,
@@ -27,7 +42,7 @@ pub fn move_word_forward(
 
     let y = line_node.rect.bottom();
     let next = search::find_navigable_below(&tree.root, y)?;
-    Some(Selection::collapsed(first_position_in(next)))
+    confined_to_scope(tree, pos, first_position_in(next))
 }
 
 pub fn move_word_backward(
@@ -49,7 +64,7 @@ pub fn move_word_backward(
 
     let y = line_node.rect.y;
     let prev = search::find_navigable_above(&tree.root, y)?;
-    Some(Selection::collapsed(last_position_in(prev)))
+    confined_to_scope(tree, pos, last_position_in(prev))
 }
 
 pub fn move_sentence_forward(
@@ -71,7 +86,7 @@ pub fn move_sentence_forward(
 
     let y = line_node.rect.bottom();
     let next = search::find_navigable_below(&tree.root, y)?;
-    Some(Selection::collapsed(first_position_in(next)))
+    confined_to_scope(tree, pos, first_position_in(next))
 }
 
 pub fn move_sentence_backward(
@@ -93,7 +108,7 @@ pub fn move_sentence_backward(
 
     let y = line_node.rect.y;
     let prev = search::find_navigable_above(&tree.root, y)?;
-    Some(Selection::collapsed(last_position_in(prev)))
+    confined_to_scope(tree, pos, last_position_in(prev))
 }
 
 pub fn select_word_at(

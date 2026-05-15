@@ -136,6 +136,71 @@ pub fn find_navigable_above(node: &LayoutNode, y: f32) -> Option<&LayoutNode> {
     }
 }
 
+/// Find the navigable (Line or Atom) node that immediately follows `target`
+/// in document order (pre-order DFS), skipping Spacing.
+///
+/// Unlike [`find_navigable_below`], this follows logical document order rather
+/// than vertical geometry, so it crosses into the next table cell in the same
+/// row instead of the cell directly below.
+pub fn find_navigable_after<'a>(
+    root: &'a LayoutNode,
+    target: &LayoutNode,
+) -> Option<&'a LayoutNode> {
+    let mut seen = false;
+    find_navigable_after_inner(root, target, &mut seen)
+}
+
+fn find_navigable_after_inner<'a>(
+    node: &'a LayoutNode,
+    target: &LayoutNode,
+    seen: &mut bool,
+) -> Option<&'a LayoutNode> {
+    if std::ptr::eq(node, target) {
+        *seen = true;
+        return None;
+    }
+    match &node.content {
+        LayoutContent::Box(b) => b
+            .children
+            .iter()
+            .find_map(|child| find_navigable_after_inner(child, target, seen)),
+        LayoutContent::Line(_) | LayoutContent::Atom(_) => seen.then_some(node),
+        LayoutContent::Spacing(_) => None,
+    }
+}
+
+/// Find the navigable (Line or Atom) node that immediately precedes `target`
+/// in document order (pre-order DFS), skipping Spacing.
+///
+/// The logical-order counterpart of [`find_navigable_above`].
+pub fn find_navigable_before<'a>(
+    root: &'a LayoutNode,
+    target: &LayoutNode,
+) -> Option<&'a LayoutNode> {
+    let mut seen = false;
+    find_navigable_before_inner(root, target, &mut seen)
+}
+
+fn find_navigable_before_inner<'a>(
+    node: &'a LayoutNode,
+    target: &LayoutNode,
+    seen: &mut bool,
+) -> Option<&'a LayoutNode> {
+    if std::ptr::eq(node, target) {
+        *seen = true;
+        return None;
+    }
+    match &node.content {
+        LayoutContent::Box(b) => b
+            .children
+            .iter()
+            .rev()
+            .find_map(|child| find_navigable_before_inner(child, target, seen)),
+        LayoutContent::Line(_) | LayoutContent::Atom(_) => seen.then_some(node),
+        LayoutContent::Spacing(_) => None,
+    }
+}
+
 /// Find the innermost scope container (style.scope == true) that contains a given position.
 pub fn find_scope_container_at<'a>(node: &'a LayoutNode, pos: &Position) -> Option<&'a LayoutNode> {
     match &node.content {

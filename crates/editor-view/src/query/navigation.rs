@@ -114,8 +114,7 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     }
                 }
             }
-            let y = line_node.rect.bottom();
-            let next = search::find_navigable_below(&tree.root, y)?;
+            let next = search::find_navigable_after(&tree.root, line_node)?;
             // If the next line is a soft-wrap continuation of the same text node,
             // advance directly into its first grapheme rather than landing at
             // the same offset (which would visually be the same caret).
@@ -133,8 +132,7 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
             Some(Selection::collapsed(first_position_in(next)))
         }
         LayoutContent::Atom(a) => {
-            let y = line_node.rect.bottom();
-            if let Some(next) = search::find_navigable_below(&tree.root, y) {
+            if let Some(next) = search::find_navigable_after(&tree.root, line_node) {
                 Some(Selection::collapsed(first_position_in(next)))
             } else {
                 Some(Selection::collapsed(Position::new(
@@ -183,8 +181,7 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                     }
                 }
             }
-            let y = line_node.rect.y;
-            let prev = search::find_navigable_above(&tree.root, y)?;
+            let prev = search::find_navigable_before(&tree.root, line_node)?;
             // If the previous line is a soft-wrap continuation of the same
             // text node, retreat into its last grapheme rather than landing
             // at the same offset (which would visually be the same caret).
@@ -202,8 +199,7 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
             Some(Selection::collapsed(last_position_in(prev)))
         }
         LayoutContent::Atom(a) => {
-            let y = line_node.rect.y;
-            if let Some(prev) = search::find_navigable_above(&tree.root, y) {
+            if let Some(prev) = search::find_navigable_before(&tree.root, line_node) {
                 Some(Selection::collapsed(last_position_in(prev)))
             } else {
                 Some(Selection::collapsed(Position::new(a.parent_id, a.index)))
@@ -1368,5 +1364,218 @@ mod integration_tests {
 
         let sel = view.hit_test(0, 9999.0, 5.0).unwrap();
         assert_eq!(sel.head.offset, 6);
+    }
+
+    #[test]
+    fn grapheme_forward_in_empty_table_cell_moves_to_next_cell_in_same_row() {
+        let (state, p1, p2) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { p1: paragraph {} }
+                            table_cell { p2: paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(p1, 0),
+                &Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(sel.head, sel.anchor);
+        assert_eq!(
+            sel.head.node_id, p2,
+            "must move to next cell in the same row"
+        );
+        assert_eq!(sel.head.offset, 0);
+    }
+
+    #[test]
+    fn grapheme_backward_in_empty_table_cell_moves_to_prev_cell_in_same_row() {
+        let (state, p1, p2) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { p1: paragraph {} }
+                            table_cell { p2: paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(p2, 0),
+                &Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(sel.head, sel.anchor);
+        assert_eq!(
+            sel.head.node_id, p1,
+            "must move to previous cell in the same row"
+        );
+        assert_eq!(sel.head.offset, 0);
+    }
+
+    #[test]
+    fn grapheme_forward_at_end_of_nonempty_table_cell_moves_to_next_cell() {
+        let (state, t1, p2) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { t1: text("A") } }
+                            table_cell { p2: paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(t1, 1),
+                &Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(sel.head, sel.anchor);
+        assert_eq!(
+            sel.head.node_id, p2,
+            "must move to next cell in the same row"
+        );
+        assert_eq!(sel.head.offset, 0);
+    }
+
+    #[test]
+    fn word_forward_at_cell_end_does_not_cross_cell_boundary() {
+        let (state, t1) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { t1: text("hi") } }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 2)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view.resolve_movement(
+            &Position::new(t1, 2),
+            &Movement::Word {
+                direction: Direction::Forward,
+            },
+            &Resource::new_test(),
+        );
+
+        assert!(
+            sel.is_none(),
+            "word-forward at the end of a cell must not leave the cell"
+        );
+    }
+
+    #[test]
+    fn word_forward_outside_table_still_crosses_paragraphs() {
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("hi") }
+                    paragraph { t2: text("there") }
+                }
+            }
+            selection: (t1, 2)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(t1, 2),
+                &Movement::Word {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            sel.head.node_id, t2,
+            "word movement outside tables must still cross paragraph boundaries"
+        );
     }
 }
