@@ -1,10 +1,10 @@
-use editor_model::{Modifier, ModifierType, NodeRef, NodeType, Schema};
+use editor_model::{Modifier, NodeRef};
 use editor_state::{PendingModifier, PendingModifiers, Position};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
     collect_applicable_targets_in_range, collect_text_nodes_in_range,
-    compact_and_restore_selection, resolve_applicable_target_collapsed,
+    compact_and_restore_selection, is_text_applicable, resolve_applicable_target_collapsed,
     resolve_inherited_modifiers,
 };
 use crate::{CommandError, CommandResult};
@@ -14,13 +14,6 @@ fn is_unit_variant(modifier: &Modifier) -> bool {
         modifier,
         Modifier::Bold | Modifier::Italic | Modifier::Underline | Modifier::Strikethrough
     )
-}
-
-fn is_text_applicable(modifier_type: ModifierType) -> bool {
-    Schema::modifier_spec(modifier_type)
-        .context
-        .rightmost_node_types()
-        .contains(&NodeType::Text)
 }
 
 pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {

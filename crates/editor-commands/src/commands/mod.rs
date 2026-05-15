@@ -1,3 +1,4 @@
+mod clear_all_modifiers;
 mod delete_empty_paragraph_backward;
 mod delete_empty_paragraph_forward;
 mod delete_node_backward;
@@ -34,6 +35,7 @@ mod split_paragraph;
 mod toggle_bold;
 mod toggle_modifier;
 
+pub use clear_all_modifiers::clear_all_modifiers;
 pub use delete_empty_paragraph_backward::delete_empty_paragraph_backward;
 pub use delete_empty_paragraph_forward::delete_empty_paragraph_forward;
 pub use delete_node_backward::delete_node_backward;

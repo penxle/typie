@@ -26,7 +26,10 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
             commands::set_modifier(tr, modifier)?;
             Ok(())
         }),
-        _ => Ok(()),
+        ModifierOp::ClearAll => editor.transact(|tr| {
+            commands::clear_all_modifiers(tr)?;
+            Ok(())
+        }),
     }
 }
 
@@ -37,16 +40,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unimplemented_is_noop() {
+    fn clear_all_collapsed_unsets_effective_inline() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { paragraph { t1: text("hello") [italic] } } }
+            selection: (t1, 2)
         };
-        let mut editor = Editor::new_test(state.clone());
+        let mut editor = Editor::new_test(state);
         editor.apply(Message::Modifier {
             op: ModifierOp::ClearAll,
         });
-        assert_eq!(editor.state().selection, state.selection);
+        assert_eq!(
+            editor.state().pending_modifiers.as_slice(),
+            &[editor_state::PendingModifier::Unset {
+                ty: ModifierType::Italic
+            }]
+        );
+    }
+
+    #[test]
+    fn clear_all_range_removes_inline_from_doc() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") [italic] } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Modifier {
+            op: ModifierOp::ClearAll,
+        });
+        let entry = editor.state().doc.get_entry(t1).unwrap();
+        assert!(
+            !entry
+                .modifiers
+                .iter()
+                .any(|(_, m)| matches!(m, editor_model::Modifier::Italic))
+        );
     }
 
     #[test]

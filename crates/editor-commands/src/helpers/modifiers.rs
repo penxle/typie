@@ -75,6 +75,13 @@ pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
     found
 }
 
+pub(crate) fn is_text_applicable(modifier_type: ModifierType) -> bool {
+    Schema::modifier_spec(modifier_type)
+        .context
+        .rightmost_node_types()
+        .contains(&NodeType::Text)
+}
+
 pub(crate) fn resolve_applicable_target_collapsed<'a>(
     doc: &'a Doc,
     cursor_node_id: NodeId,
