@@ -41,7 +41,6 @@
   import { getEditorRegistry } from './@pane/editor-registry.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
-  import EditorV2NoticeModal from './EditorV2NoticeModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import type { Affinity, Position } from '$lib/editor/types';
@@ -1487,8 +1486,6 @@
       {/if}
     </div>
   </div>
-
-  <EditorV2NoticeModal {focused} />
 
   <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
 
