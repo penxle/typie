@@ -79,7 +79,7 @@ pub fn measure_fold_title(
                     },
                     data: DecorationData::Bool(expanded),
                 }],
-                is_visual_container: true,
+                monolithic: node.spec().monolithic,
             },
             children,
         }),
@@ -106,7 +106,6 @@ pub fn measure_fold_content(
             border: EdgeInsets::ZERO,
             scope: false,
             alignment: LayoutAlignment::Start,
-            is_visual_container: true,
         },
     )
 }
@@ -149,7 +148,7 @@ pub fn measure_fold(
                 alignment: LayoutAlignment::Start,
                 scope: false,
                 decorations: vec![],
-                is_visual_container: true,
+                monolithic: node.spec().monolithic,
             },
             children,
         }),

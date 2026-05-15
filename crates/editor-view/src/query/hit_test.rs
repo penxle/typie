@@ -57,42 +57,54 @@ pub fn closest_hit_test(
 ) -> Option<Selection> {
     let abs_y = page_y + page.y_start;
     let nav = closest_navigable(&tree.root, x, abs_y, page.y_start, page.y_end)?;
+    Some(navigate_to_node(nav, x))
+}
+
+/// Extending variant: when the click fully escapes a monolithic ancestor's
+/// vertical range, promote the head to that container's slot boundary so the
+/// drag/shift-extend can select the container as a unit. Plain (non-extending)
+/// hit testing must use [`closest_hit_test`] instead.
+pub fn closest_hit_test_extending(
+    tree: &LayoutTree,
+    page: &LayoutPage,
+    x: f32,
+    page_y: f32,
+) -> Option<Selection> {
+    let abs_y = page_y + page.y_start;
+    let nav = closest_navigable(&tree.root, x, abs_y, page.y_start, page.y_end)?;
     if let Some(promoted) = promote_outside_y(&tree.root, nav, abs_y) {
         return Some(Selection::collapsed(promoted));
     }
     Some(navigate_to_node(nav, x))
 }
 
-/// When the click sits outside the vertical range of `leaf`'s ancestor boxes,
-/// snap the head up the structural ancestry to the outermost non-root box that
-/// the click is fully above (or fully below). Without this, dragging the
-/// selection past the top of a block-level container (e.g. fold) stalls at the
-/// container's innermost text position, making it impossible to select the
-/// container as a unit.
+/// When the click sits outside the vertical range of `leaf`'s monolithic
+/// ancestor boxes, snap the head up the structural ancestry to the slot
+/// boundary of the outermost monolithic box the click fully escaped. Above
+/// the box → its Front slot `(parent, idx)`; below → its Back slot
+/// `(parent, idx + 1)`. Without this, dragging the selection past a
+/// monolithic container (e.g. fold) stalls at the container's innermost text
+/// position, making it impossible to select the container as a unit.
 fn promote_outside_y(root: &LayoutNode, leaf: &LayoutNode, click_y: f32) -> Option<Position> {
     let mut path: Vec<(&LayoutNode, usize)> = Vec::new();
     if !build_path(root, leaf, &mut path) {
         return None;
     }
-    // path[k].0 is a box on the descent from root to leaf; path[k].1 is the
-    // content-child index of the next-deeper node. Non-root ancestors of leaf
-    // sit at k = 1..len. Walking outer-to-inner and taking the first match
-    // gives the outermost ancestor the click escapes.
     for k in 1..path.len() {
         let ancestor = path[k].0;
         let LayoutContent::Box(ancestor_box) = &ancestor.content else {
             continue;
         };
-        // Only promote past a box that visually delimits itself; otherwise the
-        // click is in ordinary inter-paragraph margin and should snap to the
-        // nearest leaf in the usual way.
-        if !super::selection::has_visual_boundary(&ancestor_box.style) {
+        if !ancestor_box.style.monolithic {
             continue;
         }
-        if click_y < ancestor.rect.y || click_y >= ancestor.rect.y + ancestor.rect.height {
+        let above = click_y < ancestor.rect.y;
+        let below = click_y >= ancestor.rect.y + ancestor.rect.height;
+        if above || below {
             let (parent_box_node, idx) = path[k - 1];
             if let LayoutContent::Box(parent_box) = &parent_box_node.content {
-                return Some(Position::new(parent_box.node_id, idx));
+                let slot = if below { idx + 1 } else { idx };
+                return Some(Position::new(parent_box.node_id, slot));
             }
         }
     }
@@ -243,7 +255,9 @@ mod tests {
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::*;
+    use crate::view::View;
     use editor_common::EdgeInsets;
+    use editor_macros::doc;
     use editor_model::NodeId;
 
     fn make_line_node(id: NodeId, x: f32, y: f32, text: &str, char_w: f32) -> LayoutNode {
@@ -296,7 +310,7 @@ mod tests {
                     alignment: Alignment::Start,
                     scope: false,
                     decorations: vec![],
-                    is_visual_container: true,
+                    monolithic: false,
                 },
                 children,
             }),
@@ -481,10 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn drag_above_top_promotes_past_outermost_container() {
-        use crate::view::View;
-        use editor_macros::doc;
-
+    fn extending_drag_above_top_promotes_to_front_slot() {
         let (doc,) = doc! {
             root {
                 fold {
@@ -497,13 +508,73 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&doc);
 
-        // Drag far above the page top — closest leaf is fold_title's line, but
-        // click is structurally above fold, so head must promote past fold to
-        // root's slot for fold.
-        let sel = view.hit_test(0, 20.0, -100.0).unwrap();
+        let sel = view.hit_test_extending(0, 20.0, -100.0).unwrap();
         assert!(sel.is_collapsed());
         assert_eq!(sel.head.node_id, NodeId::ROOT);
-        assert_eq!(sel.head.offset, 0);
+        assert_eq!(sel.head.offset, 0, "above-top escape → Front slot (idx)");
+    }
+
+    #[test]
+    fn extending_drag_below_bottom_promotes_to_back_slot() {
+        let (doc,) = doc! {
+            root {
+                paragraph {}
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = view.hit_test_extending(0, 20.0, 99999.0).unwrap();
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(
+            sel.head.offset, 2,
+            "below-bottom escape → Back slot (idx+1)"
+        );
+    }
+
+    #[test]
+    fn plain_hit_test_in_gutter_does_not_promote() {
+        let (doc,) = doc! {
+            root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = view.hit_test(0, 20.0, -100.0).unwrap();
+        assert!(sel.is_collapsed());
+        assert_ne!(
+            sel.head.node_id,
+            NodeId::ROOT,
+            "plain Down must not promote; head stays on nearest text leaf"
+        );
+        let ft_text = doc
+            .node(NodeId::ROOT)
+            .unwrap()
+            .children()
+            .next()
+            .unwrap() // fold
+            .children()
+            .next()
+            .unwrap() // fold_title
+            .children()
+            .next()
+            .unwrap() // text("title")
+            .id();
+        assert_eq!(
+            sel.head.node_id, ft_text,
+            "plain Down must land on the nearest text leaf (fold_title text), not promote"
+        );
     }
 
     use editor_common::Size;
@@ -535,7 +606,7 @@ mod tests {
                         alignment: Alignment::Start,
                         scope: false,
                         decorations: vec![],
-                        is_visual_container: true,
+                        monolithic: false,
                     },
                     children: vec![
                         LayoutNode {

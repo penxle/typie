@@ -2,13 +2,6 @@ use super::Schema;
 use super::content::ContentExpr;
 use super::context::ContextExpr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlockSelectionBoundaryMode {
-    FrontOnly,
-    FrontOrBack,
-    Both,
-}
-
 #[derive(Debug, Clone)]
 pub struct NodeSpec {
     pub content: ContentExpr,
@@ -19,7 +12,7 @@ pub struct NodeSpec {
     /// When true, the node is a structural part of its parent and cannot be deleted alone; only its content can be cleared.
     pub structural: bool,
     pub external: bool,
-    pub block_selection_boundary_mode: Option<BlockSelectionBoundaryMode>,
+    pub monolithic: bool,
 }
 
 impl NodeSpec {
@@ -46,7 +39,7 @@ impl Default for NodeSpec {
             isolating: false,
             structural: false,
             external: false,
-            block_selection_boundary_mode: None,
+            monolithic: false,
         }
     }
 }
@@ -94,5 +87,38 @@ mod tests {
         assert!(!Schema::node_spec(NodeType::Paragraph).is_leaf());
         assert!(!Schema::node_spec(NodeType::Blockquote).is_leaf());
         assert!(!Schema::node_spec(NodeType::Table).is_leaf());
+    }
+
+    #[test]
+    fn monolithic_flag_per_node_type() {
+        for ty in [
+            NodeType::Blockquote,
+            NodeType::Callout,
+            NodeType::Fold,
+            NodeType::Table,
+            NodeType::HorizontalRule,
+        ] {
+            assert!(
+                Schema::node_spec(ty).monolithic,
+                "{ty:?} must be monolithic"
+            );
+        }
+        for ty in [
+            NodeType::Root,
+            NodeType::Paragraph,
+            NodeType::ListItem,
+            NodeType::FoldTitle,
+            NodeType::FoldContent,
+            NodeType::TableRow,
+            NodeType::TableCell,
+            NodeType::BulletList,
+            NodeType::OrderedList,
+            NodeType::Text,
+        ] {
+            assert!(
+                !Schema::node_spec(ty).monolithic,
+                "{ty:?} must not be monolithic"
+            );
+        }
     }
 }

@@ -59,7 +59,7 @@ pub fn measure_paragraph(
                 alignment,
                 scope: false,
                 decorations: vec![],
-                is_visual_container: true,
+                monolithic: node.spec().monolithic,
             },
             children,
         }),

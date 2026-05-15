@@ -2,7 +2,7 @@ use editor_macros::{content_expr, context_expr};
 use enum_map::{EnumMap, enum_map};
 use std::sync::LazyLock;
 
-use super::{BlockSelectionBoundaryMode, Expand, ModifierSpec, NodeSpec};
+use super::{Expand, ModifierSpec, NodeSpec};
 use crate::{ModifierType, NodeType};
 
 static INNER: LazyLock<SchemaInner> = LazyLock::new(SchemaInner::default);
@@ -35,7 +35,7 @@ impl Default for SchemaInner {
                 },
                 NodeType::Blockquote => NodeSpec {
                     content: content_expr!((Paragraph | BulletList | OrderedList)+),
-                    block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
+                    monolithic: true,
                     ..Default::default()
                 },
                 NodeType::Paragraph => NodeSpec {
@@ -77,7 +77,7 @@ impl Default for SchemaInner {
                 },
                 NodeType::HorizontalRule => NodeSpec {
                     selectable: true,
-                    block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::Both),
+                    monolithic: true,
                     ..Default::default()
                 },
                 NodeType::BulletList => NodeSpec {
@@ -91,13 +91,12 @@ impl Default for SchemaInner {
                 NodeType::ListItem => NodeSpec {
                     content: content_expr!(Paragraph, (BulletList | OrderedList)?),
                     structural: true,
-                    block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
                     ..Default::default()
                 },
                 NodeType::Fold => NodeSpec {
                     content: content_expr!(FoldTitle, FoldContent),
                     isolating: true,
-                    block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOrBack),
+                    monolithic: true,
                     ..Default::default()
                 },
                 NodeType::FoldTitle => NodeSpec {
@@ -114,14 +113,14 @@ impl Default for SchemaInner {
                 },
                 NodeType::Callout => NodeSpec {
                     content: content_expr!((Paragraph | BulletList | OrderedList)+),
-                    block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
+                    monolithic: true,
                     ..Default::default()
                 },
                 NodeType::Table => NodeSpec {
                     content: content_expr!(TableRow+),
                     context: context_expr!(!Table > ** > &),
                     isolating: true,
-                    block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOrBack),
+                    monolithic: true,
                     ..Default::default()
                 },
                 NodeType::TableRow => NodeSpec {

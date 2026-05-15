@@ -189,6 +189,13 @@ impl View {
             .or_else(|| query::closest_hit_test(&result.tree, page, x, y))
     }
 
+    pub fn hit_test_extending(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
+        let result = self.layout.as_ref()?;
+        let page = result.pages.get(page_idx)?;
+        query::exact_hit_test(&result.tree, page, x, y)
+            .or_else(|| query::closest_hit_test_extending(&result.tree, page, x, y))
+    }
+
     pub fn select_word_at(
         &self,
         pos: &ResolvedPosition<'_>,

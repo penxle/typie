@@ -202,7 +202,7 @@ mod tests {
                     alignment: Alignment::Start,
                     scope: false,
                     decorations: vec![],
-                    is_visual_container: true,
+                    monolithic: false,
                 },
                 children,
             }),

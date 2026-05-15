@@ -12,7 +12,7 @@ mod visit;
 pub use composition::CompositionRect;
 pub use cursor::CursorMetrics;
 pub(crate) use cursor::cursor_metrics;
-pub(crate) use hit_test::{closest_hit_test, exact_hit_test};
+pub(crate) use hit_test::{closest_hit_test, closest_hit_test_extending, exact_hit_test};
 pub(crate) use navigation::resolve_movement;
 pub use selection::{SelectionRect, SelectionRectKind};
 pub use visit::{Edges, LineMetrics, PageVisitor, visit_page};

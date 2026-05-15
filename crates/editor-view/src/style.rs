@@ -31,7 +31,7 @@ pub struct BoxStyle {
     pub alignment: Alignment,
     pub scope: bool,
     pub decorations: Vec<Decoration>,
-    pub is_visual_container: bool,
+    pub monolithic: bool,
 }
 
 #[derive(Debug, Clone)]

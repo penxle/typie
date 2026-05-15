@@ -103,7 +103,19 @@ fn validate_position(doc: &Doc, pos: Position) -> bool {
 fn subtree_violation(a_path: &[usize], h_path: &[usize]) -> bool {
     let a_node = &a_path[..a_path.len() - 1];
     let h_node = &h_path[..h_path.len() - 1];
-    a_node != h_node && (a_node.starts_with(h_node) || h_node.starts_with(a_node))
+    if a_node == h_node {
+        return false;
+    }
+    let (anc_node, anc_full, desc_node) = if a_node.starts_with(h_node) {
+        (h_node, h_path, a_node)
+    } else if h_node.starts_with(a_node) {
+        (a_node, a_path, h_node)
+    } else {
+        return false;
+    };
+    let anc_slot = anc_full[anc_full.len() - 1];
+    let desc_child_idx = desc_node[anc_node.len()];
+    anc_slot == desc_child_idx || anc_slot == desc_child_idx + 1
 }
 
 impl<'a> ResolvedSelection<'a> {
@@ -747,6 +759,22 @@ mod tests {
     }
 
     #[test]
+    fn subtree_violation_non_adjacent_slot_is_preserved() {
+        let a = vec![0usize]; // (root, 0): node []=root, offset 0
+        let h = vec![1usize, 0, 3]; // node [1,0], offset 3
+        assert!(!subtree_violation(&a, &h));
+        assert!(!subtree_violation(&h, &a));
+    }
+
+    #[test]
+    fn subtree_violation_far_back_slot_is_preserved() {
+        let a = vec![2usize]; // (root, 2)
+        let h = vec![0usize, 0, 1]; // node [0,0], offset 1
+        assert!(!subtree_violation(&a, &h));
+        assert!(!subtree_violation(&h, &a));
+    }
+
+    #[test]
     fn normalize_position_empty_text_leaf_maps_consistently() {
         let (d, ta, te) = doc! {
             root {
@@ -977,5 +1005,50 @@ mod tests {
         let once = state.selection.normalize(&state.doc).unwrap();
         let twice = once.normalize(&state.doc).unwrap();
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn normalize_preserves_envelope_over_leading_block() {
+        let (state, _, ta) = state! {
+            doc {
+                root: root {
+                    fold {
+                        fold_title { text("t") }
+                        fold_content { paragraph { text("c") } }
+                    }
+                    paragraph { ta: text("after") }
+                }
+            }
+            selection: (root, 0) -> (ta, 3)
+        };
+        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let canonical = resolved.normalize();
+        assert!(
+            !canonical.is_collapsed(),
+            "envelope over leading fold must survive normalize, got {:?}",
+            canonical
+        );
+    }
+
+    #[test]
+    fn normalize_collapses_back_adjacent_slot() {
+        let (state, root, _) = state! {
+            doc {
+                root: root {
+                    paragraph { ta: text("Hello") }
+                    paragraph { text("x") }
+                }
+            }
+            selection: (ta, 5) -> (root, 1)
+        };
+        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let canonical = resolved.normalize();
+        assert!(
+            canonical.is_collapsed(),
+            "back-adjacent slot boundary must still collapse, got {:?}",
+            canonical
+        );
+        assert_eq!(canonical.head.node_id, root);
+        assert_eq!(canonical.head.offset, 1);
     }
 }

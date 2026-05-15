@@ -58,7 +58,6 @@ pub struct PaddedLayoutConfig {
     pub border: EdgeInsets,
     pub scope: bool,
     pub alignment: Alignment,
-    pub is_visual_container: bool,
 }
 
 pub fn layout_padded(
@@ -74,7 +73,6 @@ pub fn layout_padded(
         border,
         scope,
         alignment,
-        is_visual_container,
     } = config;
     let inner_width = width - padding.left - padding.right - border.left - border.right;
     let (children, children_height) = layout_vertical(measurer, doc, node, inner_width, view_state);
@@ -93,7 +91,7 @@ pub fn layout_padded(
                 alignment,
                 scope,
                 decorations: vec![],
-                is_visual_container,
+                monolithic: node.spec().monolithic,
             },
             children,
         }),
@@ -128,7 +126,6 @@ mod tests {
                 border: EdgeInsets::ZERO,
                 scope: false,
                 alignment: Alignment::Start,
-                is_visual_container: true,
             },
         );
 

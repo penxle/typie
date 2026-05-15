@@ -1,4 +1,4 @@
-use editor_common::{EdgeInsets, Rect};
+use editor_common::Rect;
 use editor_state::Position;
 
 use crate::page::{LayoutPage, PageRect};
@@ -39,11 +39,6 @@ pub fn selection_rects(
     );
 
     rects
-}
-
-pub(super) fn has_visual_boundary(style: &crate::style::BoxStyle) -> bool {
-    style.is_visual_container
-        && (style.padding != EdgeInsets::ZERO || style.border != EdgeInsets::ZERO)
 }
 
 fn visit_node(
@@ -225,7 +220,7 @@ fn visit_box(
 
     let fully = has_content_child && entry_phase == Phase::Inside && *phase == Phase::Inside;
 
-    if fully && has_visual_boundary(&bx.style) {
+    if fully && bx.style.monolithic {
         rects.truncate(rects_before);
         let node_top = node.rect.y;
         let node_bottom = node_top + node.rect.height;
@@ -617,6 +612,84 @@ mod tests {
             0,
             "selection collapsed at the boundary just outside t1 / just inside bl1 must emit no rects, got {:?}",
             rects,
+        );
+    }
+
+    #[test]
+    fn fully_enveloped_fold_content_emits_text_not_block() {
+        // (fold,1)->(fold,2) envelopes the fold_content subtree from the
+        // fold's perspective (fold_title excluded, so Fold itself is not
+        // fully selected). FoldContent is not monolithic (only Fold is), so a
+        // fully-enveloped fold_content must emit text rects, not one Block rect.
+        let (doc,) = doc! {
+            root {
+                fold {
+                    fold_title { text("t") }
+                    fold_content { paragraph { text("body") } }
+                }
+            }
+        };
+        let f = doc
+            .node(NodeId::ROOT)
+            .unwrap()
+            .children()
+            .next()
+            .unwrap()
+            .id();
+        let view = layout(&doc);
+        let sel = Selection::new(Position::new(f, 1), Position::new(f, 2));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        assert!(!rects.is_empty());
+        assert!(
+            rects.iter().all(|r| r.meta == SelectionRectKind::Text),
+            "fold_content is not monolithic; must emit text rects, got {:?}",
+            rects
+        );
+    }
+
+    #[test]
+    fn fully_enveloped_callout_emits_block_rect() {
+        let (doc,) = doc! {
+            root {
+                callout(variant: CalloutVariant::Danger) {
+                    paragraph { text("hi") }
+                }
+            }
+        };
+        let view = layout(&doc);
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        assert_eq!(rects.len(), 1);
+        assert_eq!(rects[0].meta, SelectionRectKind::Block);
+    }
+
+    #[test]
+    fn fully_enveloped_table_emits_block_rect() {
+        let (doc,) = doc! {
+            root {
+                table {
+                    table_row {
+                        table_cell { paragraph { text("a") } }
+                    }
+                }
+            }
+        };
+        let view = layout(&doc);
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        assert!(
+            rects.iter().any(|r| r.meta == SelectionRectKind::Block),
+            "fully-enveloped monolithic Table must emit a Block rect, got {:?}",
+            rects
         );
     }
 
