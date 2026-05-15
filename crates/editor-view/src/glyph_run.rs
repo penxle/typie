@@ -21,6 +21,12 @@ pub struct GraphemeSpan {
     pub codepoints: u8,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TextDecoration {
+    pub underline: bool,
+    pub strikethrough: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct GlyphRun {
     pub family_id: FontId,
@@ -30,6 +36,7 @@ pub struct GlyphRun {
     pub color: String,
     pub background_color: Option<String>,
     pub glyphs: Vec<Glyph>,
+    pub decoration: TextDecoration,
 
     pub node_id: NodeId,
     pub offset: usize,
@@ -57,6 +64,7 @@ impl GlyphRun {
             color: String::new(),
             background_color: None,
             glyphs: vec![],
+            decoration: TextDecoration::default(),
             node_id,
             offset,
             text: text.to_string(),
@@ -64,5 +72,18 @@ impl GlyphRun {
             width,
             graphemes,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use editor_model::NodeId;
+
+    #[test]
+    fn make_test_run_defaults_decoration_to_false() {
+        let run = GlyphRun::make_test_run(NodeId::new(), 0, "hi", 0.0, vec![]);
+        assert!(!run.decoration.underline);
+        assert!(!run.decoration.strikethrough);
     }
 }

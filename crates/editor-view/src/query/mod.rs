@@ -15,4 +15,4 @@ pub(crate) use cursor::cursor_metrics;
 pub(crate) use hit_test::{closest_hit_test, exact_hit_test};
 pub(crate) use navigation::resolve_movement;
 pub use selection::{SelectionRect, SelectionRectKind};
-pub use visit::{Edges, PageVisitor, visit_page};
+pub use visit::{Edges, LineMetrics, PageVisitor, visit_page};

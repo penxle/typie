@@ -14,6 +14,13 @@ pub struct Edges<T> {
     pub right: T,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct LineMetrics {
+    pub baseline: f32,
+    pub ascent: f32,
+    pub descent: f32,
+}
+
 pub trait PageVisitor {
     fn box_enter(
         &mut self,
@@ -23,7 +30,13 @@ pub trait PageVisitor {
         edges: Edges<bool>,
     );
     fn box_exit(&mut self);
-    fn line(&mut self, node_id: NodeId, local_rect: Rect, baseline: f32, glyph_runs: &[GlyphRun]);
+    fn line(
+        &mut self,
+        node_id: NodeId,
+        local_rect: Rect,
+        metrics: LineMetrics,
+        glyph_runs: &[GlyphRun],
+    );
     fn atom(&mut self, node_id: NodeId, local_rect: Rect);
     fn decoration(&mut self, local_rect: Rect, data: &DecorationData);
 }
@@ -80,7 +93,12 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
             visitor.box_exit();
         }
         LayoutContent::Line(l) => {
-            visitor.line(l.node_id, local_rect, l.baseline, &l.glyph_runs);
+            let metrics = LineMetrics {
+                baseline: l.baseline,
+                ascent: l.ascent,
+                descent: l.descent,
+            };
+            visitor.line(l.node_id, local_rect, metrics, &l.glyph_runs);
         }
         LayoutContent::Atom(a) => {
             visitor.atom(a.node_id, local_rect);
@@ -106,6 +124,7 @@ mod tests {
         decoration_count: usize,
         last_edges: Option<Edges<bool>>,
         line_local_rects: Vec<Rect>,
+        last_line_metrics: Option<LineMetrics>,
     }
 
     impl MockVisitor {
@@ -118,6 +137,7 @@ mod tests {
                 decoration_count: 0,
                 last_edges: None,
                 line_local_rects: vec![],
+                last_line_metrics: None,
             }
         }
     }
@@ -132,9 +152,10 @@ mod tests {
             self.box_exit_count += 1;
         }
 
-        fn line(&mut self, _: NodeId, local_rect: Rect, _: f32, _: &[GlyphRun]) {
+        fn line(&mut self, _: NodeId, local_rect: Rect, metrics: LineMetrics, _: &[GlyphRun]) {
             self.line_count += 1;
             self.line_local_rects.push(local_rect);
+            self.last_line_metrics = Some(metrics);
         }
 
         fn atom(&mut self, _: NodeId, _: Rect) {
@@ -287,5 +308,29 @@ mod tests {
         let mut visitor = MockVisitor::new();
         visit_page(&tree, &page, &mut visitor);
         assert_eq!(visitor.line_count, 2); // spacing skipped
+    }
+
+    #[test]
+    fn line_receives_metrics() {
+        let id = NodeId::new();
+        let tree = LayoutTree {
+            root: make_layout_box(
+                NodeId::ROOT,
+                0.0,
+                200.0,
+                vec![make_layout_line(id, 100.0, 20.0)],
+            ),
+        };
+        let page = LayoutPage {
+            y_start: 80.0,
+            y_end: 180.0,
+            size: Size::new(440.0, 100.0),
+        };
+        let mut visitor = MockVisitor::new();
+        visit_page(&tree, &page, &mut visitor);
+        let m = visitor.last_line_metrics.unwrap();
+        assert!((m.baseline - 16.0).abs() < 0.01); // 20 * 0.8
+        assert!((m.ascent - 14.0).abs() < 0.01); // 20 * 0.7
+        assert!((m.descent - 2.0).abs() < 0.01); // 20 * 0.1
     }
 }

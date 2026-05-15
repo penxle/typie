@@ -7,7 +7,7 @@ use parley::Layout;
 use super::strut::StrutMetrics;
 use super::style_run::StyleRun;
 use super::text_run::TextRun;
-use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis};
+use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis, TextDecoration};
 use crate::measure::resolve::resolve_inherited;
 
 pub struct ExtractedLine {
@@ -43,6 +43,15 @@ fn resolve_synthesis(doc: &Doc, node_id: NodeId) -> Synthesis {
             None
         },
     }
+}
+
+fn resolve_decoration(doc: &Doc, node_id: NodeId) -> TextDecoration {
+    doc.node(node_id)
+        .map(|node_ref| TextDecoration {
+            underline: resolve_inherited(&node_ref, ModifierType::Underline).is_some(),
+            strikethrough: resolve_inherited(&node_ref, ModifierType::Strikethrough).is_some(),
+        })
+        .unwrap_or_default()
 }
 
 fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
@@ -241,6 +250,70 @@ mod tests {
     }
 
     #[test]
+    fn resolve_decoration_none_by_default() {
+        let (doc, t1) = doc! {
+            root { paragraph { t1: text("hello") } }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(!d.underline);
+        assert!(!d.strikethrough);
+    }
+
+    #[test]
+    fn resolve_decoration_underline_only() {
+        let (doc, t1) = doc! {
+            root { paragraph { t1: text("hello") [underline] } }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(d.underline);
+        assert!(!d.strikethrough);
+    }
+
+    #[test]
+    fn resolve_decoration_strikethrough_only() {
+        let (doc, t1) = doc! {
+            root { paragraph { t1: text("hello") [strikethrough] } }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(!d.underline);
+        assert!(d.strikethrough);
+    }
+
+    #[test]
+    fn resolve_decoration_both() {
+        let (doc, t1) = doc! {
+            root { paragraph { t1: text("hello") [underline, strikethrough] } }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(d.underline);
+        assert!(d.strikethrough);
+    }
+
+    #[test]
+    fn resolve_decoration_inherits_from_ancestor() {
+        let (doc, t1) = doc! {
+            root [underline] {
+                paragraph { t1: text("hello") }
+            }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(d.underline);
+        assert!(!d.strikethrough);
+    }
+
+    #[test]
+    fn resolve_decoration_inherits_strikethrough_from_ancestor() {
+        let (doc, t1) = doc! {
+            root [strikethrough] {
+                paragraph { t1: text("hello") }
+            }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(!d.underline);
+        assert!(d.strikethrough);
+    }
+
+    #[test]
     fn segment_single_ascii_char() {
         let spans = segment_graphemes("h", 10.0, &segmenter());
         assert_eq!(spans.len(), 1);
@@ -366,6 +439,7 @@ pub fn extract_lines(
                     .unwrap_or(0);
                 let char_offset = text[node_byte_start..byte_start].char_count();
                 let synthesis = resolve_synthesis(doc, node_id);
+                let decoration = resolve_decoration(doc, node_id);
                 let (color, background_color) = resolve_text_colors(doc, node_id);
 
                 let (family_id, weight) = style_runs
@@ -384,6 +458,7 @@ pub fn extract_lines(
                     color,
                     background_color,
                     glyphs,
+                    decoration,
                     node_id,
                     offset: char_offset,
                     text: run_text,

@@ -7,7 +7,7 @@ use editor_model::{Doc, Node, NodeRef};
 use parley::setting::{FontFeature, Tag};
 use parley::style::{FontFamily, FontFamilyName, FontFeatures, FontWeight, LineHeight, TextStyle};
 
-use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis};
+use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis, TextDecoration};
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::text::resolve::{ResolvedTextStyle, resolve_text_style};
@@ -205,6 +205,7 @@ fn shape_marker(
                 color: String::new(),
                 background_color: None,
                 glyphs,
+                decoration: TextDecoration::default(),
                 node_id: node.id(),
                 offset: 0,
                 text: text.clone(),

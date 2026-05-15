@@ -2,7 +2,7 @@ use editor_common::Rect;
 use editor_model::{Doc, Node, NodeId};
 use editor_resource::Resource;
 use editor_view::style::{BoxStyle, DecorationData};
-use editor_view::{Edges, PageRect, PageVisitor};
+use editor_view::{Edges, LineMetrics, PageRect, PageVisitor};
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{Content, GlyphCache, ScaleContext};
@@ -144,6 +144,7 @@ const HR_SHAPE_GAP: f32 = 8.0;
 const MESSAGE_BORDER_RADIUS: f32 = 18.0;
 const MESSAGE_TAIL_SIZE: f32 = 10.0;
 const BULLET_RADIUS_RATIO: f32 = 0.125;
+const TEXT_DECORATION_THICKNESS: f32 = 1.0;
 
 fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Path {
     let CornerRadii {
@@ -290,6 +291,24 @@ fn diamond_path(cx: f32, cy: f32, r: f32) -> Path {
             PathElement::Close,
         ],
     }
+}
+
+fn underline_rect(m: LineMetrics, run_x: f32, run_width: f32) -> Rect {
+    Rect::from_xywh(
+        run_x,
+        m.baseline + m.descent * 0.5,
+        run_width,
+        TEXT_DECORATION_THICKNESS,
+    )
+}
+
+fn strikethrough_rect(m: LineMetrics, run_x: f32, run_width: f32) -> Rect {
+    Rect::from_xywh(
+        run_x,
+        m.baseline - m.ascent * 0.3,
+        run_width,
+        TEXT_DECORATION_THICKNESS,
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -764,7 +783,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         &mut self,
         _node_id: NodeId,
         local_rect: Rect,
-        _baseline: f32,
+        metrics: LineMetrics,
         glyph_runs: &[editor_view::glyph_run::GlyphRun],
     ) {
         if !self.on(RenderLayer::Content) {
@@ -784,6 +803,21 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         for run in glyph_runs {
             let color = self.renderer.theme.color(&run.color);
             self.render_glyph_runs(std::slice::from_ref(run), color, t);
+        }
+
+        for run in glyph_runs {
+            if !run.decoration.underline && !run.decoration.strikethrough {
+                continue;
+            }
+            let color = self.renderer.theme.color(&run.color);
+            if run.decoration.underline {
+                self.sink
+                    .fill_rect(underline_rect(metrics, run.x, run.width), color, t);
+            }
+            if run.decoration.strikethrough {
+                self.sink
+                    .fill_rect(strikethrough_rect(metrics, run.x, run.width), color, t);
+            }
         }
     }
 
@@ -1208,5 +1242,33 @@ mod tests {
         assert!((radii.top_right - 18.0).abs() < 0.01);
         assert!(radii.bottom_left.abs() < 0.01);
         assert!(radii.bottom_right.abs() < 0.01);
+    }
+
+    #[test]
+    fn underline_rect_sits_below_baseline_in_descent_band() {
+        let m = LineMetrics {
+            baseline: 80.0,
+            ascent: 70.0,
+            descent: 10.0,
+        };
+        let r = underline_rect(m, 5.0, 50.0);
+        assert!((r.x - 5.0).abs() < 0.01);
+        assert!((r.y - 85.0).abs() < 0.01); // 80 + 10 * 0.5
+        assert!((r.width - 50.0).abs() < 0.01);
+        assert!((r.height - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn strikethrough_rect_sits_above_baseline_within_ascent() {
+        let m = LineMetrics {
+            baseline: 80.0,
+            ascent: 70.0,
+            descent: 10.0,
+        };
+        let r = strikethrough_rect(m, 5.0, 50.0);
+        assert!((r.x - 5.0).abs() < 0.01);
+        assert!((r.y - 59.0).abs() < 0.01); // 80 - 70 * 0.3
+        assert!((r.width - 50.0).abs() < 0.01);
+        assert!((r.height - 1.0).abs() < 0.01);
     }
 }
