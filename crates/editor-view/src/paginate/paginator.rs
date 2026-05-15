@@ -127,10 +127,22 @@ impl Paginator {
         let box_x = self.compute_box_x(measured, width);
         let box_y = self.accumulated_y;
 
-        self.accumulated_y += measured.style.border.top + measured.style.padding.top;
+        let collapse = measured.style.border_mode == BorderMode::Collapse;
+        let lead_border_top = if collapse {
+            0.0
+        } else {
+            measured.style.border.top
+        };
+        let lead_border_left = if collapse {
+            0.0
+        } else {
+            measured.style.border.left
+        };
+
+        self.accumulated_y += lead_border_top + measured.style.padding.top;
 
         let old_x = self.current_x;
-        self.current_x = box_x + measured.style.border.left + measured.style.padding.left;
+        self.current_x = box_x + lead_border_left + measured.style.padding.left;
 
         let mut children = Vec::new();
         let mut prev_border_bottom: Option<f32> = None;
@@ -204,7 +216,12 @@ impl Paginator {
         }
 
         self.current_x = old_x;
-        self.accumulated_y += measured.style.padding.bottom + measured.style.border.bottom;
+        let trail_border_bottom = if collapse {
+            0.0
+        } else {
+            measured.style.border.bottom
+        };
+        self.accumulated_y += measured.style.padding.bottom + trail_border_bottom;
         let box_height = self.accumulated_y - box_y;
 
         LayoutNode {
@@ -221,8 +238,20 @@ impl Paginator {
         let box_x = self.compute_box_x(measured, node.width);
         let box_y = self.accumulated_y;
 
-        let mut child_x = box_x + measured.style.border.left + measured.style.padding.left;
-        let child_y = box_y + measured.style.border.top + measured.style.padding.top;
+        let collapse = measured.style.border_mode == BorderMode::Collapse;
+        let lead_border_left = if collapse {
+            0.0
+        } else {
+            measured.style.border.left
+        };
+        let lead_border_top = if collapse {
+            0.0
+        } else {
+            measured.style.border.top
+        };
+
+        let mut child_x = box_x + lead_border_left + measured.style.padding.left;
+        let child_y = box_y + lead_border_top + measured.style.padding.top;
 
         let mut child_index: usize = 0;
         let children: Vec<LayoutNode> = measured
@@ -1012,6 +1041,103 @@ mod tests {
         assert_eq!(
             p1_line_count, 1,
             "p1 must contribute exactly one strut-only line",
+        );
+    }
+
+    fn find_node(node: &LayoutNode, id: NodeId) -> Option<&LayoutNode> {
+        if let LayoutContent::Box(b) = &node.content {
+            if b.node_id == id {
+                return Some(node);
+            }
+            for c in &b.children {
+                if let Some(f) = find_node(c, id) {
+                    return Some(f);
+                }
+            }
+        }
+        None
+    }
+
+    fn box_children(node: &LayoutNode) -> Vec<&LayoutNode> {
+        let LayoutContent::Box(b) = &node.content else {
+            panic!("expected box");
+        };
+        b.children
+            .iter()
+            .filter(|c| matches!(c.content, LayoutContent::Box(_)))
+            .collect()
+    }
+
+    #[test]
+    fn collapsed_table_borders_do_not_stack() {
+        let (doc, t1) = doc! {
+            root {
+                t1: table {
+                    table_row {
+                        table_cell { paragraph { text("A") } }
+                        table_cell { paragraph { text("B") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("C") } }
+                        table_cell { paragraph { text("D") } }
+                    }
+                }
+            }
+        };
+
+        let mut measurer = Measurer::new_test();
+        let root = measurer.measure(&doc, NodeId::ROOT, 500.0, &ViewState::new());
+        let tree = into_tree(Arc::unwrap_or_clone(root));
+        let (layout, _) =
+            Paginator::continuous(540.0, 1024.0, EdgeInsets::all(20.0)).paginate(tree);
+
+        let table = find_node(&layout.root, t1).expect("table box in layout");
+        let rows = box_children(table);
+        assert_eq!(rows.len(), 2, "two rows");
+        let row0 = rows[0];
+        let last_row = rows[rows.len() - 1];
+        let cells0 = box_children(row0);
+        let cell0 = cells0[0];
+        let last_cell0 = cells0[cells0.len() - 1];
+
+        let eps = 1e-3;
+        assert!(
+            (row0.rect.y - table.rect.y).abs() < eps,
+            "row top must coincide with table top (got row.y={}, table.y={})",
+            row0.rect.y,
+            table.rect.y
+        );
+        assert!(
+            (row0.rect.x - table.rect.x).abs() < eps,
+            "row left must coincide with table left (got row.x={}, table.x={})",
+            row0.rect.x,
+            table.rect.x
+        );
+        assert!(
+            (cell0.rect.y - table.rect.y).abs() < eps,
+            "cell top must coincide with table top (got cell.y={}, table.y={})",
+            cell0.rect.y,
+            table.rect.y
+        );
+        assert!(
+            (cell0.rect.x - table.rect.x).abs() < eps,
+            "cell left must coincide with table left (got cell.x={}, table.x={})",
+            cell0.rect.x,
+            table.rect.x
+        );
+        assert!(
+            ((table.rect.y + table.rect.height) - (last_row.rect.y + last_row.rect.height)).abs()
+                < eps,
+            "table bottom must coincide with last row bottom (got table_bottom={}, row_bottom={})",
+            table.rect.y + table.rect.height,
+            last_row.rect.y + last_row.rect.height
+        );
+        assert!(
+            ((last_cell0.rect.x + last_cell0.rect.width) - (table.rect.x + table.rect.width)).abs()
+                < eps,
+            "last cell right must coincide with table right (got cell_right={}, table_right={})",
+            last_cell0.rect.x + last_cell0.rect.width,
+            table.rect.x + table.rect.width
         );
     }
 }

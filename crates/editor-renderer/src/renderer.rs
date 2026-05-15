@@ -743,7 +743,9 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         let border_color = match &frame.node {
             Some(Node::Blockquote(_)) => self.renderer.theme.color("ui.border.default"),
-            Some(Node::Table(_)) => self.renderer.theme.color("ui.border.default"),
+            Some(Node::Table(_) | Node::TableRow(_) | Node::TableCell(_)) => {
+                self.renderer.theme.color("ui.border.default")
+            }
             Some(Node::FoldTitle(_)) => self.renderer.theme.color("ui.border.default"),
             _ => self.renderer.theme.color("ui.border"),
         };

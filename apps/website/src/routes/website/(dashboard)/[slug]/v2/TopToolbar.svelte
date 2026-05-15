@@ -157,7 +157,45 @@
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
   <ToolbarButton icon={ChevronsDownUpIcon} label="접기" onclick={() => enqueue(insertFragment({ node: { type: 'fold' } }))} />
-  <ToolbarButton icon={TableIcon} label="표" onclick={() => enqueue(insertFragment({ node: { type: 'table' } }))} />
+  <ToolbarButton
+    icon={TableIcon}
+    label="표"
+    onclick={() =>
+      enqueue(
+        insertFragment({
+          node: { type: 'table' },
+          children: [
+            {
+              node: { type: 'table_row' },
+              children: [
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+              ],
+            },
+            {
+              node: { type: 'table_row' },
+              children: [
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+              ],
+            },
+            {
+              node: { type: 'table_row' },
+              children: [
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
+              ],
+            },
+          ],
+        }),
+      )}
+  />
   <ToolbarButton icon={ListIcon} label="순서 없는 목록" onclick={() => enqueue(insertFragment({ node: { type: 'bullet_list' } }))} />
   <ToolbarButton
     icon={ListOrderedIcon}
