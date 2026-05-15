@@ -18,8 +18,6 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             let selection = match count {
                 0 => return Ok(()),
                 1 => {
-                    editor.is_dragging = true;
-
                     if modifiers.shift {
                         hit.map(|h| Selection::new(editor.state.selection.anchor, h.head))
                     } else {
@@ -27,7 +25,6 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                     }
                 }
                 2 => {
-                    editor.is_dragging = false;
                     let resolved = hit.as_ref().and_then(|s| s.head.resolve(&editor.state.doc));
                     let resource = editor.resource.lock().unwrap();
                     resolved
@@ -35,7 +32,6 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                         .or(hit)
                 }
                 3.. => {
-                    editor.is_dragging = false;
                     let pos = hit.as_ref().map(|s| &s.head);
                     pos.and_then(|p| editor.view.select_paragraph_at(p)).or(hit)
                 }
@@ -48,15 +44,17 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                     Ok(())
                 })?;
             }
+
+            editor.drag_anchor = (count == 1).then_some(editor.state.selection.anchor);
         }
 
         PointerEvent::Move { page, x, y } => {
-            if !editor.is_dragging {
+            let Some(anchor) = editor.drag_anchor else {
                 return Ok(());
-            }
+            };
 
             if let Some(hit) = editor.view.hit_test(page, x, y) {
-                let new_selection = Selection::new(editor.state.selection.anchor, hit.head);
+                let new_selection = Selection::new(anchor, hit.head);
                 editor.view.clear_preferred_x();
                 editor.transact(|tr| {
                     tr.set_selection(new_selection)?;
@@ -66,7 +64,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
         }
 
         PointerEvent::Up => {
-            editor.is_dragging = false;
+            editor.drag_anchor = None;
         }
     }
 
@@ -204,7 +202,7 @@ mod tests {
         });
 
         let anchor = editor.state().selection.anchor;
-        assert!(editor.is_dragging);
+        assert!(editor.drag_anchor.is_some());
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -216,6 +214,47 @@ mod tests {
 
         let sel = editor.state().selection;
         assert_eq!(sel.anchor, anchor);
+        assert_ne!(sel.anchor, sel.head);
+    }
+
+    #[test]
+    fn drag_anchor_survives_intermediate_collapse() {
+        use editor_state::Position;
+
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: 0.0,
+                y: 5.0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        let drag_anchor = editor.state().selection.anchor;
+        assert!(editor.drag_anchor.is_some());
+
+        editor.state.selection = Selection::collapsed(Position::new(t, 11));
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: 0,
+                x: 9999.0,
+                y: 5.0,
+            },
+        });
+
+        let sel = editor.state().selection;
+        assert_eq!(
+            sel.anchor, drag_anchor,
+            "drag anchor must survive an intermediate collapse"
+        );
         assert_ne!(sel.anchor, sel.head);
     }
 
@@ -238,7 +277,7 @@ mod tests {
         });
 
         assert_eq!(editor.state().selection, before);
-        assert!(!editor.is_dragging);
+        assert!(editor.drag_anchor.is_none());
     }
 
     #[test]
@@ -259,12 +298,12 @@ mod tests {
             },
         });
 
-        assert!(editor.is_dragging);
+        assert!(editor.drag_anchor.is_some());
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Up,
         });
 
-        assert!(!editor.is_dragging);
+        assert!(editor.drag_anchor.is_none());
     }
 }
