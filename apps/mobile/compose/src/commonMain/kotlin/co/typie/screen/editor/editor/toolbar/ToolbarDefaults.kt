@@ -3,6 +3,7 @@ package co.typie.screen.editor.editor.toolbar
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import co.typie.editor.ffi.Message
 import co.typie.ui.icon.IconData
 
 internal val ToolbarHorizontalPadding = 16.dp
@@ -89,4 +90,5 @@ internal class EditorToolbarPageScope(
   val hasNextPage: Boolean,
   val navigateToPage: (EditorToolbarPageKey) -> Unit,
   val toggleBottomPanel: (EditorToolbarBottomPanelKey) -> Unit,
+  val sendMessage: (Message) -> Unit,
 )

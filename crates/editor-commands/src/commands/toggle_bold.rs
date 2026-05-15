@@ -1,11 +1,10 @@
 use editor_model::{Modifier, ModifierType, NodeId, NodeRef};
 use editor_resource::{Resource, match_weight};
-use editor_state::{PendingModifier, PendingModifiers, Position};
+use editor_state::{PendingModifier, PendingModifiers, Position, resolve_effective_modifiers_at};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    collect_text_nodes_in_range, compact_and_restore_selection, resolve_effective_modifiers,
-    resolve_inherited_modifiers,
+    collect_text_nodes_in_range, compact_and_restore_selection, resolve_inherited_modifiers,
 };
 use crate::{CommandError, CommandResult};
 
@@ -247,7 +246,7 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    let effective = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
+    let effective = resolve_effective_modifiers_at(tr.state(), &pos);
 
     let has_bold = effective.iter().any(|m| matches!(m, Modifier::Bold));
     let current_weight = effective
@@ -424,6 +423,28 @@ mod tests {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
                     paragraph {
                         t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (t1, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        assert_eq!(
+            actual.pending_modifiers.as_slice(),
+            &[PendingModifier::Set {
+                modifier: Modifier::FontWeight { value: 700 }
+            }]
+        );
+    }
+
+    #[test]
+    fn collapsed_toggle_on_uses_inherited_font_weight() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("Hello")
                     }
                 }
             }

@@ -69,7 +69,8 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
       return
     }
 
-    Logger.e(error) { "Editor failed" }
+    val detail = error.cause?.let { "$error; cause=$it" } ?: error.toString()
+    Logger.e(error) { "Editor failed: $detail" }
     Sentry.captureException(error)
     this.error = error
     clear()

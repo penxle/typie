@@ -5,6 +5,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.ModifierOp
+import co.typie.editor.ffi.ModifierType
 import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
@@ -42,10 +45,28 @@ private fun EditorTextToolbar(
     EditorToolbarLabelButton(text = "보통", contentDescription = "폰트 굵기", onClick = {})
     EditorToolbarLabelButton(text = "16", contentDescription = "폰트 크기", onClick = {})
     EditorToolbarDivider()
-    EditorToolbarButton(icon = Lucide.Bold, contentDescription = "굵게", onClick = {})
-    EditorToolbarButton(icon = Lucide.Italic, contentDescription = "기울임", onClick = {})
-    EditorToolbarButton(icon = Lucide.Underline, contentDescription = "밑줄", onClick = {})
-    EditorToolbarButton(icon = Lucide.Strikethrough, contentDescription = "취소선", onClick = {})
+    EditorToolbarButton(
+      icon = Lucide.Bold,
+      contentDescription = "굵게",
+      onClick = { scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Bold))) },
+    )
+    EditorToolbarButton(
+      icon = Lucide.Italic,
+      contentDescription = "기울임",
+      onClick = { scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Italic))) },
+    )
+    EditorToolbarButton(
+      icon = Lucide.Underline,
+      contentDescription = "밑줄",
+      onClick = { scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Underline))) },
+    )
+    EditorToolbarButton(
+      icon = Lucide.Strikethrough,
+      contentDescription = "취소선",
+      onClick = {
+        scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Strikethrough)))
+      },
+    )
     EditorToolbarDivider()
     EditorToolbarButton(icon = Lucide.Link, contentDescription = "링크", onClick = {})
     EditorToolbarButton(icon = Typie.Ruby, contentDescription = "루비", onClick = {})
@@ -54,6 +75,10 @@ private fun EditorTextToolbar(
     EditorToolbarButton(icon = Typie.LineHeight, contentDescription = "줄 높이", onClick = {})
     EditorToolbarButton(icon = Typie.LetterSpacing, contentDescription = "자간", onClick = {})
     EditorToolbarDivider()
-    EditorToolbarButton(icon = Lucide.RemoveFormatting, contentDescription = "서식 지우기", onClick = {})
+    EditorToolbarButton(
+      icon = Lucide.RemoveFormatting,
+      contentDescription = "서식 지우기",
+      onClick = { scope.sendMessage(Message.Modifier(ModifierOp.ClearAll)) },
+    )
   }
 }

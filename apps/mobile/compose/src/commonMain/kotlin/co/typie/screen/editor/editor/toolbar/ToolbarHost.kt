@@ -22,6 +22,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -33,7 +34,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorState
+import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.ui.component.ResponsiveContainerDefaults
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -47,6 +53,9 @@ internal fun EditorToolbarHost(
   onEditorFocusRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val commandScope = rememberCoroutineScope()
+  val runtime = LocalEditorRuntime.current
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val focusManager = LocalFocusManager.current
   val keyboardController = LocalSoftwareKeyboardController.current
   val toolbarContext = remember(editorState.version) { resolveEditorToolbarContext(editorState) }
@@ -197,6 +206,17 @@ internal fun EditorToolbarHost(
           },
           onBottomPanelToggle = { panel ->
             inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment)
+          },
+          onEditorMessage = { message ->
+            val editor = runtime.editor ?: return@EditorToolbarPages
+            val bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead
+
+            commandScope.launch {
+              editor.awaitWithBringIntoView(bringIntoViewRequests) {
+                enqueue(message)
+                beforeCommit { bringIntoView(bringIntoViewTarget) }
+              }
+            }
           },
           modifier = Modifier.fillMaxWidth(),
         )

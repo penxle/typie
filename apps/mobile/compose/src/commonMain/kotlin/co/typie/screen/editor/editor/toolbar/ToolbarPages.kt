@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PlainNode
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
@@ -99,6 +100,7 @@ internal fun EditorToolbarPages(
   onEditorInputRequest: () -> Unit,
   onKeyboardDismissRequest: () -> Unit,
   onBottomPanelToggle: (EditorToolbarBottomPanelKey) -> Unit,
+  onEditorMessage: (Message) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val scope = rememberCoroutineScope()
@@ -557,6 +559,7 @@ internal fun EditorToolbarPages(
                   hasNextPage = index < lastPageIndex,
                   navigateToPage = ::navigateToPage,
                   toggleBottomPanel = onBottomPanelToggle,
+                  sendMessage = onEditorMessage,
                 )
 
               Box(

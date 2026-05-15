@@ -160,10 +160,10 @@ fn map_syn_type(
 ) -> String {
     match ty {
         syn::Type::Path(type_path) => map_type_path(type_path, custom_types, known_types),
-        // Rust unit `()` serializes as JSON `null` via serde. We map to `Unit?` (nullable)
-        // so kotlinx.serialization can decode the `null` directly — `Unit` alone has no
-        // serializer that accepts null. Consumers carry a `null` value they ignore.
-        syn::Type::Tuple(tuple) if tuple.elems.is_empty() => "Unit?".into(),
+        // Rust unit `()` serializes as JSON `null`; Kotlin `Unit` expects `{}`.
+        syn::Type::Tuple(tuple) if tuple.elems.is_empty() => {
+            "kotlinx.serialization.json.JsonNull".into()
+        }
         _ => panic!("unsupported type in FFI metadata: {}", quote::quote!(#ty)),
     }
 }
@@ -1165,12 +1165,14 @@ mod tests {
     }
 
     #[test]
-    fn map_unit_tuple_to_nullable_unit() {
-        // Rust `()` serializes as JSON `null`; emitting `Unit?` lets kotlinx.serialization
-        // accept the null directly (a bare `Unit` has no serializer that decodes null).
+    fn map_unit_tuple_to_json_null() {
+        // Rust `()` serializes as JSON `null`; Kotlin `Unit` expects `{}`.
         let ct = empty_custom_types();
         let kt = empty_known_types();
-        assert_eq!(map_type("()", &ct, &kt), "Unit?");
+        assert_eq!(
+            map_type("()", &ct, &kt),
+            "kotlinx.serialization.json.JsonNull"
+        );
     }
 
     #[test]
@@ -1185,7 +1187,7 @@ mod tests {
         );
         assert_eq!(
             map_type("Tri<()>", &ct, &kt),
-            "co.typie.editor.ffi.Tri<Unit?>"
+            "co.typie.editor.ffi.Tri<kotlinx.serialization.json.JsonNull>"
         );
         assert_eq!(
             map_type("Tri<u32>", &ct, &kt),
