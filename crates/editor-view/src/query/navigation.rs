@@ -129,11 +129,11 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     pos.offset + g.codepoints as usize,
                 )));
             }
-            Some(Selection::collapsed(first_position_in(next)))
+            Some(landed(next, false, true))
         }
         LayoutContent::Atom(a) => {
             if let Some(next) = search::find_navigable_after(&tree.root, line_node) {
-                Some(Selection::collapsed(first_position_in(next)))
+                Some(landed(next, false, true))
             } else {
                 Some(Selection::collapsed(Position::new(
                     a.parent_id,
@@ -196,11 +196,11 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                     pos.offset - g.codepoints as usize,
                 )));
             }
-            Some(Selection::collapsed(last_position_in(prev)))
+            Some(landed(prev, true, false))
         }
         LayoutContent::Atom(a) => {
             if let Some(prev) = search::find_navigable_before(&tree.root, line_node) {
-                Some(Selection::collapsed(last_position_in(prev)))
+                Some(landed(prev, true, false))
             } else {
                 Some(Selection::collapsed(Position::new(a.parent_id, a.index)))
             }
@@ -264,7 +264,7 @@ fn move_block_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
         .iter()
         .rev()
         .find_map(search::find_last_navigable)?;
-    Some(Selection::collapsed(last_position_in(nav)))
+    Some(landed(nav, true, true))
 }
 
 fn move_block_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
@@ -274,7 +274,7 @@ fn move_block_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
         _ => return None,
     };
     let nav = b.children.iter().find_map(search::find_first_navigable)?;
-    Some(Selection::collapsed(first_position_in(nav)))
+    Some(landed(nav, false, false))
 }
 
 fn move_page_forward(
@@ -309,12 +309,12 @@ fn move_page_backward(
 
 fn move_document_forward(tree: &LayoutTree) -> Option<Selection> {
     let nav = search::find_last_navigable(&tree.root)?;
-    Some(Selection::collapsed(last_position_in(nav)))
+    Some(landed(nav, true, true))
 }
 
 fn move_document_backward(tree: &LayoutTree) -> Option<Selection> {
     let nav = search::find_first_navigable(&tree.root)?;
-    Some(Selection::collapsed(first_position_in(nav)))
+    Some(landed(nav, false, false))
 }
 
 fn first_position_in_line(line: &LayoutLine) -> Position {
@@ -342,6 +342,42 @@ pub(crate) fn last_position_in(node: &LayoutNode) -> Position {
         LayoutContent::Line(line) => last_position_in_line(line),
         LayoutContent::Atom(atom) => Position::new(atom.parent_id, atom.index),
         LayoutContent::Box(_) | LayoutContent::Spacing(_) => unreachable!(),
+    }
+}
+
+fn atom_selection(a: &LayoutAtom, forward: bool) -> Selection {
+    let front = Position {
+        node_id: a.parent_id,
+        offset: a.index,
+        affinity: Affinity::Downstream,
+    };
+    let back = Position {
+        node_id: a.parent_id,
+        offset: a.index + 1,
+        affinity: Affinity::Upstream,
+    };
+    if forward {
+        Selection::new(front, back)
+    } else {
+        Selection::new(back, front)
+    }
+}
+
+/// `at_end` and `forward` are independent concerns: `at_end` selects which end of a
+/// Line to place the collapsed caret; `forward` controls the direction of the atom
+/// node selection. An atom does not have a "start/end", so `at_end` is irrelevant
+/// there, and a Line does not have a direction, so `forward` is irrelevant there.
+pub(crate) fn landed(node: &LayoutNode, at_end: bool, forward: bool) -> Selection {
+    match &node.content {
+        LayoutContent::Atom(a) => atom_selection(a, forward),
+        _ => {
+            let pos = if at_end {
+                last_position_in(node)
+            } else {
+                first_position_in(node)
+            };
+            Selection::collapsed(pos)
+        }
     }
 }
 
@@ -876,9 +912,28 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(sel.head, sel.anchor);
-        assert_eq!(sel.head.node_id, f.atom_parent);
-        assert_eq!(sel.head.offset, 0);
+        // Invariant: landing on an atom must produce a node selection, not a collapsed caret.
+        assert!(
+            !sel.is_collapsed(),
+            "block-backward onto atom must be node selection, got {:?}",
+            sel
+        );
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: f.atom_parent,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: f.atom_parent,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
     }
 
     #[test]
@@ -1209,6 +1264,176 @@ mod tests {
             px,
         );
         assert_eq!(px2, Some(50.0));
+    }
+
+    #[test]
+    fn grapheme_forward_from_text_before_atom_selects_atom() {
+        // Moving forward from text whose next navigable is an atom must produce a forward node selection.
+        let f = fixture();
+        // lines[1] "foo bar" ends at offset 7; next navigable in the layout is the atom.
+        let sel = mov(
+            &f.tree,
+            Position::new(f.lines[1], 7),
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        )
+        .unwrap();
+        assert!(
+            !sel.is_collapsed(),
+            "must be atom node selection, got {:?}",
+            sel
+        );
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: f.atom_parent,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: f.atom_parent,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+    }
+
+    #[test]
+    fn grapheme_forward_from_selected_atom_passes_to_next_text() {
+        // Moving forward from the head of an atom node-selection passes through to the start of the next Line.
+        let f = fixture();
+        // Forward head of the atom node-selection is (atom_parent, 1, Upstream).
+        let pos = Position {
+            node_id: f.atom_parent,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sel = mov(
+            &f.tree,
+            pos,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        )
+        .unwrap();
+        assert!(
+            sel.is_collapsed(),
+            "passing an atom must yield a text caret, got {:?}",
+            sel
+        );
+        assert_eq!(sel.head.node_id, f.lines[2]); // "baz"
+        assert_eq!(sel.head.offset, 0);
+    }
+
+    #[test]
+    fn grapheme_backward_from_text_after_atom_selects_atom_backward() {
+        let f = fixture();
+        // Moving backward from the start of "baz" whose previous navigable is an atom must produce a backward node selection.
+        let sel = mov(
+            &f.tree,
+            Position::new(f.lines[2], 0),
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        )
+        .unwrap();
+        assert!(
+            !sel.is_collapsed(),
+            "must be atom node selection, got {:?}",
+            sel
+        );
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: f.atom_parent,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: f.atom_parent,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
+    }
+
+    #[test]
+    fn grapheme_backward_from_selected_atom_passes_to_prev_text() {
+        let f = fixture();
+        // Backward head of the atom node-selection is (atom_parent, 0, Downstream).
+        let pos = Position {
+            node_id: f.atom_parent,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        let sel = mov(
+            &f.tree,
+            pos,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        )
+        .unwrap();
+        assert!(
+            sel.is_collapsed(),
+            "passing an atom backward must yield a text caret, got {:?}",
+            sel
+        );
+        assert_eq!(sel.head.node_id, f.lines[1]); // "foo bar"
+        assert_eq!(sel.head.offset, 7);
+    }
+
+    #[test]
+    fn document_backward_to_leading_atom_selects_atom() {
+        // When the document's first navigable is an atom, document-backward must node-select it.
+        let atom_parent = NodeId::new();
+        let atom_id = NodeId::new();
+        let line_id = NodeId::new();
+        let tree = LayoutTree {
+            root: make_box_node(
+                0.0,
+                40.0,
+                false,
+                vec![
+                    make_atom_node(atom_parent, atom_id, 0.0, 0),
+                    make_line_node(line_id, 20.0, "tail"),
+                ],
+            ),
+        };
+        let sel = mov(
+            &tree,
+            Position::new(line_id, 2),
+            Movement::Document {
+                direction: Direction::Backward,
+            },
+        )
+        .unwrap();
+        // document-backward calls landed(nav, at_end=false, forward=false), so the backward
+        // form is: anchor=(parent, idx+1, Upstream), head=(parent, idx, Downstream).
+        assert!(!sel.is_collapsed(), "got {:?}", sel);
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: atom_parent,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: atom_parent,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
     }
 }
 

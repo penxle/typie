@@ -54,19 +54,10 @@ pub fn cursor_metrics(
                 line: line_rect,
             })
         }
-        LayoutContent::Atom(_) => {
-            let caret = Rect::from_xywh(
-                line_node.rect.x,
-                line_node.rect.y - y_start,
-                1.0,
-                line_node.rect.height,
-            );
-            Some(CursorMetrics {
-                page_idx,
-                caret,
-                line: line_rect,
-            })
-        }
+        // Normalize guarantees a collapsed selection never points at an atom, so this
+        // arm is unreachable for well-formed state. Returning None avoids drawing a
+        // spurious caret on the atom's left edge on unexpected bypass entry.
+        LayoutContent::Atom(_) => None,
         _ => None,
     }
 }
@@ -378,7 +369,10 @@ mod tests {
     }
 
     #[test]
-    fn cursor_metrics_atom_line_covers_atom_rect() {
+    fn cursor_metrics_atom_returns_none() {
+        // Invariant: normalize expands collapsed-on-atom selections to node selections,
+        // so the Atom branch is unreachable for well-formed state. cursor_metrics must
+        // return None here rather than draw a wrong caret.
         let para_id = NodeId::new();
         let tree = LayoutTree {
             root: LayoutNode {
@@ -412,18 +406,7 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(para_id, 0);
-        let CursorMetrics { caret, line, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
-
-        // caret: width=1.0 세로 바, height는 line_node.rect.height 그대로
-        assert_eq!(caret.x, 10.0);
-        assert_eq!(caret.y, 5.0);
-        assert_eq!(caret.width, 1.0);
-        assert_eq!(caret.height, 40.0);
-        // line: atom의 rect 전체
-        assert_eq!(line.x, 10.0);
-        assert_eq!(line.y, 5.0);
-        assert_eq!(line.width, 150.0);
-        assert_eq!(line.height, 40.0);
+        assert!(cursor_metrics(&tree, &pages, &pos, None).is_none());
     }
 
     #[test]

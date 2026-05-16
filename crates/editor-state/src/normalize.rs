@@ -118,6 +118,70 @@ fn subtree_violation(a_path: &[usize], h_path: &[usize]) -> bool {
     anc_slot == desc_child_idx || anc_slot == desc_child_idx + 1
 }
 
+fn is_atom_node(node: &NodeRef<'_>) -> bool {
+    let spec = Schema::node_spec(node.as_type());
+    // atom = selectable, non-inline, leaf. The is_leaf guard ensures a future
+    // selectable non-leaf container is not misclassified (equivalent under the current schema).
+    spec.selectable && !spec.inline && spec.is_leaf()
+}
+
+/// At a container boundary, if the affinity-selected adjacent child is an atom,
+/// expands to that atom's node selection. Affinity convention: Upstream selects
+/// child[offset-1], Downstream selects child[offset]. Returns None for a text
+/// node position or when the adjacent child is not an atom.
+fn expand_atom_at(doc: &Doc, pos: Position) -> Option<Selection> {
+    let node = doc.node(pos.node_id)?;
+    if matches!(node.node(), Node::Text(_)) {
+        return None;
+    }
+    match pos.affinity {
+        Affinity::Downstream => {
+            let child = node.children().nth(pos.offset)?;
+            if is_atom_node(&child) {
+                return Some(Selection::new(
+                    Position {
+                        node_id: pos.node_id,
+                        offset: pos.offset,
+                        affinity: Affinity::Downstream,
+                    },
+                    Position {
+                        node_id: pos.node_id,
+                        offset: pos.offset + 1,
+                        affinity: Affinity::Upstream,
+                    },
+                ));
+            }
+        }
+        Affinity::Upstream => {
+            let prev_idx = pos.offset.checked_sub(1)?;
+            let child = node.children().nth(prev_idx)?;
+            if is_atom_node(&child) {
+                return Some(Selection::new(
+                    Position {
+                        node_id: pos.node_id,
+                        offset: pos.offset,
+                        affinity: Affinity::Upstream,
+                    },
+                    Position {
+                        node_id: pos.node_id,
+                        offset: prev_idx,
+                        affinity: Affinity::Downstream,
+                    },
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// Invariant: a normalized selection must never be collapsed at an atom boundary.
+fn collapsed_or_atom(doc: &Doc, pos: Position) -> Selection {
+    if let Some(node_sel) = expand_atom_at(doc, pos) {
+        return node_sel;
+    }
+    Selection::collapsed(pos)
+}
+
 impl<'a> ResolvedSelection<'a> {
     /// Caller must supply endpoints that already pass `validate_position`.
     /// `Selection::normalize` enforces that gate; direct callers do not.
@@ -130,7 +194,7 @@ impl<'a> ResolvedSelection<'a> {
         let h_bd = boundary_identity(doc, h_in);
 
         if a_bd == h_bd {
-            return Selection::collapsed(normalize_position(doc, h_in));
+            return collapsed_or_atom(doc, normalize_position(doc, h_in));
         }
 
         let (a_aff, h_aff) = if a_bd < h_bd {
@@ -155,7 +219,7 @@ impl<'a> ResolvedSelection<'a> {
         let h_resolved = h.resolve(doc).expect("normalized head resolves");
         if subtree_violation(a_resolved.path(), h_resolved.path()) {
             // Preserve the caller's original head affinity in the fallback.
-            return Selection::collapsed(normalize_position(doc, h_in));
+            return collapsed_or_atom(doc, normalize_position(doc, h_in));
         }
 
         Selection { anchor: a, head: h }
@@ -1050,5 +1114,207 @@ mod tests {
         );
         assert_eq!(canonical.head.node_id, root);
         assert_eq!(canonical.head.offset, 1);
+    }
+
+    #[test]
+    fn normalize_collapsed_before_atom_downstream_expands_to_node_selection() {
+        let (d, ..) = doc! {
+            root { paragraph { text("a") } image paragraph { text("b") } }
+        };
+        // (root, 1, Downstream) is the boundary just before the image; must expand to node selection.
+        let root_id = NodeId::ROOT;
+        let sel = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        });
+        let out = sel.normalize(&d).unwrap();
+        assert!(
+            !out.is_collapsed(),
+            "must expand to node selection, got {:?}",
+            out
+        );
+        assert_eq!(
+            out.anchor,
+            Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            out.head,
+            Position {
+                node_id: root_id,
+                offset: 2,
+                affinity: Affinity::Upstream
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_collapsed_after_atom_upstream_expands_backward_node_selection() {
+        let (d, ..) = doc! {
+            root { paragraph { text("a") } image paragraph { text("b") } }
+        };
+        let root_id = NodeId::ROOT;
+        // (root, 2, Upstream) is the boundary just after the image; Upstream selects child[1]=image.
+        let sel = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 2,
+            affinity: Affinity::Upstream,
+        });
+        let out = sel.normalize(&d).unwrap();
+        assert!(!out.is_collapsed(), "must expand, got {:?}", out);
+        assert_eq!(
+            out.anchor,
+            Position {
+                node_id: root_id,
+                offset: 2,
+                affinity: Affinity::Upstream
+            }
+        );
+        assert_eq!(
+            out.head,
+            Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: Affinity::Downstream
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_collapsed_between_adjacent_atoms_uses_affinity() {
+        let (d, ..) = doc! {
+            root { paragraph { text("x") } image horizontal_rule paragraph { text("y") } }
+        };
+        let root_id = NodeId::ROOT;
+        // (root,2,Down) → child[2]=horizontal_rule.
+        let down = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 2,
+            affinity: Affinity::Downstream,
+        })
+        .normalize(&d)
+        .unwrap();
+        assert_eq!(
+            down.anchor,
+            Position {
+                node_id: root_id,
+                offset: 2,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            down.head,
+            Position {
+                node_id: root_id,
+                offset: 3,
+                affinity: Affinity::Upstream
+            }
+        );
+        // (root,2,Up) → child[1]=image.
+        let up = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 2,
+            affinity: Affinity::Upstream,
+        })
+        .normalize(&d)
+        .unwrap();
+        assert_eq!(
+            up.anchor,
+            Position {
+                node_id: root_id,
+                offset: 2,
+                affinity: Affinity::Upstream
+            }
+        );
+        assert_eq!(
+            up.head,
+            Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: Affinity::Downstream
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_collapsed_non_atom_container_position_unchanged() {
+        let (d, ..) = doc! {
+            root { paragraph { text("a") } paragraph { text("b") } }
+        };
+        let root_id = NodeId::ROOT;
+        // Both sides of (root,1) are paragraphs (non-atom), so the selection must stay collapsed.
+        for aff in [Affinity::Downstream, Affinity::Upstream] {
+            let sel = Selection::collapsed(Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: aff,
+            });
+            let out = sel.normalize(&d).unwrap();
+            assert!(
+                out.is_collapsed(),
+                "non-atom container pos must stay collapsed, got {:?}",
+                out
+            );
+        }
+    }
+
+    #[test]
+    fn normalize_atom_node_selection_idempotent() {
+        let (d, ..) = doc! {
+            root { paragraph { text("a") } image paragraph { text("b") } }
+        };
+        let root_id = NodeId::ROOT;
+        let sel = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        });
+        let once = sel.normalize(&d).unwrap();
+        let twice = once.normalize(&d).unwrap();
+        assert_eq!(
+            once, twice,
+            "atom node selection normalize must be idempotent"
+        );
+    }
+
+    #[test]
+    fn normalize_collapsed_before_leading_atom_index0_expands() {
+        // In a leading-atom doc, first_cursor_position yields (root,0) collapsed;
+        // normalize must expand it to a node selection.
+        let (d, ..) = doc! {
+            root { image paragraph { text("b") } }
+        };
+        let root_id = NodeId::ROOT;
+        let sel = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        });
+        let out = sel.normalize(&d).unwrap();
+        assert!(
+            !out.is_collapsed(),
+            "leading atom must node-select, got {:?}",
+            out
+        );
+        assert_eq!(
+            out.anchor,
+            Position {
+                node_id: root_id,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            out.head,
+            Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
     }
 }

@@ -132,5 +132,8 @@ fn doc_start_selection(doc: &editor_model::Doc) -> EditorResult<editor_state::Se
     let pos = root
         .first_cursor_position()
         .ok_or(FfiError::NoInitialCursorPosition)?;
-    Ok(editor_state::Selection::collapsed(pos))
+    // Bypass entry point: first_cursor_position can yield (root,0) collapsed on a
+    // leading atom, so normalize upholds the invariant here.
+    let sel = editor_state::Selection::collapsed(pos);
+    Ok(sel.normalize(doc).unwrap_or(sel))
 }

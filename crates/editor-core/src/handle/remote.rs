@@ -12,7 +12,8 @@ pub fn handle_remote(editor: &mut Editor, changeset: Changeset<DocOp>) -> Result
         .state
         .receive_remote_changeset(changeset)
         .map_err(|e| EditorError::Step(StepError::State(e)))?;
-    next.selection = frozen.thaw(&next.doc);
+    let thawed = frozen.thaw(&next.doc);
+    next.selection = thawed.normalize(&next.doc).unwrap_or(thawed);
     editor.state = next;
     editor.pending_ops.extend(applied_ops);
     Ok(())
@@ -123,5 +124,74 @@ mod tests {
 
         assert_eq!(editor.state().selection.head.node_id, NodeId::ROOT);
         assert_eq!(editor.state().selection.head.offset, 1);
+    }
+
+    #[test]
+    fn remote_changeset_normalizes_collapsed_on_atom_selection() {
+        use editor_crdt::Changeset;
+        // replica_a: doc whose first child is an image; initial selection placed at t2.
+        let (replica_a, t2) = state! {
+            doc { root { image paragraph { t2: text("b") } } }
+            selection: (t2, 0)
+        };
+        let css_a: Vec<Changeset<DocOp>> = replica_a.graph.changesets_as_vec();
+        let root = NodeId::ROOT;
+        // Seed replica_b with a raw collapsed-on-atom selection (root,0,Down).
+        // State::from_changesets does not call normalize, so this abnormal state
+        // persists — reproducing the bypass entry point that handle_remote must fix.
+        let raw_on_atom = editor_state::Selection::collapsed(editor_state::Position {
+            node_id: root,
+            offset: 0,
+            affinity: editor_state::Affinity::Downstream,
+        });
+        let replica_b = State::from_changesets(css_a, raw_on_atom).unwrap();
+
+        // Generate a trivial remote op from replica_a (text insert) to trigger handle_remote.
+        let baseline: HashSet<_> = replica_a.graph.current_heads().copied().collect();
+        let (replica_a, _op) = replica_a
+            .apply(DocOp::Text {
+                node_id: t2,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'X',
+                },
+            })
+            .unwrap();
+        let replica_a = State {
+            graph: replica_a.graph.commit(),
+            ..replica_a
+        };
+        let cs = replica_a
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0);
+
+        let mut editor = Editor::new_test(replica_b);
+        editor.receive_remote_changeset(cs);
+        let _ = editor.tick().unwrap();
+
+        // handle_remote must normalize after thaw, expanding to the image (child[0]) node selection.
+        let sel = editor.state().selection;
+        assert!(
+            !sel.is_collapsed(),
+            "remote thaw must normalize collapsed-on-atom, got {:?}",
+            sel
+        );
+        assert_eq!(
+            sel.anchor,
+            editor_state::Position {
+                node_id: root,
+                offset: 0,
+                affinity: editor_state::Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            editor_state::Position {
+                node_id: root,
+                offset: 1,
+                affinity: editor_state::Affinity::Upstream
+            }
+        );
     }
 }

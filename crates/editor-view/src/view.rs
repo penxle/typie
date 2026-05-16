@@ -352,7 +352,8 @@ impl View {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_macros::doc;
+    use editor_common::Direction;
+    use editor_macros::{doc, state};
 
     fn make_op(id: editor_crdt::Dot, payload: DocOp) -> Op<DocOp> {
         Op {
@@ -855,5 +856,120 @@ mod tests {
 
         assert!(view.node_box_rects(&[]).is_empty());
         assert_eq!(view.nearest_node_box(0, cx, cy, &[]), None);
+    }
+
+    #[test]
+    fn arrow_right_onto_image_selects_image_then_passes() {
+        let (state, t1, t2) = state! {
+            doc { root {
+                paragraph { t1: text("ab") }
+                image
+                paragraph { t2: text("cd") }
+            } }
+            selection: (t1, 2)
+        };
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+        let root = editor_model::NodeId::ROOT;
+
+        // First →: cursor is at end of "ab" (before the image), so movement lands on the
+        // image and produces a node-selection spanning it rather than passing through.
+        let sel1 = view
+            .resolve_movement(
+                &Position::new(t1, 2),
+                &Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+        assert!(
+            !sel1.is_collapsed(),
+            "first → must select image, got {:?}",
+            sel1
+        );
+        assert_eq!(
+            sel1.anchor,
+            Position {
+                node_id: root,
+                offset: 1,
+                affinity: editor_state::Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            sel1.head,
+            Position {
+                node_id: root,
+                offset: 2,
+                affinity: editor_state::Affinity::Upstream
+            }
+        );
+
+        // Second →: cursor is at the trailing edge of the image node-selection, so movement
+        // passes through and lands at the start of the following paragraph's text.
+        let sel2 = view
+            .resolve_movement(
+                &sel1.head,
+                &Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+        assert!(
+            sel2.is_collapsed(),
+            "second → must pass image, got {:?}",
+            sel2
+        );
+        assert_eq!(sel2.head.node_id, t2);
+        assert_eq!(sel2.head.offset, 0);
+    }
+
+    #[test]
+    fn arrow_left_onto_horizontal_rule_selects_it() {
+        let (state, t2) = state! {
+            doc { root {
+                paragraph { text("ab") }
+                horizontal_rule
+                paragraph { t2: text("cd") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+        let root = editor_model::NodeId::ROOT;
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(t2, 0),
+                &Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+        assert!(
+            !sel.is_collapsed(),
+            "← onto hr must node-select, got {:?}",
+            sel
+        );
+        // Backward direction: anchor is at the trailing edge (offset 2, Upstream),
+        // head is at the leading edge (offset 1, Downstream).
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: root,
+                offset: 2,
+                affinity: editor_state::Affinity::Upstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: root,
+                offset: 1,
+                affinity: editor_state::Affinity::Downstream
+            }
+        );
     }
 }

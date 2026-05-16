@@ -5,7 +5,7 @@ use icu_segmenter::{SentenceSegmenter, WordSegmenter};
 
 use crate::paginate::*;
 
-use super::navigation::{first_position_in, last_position_in};
+use super::navigation::landed;
 use super::search;
 
 /// Word and sentence movement must not cross a scope-container boundary:
@@ -13,14 +13,21 @@ use super::search;
 /// that same container is rejected so the caret stays put instead of
 /// jumping out. When `from` is not inside any scope container the target
 /// passes through unchanged.
-fn confined_to_scope(tree: &LayoutTree, from: &Position, target: Position) -> Option<Selection> {
+fn confined_to_scope(
+    tree: &LayoutTree,
+    from: &Position,
+    target_node: &LayoutNode,
+    at_end: bool,
+    forward: bool,
+) -> Option<Selection> {
+    let sel = landed(target_node, at_end, forward);
     if let Some(from_scope) = search::find_scope_container_at(&tree.root, from) {
-        let target_scope = search::find_scope_container_at(&tree.root, &target)?;
+        let target_scope = search::find_scope_container_at(&tree.root, &sel.head)?;
         if !std::ptr::eq(from_scope, target_scope) {
             return None;
         }
     }
-    Some(Selection::collapsed(target))
+    Some(sel)
 }
 
 pub fn move_word_forward(
@@ -31,6 +38,10 @@ pub fn move_word_forward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
+        LayoutContent::Atom(_) => {
+            let next = search::find_navigable_after(&tree.root, line_node)?;
+            return confined_to_scope(tree, pos, next, false, true);
+        }
         _ => return None,
     };
     let char_idx = line_char_index(line, pos)?;
@@ -42,7 +53,7 @@ pub fn move_word_forward(
 
     let y = line_node.rect.bottom();
     let next = search::find_navigable_below(&tree.root, y)?;
-    confined_to_scope(tree, pos, first_position_in(next))
+    confined_to_scope(tree, pos, next, false, true)
 }
 
 pub fn move_word_backward(
@@ -53,6 +64,10 @@ pub fn move_word_backward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
+        LayoutContent::Atom(_) => {
+            let prev = search::find_navigable_before(&tree.root, line_node)?;
+            return confined_to_scope(tree, pos, prev, true, false);
+        }
         _ => return None,
     };
     let char_idx = line_char_index(line, pos)?;
@@ -64,7 +79,7 @@ pub fn move_word_backward(
 
     let y = line_node.rect.y;
     let prev = search::find_navigable_above(&tree.root, y)?;
-    confined_to_scope(tree, pos, last_position_in(prev))
+    confined_to_scope(tree, pos, prev, true, false)
 }
 
 pub fn move_sentence_forward(
@@ -75,6 +90,10 @@ pub fn move_sentence_forward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
+        LayoutContent::Atom(_) => {
+            let next = search::find_navigable_after(&tree.root, line_node)?;
+            return confined_to_scope(tree, pos, next, false, true);
+        }
         _ => return None,
     };
     let char_idx = line_char_index(line, pos)?;
@@ -86,7 +105,7 @@ pub fn move_sentence_forward(
 
     let y = line_node.rect.bottom();
     let next = search::find_navigable_below(&tree.root, y)?;
-    confined_to_scope(tree, pos, first_position_in(next))
+    confined_to_scope(tree, pos, next, false, true)
 }
 
 pub fn move_sentence_backward(
@@ -97,6 +116,10 @@ pub fn move_sentence_backward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
+        LayoutContent::Atom(_) => {
+            let prev = search::find_navigable_before(&tree.root, line_node)?;
+            return confined_to_scope(tree, pos, prev, true, false);
+        }
         _ => return None,
     };
     let char_idx = line_char_index(line, pos)?;
@@ -108,7 +131,7 @@ pub fn move_sentence_backward(
 
     let y = line_node.rect.y;
     let prev = search::find_navigable_above(&tree.root, y)?;
-    confined_to_scope(tree, pos, last_position_in(prev))
+    confined_to_scope(tree, pos, prev, true, false)
 }
 
 pub fn select_word_at(
@@ -187,8 +210,8 @@ pub fn select_paragraph_at(tree: &LayoutTree, pos: &Position) -> Option<Selectio
     let first = search::find_first_navigable(container)?;
     let last = search::find_last_navigable(container)?;
     Some(Selection::new(
-        first_position_in(first),
-        last_position_in(last),
+        super::navigation::first_position_in(first),
+        super::navigation::last_position_in(last),
     ))
 }
 
@@ -785,5 +808,105 @@ mod tests {
         assert_eq!(sel.anchor.offset, 0);
         assert_eq!(sel.head.node_id, NodeId::ROOT);
         assert_eq!(sel.head.offset, 1);
+    }
+
+    #[test]
+    fn word_forward_onto_atom_selects_atom() {
+        use crate::paginate::{LayoutAtom, LayoutContent, LayoutNode, LayoutTree};
+        let para = NodeId::new();
+        let atom_parent = NodeId::new();
+        let atom_id = NodeId::new();
+        let line = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 50.0, 20.0),
+            content: LayoutContent::Line(make_line(para, "hi")),
+        };
+        let atom = LayoutNode {
+            rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
+            content: LayoutContent::Atom(LayoutAtom {
+                node_id: atom_id,
+                parent_id: atom_parent,
+                index: 0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    children: vec![line, atom],
+                }),
+            },
+        };
+        let segmenters = TextSegmenters::new_test();
+        // Moving word-forward from the end of "hi" has no in-line boundary; the next navigable is the atom.
+        let sel = move_word_forward(&tree, &Position::new(para, 2), &segmenters).unwrap();
+        assert!(
+            !sel.is_collapsed(),
+            "word-forward onto atom must node-select, got {:?}",
+            sel
+        );
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: atom_parent,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: atom_parent,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+    }
+
+    #[test]
+    fn word_forward_from_selected_atom_passes_to_next_text() {
+        use crate::paginate::{LayoutAtom, LayoutContent, LayoutNode, LayoutTree};
+        let para = NodeId::new();
+        let atom_parent = NodeId::new();
+        let atom_id = NodeId::new();
+        let atom = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+            content: LayoutContent::Atom(LayoutAtom {
+                node_id: atom_id,
+                parent_id: atom_parent,
+                index: 0,
+            }),
+        };
+        let line = LayoutNode {
+            rect: Rect::from_xywh(0.0, 20.0, 50.0, 20.0),
+            content: LayoutContent::Line(make_line(para, "hi")),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    children: vec![atom, line],
+                }),
+            },
+        };
+        let segmenters = TextSegmenters::new_test();
+        // Forward head of the atom node-selection is (atom_parent, 1, Upstream).
+        // find_line_at returns Atom, so word-forward passes through to the next navigable Line.
+        let pos = Position {
+            node_id: atom_parent,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sel = move_word_forward(&tree, &pos, &segmenters).unwrap();
+        assert!(
+            sel.is_collapsed(),
+            "passing atom must yield text caret, got {:?}",
+            sel
+        );
+        assert_eq!(sel.head.node_id, para);
+        assert_eq!(sel.head.offset, 0);
     }
 }

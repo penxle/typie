@@ -719,4 +719,45 @@ mod tests {
         assert_eq!(sel.head.node_id, id);
         assert_eq!(sel.head.offset, 0);
     }
+
+    #[test]
+    fn exact_hit_on_atom_node_selects_atom() {
+        let parent = NodeId::new();
+        let atom_id = NodeId::new();
+        let atom = LayoutNode {
+            rect: Rect::from_xywh(10.0, 0.0, 100.0, 40.0),
+            content: LayoutContent::Atom(LayoutAtom {
+                node_id: atom_id,
+                parent_id: parent,
+                index: 0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: make_box_node(NodeId::ROOT, 0.0, 0.0, 200.0, 40.0, vec![atom]),
+        };
+        let page = make_page(0.0, 100.0);
+        // page-local (50,20) → abs (50,20) ∈ atom rect (10..110, 0..40).
+        let sel = exact_hit_test(&tree, &page, 50.0, 20.0).unwrap();
+        assert!(
+            !sel.is_collapsed(),
+            "click on atom must node-select, got {:?}",
+            sel
+        );
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: parent,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: parent,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+    }
 }
