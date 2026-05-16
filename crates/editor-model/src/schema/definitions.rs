@@ -90,7 +90,6 @@ impl Default for SchemaInner {
                 },
                 NodeType::ListItem => NodeSpec {
                     content: content_expr!(Paragraph, (BulletList | OrderedList)?),
-                    structural: true,
                     ..Default::default()
                 },
                 NodeType::Fold => NodeSpec {

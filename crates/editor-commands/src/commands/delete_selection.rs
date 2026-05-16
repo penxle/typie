@@ -18,12 +18,24 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
         .resolve(&doc)
         .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
 
-    // A cell-rect is a non-collapsed selection over TableRow boundaries.
-    // Generic range-delete here would remove TableCell children and corrupt
-    // the table. Refuse (no-op); clearing cell *contents* is a future cell
-    // command, out of scope for the representation layer.
-    if resolved.as_cell_rect().is_some() {
-        return Ok(false);
+    // A cell-rect is the corner-bracket encoding of a rectangular cell block —
+    // not a linear range. Decode it via the selection layer, then apply the
+    // same generic structural clear: every selected cell keeps its structure
+    // and is emptied to one paragraph; no cell/row is removed.
+    if let Some(rect) = resolved.as_cell_rect() {
+        let cell_ids: Vec<NodeId> = rect.cells().map(|c| c.id()).collect();
+        let anchor_id = rect.anchor_cell.id();
+        tr.batch::<_, CommandError>(|tr| {
+            for cell_id in cell_ids {
+                clear_structural_subtree(tr, cell_id)?;
+            }
+            Ok(())
+        })?;
+        let cursor = find_first_text_position(&tr.doc(), anchor_id).ok_or(
+            CommandError::Corrupted("anchor cell has no text position".into()),
+        )?;
+        tr.set_selection(Selection::collapsed(cursor))?;
+        return Ok(true);
     }
 
     let from = Position::from(resolved.from());
@@ -78,10 +90,15 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
         to_path.push(to.offset);
 
         let from_node_id = from.node_id;
+        let to_node_id = to.node_id;
         tr.batch::<_, CommandError>(|tr| {
             delete_range(tr, &from_path, &to_path, lca_id)?;
             merge_after_delete(tr, from_tb, to_tb, lca_id)?;
             fulfill_ancestors(tr, from_node_id, lca_id)?;
+            // The to-side endpoint may itself be a structural container whose
+            // non-structural children were emptied by delete_to; fulfill it too.
+            // fulfill_ancestors is idempotent and skips already-removed nodes.
+            fulfill_ancestors(tr, to_node_id, lca_id)?;
             Ok(())
         })?;
 
@@ -167,7 +184,7 @@ fn delete_within_node(
                 .collect();
 
             for child_id in children_to_remove.into_iter().rev() {
-                tr.remove_subtree(child_id)?;
+                remove_or_clear(tr, child_id)?;
             }
 
             Ok(Position {
@@ -177,6 +194,44 @@ fn delete_within_node(
             })
         }
     }
+}
+
+/// Remove a fully-selected child, honoring the schema `structural` invariant:
+/// a structural node is a fixed part of its parent and is never deleted — its
+/// content is cleared recursively and the node is re-fulfilled instead.
+fn remove_or_clear(tr: &mut Transaction, child_id: NodeId) -> Result<(), CommandError> {
+    let is_structural = tr.doc().node(child_id).is_some_and(|n| n.spec().structural);
+    if is_structural {
+        clear_structural_subtree(tr, child_id)?;
+    } else {
+        tr.remove_subtree(child_id)?;
+    }
+    Ok(())
+}
+
+/// Recursively empties a structural node: structural descendants are preserved
+/// (recursed into), non-structural descendants are removed, then every visited
+/// structural node is re-fulfilled so it regains its minimal required content
+/// (an emptied TableCell/FoldContent gets one empty paragraph; an emptied
+/// FoldTitle stays empty since its content is `Text*`).
+fn clear_structural_subtree(tr: &mut Transaction, node_id: NodeId) -> Result<(), CommandError> {
+    let child_ids: Vec<NodeId> = match tr.doc().node(node_id) {
+        Some(n) => n.entry().children.iter().copied().collect(),
+        None => return Ok(()),
+    };
+    for child_id in child_ids.into_iter().rev() {
+        let child_structural = tr.doc().node(child_id).is_some_and(|n| n.spec().structural);
+        if child_structural {
+            clear_structural_subtree(tr, child_id)?;
+        } else {
+            tr.remove_subtree(child_id)?;
+        }
+    }
+    let doc = tr.doc();
+    if let Some(node) = doc.node(node_id) {
+        tr.apply_steps(fulfill(&node))?;
+    }
+    Ok(())
 }
 
 fn resolve_cursor_after_removal(
@@ -239,7 +294,7 @@ fn delete_from(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<
                 let children: Vec<NodeId> =
                     node.entry().children.iter().skip(offset).copied().collect();
                 for child_id in children.into_iter().rev() {
-                    tr.remove_subtree(child_id)?;
+                    remove_or_clear(tr, child_id)?;
                 }
             }
         }
@@ -253,7 +308,7 @@ fn delete_from(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<
             .copied()
             .collect();
         for child_id in children.into_iter().rev() {
-            tr.remove_subtree(child_id)?;
+            remove_or_clear(tr, child_id)?;
         }
         let child_id = node.entry().children.iter().nth(idx).copied().unwrap();
         delete_from(tr, &path[1..], child_id)?;
@@ -284,7 +339,7 @@ fn delete_to(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<()
                 let children: Vec<NodeId> =
                     node.entry().children.iter().take(offset).copied().collect();
                 for child_id in children.into_iter().rev() {
-                    tr.remove_subtree(child_id)?;
+                    remove_or_clear(tr, child_id)?;
                 }
             }
         }
@@ -292,7 +347,7 @@ fn delete_to(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<()
         let idx = path[0];
         let children: Vec<NodeId> = node.entry().children.iter().take(idx).copied().collect();
         for child_id in children.into_iter().rev() {
-            tr.remove_subtree(child_id)?;
+            remove_or_clear(tr, child_id)?;
         }
         let child_id = node.entry().children.iter().nth(idx).copied().unwrap();
         delete_to(tr, &path[1..], child_id)?;
@@ -364,7 +419,7 @@ fn delete_range(
         }
 
         for child_id in fully_selected.into_iter().rev() {
-            tr.remove_subtree(child_id)?;
+            remove_or_clear(tr, child_id)?;
         }
 
         if let Some(child_id) = to_child_id {
@@ -477,6 +532,25 @@ fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: u
     Selection::collapsed(Position::new(container_id, offset.min(children.len())))
 }
 
+/// The structural region a node belongs to: the node itself if it is
+/// `structural` (e.g. FoldTitle, which is both a textblock and structural),
+/// otherwise its nearest structural ancestor, otherwise `None` (outermost).
+/// Two textblocks with different regions are separated by a structural
+/// boundary and must not have content merged across it.
+fn structural_region(doc: &editor_model::Doc, node_id: NodeId) -> Option<NodeId> {
+    let node = doc.node(node_id)?;
+    if node.spec().structural {
+        return Some(node_id);
+    }
+    let mut current = node.parent()?;
+    loop {
+        if current.spec().structural {
+            return Some(current.id());
+        }
+        current = current.parent()?;
+    }
+}
+
 /// After deletion, merge boundary textblocks and clean up containers.
 fn merge_after_delete(
     tr: &mut Transaction,
@@ -491,6 +565,12 @@ fn merge_after_delete(
 
     let doc = tr.doc();
     if doc.node(from_tb).is_none() || doc.node(to_tb).is_none() {
+        return Ok(());
+    }
+
+    // Never merge content across a structural boundary. If the two textblocks
+    // live in different structural regions, leave both intact.
+    if structural_region(&doc, from_tb) != structural_region(&doc, to_tb) {
         return Ok(());
     }
 
@@ -578,12 +658,50 @@ fn merge_after_delete(
         }
     }
 
+    // Collect the ancestor chain from to_tb_parent up to lca_id before any prune
+    // runs, because prune removes nodes and severs the parent link we need to walk.
+    let ancestor_chain: Vec<NodeId> = {
+        let doc = tr.doc();
+        let mut chain = Vec::new();
+        if let Some(start_id) = to_tb_parent {
+            let mut current = start_id;
+            loop {
+                chain.push(current);
+                if current == lca_id {
+                    break;
+                }
+                match doc.node(current).and_then(|n| n.parent()).map(|p| p.id()) {
+                    Some(parent_id) => current = parent_id,
+                    None => break,
+                }
+            }
+        }
+        chain
+    };
+
     let doc = tr.doc();
     if let Some(parent_id) = to_tb_parent
         && let Some(parent) = doc.node(parent_id)
         && parent.entry().children.is_empty()
     {
-        tr.apply_steps(prune(&parent))?;
+        if parent.spec().structural {
+            tr.apply_steps(fulfill(&parent))?;
+        } else {
+            tr.apply_steps(prune(&parent))?;
+        }
+    }
+
+    // The prune cascade above stops at the first structural ancestor but does not
+    // repair it. Any structural node between to_tb_parent and the LCA may have been
+    // emptied by the merge; fulfill them so no structural container is left
+    // schema-invalid. fulfill is idempotent and skips already-removed nodes.
+    for &id in &ancestor_chain {
+        let doc = tr.doc();
+        if let Some(node) = doc.node(id)
+            && node.spec().structural
+        {
+            tr.apply_steps(fulfill(&node))?;
+        }
     }
 
     let doc = tr.doc();
@@ -1216,9 +1334,12 @@ mod tests {
             selection: (t1, 1) -> (t3, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        // fold_title allows empty because its content is Text* (no required child).
+        // The fold boundary blocks content merge, so t1 and t3 remain in separate blocks.
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("13") }
+                paragraph { t1: text("1") }
+                fold { fold_title {} fold_content { paragraph { t3: text("3") } } }
                 paragraph { t4: text("44") }
             } }
             selection: (t1, 1)
@@ -1242,14 +1363,15 @@ mod tests {
             selection: (t2, 1) -> (t4, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        // The fold boundary blocks content merge across it; fold structure is preserved.
         let (expected, ..) = state! {
             doc { root {
                 paragraph { t1: text("11") }
                 fold {
-                    fold_title { t2: text("24") }
+                    fold_title { t2: text("2") }
                     fold_content { paragraph {} }
                 }
-                paragraph {}
+                paragraph { t4: text("4") }
             } }
             selection: (t2, 1)
         };
@@ -1300,11 +1422,15 @@ mod tests {
             selection: (t1, 1) -> (t3, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        // The fold boundary blocks content merge; partially-selected non-textblock ancestors
+        // (bullet_list/list_item) are preserved because they are not wholly contained.
         let (expected, ..) = state! {
             doc { root {
                 fold {
-                    fold_title { t1: text("13") }
-                    fold_content { paragraph {} }
+                    fold_title { t1: text("1") }
+                    fold_content {
+                        bullet_list { list_item { paragraph { t3: text("3") } } }
+                    }
                 }
             } }
             selection: (t1, 1)
@@ -1478,7 +1604,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_selection_noops_on_1x1_cell_rect() {
+    fn delete_selection_clears_1x1_cell_rect() {
         let (state, _, c00, c01) = state! {
             doc { root { table { tr0: table_row {
                 c00: table_cell { paragraph { text("a") } }
@@ -1491,14 +1617,16 @@ mod tests {
             selection: sel,
             ..state
         };
-        let (after, ..) = transact_fail!(initial, |tr| delete_selection(&mut tr));
-        // Both cells still present — the table was not corrupted.
-        assert!(after.doc.node(c00).is_some());
-        assert!(after.doc.node(c01).is_some());
+        let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let c00n = after.doc.node(c00).expect("c00 survives");
+        assert_eq!(c00n.children().count(), 1);
+        assert_eq!(c00n.first_child().unwrap().children().count(), 0);
+        let c01n = after.doc.node(c01).expect("c01 survives");
+        assert_eq!(c01n.first_child().unwrap().children().count(), 1); // "b" intact
     }
 
     #[test]
-    fn delete_selection_noops_on_1xn_cell_rect() {
+    fn delete_selection_clears_1xn_cell_rect() {
         let (state, _, c00, c01) = state! {
             doc { root { table { tr0: table_row {
                 c00: table_cell { paragraph { text("a") } }
@@ -1511,13 +1639,145 @@ mod tests {
             selection: sel,
             ..state
         };
-        let (after, ..) = transact_fail!(initial, |tr| delete_selection(&mut tr));
-        assert!(after.doc.node(c00).is_some());
+        let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        for cid in [c00, c01] {
+            let n = after.doc.node(cid).expect("cell survives");
+            assert_eq!(n.children().count(), 1);
+            assert_eq!(n.first_child().unwrap().children().count(), 0);
+        }
+    }
+
+    #[test]
+    fn delete_selection_through_rows_clears_cells_keeps_structure() {
+        let (state, _, c00, c01, c10, c11, ..) = state! {
+            doc { root {
+                paragraph { pt: text("hello") }
+                table {
+                    table_row {
+                        c00: table_cell { paragraph { text("a") } }
+                        c01: table_cell { paragraph { text("b") } }
+                    }
+                    table_row {
+                        c10: table_cell { paragraph { text("c") } }
+                        c11: table_cell { paragraph { ct: text("d") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (pt, 3) -> (ct, 0)
+        };
+        let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
+        for cid in [c00, c01, c10, c11] {
+            assert!(after.doc.node(cid).is_some(), "cell {cid:?} must survive");
+        }
+        for cid in [c00, c01, c10] {
+            let cell = after.doc.node(cid).unwrap();
+            let kids: Vec<_> = cell.children().collect();
+            assert_eq!(kids.len(), 1, "cell {cid:?} one child");
+            assert!(matches!(kids[0].node(), editor_model::Node::Paragraph(_)));
+            assert_eq!(kids[0].children().count(), 0, "empty paragraph");
+        }
+    }
+
+    #[test]
+    fn delete_selection_whole_table_contained_removes_table_and_merges() {
+        let (state, ..) = state! {
+            doc { root {
+                paragraph { bt: text("AB") }
+                table { table_row { table_cell { paragraph { text("x") } } } }
+                paragraph { at: text("CD") }
+            } }
+            selection: (bt, 1) -> (at, 1)
+        };
+        let (got, ..) = transact!(state, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("AD") } } }
+            selection: (t, 1)
+        };
+        assert_state_eq!(&got, &expected);
+    }
+
+    #[test]
+    fn delete_selection_to_structural_container_offset_fulfills_cell() {
+        let (state, _, c00, c01) = state! {
+            doc { root {
+                paragraph { pt: text("X") }
+                table { table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                } }
+                paragraph {}
+            } }
+            selection: (pt, 0) -> (c00, 1)
+        };
+        let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
+        let cell = after.doc.node(c00).expect("structural cell must survive");
+        assert_eq!(cell.children().count(), 1, "emptied cell must be fulfilled");
+        assert!(matches!(
+            cell.first_child().unwrap().node(),
+            editor_model::Node::Paragraph(_)
+        ));
+        assert_eq!(cell.first_child().unwrap().children().count(), 0);
         assert!(after.doc.node(c01).is_some());
     }
 
     #[test]
-    fn delete_selection_noops_on_mxn_cell_rect() {
+    fn delete_selection_from_outside_into_cell_must_not_delete_cell() {
+        let (state, _, c00, _, c01, c02, c03) = state! {
+            doc { root {
+                p1: paragraph {}
+                table {
+                    table_row {
+                        c00: table_cell { p2: paragraph {} }
+                        c01: table_cell { paragraph {} }
+                        c02: table_cell { paragraph {} }
+                        c03: table_cell { paragraph {} }
+                    }
+                    table_row {
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                    }
+                    table_row {
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 0, >) -> (p2, 0, <)
+        };
+        let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
+        assert!(
+            after.doc.node(c00).is_some(),
+            "first table_cell must not be deleted by backspace"
+        );
+        assert!(after.doc.node(c01).is_some());
+        assert!(after.doc.node(c02).is_some());
+        assert!(after.doc.node(c03).is_some());
+    }
+
+    #[test]
+    fn delete_selection_cell_to_cell_no_cross_merge() {
+        let (state, ca, _, cb, ..) = state! {
+            doc { root { table { table_row {
+                ca: table_cell { paragraph { ta: text("hello") } }
+                cb: table_cell { paragraph { tb: text("world") } }
+            } } } }
+            selection: (ta, 2) -> (tb, 3)
+        };
+        let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
+        assert!(after.doc.node(ca).is_some());
+        assert!(after.doc.node(cb).is_some());
+        assert!(after.doc.node(ca).unwrap().children().count() >= 1);
+        assert!(after.doc.node(cb).unwrap().children().count() >= 1);
+    }
+
+    #[test]
+    fn delete_selection_clears_mxn_cell_rect() {
         let (state, _, c00, c01, _, c10, c11) = state! {
             doc { root { table {
                 tr0: table_row {
@@ -1531,17 +1791,16 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        // M×N cell-rect: endpoints in DIFFERENT TableRows → absent the guard
-        // this hits the cross-node delete branch. Guard must no-op it.
         let sel = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
         let initial = editor_state::State {
             selection: sel,
             ..state
         };
-        let (after, ..) = transact_fail!(initial, |tr| delete_selection(&mut tr));
-        assert!(after.doc.node(c00).is_some());
-        assert!(after.doc.node(c01).is_some());
-        assert!(after.doc.node(c10).is_some());
-        assert!(after.doc.node(c11).is_some());
+        let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        for cid in [c00, c01, c10, c11] {
+            let n = after.doc.node(cid).expect("cell survives");
+            assert_eq!(n.children().count(), 1);
+            assert_eq!(n.first_child().unwrap().children().count(), 0);
+        }
     }
 }

@@ -14,6 +14,12 @@ pub fn prune(node: &NodeRef) -> Vec<Step> {
         return vec![];
     }
 
+    // A structural node is a fixed part of its parent's shape; it can never be
+    // removed, only emptied and re-fulfilled by the caller.
+    if node.spec().structural {
+        return vec![];
+    }
+
     prune_empty(node)
 }
 
@@ -40,7 +46,10 @@ fn prune_empty(node: &NodeRef) -> Vec<Step> {
     }];
 
     // If parent will also become empty after removal, cascade
-    if parent.entry().children.len() == 1 && parent.spec().content.min_required() > 0 {
+    if parent.entry().children.len() == 1
+        && parent.spec().content.min_required() > 0
+        && !parent.spec().structural
+    {
         steps.extend(prune_empty(&parent));
     }
 
@@ -112,6 +121,29 @@ mod tests {
         let para = doc.node(p1).unwrap();
         let steps = prune(&para);
         assert!(steps.is_empty());
+    }
+
+    #[test]
+    fn prune_skips_structural_node() {
+        // TableCell: content (Paragraph|...)+, min_required > 0, structural = true.
+        // An empty structural node must NEVER be pruned — it is fulfilled instead.
+        let (doc, c1, ..) = doc! {
+            root {
+                table {
+                    table_row {
+                        c1: table_cell
+                        table_cell { paragraph }
+                    }
+                }
+                paragraph
+            }
+        };
+        let cell = doc.node(c1).unwrap();
+        let steps = prune(&cell);
+        assert!(
+            steps.is_empty(),
+            "structural TableCell must not be pruned, got {steps:?}"
+        );
     }
 
     #[test]
