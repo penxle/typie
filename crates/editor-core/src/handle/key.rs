@@ -104,6 +104,37 @@ mod tests {
     }
 
     #[test]
+    fn enter_in_fold_title_is_noop() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        ft1: fold_title {}
+                        fold_content { paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (ft1, 0)
+        };
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        ft1: fold_title {}
+                        fold_content { paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (ft1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn enter_splits_paragraph() {
         let (state, ..) = state! {
             doc { root { paragraph { t1: text("hello") } } }

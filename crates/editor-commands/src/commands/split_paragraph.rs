@@ -21,6 +21,9 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
     match node.node() {
         Node::Text(text_node) => {
             let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
+            if !matches!(parent.node(), Node::Paragraph(_)) {
+                return Ok(false);
+            }
             let node_index = node
                 .index()
                 .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
@@ -38,9 +41,10 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
 
             tr.split_node(parent.id(), split_index, new_paragraph_id)?;
         }
-        _ => {
+        Node::Paragraph(_) => {
             tr.split_node(pos.node_id, pos.offset, new_paragraph_id)?;
         }
+        _ => return Ok(false),
     }
 
     let doc = tr.doc();
@@ -77,6 +81,40 @@ mod tests {
         let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 3)
+        };
+        transact_fail!(initial, |tr| split_paragraph(&mut tr));
+    }
+
+    #[test]
+    fn returns_false_in_empty_fold_title() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        ft1: fold_title {}
+                        fold_content { paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (ft1, 0)
+        };
+        transact_fail!(initial, |tr| split_paragraph(&mut tr));
+    }
+
+    #[test]
+    fn returns_false_in_fold_title_with_text() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 2)
         };
         transact_fail!(initial, |tr| split_paragraph(&mut tr));
     }
