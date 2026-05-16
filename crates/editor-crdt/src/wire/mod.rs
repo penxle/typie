@@ -190,26 +190,4 @@ pub fn decode_dots(bytes: &[u8]) -> WireResult<Vec<crate::Dot>> {
 }
 
 #[cfg(test)]
-mod derive_test;
-
-#[cfg(test)]
-mod dots_wire_tests {
-    use super::*;
-    use crate::Dot;
-
-    #[test]
-    fn empty_dots_round_trip() {
-        let bytes = encode_dots(&[]).unwrap();
-        assert!(bytes.is_empty());
-        let decoded = decode_dots(&bytes).unwrap();
-        assert!(decoded.is_empty());
-    }
-
-    #[test]
-    fn dots_round_trip() {
-        let dots = vec![Dot::new(7, 10), Dot::new(99, 3), Dot::new(7, 12)];
-        let bytes = encode_dots(&dots).unwrap();
-        let decoded = decode_dots(&bytes).unwrap();
-        assert_eq!(decoded, dots);
-    }
-}
+mod tests;

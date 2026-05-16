@@ -9,7 +9,7 @@ pub(crate) mod helpers;
 mod test_utils;
 
 #[cfg(test)]
-mod cell_rect_freedom;
+mod tests;
 
 pub use commands::*;
 pub use compose::*;

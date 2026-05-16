@@ -494,6 +494,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
+    use crate::editor::Editor;
     use editor_crdt::{OpGraph, RgaOp};
     use editor_macros::{doc, state};
     use editor_model::{
@@ -1422,12 +1423,6 @@ mod tests {
             "para2 must no longer be a live child of root after removal"
         );
     }
-}
-
-#[cfg(test)]
-mod cell_render_tests {
-    use crate::editor::Editor;
-    use editor_macros::state;
 
     #[test]
     fn render_uses_node_box_rects_for_cell_rect_selection() {

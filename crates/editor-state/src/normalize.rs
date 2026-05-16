@@ -1,12 +1,3 @@
-//! Selection / Position normalization.
-//!
-//! Maps the many `Position` / `Selection` representations that point at the
-//! same caret or range to a single canonical form. The canonical form prefers
-//! the text-leaf representation over the textblock-container representation
-//! and uses `Affinity` to choose between adjacent leaves on either side of a
-//! boundary; when neither side is a text leaf, the container representation
-//! is kept as-is.
-
 use editor_model::{Doc, Node, NodeRef, Schema};
 
 use crate::affinity::Affinity;
@@ -1104,7 +1095,7 @@ mod tests {
 
     #[test]
     fn normalize_preserves_envelope_over_leading_block() {
-        let (state, _, ta) = state! {
+        let (state, ..) = state! {
             doc {
                 root: root {
                     fold {

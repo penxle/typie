@@ -420,8 +420,12 @@ mod tests {
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::Alignment;
     use crate::style::{BorderMode, BoxStyle, Direction as LayoutDirection};
-    use editor_common::{Direction, EdgeInsets, Rect};
+    use crate::view::View;
+    use editor_common::{Axis, Direction, EdgeInsets, Movement, Rect};
+    use editor_macros::state;
     use editor_model::NodeId;
+    use editor_resource::Resource;
+    use editor_state::Position;
 
     fn gs(n: usize) -> Vec<GraphemeSpan> {
         vec![
@@ -1435,16 +1439,6 @@ mod tests {
             }
         );
     }
-}
-
-#[cfg(test)]
-mod integration_tests {
-    use editor_common::{Axis, Direction, Movement};
-    use editor_macros::state;
-    use editor_resource::Resource;
-    use editor_state::Position;
-
-    use crate::view::View;
 
     #[test]
     fn line_vertical_forward_from_start_two_paragraphs() {

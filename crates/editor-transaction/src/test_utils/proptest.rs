@@ -75,7 +75,7 @@ pub fn transform_scenario() -> impl Strategy<Value = TransformScenario> {
 }
 
 #[cfg(test)]
-mod sanity {
+mod proptests {
     use super::*;
 
     proptest! {

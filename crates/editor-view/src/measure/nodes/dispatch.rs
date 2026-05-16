@@ -61,7 +61,7 @@ pub(crate) fn measure_node(
 }
 
 #[cfg(test)]
-mod integration_tests {
+mod tests {
     use editor_macros::doc;
     use editor_model::NodeId;
 

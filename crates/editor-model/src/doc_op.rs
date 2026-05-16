@@ -205,7 +205,7 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_crdt::OpGraph;
+    use editor_crdt::{OpGraph, TextOp};
 
     fn first_op<P: Clone>(graph: &OpGraph<P>, payload: P) -> (OpGraph<P>, Op<P>) {
         graph.clone().add(payload).unwrap()
@@ -614,6 +614,80 @@ mod tests {
         let mut slice = &buf[..];
         let got = <DocOp as Wire>::decode(&dc, &mut slice).unwrap();
         assert_eq!(got, op);
+    }
+
+    fn build_typing(text: &str) -> Vec<editor_crdt::Changeset<DocOp>> {
+        let mut g = OpGraph::with_actor(1);
+        let para = NodeId::new();
+        let mut prev = None;
+        for ch in text.chars() {
+            let payload = DocOp::Text {
+                node_id: para,
+                op: TextOp::InsertChar { after: prev, ch },
+            };
+            let (ng, op) = g.add(payload).unwrap();
+            prev = Some(op.id);
+            g = ng;
+        }
+        g.commit().changesets_as_vec()
+    }
+
+    #[test]
+    fn run_grouping_round_trip() {
+        let css = build_typing("hello, world!");
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert_eq!(decoded, css);
+    }
+
+    #[test]
+    fn run_grouping_collapses_typing_into_one_entry() {
+        let css = build_typing("hello, world!");
+        assert_eq!(css.len(), 1);
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let body = editor_crdt::wire::envelope::unwrap(&bytes).unwrap();
+        let mut input = &body[..];
+        let _dc = editor_crdt::wire::preamble::decode_preamble(&mut input).unwrap();
+        let cs_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        assert_eq!(cs_count, 1);
+        let parent_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        for _ in 0..parent_count {
+            let _ = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+            let _ = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        }
+        let entry_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
+        assert_eq!(
+            entry_count, 1,
+            "13-char typing should fold into one run entry"
+        );
+    }
+
+    #[test]
+    fn hangul_round_trip() {
+        let css = build_typing("안녕하세요!");
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert_eq!(decoded, css);
+    }
+
+    #[test]
+    fn single_op_round_trip() {
+        let css = build_typing("a");
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert_eq!(decoded, css);
+    }
+
+    #[test]
+    fn empty_bundle_round_trip() {
+        let bytes = editor_crdt::wire::encode::<DocOp>(&[]).unwrap();
+        assert!(bytes.is_empty());
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert!(decoded.is_empty());
     }
 }
 
@@ -1202,84 +1276,4 @@ fn decode_text_run_entry(
         prev_id_inner = Some(id);
     }
     Ok(ops)
-}
-
-#[cfg(test)]
-mod wire_changeset_tests {
-    use super::*;
-    use editor_crdt::{OpGraph, TextOp};
-
-    fn build_typing(text: &str) -> Vec<editor_crdt::Changeset<DocOp>> {
-        let mut g = OpGraph::with_actor(1);
-        let para = NodeId::new();
-        let mut prev = None;
-        for ch in text.chars() {
-            let payload = DocOp::Text {
-                node_id: para,
-                op: TextOp::InsertChar { after: prev, ch },
-            };
-            let (ng, op) = g.add(payload).unwrap();
-            prev = Some(op.id);
-            g = ng;
-        }
-        g.commit().changesets_as_vec()
-    }
-
-    #[test]
-    fn run_grouping_round_trip() {
-        let css = build_typing("hello, world!");
-        let bytes = editor_crdt::wire::encode(&css).unwrap();
-        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
-            editor_crdt::wire::decode(&bytes).unwrap();
-        assert_eq!(decoded, css);
-    }
-
-    #[test]
-    fn run_grouping_collapses_typing_into_one_entry() {
-        let css = build_typing("hello, world!");
-        assert_eq!(css.len(), 1);
-        let bytes = editor_crdt::wire::encode(&css).unwrap();
-        let body = editor_crdt::wire::envelope::unwrap(&bytes).unwrap();
-        let mut input = &body[..];
-        let _dc = editor_crdt::wire::preamble::decode_preamble(&mut input).unwrap();
-        let cs_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
-        assert_eq!(cs_count, 1);
-        let parent_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
-        for _ in 0..parent_count {
-            let _ = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
-            let _ = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
-        }
-        let entry_count = editor_crdt::wire::varint::read_varint(&mut input).unwrap();
-        assert_eq!(
-            entry_count, 1,
-            "13-char typing should fold into one run entry"
-        );
-    }
-
-    #[test]
-    fn hangul_round_trip() {
-        let css = build_typing("안녕하세요!");
-        let bytes = editor_crdt::wire::encode(&css).unwrap();
-        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
-            editor_crdt::wire::decode(&bytes).unwrap();
-        assert_eq!(decoded, css);
-    }
-
-    #[test]
-    fn single_op_round_trip() {
-        let css = build_typing("a");
-        let bytes = editor_crdt::wire::encode(&css).unwrap();
-        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
-            editor_crdt::wire::decode(&bytes).unwrap();
-        assert_eq!(decoded, css);
-    }
-
-    #[test]
-    fn empty_bundle_round_trip() {
-        let bytes = editor_crdt::wire::encode::<DocOp>(&[]).unwrap();
-        assert!(bytes.is_empty());
-        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
-            editor_crdt::wire::decode(&bytes).unwrap();
-        assert!(decoded.is_empty());
-    }
 }

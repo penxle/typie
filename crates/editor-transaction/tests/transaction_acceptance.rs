@@ -3,7 +3,20 @@ use editor_model::{Modifier, NodeId, PlainNode, PlainParagraphNode};
 use editor_transaction::{Step, Transaction};
 use proptest::prelude::*;
 
-mod step_internal_atomic {
+fn extract_text(state: &editor_state::State, node_id: NodeId) -> String {
+    let Some(node_ref) = state.doc.node(node_id) else {
+        return String::new();
+    };
+    let mut result = String::new();
+    for desc in std::iter::once(node_ref.clone()).chain(node_ref.descendants()) {
+        if let editor_model::Node::Text(t) = desc.node() {
+            result.push_str(&t.text.to_string());
+        }
+    }
+    result
+}
+
+mod proptests {
     use super::*;
 
     proptest! {
@@ -42,52 +55,6 @@ mod step_internal_atomic {
             prop_assert_ne!(tr.doc().to_plain(), after_step_1.to_plain());
         }
     }
-}
-
-mod validation_dispatch {
-    use super::*;
-
-    #[test]
-    fn add_modifier_twice_dispatches_once() {
-        let (state, t1) = state! {
-            doc {
-                root {
-                    paragraph {
-                        t1: text("hi")
-                    }
-                }
-            }
-            selection: (t1, 0)
-        };
-
-        let mut tr = Transaction::new(&state);
-        tr.add_modifier(t1, Modifier::Bold).unwrap();
-        tr.add_modifier(t1, Modifier::Bold).unwrap();
-        let (_, _, _, _, _) = tr.commit();
-    }
-
-    #[test]
-    fn subtree_subsumes_node_in_dispatch() {
-        let (state, t1) = state! {
-            doc {
-                root {
-                    paragraph {
-                        t1: text("hello")
-                    }
-                }
-            }
-            selection: (t1, 0)
-        };
-
-        let mut tr = Transaction::new(&state);
-        let new_t = NodeId::new();
-        tr.split_node(t1, 3, new_t).unwrap();
-        let (_, _, _, _, _) = tr.commit();
-    }
-}
-
-mod structural_single_replica {
-    use super::*;
 
     proptest! {
         #[test]
@@ -213,24 +180,6 @@ mod structural_single_replica {
 
     }
 
-    #[test]
-    fn remove_subtree_removes_from_doc() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph paragraph } }
-            selection: (p1, 0)
-        };
-
-        let mut tr = Transaction::new(&state);
-        tr.remove_subtree(p1).unwrap();
-        let (removed, _, _, _, _) = tr.commit();
-
-        assert!(removed.doc.get_entry(p1).is_none());
-    }
-}
-
-mod inverse_visible {
-    use super::*;
-
     proptest! {
         #[test]
         fn insert_text_inverse_round_trip(text in "[a-z]{1,10}") {
@@ -265,6 +214,62 @@ mod inverse_visible {
             prop_assert_eq!(restored.doc.to_plain(), plain_before);
         }
 
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_modifier_twice_dispatches_once() {
+        let (state, t1) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("hi")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.add_modifier(t1, Modifier::Bold).unwrap();
+        tr.add_modifier(t1, Modifier::Bold).unwrap();
+        let (_, _, _, _, _) = tr.commit();
+    }
+
+    #[test]
+    fn subtree_subsumes_node_in_dispatch() {
+        let (state, t1) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut tr = Transaction::new(&state);
+        let new_t = NodeId::new();
+        tr.split_node(t1, 3, new_t).unwrap();
+        let (_, _, _, _, _) = tr.commit();
+    }
+
+    #[test]
+    fn remove_subtree_removes_from_doc() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph paragraph } }
+            selection: (p1, 0)
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.remove_subtree(p1).unwrap();
+        let (removed, _, _, _, _) = tr.commit();
+
+        assert!(removed.doc.get_entry(p1).is_none());
     }
 
     #[test]
@@ -444,17 +449,4 @@ mod inverse_visible {
         let restored = inverse.apply(&after_state).unwrap().state;
         assert_eq!(restored.doc.to_plain(), plain_before);
     }
-}
-
-fn extract_text(state: &editor_state::State, node_id: NodeId) -> String {
-    let Some(node_ref) = state.doc.node(node_id) else {
-        return String::new();
-    };
-    let mut result = String::new();
-    for desc in std::iter::once(node_ref.clone()).chain(node_ref.descendants()) {
-        if let editor_model::Node::Text(t) = desc.node() {
-            result.push_str(&t.text.to_string());
-        }
-    }
-    result
 }

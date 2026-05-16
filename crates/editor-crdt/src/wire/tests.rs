@@ -1,4 +1,6 @@
-use crate::wire::{DecCtx, EncCtx, Wire as _};
+use super::*;
+use crate::Dot;
+use crate::wire::{DecCtx, EncCtx};
 use editor_macros::Wire;
 
 #[derive(Debug, PartialEq, Eq, Wire)]
@@ -174,4 +176,20 @@ fn skip_field_uses_default_on_decode() {
     let got = WithSkip::decode(&dc, &mut slice).unwrap();
     assert_eq!(got.kept, 42);
     assert_eq!(got._cached, 0);
+}
+
+#[test]
+fn empty_dots_round_trip() {
+    let bytes = encode_dots(&[]).unwrap();
+    assert!(bytes.is_empty());
+    let decoded = decode_dots(&bytes).unwrap();
+    assert!(decoded.is_empty());
+}
+
+#[test]
+fn dots_round_trip() {
+    let dots = vec![Dot::new(7, 10), Dot::new(99, 3), Dot::new(7, 12)];
+    let bytes = encode_dots(&dots).unwrap();
+    let decoded = decode_dots(&bytes).unwrap();
+    assert_eq!(decoded, dots);
 }
