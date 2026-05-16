@@ -2,7 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
-  import { onDestroy, untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
   import { PAGE_GAP } from '../constants';
@@ -65,6 +65,8 @@
       loadFonts(document.data.fontFamilies);
       ctx.editor = await Editor.create(graph, { width, height, scale_factor: window.devicePixelRatio }, theme.currentThemeVariant);
       status = 'initialized';
+      await tick();
+      ctx.editor?.focus();
     } catch (err) {
       console.error(err);
       status = 'error';
@@ -115,7 +117,10 @@
     };
   }}
   onfocusin={() => ctx.editor?.focus()}
-  onfocusout={() => ctx.editor?.blur()}
+  onfocusout={() => {
+    if (!window.document.hasFocus()) return;
+    ctx.editor?.blur();
+  }}
   onpointerdown={handle(ctx.editor, handlePointerDown)}
   onpointermove={handle(ctx.editor, handlePointerMove)}
   onpointerup={handle(ctx.editor, handlePointerUp)}
