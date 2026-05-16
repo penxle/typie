@@ -5,6 +5,7 @@ use editor_resource::Resource;
 use editor_state::{Position, ResolvedPosition, ResolvedSelection, Selection};
 use std::sync::{Arc, Mutex};
 
+use crate::ExternalElement;
 use crate::measure::text::resolve::resolve_text_style;
 use crate::measure::text::strut::compute_strut;
 use crate::measure::{MeasuredTree, Measurer};
@@ -288,6 +289,13 @@ impl View {
         self.layout.as_ref().map_or(&[], |r| &r.pages)
     }
 
+    pub fn external_elements(&self, doc: &Doc, selection: &Selection) -> Vec<ExternalElement> {
+        let Some(ref result) = self.layout else {
+            return vec![];
+        };
+        crate::external::external_elements(&result.tree, &result.pages, doc, selection)
+    }
+
     pub fn viewport(&self) -> &Viewport {
         &self.viewport
     }
@@ -307,8 +315,20 @@ impl View {
         self.view_state.fold_states.insert(node_id, expanded);
     }
 
-    pub fn set_external_height(&mut self, node_id: NodeId, height: f32) {
+    pub fn set_external_height(&mut self, doc: &Doc, node_id: NodeId, height: f32) -> bool {
+        if !height.is_finite() || height <= 0.0 || doc.node(node_id).is_none() {
+            return false;
+        }
+
+        if self.view_state.external_height(node_id) == Some(height) {
+            return false;
+        }
+
         self.view_state.external_heights.insert(node_id, height);
+        self.measurer.invalidate_with_ancestors(doc, node_id);
+        self.compute(doc);
+        self.view_state.preferred_x = None;
+        true
     }
 
     pub fn clear_preferred_x(&mut self) {

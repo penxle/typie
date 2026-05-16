@@ -2,7 +2,7 @@ package co.typie.screen.editor.editor.toolbar.bottom
 
 import co.typie.editor.ffi.Break
 import co.typie.editor.ffi.InsertionOp
-import co.typie.editor.ffi.Node
+import co.typie.editor.ffi.PlainNode
 import co.typie.icons.Lucide
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,8 +49,8 @@ class BottomToolbarNodesTest {
     val blockquote = assertIs<InsertionOp.Fragment>(items.single { it.label == "인용구" }.message.op)
     val table = assertIs<InsertionOp.Fragment>(items.single { it.label == "표" }.message.op)
 
-    assertEquals(Node.HorizontalRule(), horizontalRule.fragment.node)
-    assertEquals(Node.Blockquote(), blockquote.fragment.node)
-    assertEquals(Node.Table(), table.fragment.node)
+    assertEquals(PlainNode.HorizontalRule(), horizontalRule.fragment.node)
+    assertEquals(PlainNode.Blockquote(), blockquote.fragment.node)
+    assertEquals(PlainNode.Table(), table.fragment.node)
   }
 }

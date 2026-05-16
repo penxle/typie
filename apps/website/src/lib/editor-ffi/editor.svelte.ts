@@ -8,6 +8,7 @@ import type {
   CursorMetrics,
   Editor as WasmEditor,
   EditorEvent,
+  ExternalElement,
   Message,
   ModifierState,
   PlainRootNode,
@@ -52,6 +53,7 @@ export class Editor {
   #cursor = $state<CursorMetrics>();
   #selection = $state<Selection>();
   #pageSizes = $state<Size[]>([]);
+  #externalElements = $state<ExternalElement[]>([]);
   #rootAttrs = $state<PlainRootNode>();
   #modifierState = $state<ModifierState>();
   #blockState = $state<BlockState>();
@@ -116,6 +118,10 @@ export class Editor {
 
   get pageSizes() {
     return this.#pageSizes;
+  }
+
+  get externalElements() {
+    return this.#externalElements;
   }
 
   get rootAttrs() {
@@ -244,6 +250,10 @@ export class Editor {
     this.#wasm.resize_surface(page, width, height, this.#viewport.scale_factor);
   }
 
+  setExternalElementHeight(nodeId: string, height: number): void {
+    this.enqueue({ type: 'system', event: { type: 'set_external_height', node_id: nodeId, height } });
+  }
+
   currentHeads(): Uint8Array {
     return this.#wasm.current_heads();
   }
@@ -300,6 +310,10 @@ export class Editor {
 
     if (fields.includes('page_sizes')) {
       this.#pageSizes = this.#wasm.page_sizes();
+    }
+
+    if (fields.includes('external_elements')) {
+      this.#externalElements = this.#wasm.external_elements();
     }
 
     if (fields.includes('root_attrs')) {

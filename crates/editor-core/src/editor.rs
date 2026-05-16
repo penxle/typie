@@ -185,6 +185,7 @@ impl Editor {
         if dirty {
             fields.insert(StateField::Cursor);
             fields.insert(StateField::PageSizes);
+            fields.insert(StateField::ExternalElements);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
@@ -204,6 +205,7 @@ impl Editor {
 
         if old_selection != self.state.selection {
             fields.insert(StateField::Cursor);
+            fields.insert(StateField::ExternalElements);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Selection);
             fields.insert(StateField::Modifiers);

@@ -110,6 +110,16 @@ impl Editor {
         })
     }
 
+    pub fn external_elements(&self) -> EditorResult<Vec<Complex<editor_view::ExternalElement>>> {
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .view()
+                .external_elements(&inner.editor.state().doc, &inner.editor.state().selection)
+                .into_ffi()?)
+        })
+    }
+
     pub fn ime(
         &self,
         before_limit: usize,

@@ -107,6 +107,7 @@ class EditorViewportScrollReconcileTest {
             ),
           selection = null,
           pageSizes = listOf(PageSize(width = 300f, height = 900f)),
+          externalElements = emptyList(),
           rootAttrs = null,
           ime = null,
         ),

@@ -13,6 +13,7 @@ pub enum StateField {
     Selection,
     Cursor,
     PageSizes,
+    ExternalElements,
     Ime,
     Modifiers,
     Block,

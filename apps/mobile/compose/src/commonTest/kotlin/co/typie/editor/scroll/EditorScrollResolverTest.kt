@@ -173,6 +173,7 @@ class EditorScrollResolverTest {
       cursor = cursor,
       selection = null,
       pageSizes = pageSizes,
+      externalElements = emptyList(),
       rootAttrs = null,
       ime = null,
     )

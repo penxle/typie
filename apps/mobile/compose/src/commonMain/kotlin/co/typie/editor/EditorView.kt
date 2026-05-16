@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
+import co.typie.editor.external.EditorExternalElementOverlay
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.editorGestures
 import co.typie.editor.input.editorInput
@@ -129,6 +130,7 @@ internal fun EditorView(
       ) {
         editor.pageSizes.forEachIndexed { index, size ->
           val pageCursor = editor.cursor?.takeIf { it.pageIdx == index }
+          val pageExternalElements = editor.externalElements.filter { it.pageIdx == index }
           EditorPageSurface(
             page = index,
             width = size.width,
@@ -150,6 +152,10 @@ internal fun EditorView(
               )
             },
             foregroundOverlay = {
+              EditorExternalElementOverlay(
+                elements = pageExternalElements,
+                displayZoom = displayZoom,
+              )
               EditorCursorOverlay(
                 cursor = pageCursor,
                 focused = uiState.focused,

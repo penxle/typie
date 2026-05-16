@@ -242,6 +242,14 @@ export interface CursorMetrics {
     line: Rect;
 }
 
+export interface ExternalElement {
+    page_idx: number;
+    node_id: NodeId;
+    bounds: Rect;
+    data: ExternalElementData;
+    is_selected: boolean;
+}
+
 export interface FontFamily {
     name: string;
     source: FontFamilySource;
@@ -473,6 +481,8 @@ export type Effect = { load_font: { family: string; weight: number; codepoints: 
 
 export type EmbedNodeAttr = { type: "id" } & string | undefined;
 
+export type ExternalElementData = { type: "image"; id: string | undefined; proportion: number } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
+
 export type FileNodeAttr = { type: "id" } & string | undefined;
 
 export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "move_cursor"; delta: number };
@@ -543,7 +553,7 @@ export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
 export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
-export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers" | "block";
+export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "ime" | "modifiers" | "block";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -572,6 +582,7 @@ declare class Editor {
     cursor(): CursorMetrics | undefined;
     detach_surface(page: number): void;
     enqueue(message: Message): void;
+    external_elements(): ExternalElement[];
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;

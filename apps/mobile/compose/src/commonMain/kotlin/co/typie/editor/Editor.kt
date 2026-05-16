@@ -10,6 +10,7 @@ import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
@@ -56,6 +57,7 @@ internal constructor(
   val cursor: CursorMetrics? by derivedStateOf { state.cursor }
   val selection: Selection? by derivedStateOf { state.selection }
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
+  val externalElements: List<ExternalElement> by derivedStateOf { state.externalElements }
   val rootAttrs: PlainRootNode? by derivedStateOf { state.rootAttrs }
   val modifierState: ModifierState? by derivedStateOf { state.modifierState }
   val blockState: BlockState? by derivedStateOf { state.blockState }
@@ -314,6 +316,7 @@ internal constructor(
       cursor = inner.cursor(),
       selection = inner.selection(),
       pageSizes = inner.pageSizes(),
+      externalElements = inner.externalElements(),
       rootAttrs = inner.rootAttrs(),
       modifierState = inner.modifierState(),
       blockState = inner.blockState(),

@@ -231,7 +231,11 @@ pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
         // line ascent/descent (caret coordinates change), so the host must re-query
         // both — otherwise the canvas stays sized for the pre-load layout.
         editor.push_event(EditorEvent::StateChanged {
-            fields: vec![StateField::Cursor, StateField::PageSizes],
+            fields: vec![
+                StateField::Cursor,
+                StateField::PageSizes,
+                StateField::ExternalElements,
+            ],
         });
         editor.push_event(EditorEvent::RenderInvalidated);
     }

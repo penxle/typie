@@ -2,6 +2,7 @@ package co.typie.editor
 
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainRootNode
@@ -13,6 +14,7 @@ data class EditorState(
   val cursor: CursorMetrics?,
   val selection: Selection?,
   val pageSizes: List<Size>,
+  val externalElements: List<ExternalElement>,
   val rootAttrs: PlainRootNode?,
   val modifierState: ModifierState? = null,
   val blockState: BlockState? = null,
@@ -25,6 +27,7 @@ data class EditorState(
         cursor = null,
         selection = null,
         pageSizes = emptyList(),
+        externalElements = emptyList(),
         rootAttrs = null,
         modifierState = null,
         blockState = null,

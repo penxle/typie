@@ -4,6 +4,9 @@ use crate::measure::{MeasuredAtom, MeasuredContent, MeasuredNode};
 use crate::view_state::ViewState;
 
 const HORIZONTAL_RULE_HEIGHT: f32 = 24.0;
+// Non-zero sentinel that lets hosts mount and measure external content before
+// the first real height arrives.
+const DEFAULT_EXTERNAL_HEIGHT: f32 = 1.0;
 
 pub fn measure_atom(node: &NodeRef<'_>, width: f32, view_state: &ViewState) -> MeasuredNode {
     let node_id = node.id();
@@ -11,13 +14,17 @@ pub fn measure_atom(node: &NodeRef<'_>, width: f32, view_state: &ViewState) -> M
     let (w, h) = match node.node() {
         Node::Image(img) => {
             let w = (*img.proportion.get() as f32 / 100.0) * width;
-            let h = view_state.external_height(node_id).unwrap_or(0.0);
+            let h = view_state
+                .external_height(node_id)
+                .unwrap_or(DEFAULT_EXTERNAL_HEIGHT);
             (w, h)
         }
         Node::HorizontalRule(_) => (width, HORIZONTAL_RULE_HEIGHT),
         _ => {
             // File, Embed, Archived: height supplied externally
-            let h = view_state.external_height(node_id).unwrap_or(0.0);
+            let h = view_state
+                .external_height(node_id)
+                .unwrap_or(DEFAULT_EXTERNAL_HEIGHT);
             (width, h)
         }
     };
@@ -64,14 +71,14 @@ mod tests {
     }
 
     #[test]
-    fn image_without_external_height() {
+    fn image_without_external_height_uses_placeholder() {
         let (doc, i1) = doc! { root { i1: image(proportion: 80) } };
 
         let node = doc.node(i1).unwrap();
         let result = measure_atom(&node, 400.0, &ViewState::new());
 
         assert_eq!(result.width, 320.0);
-        assert_eq!(result.height, 0.0);
+        assert_eq!(result.height, 1.0);
     }
 
     #[test]

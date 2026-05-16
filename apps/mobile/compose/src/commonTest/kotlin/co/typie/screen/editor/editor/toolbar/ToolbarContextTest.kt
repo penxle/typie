@@ -6,7 +6,7 @@ import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.FontSizeValue
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.ModifierState
-import co.typie.editor.ffi.Node
+import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Tri
@@ -23,7 +23,7 @@ class ToolbarContextTest {
           modifierState = modifierState(inlineText = true),
           blockState =
             blockState(
-              ancestors = listOf(block("paragraph", Node.Paragraph), block("root", rootNode()))
+              ancestors = listOf(block("paragraph", PlainNode.Paragraph), block("root", rootNode()))
             ),
         )
       )
@@ -41,7 +41,7 @@ class ToolbarContextTest {
           modifierState = modifierState(inlineText = true),
           blockState =
             blockState(
-              ancestors = listOf(block("paragraph", Node.Paragraph), block("root", rootNode()))
+              ancestors = listOf(block("paragraph", PlainNode.Paragraph), block("root", rootNode()))
             ),
         )
       )
@@ -60,7 +60,7 @@ class ToolbarContextTest {
           blockState =
             blockState(
               ancestors = listOf(block("root", rootNode())),
-              nodes = listOf(block("image", Node.Image(id = null))),
+              nodes = listOf(block("image", PlainNode.Image(id = null))),
             ),
         )
       )
@@ -78,7 +78,7 @@ class ToolbarContextTest {
           blockState =
             blockState(
               ancestors = listOf(block("root", rootNode())),
-              nodes = listOf(block("table", Node.Table())),
+              nodes = listOf(block("table", PlainNode.Table())),
             ),
         )
       )
@@ -99,10 +99,10 @@ class ToolbarContextTest {
             blockState(
               ancestors =
                 listOf(
-                  block("paragraph", Node.Paragraph),
-                  block("list-item", Node.ListItem),
-                  block("bullet-list", Node.BulletList),
-                  block("blockquote", Node.Blockquote()),
+                  block("paragraph", PlainNode.Paragraph),
+                  block("list-item", PlainNode.ListItem),
+                  block("bullet-list", PlainNode.BulletList),
+                  block("blockquote", PlainNode.Blockquote()),
                   block("root", rootNode()),
                 )
             ),
@@ -132,10 +132,10 @@ class ToolbarContextTest {
             blockState(
               ancestors =
                 listOf(
-                  block("paragraph", Node.Paragraph),
-                  block("cell", Node.TableCell(colWidth = null)),
-                  block("row", Node.TableRow),
-                  block("table", Node.Table()),
+                  block("paragraph", PlainNode.Paragraph),
+                  block("cell", PlainNode.TableCell(colWidth = null)),
+                  block("row", PlainNode.TableRow),
+                  block("table", PlainNode.Table()),
                   block("root", rootNode()),
                 )
             ),
@@ -160,6 +160,7 @@ class ToolbarContextTest {
       cursor = null,
       selection = selection,
       pageSizes = emptyList(),
+      externalElements = emptyList(),
       rootAttrs = null,
       modifierState = modifierState,
       blockState = blockState,
@@ -189,9 +190,9 @@ class ToolbarContextTest {
     nodes: List<Block> = emptyList(),
   ): BlockState = BlockState(ancestors = ancestors, nodes = nodes)
 
-  private fun block(id: String, node: Node): Block = Block(id = id, node = node)
+  private fun block(id: String, node: PlainNode): Block = Block(id = id, node = node)
 
-  private fun rootNode(): Node.Root = Node.Root(LayoutMode.Continuous(maxWidth = 640f))
+  private fun rootNode(): PlainNode.Root = PlainNode.Root(LayoutMode.Continuous(maxWidth = 640))
 
   private fun modifierState(
     inlineText: Boolean = false,

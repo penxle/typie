@@ -29,7 +29,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             );
             if changed {
                 editor.push_event(EditorEvent::StateChanged {
-                    fields: vec![StateField::PageSizes],
+                    fields: vec![StateField::PageSizes, StateField::ExternalElements],
                 });
                 editor.push_event(EditorEvent::RenderInvalidated);
             }
@@ -52,7 +52,19 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
         }
 
         SystemEvent::SetExternalHeight { node_id, height } => {
-            editor.view.set_external_height(node_id, height);
+            if editor
+                .view
+                .set_external_height(&editor.state.doc, node_id, height)
+            {
+                editor.push_event(EditorEvent::StateChanged {
+                    fields: vec![
+                        StateField::Cursor,
+                        StateField::PageSizes,
+                        StateField::ExternalElements,
+                    ],
+                });
+                editor.push_event(EditorEvent::RenderInvalidated);
+            }
         }
 
         SystemEvent::FontsChanged => {
@@ -425,6 +437,99 @@ mod tests {
             has_cursor,
             "font load that changes line metrics must emit StateChanged with Cursor"
         );
+    }
+
+    #[test]
+    fn set_external_height_relayouts_and_emits_host_state_change() {
+        let (state, img, _text) = state! {
+            doc {
+                root {
+                    img: image
+                    paragraph { text: text("after") }
+                }
+            }
+            selection: (text, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let before = editor
+            .view
+            .external_elements(&editor.state.doc, &editor.state.selection)
+            .into_iter()
+            .find(|element| element.node_id == img)
+            .expect("image external element before height update");
+        assert_eq!(before.bounds.height, 1.0);
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetExternalHeight {
+                node_id: img,
+                height: 72.0,
+            },
+        });
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+        assert!(
+            events.iter().any(|e| {
+                matches!(
+                    e,
+                    EditorEvent::StateChanged { fields }
+                        if fields.contains(&StateField::Cursor)
+                            && fields.contains(&StateField::PageSizes)
+                            && fields.contains(&StateField::ExternalElements)
+                )
+            }),
+            "external height changes must tell hosts to re-query geometry"
+        );
+
+        let after = editor
+            .view
+            .external_elements(&editor.state.doc, &editor.state.selection)
+            .into_iter()
+            .find(|element| element.node_id == img)
+            .expect("image external element after height update");
+        assert_eq!(after.bounds.height, 72.0);
+    }
+
+    #[test]
+    fn set_external_height_ignores_zero_height() {
+        let (state, img, _text) = state! {
+            doc {
+                root {
+                    img: image
+                    paragraph { text: text("after") }
+                }
+            }
+            selection: (text, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetExternalHeight {
+                node_id: img,
+                height: 0.0,
+            },
+        });
+
+        assert!(events.is_empty());
+        let element = editor
+            .view
+            .external_elements(&editor.state.doc, &editor.state.selection)
+            .into_iter()
+            .find(|element| element.node_id == img)
+            .expect("image external element");
+        assert_eq!(element.bounds.height, 1.0);
     }
 
     #[test]

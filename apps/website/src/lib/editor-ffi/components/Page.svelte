@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
+  import ExternalElement from './ExternalElement.svelte';
 
   type Props = {
     page: number;
@@ -18,6 +19,7 @@
   const cssWidth = $derived(Math.round(width * scaleFactor) / scaleFactor);
   const cssHeight = $derived(Math.round(height * scaleFactor) / scaleFactor);
   const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
+  const externalElements = $derived(ctx.editor?.externalElements.filter((element) => element.page_idx === page) ?? []);
 </script>
 
 <div
@@ -68,4 +70,8 @@
       };
     }}
   ></canvas>
+
+  {#each externalElements as element (element.node_id)}
+    <ExternalElement {element} />
+  {/each}
 </div>
