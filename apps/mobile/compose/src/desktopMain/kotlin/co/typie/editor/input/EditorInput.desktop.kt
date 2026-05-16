@@ -16,7 +16,7 @@ import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
 import co.typie.editor.ffi.CompositionOp
-import co.typie.editor.ffi.DeletionOp
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
@@ -81,37 +81,11 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
       editor.syncWithBringIntoView(bringIntoViewRequests) {
-        val editorScope = this
-        val scope =
-          object : TextEditingScope {
-            override fun commitText(text: CharSequence, newCursorPosition: Int) {
-              if (text.toString() == "\n") {
-                editorScope.enqueue(Message.Key(KeyEvent(Key.Enter)))
-              } else {
-                editorScope.enqueue(Message.Composition(CompositionOp.Commit(text.toString())))
-              }
-            }
-
-            override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
-              editorScope.enqueue(Message.Composition(CompositionOp.Update(text.toString(), null)))
-            }
-
-            override fun finishComposingText() {
-              editorScope.enqueue(Message.Composition(CompositionOp.CommitAsIs))
-            }
-
-            override fun deleteSurroundingTextInCodePoints(
-              lengthBeforeCursor: Int,
-              lengthAfterCursor: Int,
-            ) {
-              editorScope.enqueue(
-                Message.Deletion(
-                  DeletionOp.SurroundingCodePoints(lengthBeforeCursor, lengthAfterCursor)
-                )
-              )
-            }
-          }
-        scope.block()
+        val batch = EditorDesktopTextEditingBatch()
+        batch.block()
+        for (message in batch.drainMessages()) {
+          enqueue(message)
+        }
         beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
       }
     }
@@ -124,4 +98,45 @@ internal actual fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppress
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
   // Desktop Skiko: pull-based via request.value — no explicit notification needed.
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+internal class EditorDesktopTextEditingBatch : TextEditingScope {
+  private val messages = mutableListOf<Message>()
+  private val ops = mutableListOf<FlatImeOp>()
+
+  override fun commitText(text: CharSequence, newCursorPosition: Int) {
+    if (text.toString() == "\n") {
+      flushOps()
+      messages += Message.Key(KeyEvent(Key.Enter))
+    } else {
+      ops += FlatImeOp.Compose(text.toString())
+      ops += FlatImeOp.ClearComposition
+    }
+  }
+
+  override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
+    ops += FlatImeOp.Compose(text.toString())
+  }
+
+  override fun finishComposingText() {
+    ops += FlatImeOp.ClearComposition
+  }
+
+  override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {
+    ops += FlatImeOp.DeleteSurrounding(lengthBeforeCursor, lengthAfterCursor)
+  }
+
+  fun drainMessages(): List<Message> {
+    flushOps()
+    val drained = messages.toList()
+    messages.clear()
+    return drained
+  }
+
+  private fun flushOps() {
+    if (ops.isEmpty()) return
+    messages += Message.Composition(CompositionOp.Flat(ops.toList()))
+    ops.clear()
+  }
 }

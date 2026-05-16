@@ -1,9 +1,9 @@
 use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_common::StrExt;
-use editor_model::Doc;
+use editor_model::{Doc, Modifier};
 use editor_state::{
-    Composition, DocFlatExt, FLAT_CLOSE, FLAT_OPEN, FlatSegment, ResolvedPosition,
-    ResolvedPositionFlatExt, Selection,
+    Composition, DocFlatExt, FLAT_CLOSE, FLAT_OPEN, FlatSegment, PendingModifier, ResolvedPosition,
+    ResolvedPositionFlatExt, Selection, resolve_effective_modifiers_at,
 };
 use editor_transaction::Transaction;
 
@@ -57,6 +57,7 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
 
 fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
     let doc = tr.doc();
+    let replacement_modifiers = uniform_text_modifiers_in_range(&doc, start, end);
     let start_pos = ResolvedPosition::from_flat(&doc, start)
         .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
     let end_pos = ResolvedPosition::from_flat(&doc, end)
@@ -67,8 +68,58 @@ fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str
         commands::set_selection(Selection::new((&start_pos).into(), (&end_pos).into())),
         commands::optional!(commands::ensure_paragraph()),
         commands::optional!(commands::delete_selection()),
+        |tr| apply_replacement_modifiers(tr, text, replacement_modifiers.as_deref()),
         commands::when!(!text.is_empty(), commands::insert_text(text)),
     )
+}
+
+fn apply_replacement_modifiers(
+    tr: &mut Transaction,
+    text: &str,
+    target_modifiers: Option<&[Modifier]>,
+) -> CommandResult {
+    if text.is_empty() {
+        return Ok(true);
+    }
+    let Some(target_modifiers) = target_modifiers else {
+        return Ok(true);
+    };
+
+    let base_modifiers = resolve_effective_modifiers_at(tr.state(), &tr.selection().head);
+    let pending = PendingModifier::diff(&base_modifiers, target_modifiers);
+    tr.set_pending_modifiers(pending)?;
+    Ok(true)
+}
+
+fn uniform_text_modifiers_in_range(doc: &Doc, start: usize, end: usize) -> Option<Vec<Modifier>> {
+    if start >= end {
+        return None;
+    }
+
+    let mut range_modifiers: Option<Vec<Modifier>> = None;
+    for (seg_start, seg) in doc.flat_segments() {
+        let seg_end = seg_start + seg.size();
+        if seg_end <= start {
+            continue;
+        }
+        if seg_start >= end {
+            break;
+        }
+
+        let FlatSegment::Text { node_id, .. } = seg else {
+            return None;
+        };
+        let node = doc.node(node_id)?;
+        let mut modifiers: Vec<_> = node.modifiers().cloned().collect();
+        modifiers.sort_by_key(|m| m.as_type());
+        match &range_modifiers {
+            Some(existing) if existing != &modifiers => return None,
+            Some(_) => {}
+            None => range_modifiers = Some(modifiers),
+        }
+    }
+
+    range_modifiers
 }
 
 fn composition_range_valid(doc: &Doc, start: usize, end: usize) -> bool {
@@ -863,6 +914,200 @@ mod tests {
             selection: (t1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn update_preserves_existing_composition_modifiers() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("하") } } }
+            selection: (t1, 1)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "ㅎ".into(),
+                replace_length: None,
+            },
+        });
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "하".into(),
+                replace_length: None,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("하")
+                        t2: text("하") [bold]
+                    }
+                }
+            }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+    }
+
+    #[test]
+    fn update_preserves_font_weight_from_actual_bold_toggle() {
+        let mut resource = Resource::new_test();
+        resource
+            .font_registry
+            .set_fonts(vec![editor_resource::FontFamily {
+                name: "Pretendard".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![
+                    editor_resource::FontWeight {
+                        value: 400,
+                        hash: "pretendard_400".into(),
+                        chunks: vec![vec![0x0000, 0xFFFF]],
+                    },
+                    editor_resource::FontWeight {
+                        value: 700,
+                        hash: "pretendard_700".into(),
+                        chunks: vec![vec![0x0000, 0xFFFF]],
+                    },
+                ],
+            }]);
+        let resource = Arc::new(Mutex::new(resource));
+        let (state, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph { t1: text("하") }
+                }
+            }
+            selection: (t1, 1)
+        };
+        let mut editor = Editor::new_test_with_resource(state, resource);
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: editor_model::ModifierType::Bold,
+            },
+        });
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "ㅎ".into(),
+                replace_length: None,
+            },
+        });
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "하".into(),
+                replace_length: None,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("하")
+                        t2: text("하") [font_weight(700)]
+                    }
+                }
+            }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+    }
+
+    #[test]
+    fn update_preserves_regular_composition_after_bold_text() {
+        let (mut state, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("A") [bold]
+                        t2: text("ㅎ")
+                    }
+                }
+            }
+            selection: (t2, 1)
+        };
+        state.composition = Some(Composition { start: 2, end: 3 });
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "하".into(),
+                replace_length: None,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("A") [bold]
+                        t2: text("하")
+                    }
+                }
+            }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_delete_then_compose_preserves_deleted_modifiers() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("하")
+                        t2: text("ㅎ") [italic]
+                    }
+                }
+            }
+            selection: (t2, 1)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![
+                    FlatImeOp::DeleteSurrounding {
+                        before: 1,
+                        after: 0,
+                    },
+                    FlatImeOp::Compose { text: "하".into() },
+                ],
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("하")
+                        t2: text("하") [italic]
+                    }
+                }
+            }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
     }
 
     #[test]
