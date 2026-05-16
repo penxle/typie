@@ -233,6 +233,37 @@ impl Selection {
         }
         self.resolve(doc).map(|r| r.normalize())
     }
+
+    /// Navigation extend must treat a selection that already brackets an atom
+    /// differently from a text/collapsed selection: it re-anchors to the atom's
+    /// far edge so the atom stays selected while the range grows. This predicate
+    /// is that classification gate. Callers pass selections already validated by
+    /// `normalize`; an unnormalized/out-of-range selection harmlessly returns
+    /// false. Direction-agnostic (forward or reversed atom selection both true).
+    pub fn is_atom_node_selection(&self, doc: &Doc) -> bool {
+        if self.anchor.node_id != self.head.node_id {
+            return false;
+        }
+        let (lo, hi) = if self.anchor.offset <= self.head.offset {
+            (self.anchor.offset, self.head.offset)
+        } else {
+            (self.head.offset, self.anchor.offset)
+        };
+        if lo.checked_add(1) != Some(hi) {
+            return false;
+        }
+        let Some(node) = doc.node(self.anchor.node_id) else {
+            return false;
+        };
+        // Text offsets are char positions, not child indices; children() is
+        // meaningless on a text node.
+        if matches!(node.node(), Node::Text(_)) {
+            return false;
+        }
+        node.children()
+            .nth(lo)
+            .is_some_and(|child| is_atom_node(&child))
+    }
 }
 
 fn normalize_position(doc: &Doc, pos: Position) -> Position {
@@ -1278,6 +1309,49 @@ mod tests {
         assert_eq!(
             once, twice,
             "atom node selection normalize must be idempotent"
+        );
+    }
+
+    #[test]
+    fn is_atom_node_selection_classifies_correctly() {
+        let (d, r, t) = doc! {
+            r: root {
+                image
+                paragraph { t: text("x") }
+            }
+        };
+        let atom = Selection::new(
+            Position {
+                node_id: r,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: r,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        assert!(atom.is_atom_node_selection(&d));
+        assert!(Selection::new(atom.head, atom.anchor).is_atom_node_selection(&d));
+        assert!(!Selection::collapsed(Position::new(t, 0)).is_atom_node_selection(&d));
+        assert!(
+            !Selection::new(Position::new(t, 0), Position::new(t, 1)).is_atom_node_selection(&d)
+        );
+        assert!(
+            !Selection::new(
+                Position {
+                    node_id: r,
+                    offset: 1,
+                    affinity: Affinity::Downstream
+                },
+                Position {
+                    node_id: r,
+                    offset: 2,
+                    affinity: Affinity::Upstream
+                },
+            )
+            .is_atom_node_selection(&d)
         );
     }
 
