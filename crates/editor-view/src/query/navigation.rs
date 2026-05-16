@@ -1674,4 +1674,77 @@ mod integration_tests {
             "ArrowUp must move to the cell directly above in the same column"
         );
     }
+
+    #[test]
+    fn line_vertical_forward_from_paragraph_above_fold_enters_fold_title() {
+        let (state, p1, t1) = state! {
+            doc {
+                root {
+                    p1: paragraph {}
+                    fold {
+                        fold_title { t1: text("13") }
+                        fold_content { paragraph { text("123") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(p1, 0),
+                &Movement::Line {
+                    direction: Direction::Forward,
+                    axis: Axis::Vertical,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            sel.head.node_id, t1,
+            "ArrowDown from the paragraph above a fold must enter the fold title, not skip the fold"
+        );
+        assert_eq!(sel.head.offset, 0);
+    }
+
+    #[test]
+    fn line_vertical_backward_from_paragraph_below_fold_enters_fold_content() {
+        let (state, c1, p1) = state! {
+            doc {
+                root {
+                    paragraph {}
+                    fold {
+                        fold_title { text("13") }
+                        fold_content { paragraph { c1: text("123") } }
+                    }
+                    p1: paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(p1, 0),
+                &Movement::Line {
+                    direction: Direction::Backward,
+                    axis: Axis::Vertical,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            sel.head.node_id, c1,
+            "ArrowUp from the paragraph below a fold must enter the fold content, not skip the fold"
+        );
+    }
 }

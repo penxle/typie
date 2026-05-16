@@ -283,11 +283,13 @@ fn horizontal_distance(node: &LayoutNode, x: f32) -> f32 {
 /// Find the navigable node visually below `y_threshold` that best matches the
 /// horizontal position `x`.
 ///
-/// Nodes whose horizontal extent contains `x` are preferred so that vertical
-/// movement stays in the same table column instead of collapsing to the
-/// document-order-first cell of the next row; the closest such node (smallest
-/// `rect.y`) wins, with document order breaking ties. When no node contains
-/// `x`, the horizontally nearest one is used so the caret never gets stuck.
+/// The nearest line below defines a band: only candidates that vertically
+/// overlap it (the same visual row) compete on `x`, where a node whose extent
+/// contains `x` is preferred and otherwise the horizontally nearest one wins so
+/// the caret never gets stuck. Restricting the `x` contest to that band keeps
+/// table-column movement intact while stopping a far full-width node from
+/// leapfrogging a closer x-inset one — without the band an `x`-containing
+/// paragraph after a fold would be chosen over the fold's padded title.
 pub fn find_navigable_below_at_x(
     root: &LayoutNode,
     y_threshold: f32,
@@ -295,16 +297,24 @@ pub fn find_navigable_below_at_x(
 ) -> Option<&LayoutNode> {
     let mut nodes = Vec::new();
     collect_navigable(root, &mut nodes);
-    nodes
+    let candidates: Vec<&LayoutNode> = nodes
         .into_iter()
         .filter(|n| n.rect.y >= y_threshold)
+        .collect();
+    let top = candidates.iter().copied().min_by(|p, q| {
+        p.rect
+            .y
+            .total_cmp(&q.rect.y)
+            .then(p.rect.x.total_cmp(&q.rect.x))
+    })?;
+    let band_end = top.rect.bottom();
+    candidates
+        .into_iter()
+        .filter(|n| n.rect.y < band_end)
         .min_by(|p, q| {
             let key = |n: &LayoutNode| {
-                if contains_x(n, x) {
-                    (0u8, n.rect.y, 0.0)
-                } else {
-                    (1u8, horizontal_distance(n, x), n.rect.y)
-                }
+                let group = if contains_x(n, x) { 0u8 } else { 1u8 };
+                (group, horizontal_distance(n, x), n.rect.y)
             };
             let (pg, pa, pb) = key(p);
             let (qg, qa, qb) = key(q);
@@ -312,9 +322,9 @@ pub fn find_navigable_below_at_x(
         })
 }
 
-/// The upward counterpart of [`find_navigable_below_at_x`]: among nodes whose
-/// bottom edge is at or above `y_threshold`, prefer those containing `x` and
-/// take the closest one (largest `rect.bottom()`).
+/// The upward counterpart of [`find_navigable_below_at_x`]: the nearest line
+/// above defines the band, and only candidates that vertically overlap it
+/// compete on `x`.
 pub fn find_navigable_above_at_x(
     root: &LayoutNode,
     y_threshold: f32,
@@ -322,16 +332,24 @@ pub fn find_navigable_above_at_x(
 ) -> Option<&LayoutNode> {
     let mut nodes = Vec::new();
     collect_navigable(root, &mut nodes);
-    nodes
+    let candidates: Vec<&LayoutNode> = nodes
         .into_iter()
         .filter(|n| n.rect.bottom() <= y_threshold)
+        .collect();
+    let bottom = candidates.iter().copied().min_by(|p, q| {
+        q.rect
+            .bottom()
+            .total_cmp(&p.rect.bottom())
+            .then(p.rect.x.total_cmp(&q.rect.x))
+    })?;
+    let band_start = bottom.rect.y;
+    candidates
+        .into_iter()
+        .filter(|n| n.rect.bottom() > band_start)
         .min_by(|p, q| {
             let key = |n: &LayoutNode| {
-                if contains_x(n, x) {
-                    (0u8, -n.rect.bottom(), 0.0)
-                } else {
-                    (1u8, horizontal_distance(n, x), -n.rect.bottom())
-                }
+                let group = if contains_x(n, x) { 0u8 } else { 1u8 };
+                (group, horizontal_distance(n, x), -n.rect.bottom())
             };
             let (pg, pa, pb) = key(p);
             let (qg, qa, qb) = key(q);
@@ -610,6 +628,50 @@ mod tests {
         let nav = find_navigable_below_at_x(&root, 20.0, -50.0).unwrap();
         match &nav.content {
             LayoutContent::Line(l) => assert_eq!(l.node_id, r1c0),
+            _ => panic!("expected Line"),
+        }
+    }
+
+    #[test]
+    fn find_navigable_below_at_x_prefers_closer_inset_line_over_far_wide_line() {
+        // Mimics ArrowDown into a fold: the fold title line is x-inset by the
+        // fold's padding (so it does not contain the caret x) while the
+        // full-width paragraph after the fold does. The closer inset line must
+        // still win — the x contest is confined to the nearest band.
+        let inset = NodeId::new();
+        let far_wide = NodeId::new();
+        let root = make_box_node(
+            0.0,
+            220.0,
+            vec![
+                make_line_node_at(inset, 40.0, 20.0, 60.0),
+                make_line_node_at(far_wide, 0.0, 200.0, 200.0),
+            ],
+        );
+        let nav = find_navigable_below_at_x(&root, 20.0, 0.0).unwrap();
+        match &nav.content {
+            LayoutContent::Line(l) => assert_eq!(l.node_id, inset),
+            _ => panic!("expected Line"),
+        }
+    }
+
+    #[test]
+    fn find_navigable_above_at_x_prefers_closer_inset_line_over_far_wide_line() {
+        // ArrowUp counterpart: the fold content line is x-inset while the
+        // paragraph above the fold is full-width; the closer inset line wins.
+        let inset = NodeId::new();
+        let far_wide = NodeId::new();
+        let root = make_box_node(
+            0.0,
+            220.0,
+            vec![
+                make_line_node_at(far_wide, 0.0, 0.0, 200.0),
+                make_line_node_at(inset, 40.0, 180.0, 60.0),
+            ],
+        );
+        let nav = find_navigable_above_at_x(&root, 200.0, 0.0).unwrap();
+        match &nav.content {
+            LayoutContent::Line(l) => assert_eq!(l.node_id, inset),
             _ => panic!("expected Line"),
         }
     }
