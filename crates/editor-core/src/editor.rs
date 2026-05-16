@@ -101,8 +101,8 @@ impl Editor {
         crate::block_state::resolve_block_state(&self.state)
     }
 
-    pub fn set_theme_variant(&mut self, variant: ThemeVariant) {
-        self.renderer.set_theme_variant(variant);
+    pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
+        self.renderer.set_theme_variant(variant)
     }
 
     pub fn ime(&self, before_limit: usize, after_limit: usize) -> Result<Ime, EditorError> {

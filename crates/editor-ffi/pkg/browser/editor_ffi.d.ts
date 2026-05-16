@@ -555,7 +555,7 @@ export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection 
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "ime" | "modifiers" | "block";
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "set_theme_variant"; variant: ThemeVariant } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
@@ -568,6 +568,8 @@ export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: 
 export type TableRowNodeAttr = void;
 
 export type TextNodeAttr = void;
+
+export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
 
 export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
 

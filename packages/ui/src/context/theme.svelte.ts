@@ -10,6 +10,7 @@ export type EffectiveTheme = Exclude<Theme, 'auto'>;
 
 export type LightVariant = 'white' | 'snow' | 'butter' | 'peach' | 'rose' | 'lavender' | 'mint' | 'latte';
 export type DarkVariant = 'black' | 'charcoal' | 'graphite' | 'midnight' | 'navy' | 'obsidian' | 'storm' | 'espresso';
+export type ThemeVariant = `light-${LightVariant}` | `dark-${DarkVariant}`;
 
 const LIGHT_VARIANTS = new Set<LightVariant>(['white', 'snow', 'butter', 'peach', 'rose', 'lavender', 'mint', 'latte']);
 const DARK_VARIANTS = new Set<DarkVariant>(['black', 'charcoal', 'graphite', 'midnight', 'navy', 'obsidian', 'storm', 'espresso']);
@@ -116,6 +117,10 @@ export class ThemeState {
 
   get effectiveTheme(): EffectiveTheme {
     return this.#effectiveTheme;
+  }
+
+  get currentThemeVariant(): ThemeVariant {
+    return this.#effectiveTheme === 'light' ? `light-${this.#lightVariant}` : `dark-${this.#darkVariant}`;
   }
 
   get lightVariant(): LightVariant {

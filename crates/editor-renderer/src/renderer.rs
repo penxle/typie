@@ -381,8 +381,8 @@ impl Renderer {
         }
     }
 
-    pub fn set_theme_variant(&mut self, variant: ThemeVariant) {
-        self.theme.set_variant(variant);
+    pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
+        self.theme.set_variant(variant)
     }
 
     fn resolve_mark(&self, data: &MarkData) -> MarkStyle {

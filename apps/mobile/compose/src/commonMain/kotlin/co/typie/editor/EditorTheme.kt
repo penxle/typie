@@ -1,7 +1,11 @@
 package co.typie.editor
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import co.typie.editor.ffi.ThemeVariant
 import co.typie.generated.resources.Res
+import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.ResolvedThemeMode
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -14,27 +18,34 @@ data class EditorThemeData(
   val variants: Map<String, Map<String, String>>,
 )
 
-enum class EditorThemeVariant(val key: String) {
-  LightWhite("light-white"),
-  LightSnow("light-snow"),
-  LightButter("light-butter"),
-  LightPeach("light-peach"),
-  LightRose("light-rose"),
-  LightLavender("light-lavender"),
-  LightMint("light-mint"),
-  LightLatte("light-latte"),
-  DarkBlack("dark-black"),
-  DarkCharcoal("dark-charcoal"),
-  DarkGraphite("dark-graphite"),
-  DarkMidnight("dark-midnight"),
-  DarkNavy("dark-navy"),
-  DarkObsidian("dark-obsidian"),
-  DarkStorm("dark-storm"),
-  DarkEspresso("dark-espresso");
+val ThemeVariant.key: String
+  get() =
+    when (this) {
+      ThemeVariant.LightWhite -> "light-white"
+      ThemeVariant.LightSnow -> "light-snow"
+      ThemeVariant.LightButter -> "light-butter"
+      ThemeVariant.LightPeach -> "light-peach"
+      ThemeVariant.LightRose -> "light-rose"
+      ThemeVariant.LightLavender -> "light-lavender"
+      ThemeVariant.LightMint -> "light-mint"
+      ThemeVariant.LightLatte -> "light-latte"
+      ThemeVariant.DarkBlack -> "dark-black"
+      ThemeVariant.DarkCharcoal -> "dark-charcoal"
+      ThemeVariant.DarkGraphite -> "dark-graphite"
+      ThemeVariant.DarkMidnight -> "dark-midnight"
+      ThemeVariant.DarkNavy -> "dark-navy"
+      ThemeVariant.DarkObsidian -> "dark-obsidian"
+      ThemeVariant.DarkStorm -> "dark-storm"
+      ThemeVariant.DarkEspresso -> "dark-espresso"
+    }
 
-  val isLight: Boolean
-    get() = key.startsWith("light-")
-}
+private val ThemeVariant.isLight: Boolean
+  get() = key.startsWith("light-")
+
+@Composable
+fun currentEditorThemeVariant(): ThemeVariant =
+  if (AppTheme.themeMode == ResolvedThemeMode.Dark) ThemeVariant.DarkBlack
+  else ThemeVariant.LightWhite
 
 data class ResolvedEditorTheme(val colors: Map<String, Color>) {
   operator fun get(key: String): Color? = colors[key]
@@ -55,9 +66,9 @@ object EditorTheme {
     }
   }
 
-  private val cache = mutableMapOf<EditorThemeVariant, ResolvedEditorTheme>()
+  private val cache = mutableMapOf<ThemeVariant, ResolvedEditorTheme>()
 
-  fun resolve(variant: EditorThemeVariant): ResolvedEditorTheme {
+  fun resolve(variant: ThemeVariant): ResolvedEditorTheme {
     return cache.getOrPut(variant) {
       val variantColors = data.variants.getValue(variant.key)
       val modeShared = if (variant.isLight) data.lightShared else data.darkShared

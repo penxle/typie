@@ -39,6 +39,12 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             // stub
         }
 
+        SystemEvent::SetThemeVariant { variant } => {
+            if editor.set_theme_variant(variant) {
+                editor.push_event(EditorEvent::RenderInvalidated);
+            }
+        }
+
         SystemEvent::FontBaseLoaded { family, weight: _ } => {
             font::retry_pending_on_load(editor, &family);
         }
@@ -77,6 +83,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_renderer::ThemeVariant;
 
     use super::*;
     use crate::event::FontData;
@@ -165,6 +172,48 @@ mod tests {
             )
         });
         assert!(has_data_missing);
+    }
+
+    #[test]
+    fn set_theme_variant_invalidates_render_when_changed() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetThemeVariant {
+                variant: ThemeVariant::DarkBlack,
+            },
+        });
+
+        assert_eq!(events, vec![EditorEvent::RenderInvalidated]);
+    }
+
+    #[test]
+    fn set_theme_variant_ignores_current_variant() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetThemeVariant {
+                variant: ThemeVariant::LightWhite,
+            },
+        });
+
+        assert!(events.is_empty());
     }
 
     #[test]

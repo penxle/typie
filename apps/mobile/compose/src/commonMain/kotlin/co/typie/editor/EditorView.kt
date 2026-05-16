@@ -53,9 +53,10 @@ internal fun EditorView(
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val zoomController = LocalEditorZoomController.current
   val displayZoom = zoomController.displayZoom
+  val themeVariant = currentEditorThemeVariant()
   val canCreateEditor = runtime.canCreateEditor
 
-  LaunchedEffect(canCreateEditor, viewportWidth, viewportHeight, density.density) {
+  LaunchedEffect(canCreateEditor, viewportWidth, viewportHeight, density.density, themeVariant) {
     if (viewportWidth <= 0f || viewportHeight <= 0f) {
       return@LaunchedEffect
     }
@@ -73,6 +74,7 @@ internal fun EditorView(
           Editor.create(
             graph = graph,
             viewport = viewport,
+            themeVariant = themeVariant,
             scope = scope,
             onError = { editor, error -> runtime.reportError(editor, error) },
           )
@@ -88,6 +90,7 @@ internal fun EditorView(
   Box(modifier) {
     val editor = runtime.editor ?: return@Box
     val focusManager = LocalFocusManager.current
+    LaunchedEffect(editor, themeVariant) { editor.setThemeVariant(themeVariant) }
     SideEffect { editor.focusManager = focusManager }
     DisposableEffect(editor, uiState) {
       onDispose {

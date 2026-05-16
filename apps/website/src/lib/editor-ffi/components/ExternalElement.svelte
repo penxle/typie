@@ -11,7 +11,6 @@
   import { getEditorContext } from '../editor.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
   import type { Component } from 'svelte';
-  import type { ThemeVariant } from '$lib/editor/theme';
 
   type Props = {
     element: ExternalElement;
@@ -26,9 +25,7 @@
   let reportedHeight = $state<number>();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const themeVariant = $derived(
-    (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
-  );
+  const themeVariant = $derived(theme.currentThemeVariant);
   const selectionColor = $derived(THEME_COLORS[themeVariant].selection);
 
   const meta = $derived.by<{ icon: Component; label: string }>(() => {

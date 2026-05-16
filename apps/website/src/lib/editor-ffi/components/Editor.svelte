@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
+  import { getThemeContext } from '@typie/ui/context';
   import { onDestroy, untrack } from 'svelte';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
@@ -27,6 +28,7 @@
   let { document$key, graph, style }: Props = $props();
 
   const ctx = getEditorContext();
+  const theme = getThemeContext();
 
   const document = createFragment(
     graphql(`
@@ -61,7 +63,7 @@
     try {
       await initWasm();
       loadFonts(document.data.fontFamilies);
-      ctx.editor = await Editor.create(graph, { width, height, scale_factor: window.devicePixelRatio });
+      ctx.editor = await Editor.create(graph, { width, height, scale_factor: window.devicePixelRatio }, theme.currentThemeVariant);
       status = 'initialized';
     } catch (err) {
       console.error(err);
@@ -74,6 +76,10 @@
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       untrack(() => init(clientWidth!, clientHeight!));
     }
+  });
+
+  $effect(() => {
+    ctx.editor?.setThemeVariant(theme.currentThemeVariant);
   });
 
   onDestroy(() => {

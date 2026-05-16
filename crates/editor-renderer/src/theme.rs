@@ -15,11 +15,14 @@ impl Theme {
         }
     }
 
-    pub fn set_variant(&mut self, variant: ThemeVariant) {
-        if self.variant != variant {
-            self.variant = variant;
-            self.colors = variant.colors();
+    pub fn set_variant(&mut self, variant: ThemeVariant) -> bool {
+        if self.variant == variant {
+            return false;
         }
+
+        self.variant = variant;
+        self.colors = variant.colors();
+        true
     }
 
     pub fn color(&self, token: &str) -> Color {

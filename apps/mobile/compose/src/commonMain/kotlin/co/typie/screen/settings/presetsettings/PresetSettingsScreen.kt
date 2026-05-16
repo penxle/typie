@@ -28,8 +28,8 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.EditorOption
 import co.typie.editor.EditorTheme
-import co.typie.editor.EditorThemeVariant
 import co.typie.editor.EditorValues
+import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.matchWeight
 import co.typie.ext.clickable
 import co.typie.ext.excludeBottom
@@ -63,7 +63,6 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -329,9 +328,7 @@ private fun SpacingSection(model: PresetSettingsViewModel, onSave: suspend (Pres
 
 @Composable
 private fun ColorSection(model: PresetSettingsViewModel, onSave: suspend (Preset) -> Unit) {
-  val variant =
-    if (AppTheme.themeMode == ResolvedThemeMode.Dark) EditorThemeVariant.DarkBlack
-    else EditorThemeVariant.LightWhite
+  val variant = currentEditorThemeVariant()
   val editorTheme = remember(variant) { EditorTheme.resolve(variant) }
 
   PresetSection(title = "색상") {

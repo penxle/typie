@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.typie.editor.EditorTheme
-import co.typie.editor.EditorThemeVariant
+import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.Message
@@ -72,9 +72,9 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   var reportedHeight by remember(element.nodeId) { mutableFloatStateOf(Float.NaN) }
   val content = element.data.content()
   val shape = AppShapes.rounded(4.dp * safeZoom)
-  val selectionColor = remember {
-    EditorTheme.resolve(EditorThemeVariant.LightWhite).colors.getValue("selection")
-  }
+  val themeVariant = currentEditorThemeVariant()
+  val selectionColor =
+    remember(themeVariant) { EditorTheme.resolve(themeVariant).colors.getValue("selection") }
 
   Box(
     Modifier.offset {

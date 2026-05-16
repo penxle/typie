@@ -19,6 +19,7 @@ import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
 import co.typie.platform.PlatformModule
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -195,6 +196,10 @@ internal constructor(
     scheduleTick()
   }
 
+  fun setThemeVariant(variant: ThemeVariant) {
+    enqueue(Message.System(SystemEvent.SetThemeVariant(variant)))
+  }
+
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
     scope.launch(dispatcher) {
@@ -367,6 +372,7 @@ internal constructor(
       graph: ByteArray,
       viewport: Viewport,
       scope: CoroutineScope,
+      themeVariant: ThemeVariant = ThemeVariant.LightWhite,
       dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
       onError: (Editor, Throwable) -> Unit = { _, _ -> },
     ): Editor =
@@ -377,7 +383,10 @@ internal constructor(
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
 
         try {
-          editor.awaitOrThrow { enqueue(Message.System(SystemEvent.Initialize)) }
+          editor.awaitOrThrow {
+            enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
+            enqueue(Message.System(SystemEvent.Initialize))
+          }
         } catch (e: Throwable) {
           editor.dispose()
           throw e

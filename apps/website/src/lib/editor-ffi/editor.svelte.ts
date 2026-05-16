@@ -14,6 +14,7 @@ import type {
   PlainRootNode,
   Selection,
   Size,
+  ThemeVariant,
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { EditorEventListener } from './types';
@@ -64,7 +65,7 @@ export class Editor {
     // no-op
   }
 
-  static async create(graph: Uint8Array, viewport: Viewport) {
+  static async create(graph: Uint8Array, viewport: Viewport, themeVariant: ThemeVariant = 'light-white') {
     await ensureWasmInitialized();
 
     const self = new this();
@@ -103,6 +104,7 @@ export class Editor {
       });
     });
 
+    self.enqueue({ type: 'system', event: { type: 'set_theme_variant', variant: themeVariant } });
     self.enqueue({ type: 'system', event: { type: 'initialize' } });
 
     return self;
@@ -252,6 +254,10 @@ export class Editor {
 
   setExternalElementHeight(nodeId: string, height: number): void {
     this.enqueue({ type: 'system', event: { type: 'set_external_height', node_id: nodeId, height } });
+  }
+
+  setThemeVariant(variant: ThemeVariant): void {
+    this.enqueue({ type: 'system', event: { type: 'set_theme_variant', variant } });
   }
 
   currentHeads(): Uint8Array {

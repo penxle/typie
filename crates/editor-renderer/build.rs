@@ -57,7 +57,9 @@ fn main() {
         .collect();
 
     let output = quote! {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[editor_macros::ffi]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+        #[serde(rename_all = "kebab-case")]
         pub enum ThemeVariant {
             #(#variant_idents,)*
         }
