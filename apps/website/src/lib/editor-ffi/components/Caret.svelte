@@ -17,11 +17,12 @@
   {@attach (el) => {
     if (editor) {
       $effect(() => {
-        if (editor.cursor) {
+        if (editor.cursor && editor.focused) {
           const { width, height } = editor.cursor.caret;
           el.style.width = `${width}px`;
           el.style.height = `${height}px`;
           el.style.visibility = 'visible';
+          el.getAnimations().forEach((a) => (a.currentTime = 0));
         } else {
           el.style.visibility = 'hidden';
         }
