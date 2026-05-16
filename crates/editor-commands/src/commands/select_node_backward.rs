@@ -1,6 +1,6 @@
-use editor_model::Node;
+use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
-use editor_transaction::{Transaction, fulfill};
+use editor_transaction::{Transaction, fulfill, prune};
 
 use crate::{CommandError, CommandResult};
 
@@ -44,15 +44,41 @@ pub fn select_node_backward(tr: &mut Transaction) -> CommandResult {
     let start_id = start.id();
     let start_parent_id = start.parent().map(|p| p.id());
 
-    if remove_start {
+    if remove_start && let Some(pid) = start_parent_id {
+        // Capture the ancestor chain before removal: prune severs parent links,
+        // so we cannot walk upward afterward to repair surviving ancestors.
+        let ancestor_chain: Vec<NodeId> = {
+            let doc = tr.doc();
+            let mut chain = Vec::new();
+            let mut current = Some(pid);
+            while let Some(id) = current {
+                chain.push(id);
+                current = doc.node(id).and_then(|n| n.parent()).map(|p| p.id());
+            }
+            chain
+        };
+
         tr.batch::<_, CommandError>(|tr| {
             tr.remove_subtree(start_id)?;
-            if let Some(pid) = start_parent_id {
+
+            let doc = tr.doc();
+            if let Some(parent) = doc.node(pid)
+                && parent.entry().children.is_empty()
+                && !parent.spec().structural
+            {
+                tr.apply_steps(prune(&parent))?;
+            }
+
+            // prune may have cascaded removals; re-fulfill the surviving
+            // ancestors so structural containers and the root's trailing
+            // paragraph requirement stay schema-valid.
+            for &id in &ancestor_chain {
                 let doc = tr.doc();
-                if let Some(parent) = doc.node(pid) {
-                    tr.apply_steps(fulfill(&parent))?;
+                if let Some(node) = doc.node(id) {
+                    tr.apply_steps(fulfill(&node))?;
                 }
             }
+
             Ok(())
         })?;
     }
@@ -136,6 +162,61 @@ mod tests {
         let (expected, ..) = state! {
             doc { r: root { horizontal_rule paragraph { text("hello") } } }
             selection: (r, 0, >) -> (r, 1, <)
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn select_node_backward_removes_empty_callout_when_its_only_paragraph_is_emptied() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    horizontal_rule
+                    callout { p1: paragraph {} }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| select_node_backward(&mut tr));
+
+        let (expected, ..) = state! {
+            doc {
+                r1: root {
+                    horizontal_rule
+                    paragraph {}
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn select_node_backward_removes_empty_callout_and_refulfills_root_trailing_paragraph() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    horizontal_rule
+                    callout { p1: paragraph {} }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| select_node_backward(&mut tr));
+
+        let (expected, ..) = state! {
+            doc {
+                r1: root {
+                    horizontal_rule
+                    paragraph {}
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 1, <)
         };
 
         assert_state_eq!(actual, expected);

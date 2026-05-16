@@ -212,6 +212,32 @@ mod tests {
     }
 
     #[test]
+    fn delete_at_start_of_only_callout_paragraph_removes_callout() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    callout { p1: paragraph {} }
+                    horizontal_rule
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc {
+                r1: root {
+                    horizontal_rule
+                    paragraph {}
+                }
+            }
+            selection: (r1, 1, <) -> (r1, 0, >)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn backspace_removes_empty_paragraph_after_fold() {
         let (state, ..) = state! {
             doc { root {
@@ -236,6 +262,32 @@ mod tests {
                 paragraph {}
             } }
             selection: (t1, 7)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_at_start_of_only_callout_paragraph_removes_callout() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    horizontal_rule
+                    callout { p1: paragraph {} }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                r1: root {
+                    horizontal_rule
+                    paragraph {}
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 1, <)
         };
         assert_state_eq!(editor.state(), &expected);
     }
