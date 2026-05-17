@@ -130,7 +130,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             }
         }
 
-        PointerEvent::Up => {
+        PointerEvent::Up | PointerEvent::Cancel => {
             editor.drag_anchor = None;
         }
     }
@@ -369,6 +369,33 @@ mod tests {
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Up,
+        });
+
+        assert!(editor.drag_anchor.is_none());
+    }
+
+    #[test]
+    fn cancel_resets_dragging() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: 0.0,
+                y: 0.0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(editor.drag_anchor.is_some());
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Cancel,
         });
 
         assert!(editor.drag_anchor.is_none());

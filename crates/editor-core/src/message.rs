@@ -57,6 +57,7 @@ pub enum PointerEvent {
         y: f32,
     },
     Up,
+    Cancel,
 }
 
 #[ffi]

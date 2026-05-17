@@ -9,7 +9,7 @@
   import { Editor, getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
-  import { handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
+  import { handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import Caret from './Caret.svelte';
   import CaretPositioned from './CaretPositioned.svelte';
   import Input from './Input.svelte';
@@ -121,6 +121,7 @@
     if (!window.document.hasFocus()) return;
     ctx.editor?.blur();
   }}
+  onpointercancel={handle(ctx.editor, handlePointerCancel)}
   onpointerdown={handle(ctx.editor, handlePointerDown)}
   onpointermove={handle(ctx.editor, handlePointerMove)}
   onpointerup={handle(ctx.editor, handlePointerUp)}

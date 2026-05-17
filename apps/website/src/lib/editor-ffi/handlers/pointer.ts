@@ -33,6 +33,10 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
   editor.enqueue({ type: 'pointer', event: { type: 'up' } });
 };
 
+export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor) => {
+  editor.enqueue({ type: 'pointer', event: { type: 'cancel' } });
+};
+
 class PointerState {
   static #instances = new WeakMap<Editor, PointerState>();
 
