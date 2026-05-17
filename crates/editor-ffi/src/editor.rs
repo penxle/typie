@@ -73,6 +73,20 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.block_state().into_ffi()?))
     }
 
+    pub fn interactive_hit_test(
+        &self,
+        page: u32,
+        x: f32,
+        y: f32,
+    ) -> EditorResult<Option<Complex<editor_view::InteractiveHit>>> {
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .interactive_hit_test(page as usize, x, y)
+                .into_ffi()?)
+        })
+    }
+
     pub fn inspect_state(
         &self,
         options: Option<Complex<editor_introspection::InspectStateOptions>>,

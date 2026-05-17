@@ -101,6 +101,16 @@ impl Editor {
         crate::block_state::resolve_block_state(&self.state)
     }
 
+    pub fn interactive_hit_test(
+        &self,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> Option<editor_view::InteractiveHit> {
+        self.view
+            .interactive_hit_test(&self.state.doc, page_idx, x, y)
+    }
+
     pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
         self.renderer.set_theme_variant(variant)
     }
@@ -296,6 +306,7 @@ impl Editor {
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
+            Message::View { op } => handle::handle_view_op(self, op)?,
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
             Message::Composition { op } => handle::handle_composition_op(self, op)?,
             Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
@@ -1421,6 +1432,36 @@ mod tests {
         assert!(
             !still_present,
             "para2 must no longer be a live child of root after removal"
+        );
+    }
+
+    #[test]
+    fn editor_interactive_hit_test_delegates_to_view() {
+        use editor_macros::state;
+        let (initial, f1, ft1, ..) = state! {
+            doc { root {
+                f1: fold {
+                    ft1: fold_title { t1: text("Title") }
+                    fold_content { paragraph { text("Body") } }
+                }
+            } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let rects = editor.view().node_box_rects(&[ft1]);
+        let r = rects.first().expect("fold-title box rect");
+        // +2 from the box left edge = chevron/padding region (text starts at padding.left=40).
+        let hit = editor.interactive_hit_test(r.page_idx, r.rect.x + 2.0, r.rect.y + 2.0);
+        assert!(
+            matches!(
+                hit,
+                Some(editor_view::InteractiveHit::FoldTitle { id, .. }) if id == f1
+            ),
+            "got {hit:?}"
         );
     }
 

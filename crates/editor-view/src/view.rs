@@ -197,6 +197,18 @@ impl View {
             .or_else(|| query::closest_hit_test_extending(&result.tree, page, x, y))
     }
 
+    pub fn interactive_hit_test(
+        &self,
+        doc: &Doc,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> Option<crate::query::InteractiveHit> {
+        let result = self.layout.as_ref()?;
+        let page = result.pages.get(page_idx)?;
+        crate::query::interactive_hit_test(&result.tree, page, doc, x, y)
+    }
+
     pub fn select_word_at(
         &self,
         pos: &ResolvedPosition<'_>,
@@ -331,6 +343,34 @@ impl View {
         true
     }
 
+    pub fn fold_expanded(&self, node_id: NodeId) -> bool {
+        self.view_state.fold_expanded(node_id)
+    }
+
+    pub fn toggle_fold(&mut self, doc: &Doc, node_id: NodeId) -> bool {
+        let Some(node_ref) = doc.node(node_id) else {
+            return false;
+        };
+        if !matches!(node_ref.node(), Node::Fold(_)) {
+            return false;
+        }
+        let expanded = self.view_state.fold_expanded(node_id);
+        self.view_state.fold_states.insert(node_id, !expanded);
+        // fold-title's measured chevron/border embeds the parent fold's expanded
+        // state; the measure cache is node-id-keyed and invalidate_with_ancestors
+        // only walks upward, so the fold-title child needs explicit invalidation
+        // or it stays stale.
+        for child in node_ref.children() {
+            if matches!(child.node(), Node::FoldTitle(_)) {
+                self.measurer.invalidate_with_ancestors(doc, child.id());
+            }
+        }
+        self.measurer.invalidate_with_ancestors(doc, node_id);
+        self.compute(doc);
+        self.view_state.preferred_x = None;
+        true
+    }
+
     pub fn clear_preferred_x(&mut self) {
         self.view_state.preferred_x = None;
     }
@@ -346,6 +386,10 @@ impl View {
             layout: None,
             fingerprint: None,
         }
+    }
+
+    pub fn layout_tree_for_test(&self) -> Option<&crate::paginate::LayoutTree> {
+        self.layout.as_ref().map(|r| &r.tree)
     }
 }
 
@@ -970,6 +1014,105 @@ mod tests {
                 offset: 1,
                 affinity: editor_state::Affinity::Downstream
             }
+        );
+    }
+}
+
+#[cfg(test)]
+mod interactive_tests {
+    use super::*;
+    use crate::paginate::{LayoutContent, LayoutNode};
+    use crate::query::InteractiveHit;
+    use crate::style::DecorationData;
+    use editor_macros::doc;
+
+    fn find_box(node: &LayoutNode, target: NodeId) -> Option<&LayoutNode> {
+        if let LayoutContent::Box(b) = &node.content {
+            if b.node_id == target {
+                return Some(node);
+            }
+            for c in &b.children {
+                if let Some(found) = find_box(c, target) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    fn fold_title_bool(node: &LayoutNode, fold_title: NodeId) -> bool {
+        let b = match &find_box(node, fold_title).unwrap().content {
+            LayoutContent::Box(b) => b,
+            _ => unreachable!(),
+        };
+        match b.style.decorations.iter().find(|d| d.id == 0).unwrap().data {
+            DecorationData::Bool(v) => v,
+            _ => panic!("fold-title decoration must be Bool(expanded)"),
+        }
+    }
+
+    #[test]
+    fn toggle_fold_flips_relayouts_and_refreshes_chevron() {
+        let (doc, f1, ft1) = doc! {
+            root {
+                f1: fold {
+                    ft1: fold_title { text("Title") }
+                    fold_content { paragraph { text("Content") } }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let tree = view.layout_tree_for_test().unwrap();
+        let expanded_h = find_box(&tree.root, f1).unwrap().rect.height;
+        assert!(fold_title_bool(&tree.root, ft1), "starts expanded");
+
+        assert!(view.toggle_fold(&doc, f1));
+        let tree = view.layout_tree_for_test().unwrap();
+        let collapsed_h = find_box(&tree.root, f1).unwrap().rect.height;
+        assert!(collapsed_h < expanded_h, "collapsed shorter");
+        assert!(
+            !fold_title_bool(&tree.root, ft1),
+            "chevron Bool must refresh to collapsed (not stale)"
+        );
+
+        assert!(view.toggle_fold(&doc, f1));
+        let tree = view.layout_tree_for_test().unwrap();
+        assert_eq!(find_box(&tree.root, f1).unwrap().rect.height, expanded_h);
+        assert!(fold_title_bool(&tree.root, ft1), "chevron back to expanded");
+    }
+
+    #[test]
+    fn toggle_fold_rejects_non_fold_node() {
+        let (doc, ft1) = doc! {
+            root { fold { ft1: fold_title { text("T") } fold_content { paragraph } } }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        assert!(!view.toggle_fold(&doc, ft1), "non-Fold id rejected");
+    }
+
+    #[test]
+    fn interactive_hit_test_finds_fold_title() {
+        let (doc, f1, ft1) = doc! {
+            root {
+                f1: fold {
+                    ft1: fold_title { text("Title") }
+                    fold_content { paragraph { text("Content") } }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let tb = find_box(&tree.root, ft1).unwrap();
+        // View::new_test continuous layout → single page (y_start=0), so the
+        // absolute tree coords double as page-local input here.
+        let hit = view.interactive_hit_test(&doc, 0, tb.rect.x + 4.0, tb.rect.y + 4.0);
+        assert!(
+            matches!(hit, Some(InteractiveHit::FoldTitle { id, .. }) if id == f1),
+            "got {hit:?}"
         );
     }
 }

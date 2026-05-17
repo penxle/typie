@@ -144,6 +144,13 @@ pub enum NodeOp {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+pub enum ViewOp {
+    ToggleFold { id: NodeId },
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClipboardOp {
     Paste { html: Option<String>, text: String },
     Cut,
@@ -257,6 +264,9 @@ pub enum Message {
     },
     Node {
         op: NodeOp,
+    },
+    View {
+        op: ViewOp,
     },
     Clipboard {
         op: ClipboardOp,

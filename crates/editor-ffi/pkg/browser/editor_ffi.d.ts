@@ -513,13 +513,15 @@ export type ImageNodeAttr = ({ type: "id" } & string | undefined) | ({ type: "pr
 
 export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment };
 
+export type InteractiveHit = { type: "fold_title"; id: NodeId; text_rect: Rect | undefined } | { type: "callout_icon"; id: NodeId; next_variant: CalloutVariant };
+
 export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
 export type LayoutMode = { type: "paginated"; page_width: number; page_height: number; page_margin_top: number; page_margin_bottom: number; page_margin_left: number; page_margin_right: number } | { type: "continuous"; max_width: number };
 
 export type ListItemNodeAttr = void;
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "clipboard"; op: ClipboardOp } | { type: "composition"; op: CompositionOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
+export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "composition"; op: CompositionOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 
@@ -573,6 +575,8 @@ export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "d
 
 export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
 
+export type ViewOp = { type: "toggle_fold"; id: NodeId };
+
 
 declare class Editor {
     private constructor();
@@ -588,6 +592,7 @@ declare class Editor {
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
+    interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
     modifier_state(): ModifierState;
     page_sizes(): Size[];

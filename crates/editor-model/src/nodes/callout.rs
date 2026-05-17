@@ -25,9 +25,28 @@ pub enum CalloutVariant {
     Danger,
 }
 
+impl CalloutVariant {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Info => Self::Success,
+            Self::Success => Self::Warning,
+            Self::Warning => Self::Danger,
+            Self::Danger => Self::Info,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn callout_variant_next_cycles() {
+        assert_eq!(CalloutVariant::Info.next(), CalloutVariant::Success);
+        assert_eq!(CalloutVariant::Success.next(), CalloutVariant::Warning);
+        assert_eq!(CalloutVariant::Warning.next(), CalloutVariant::Danger);
+        assert_eq!(CalloutVariant::Danger.next(), CalloutVariant::Info);
+    }
 
     #[test]
     fn callout_variant_wire_round_trip() {
