@@ -31,7 +31,8 @@ pub fn select_node_backward(tr: &mut Transaction) -> CommandResult {
         }
     };
 
-    if !prev.spec().is_leaf() || matches!(prev.node(), Node::Text(_)) {
+    let prev_spec = prev.spec();
+    if matches!(prev.node(), Node::Text(_)) || (!prev_spec.is_leaf() && !prev_spec.monolithic) {
         return Ok(false);
     }
 
@@ -125,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_if_prev_sibling_is_not_leaf() {
+    fn rejects_if_prev_sibling_is_not_leaf_or_monolithic() {
         let (initial, ..) = state! {
             doc { root { paragraph paragraph { t: text("hello") } } }
             selection: (t, 0)
@@ -233,6 +234,98 @@ mod tests {
 
         let (expected, ..) = state! {
             doc { r: root { horizontal_rule paragraph } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn select_node_backward_on_fold() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                p: paragraph {}
+            } }
+            selection: (p, 0)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| select_node_backward(&mut tr));
+
+        let (expected, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                paragraph {}
+            } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn select_node_backward_on_callout() {
+        let (initial, ..) = state! {
+            doc { root {
+                callout { paragraph { text("c") } }
+                p: paragraph {}
+            } }
+            selection: (p, 0)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| select_node_backward(&mut tr));
+
+        let (expected, ..) = state! {
+            doc { r: root {
+                callout { paragraph { text("c") } }
+                paragraph {}
+            } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn select_node_backward_on_blockquote() {
+        let (initial, ..) = state! {
+            doc { root {
+                blockquote { paragraph { text("c") } }
+                p: paragraph {}
+            } }
+            selection: (p, 0)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| select_node_backward(&mut tr));
+
+        let (expected, ..) = state! {
+            doc { r: root {
+                blockquote { paragraph { text("c") } }
+                paragraph {}
+            } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn select_node_backward_on_table() {
+        let (initial, ..) = state! {
+            doc { root {
+                table { table_row { table_cell { paragraph { text("c") } } } }
+                p: paragraph {}
+            } }
+            selection: (p, 0)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| select_node_backward(&mut tr));
+
+        let (expected, ..) = state! {
+            doc { r: root {
+                table { table_row { table_cell { paragraph { text("c") } } } }
+                paragraph {}
+            } }
             selection: (r, 0, >) -> (r, 1, <)
         };
 

@@ -220,7 +220,7 @@ mod tests {
             doc { root {
                 p1: paragraph {}
                 fold {
-                    fold_title { t1: text("title") }
+                    fold_title { text("title") }
                     fold_content { paragraph { text("content") } }
                 }
                 paragraph {}
@@ -230,14 +230,14 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
-            doc { root {
+            doc { r1: root {
                 fold {
-                    fold_title { t1: text("title") }
+                    fold_title { text("title") }
                     fold_content { paragraph { text("content") } }
                 }
                 paragraph {}
             } }
-            selection: (t1, 0)
+            selection: (r1, 1, <) -> (r1, 0, >)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -275,7 +275,7 @@ mod tests {
                 paragraph {}
                 fold {
                     fold_title { text("title") }
-                    fold_content { paragraph { t1: text("content") } }
+                    fold_content { paragraph { text("content") } }
                 }
                 p2: paragraph {}
             } }
@@ -284,15 +284,15 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
-            doc { root {
+            doc { r1: root {
                 paragraph {}
                 fold {
                     fold_title { text("title") }
-                    fold_content { paragraph { t1: text("content") } }
+                    fold_content { paragraph { text("content") } }
                 }
                 paragraph {}
             } }
-            selection: (t1, 7)
+            selection: (r1, 1, >) -> (r1, 2, <)
         };
         assert_state_eq!(editor.state(), &expected);
     }
