@@ -7,10 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect
+import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 
 @Composable
@@ -36,7 +36,7 @@ internal fun EditorCursorOverlay(cursor: CursorMetrics?, focused: Boolean, displ
   Box(
     Modifier.editorOverlayRect(rect)
       .graphicsLayer { this.alpha = alpha.value }
-      .background(Color.Black)
+      .background(AppTheme.colors.textDefault)
   )
 }
 
