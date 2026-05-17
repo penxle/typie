@@ -145,7 +145,10 @@ fn apply_modifier_to_node(
     let inherited = resolve_inherited_modifiers(target);
     let inherited_value = inherited.iter().find(|m| m.as_type() == modifier_type);
 
-    if let Some(existing) = target.modifiers().find(|m| m.as_type() == modifier_type) {
+    if let Some(existing) = target
+        .explicit_modifiers()
+        .find(|m| m.as_type() == modifier_type)
+    {
         tr.remove_modifier(target_id, existing.clone())?;
     }
 

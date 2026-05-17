@@ -3,7 +3,9 @@ use editor_resource::{Resource, TextBrush};
 use parley::style::{
     FontFamily, FontFamilyName, FontFeatures, FontVariations, FontWeight, LineHeight, TextStyle,
 };
-use parley::{Alignment as ParleyAlignment, AlignmentOptions, IndentOptions, Layout, WordBreak};
+use parley::{
+    Alignment as ParleyAlignment, AlignmentOptions, IndentOptions, Layout, OverflowWrap, WordBreak,
+};
 use std::borrow::Cow;
 
 use super::style_run::StyleRun;
@@ -42,8 +44,11 @@ pub fn build_layout(
                 node_id: style_run.node_id,
             },
             font_variations: FontVariations::empty(),
-            font_features: FontFeatures::empty(),
+            font_features: FontFeatures::Source(Cow::Borrowed(
+                "\"ss05\" 1, \"cv12\" 1, \"ss18\" 1",
+            )),
             word_break: WordBreak::BreakAll,
+            overflow_wrap: OverflowWrap::Anywhere,
             ..TextStyle::default()
         };
 

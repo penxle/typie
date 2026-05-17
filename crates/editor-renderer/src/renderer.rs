@@ -1040,7 +1040,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 } else {
                     "lucide/chevron-down"
                 };
-                let color = self.renderer.theme.color("ui.text.faint");
+                let color = self.renderer.theme.color("text.gray");
                 if let Some(icon) = ICONS.resolve(icon_name) {
                     self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
                 }

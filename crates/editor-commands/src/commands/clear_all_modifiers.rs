@@ -67,7 +67,7 @@ fn clear_all_modifiers_range(tr: &mut Transaction) -> CommandResult {
             .node(node_id)
             .ok_or(CommandError::NodeNotFound(node_id))?;
         let to_remove: Vec<Modifier> = node
-            .modifiers()
+            .explicit_modifiers()
             .filter(|m| is_text_applicable(m.as_type()))
             .cloned()
             .collect();

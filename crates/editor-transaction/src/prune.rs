@@ -40,7 +40,7 @@ fn prune_empty(node: &NodeRef) -> Vec<Step> {
         subtree: Subtree {
             id: node.id(),
             node: node.node().to_plain(),
-            modifiers: node.modifiers().cloned().collect(),
+            modifiers: node.explicit_modifiers().cloned().collect(),
             children: vec![],
         },
     }];

@@ -39,15 +39,6 @@ pub fn measure_fold_title(
         .map(|p| view_state.fold_expanded(p.id()))
         .unwrap_or(true);
 
-    // 펼친 상태일 때만 title과 content를 가르는 1px separator를 BoxStyle.border로 표현.
-    // 접힌 상태에서는 외곽 Fold border 만으로 충분.
-    let border = EdgeInsets {
-        top: 0.0,
-        left: 0.0,
-        right: 0.0,
-        bottom: if expanded { FOLD_BORDER_WIDTH } else { 0.0 },
-    };
-
     let inner_width = width - padding.left - padding.right;
     let (children, children_height) = measure_inline_text(
         measurer,
@@ -61,13 +52,13 @@ pub fn measure_fold_title(
 
     let mut measured = MeasuredNode {
         width,
-        height: children_height + padding.top + padding.bottom + border.top + border.bottom,
+        height: children_height + padding.top + padding.bottom,
         content: MeasuredContent::Box(MeasuredBox {
             node_id: node.id(),
             style: BoxStyle {
                 direction: Direction::Vertical,
                 padding,
-                border,
+                border: EdgeInsets::ZERO,
                 border_mode: BorderMode::Separate,
                 alignment: LayoutAlignment::Start,
                 scope: false,
@@ -172,6 +163,7 @@ mod tests {
     use editor_macros::doc;
 
     use super::*;
+    use crate::glyph_run::GlyphRun;
 
     #[test]
     fn fold_collapsed_excludes_content() {
@@ -287,6 +279,75 @@ mod tests {
             (icon_center - first_line_center).abs() < 0.01,
             "icon center {icon_center} should match first line center {first_line_center}",
         );
+    }
+
+    #[test]
+    fn fold_title_has_no_separator_border_when_expanded() {
+        let (doc, ft1) = doc! {
+            root {
+                fold {
+                    ft1: fold_title { text("Title") }
+                    fold_content { paragraph { text("Content") } }
+                }
+            }
+        };
+
+        let mut view_state = ViewState::new();
+        // The removed separator was only ever added in the expanded branch, so
+        // the test must expand the fold to exercise that path.
+        if let Some(p) = doc.node(ft1).unwrap().parent() {
+            view_state.fold_states.insert(p.id(), true);
+        }
+
+        let node = doc.node(ft1).unwrap();
+        let mut measurer = Measurer::new_test();
+        let result = measure_fold_title(&mut measurer, &doc, &node, 300.0, &view_state);
+
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!()
+        };
+
+        assert_eq!(b.style.border, EdgeInsets::ZERO);
+    }
+
+    fn first_line_glyph_run<'a>(result: &'a MeasuredNode) -> &'a GlyphRun {
+        let MeasuredContent::Box(b) = &result.content else {
+            panic!("expected box")
+        };
+        let first = b
+            .children
+            .iter()
+            .find_map(|c| match &c.content {
+                MeasuredContent::Line(l) if !l.glyph_runs.is_empty() => Some(l),
+                _ => None,
+            })
+            .expect("a line with glyph runs");
+        &first.glyph_runs[0]
+    }
+
+    #[test]
+    fn fold_title_text_uses_implicit_style() {
+        let (doc, ft1) = doc! {
+            root {
+                fold {
+                    ft1: fold_title { text("1234") }
+                    fold_content { paragraph { text("c") } }
+                }
+            }
+        };
+
+        let node = doc.node(ft1).unwrap();
+        let mut measurer = Measurer::new_test();
+        let result = measure_fold_title(&mut measurer, &doc, &node, 300.0, &ViewState::new());
+
+        let gr = first_line_glyph_run(&result);
+        // FoldTitle's implicit FontSize(1050) resolves to 14px.
+        assert!(
+            (gr.font_size - 14.0).abs() < 0.5,
+            "font_size = {}",
+            gr.font_size
+        );
+        assert_eq!(gr.color, "text.gray");
     }
 
     #[test]

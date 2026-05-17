@@ -42,7 +42,10 @@ pub use table_cell::*;
 pub use table_row::*;
 pub use text::*;
 
+use std::sync::LazyLock;
+
 use crate::ModelError;
+use crate::Modifier;
 use editor_macros::{FromDiscriminant, NodeCompanion, ffi};
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
@@ -111,9 +114,42 @@ pub enum Node {
     PageBreak(PageBreakNode),
 }
 
+static FOLD_TITLE_IMPLICIT: LazyLock<Vec<Modifier>> = LazyLock::new(|| {
+    vec![
+        Modifier::FontWeight { value: 500 },
+        Modifier::FontSize { value: 1050 },
+        Modifier::LineHeight { value: 160 },
+        Modifier::LetterSpacing { value: 0 },
+        Modifier::TextColor {
+            value: "gray".to_string(),
+        },
+    ]
+});
+
+static MESSAGE_SENT_IMPLICIT: LazyLock<Vec<Modifier>> = LazyLock::new(|| {
+    vec![Modifier::TextColor {
+        value: "bright".to_string(),
+    }]
+});
+
 impl Node {
     pub fn as_type(&self) -> NodeType {
         NodeType::from(self)
+    }
+
+    // Modifiers a node type imposes implicitly, surfaced through
+    // `NodeRef::modifiers()` as if they sat on the node. They are never
+    // written to the document — `NodeRef::explicit_modifiers()` is the
+    // persisted-only view. Resolvers therefore resolve identical (family,
+    // weight) for render and font collection without per-call-site wiring.
+    pub fn implicit_modifiers(&self) -> &'static [Modifier] {
+        match self {
+            Node::FoldTitle(_) => FOLD_TITLE_IMPLICIT.as_slice(),
+            Node::Blockquote(bq) if *bq.variant.get() == BlockquoteVariant::MessageSent => {
+                MESSAGE_SENT_IMPLICIT.as_slice()
+            }
+            _ => &[],
+        }
     }
 }
 

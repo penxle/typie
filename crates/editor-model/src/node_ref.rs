@@ -36,6 +36,17 @@ impl<'a> NodeRef<'a> {
     }
 
     pub fn modifiers(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
+        self.entry()
+            .modifiers
+            .iter()
+            .map(|(_, v)| v)
+            .chain(self.node().implicit_modifiers().iter())
+    }
+
+    // Persisted modifiers only, excluding the node type's implicit ones. Use
+    // where virtual modifiers must not be treated as real: capturing a subtree
+    // for the undo log, and deciding which modifiers to remove/replace.
+    pub fn explicit_modifiers(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
         self.entry().modifiers.iter().map(|(_, v)| v)
     }
 

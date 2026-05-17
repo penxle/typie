@@ -303,4 +303,29 @@ mod tests {
         assert!(nodes[&t1].contains(&('A' as u32)));
         assert!(nodes[&t2].contains(&('C' as u32)));
     }
+
+    #[test]
+    fn collect_requests_fold_title_weight_override() {
+        let (doc, t1) = doc! {
+            root [font_family("Pretendard".to_string()), font_weight(400)] {
+                fold {
+                    fold_title { t1: text("1234") }
+                    fold_content { paragraph { text("c") } }
+                }
+                paragraph {}
+            }
+        };
+
+        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
+
+        // FoldTitle imposes weight 500 on its text; the render path requests that
+        // weight, so font collection must request it too (else the glyphs never load).
+        let key = ("Pretendard".to_string(), 500u16);
+        assert!(
+            result.contains_key(&key),
+            "missing (Pretendard, 500); keys = {:?}",
+            result.keys().collect::<Vec<_>>()
+        );
+        assert!(result[&key].contains_key(&t1));
+    }
 }

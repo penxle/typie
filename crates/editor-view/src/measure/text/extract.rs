@@ -1,5 +1,5 @@
 use editor_common::StrExt;
-use editor_model::{BlockquoteVariant, Doc, Modifier, ModifierType, Node, NodeId, NodeRef};
+use editor_model::{Doc, Modifier, ModifierType, NodeId, NodeRef};
 use editor_resource::TextBrush;
 use icu_segmenter::GraphemeClusterSegmenter;
 use parley::Layout;
@@ -79,11 +79,6 @@ fn resolve_text_color(node_ref: &NodeRef<'_>) -> String {
             .find(|m| matches!(m, Modifier::TextColor { .. }))
         {
             return format!("text.{value}");
-        }
-        if let Node::Blockquote(bq) = ancestor.node()
-            && *bq.variant.get() == BlockquoteVariant::MessageSent
-        {
-            return "text.bright".to_string();
         }
     }
     "text.black".to_string()

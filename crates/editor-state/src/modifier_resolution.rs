@@ -20,11 +20,7 @@ pub fn resolve_effective_modifiers_at(state: &State, pos: &Position) -> Vec<Modi
     let base = resolve_base_modifiers(&node, pos.offset);
     let inherited = resolve_inherited_modifiers(&node);
     let merged = merge_with_inherited(base, &inherited);
-    let candidate_paths = modifier_candidate_paths_at(&node);
     apply_pending_delta(merged, &state.pending_modifiers)
-        .into_iter()
-        .filter(|m| modifier_allowed_on_any_path(m.as_type(), &candidate_paths))
-        .collect()
 }
 
 fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
@@ -187,38 +183,6 @@ fn root_to_node_type_path(node: &NodeRef<'_>) -> Vec<NodeType> {
     let mut path: Vec<NodeType> = node.ancestors().map(|n| n.as_type()).collect();
     path.reverse();
     path
-}
-
-fn modifier_candidate_paths_at(node: &NodeRef<'_>) -> Vec<Vec<NodeType>> {
-    let mut paths = Vec::new();
-    let mut current = Some(*node);
-
-    while let Some(n) = current {
-        paths.push(root_to_node_type_path(&n));
-        current = n.parent();
-    }
-
-    if !node.spec().inline && node.spec().content.matches(NodeType::Text) {
-        let mut text_path = root_to_node_type_path(node);
-        text_path.push(NodeType::Text);
-        paths.push(text_path);
-    }
-
-    paths
-}
-
-fn modifier_allowed_on_any_path(ty: ModifierType, paths: &[Vec<NodeType>]) -> bool {
-    let context = &Schema::modifier_spec(ty).context;
-    let targets = context.rightmost_node_types();
-    paths
-        .iter()
-        .filter(|path| {
-            targets.is_empty()
-                || path
-                    .last()
-                    .is_some_and(|node_type| targets.contains(node_type))
-        })
-        .any(|path| context.matches(path))
 }
 
 fn effective_modifier_on_node(node: &NodeRef<'_>, ty: ModifierType) -> Option<Modifier> {
@@ -424,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn collapsed_fold_title_filters_text_modifiers_by_context() {
+    fn collapsed_fold_title_surfaces_implicit_text_style() {
         let (state, ..) = state! {
             doc {
                 root [font_size(1600)] {
@@ -438,15 +402,28 @@ mod tests {
             pending_modifiers: [bold]
         };
         let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        // FoldTitle's implicit text style reaches the cursor so the toolbar
+        // shows the real size/weight/color. FoldTitle's own FontSize(1050)
+        // wins over the root's inherited 1600.
         assert!(
-            !result
+            result
                 .iter()
-                .any(|m| matches!(m, Modifier::FontSize { .. } | Modifier::Bold))
+                .any(|m| matches!(m, Modifier::FontWeight { value: 500 }))
         );
+        assert!(
+            result
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1050 }))
+        );
+        assert!(result.iter().any(|m| *m
+            == Modifier::TextColor {
+                value: "gray".to_string()
+            }));
+        assert!(result.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
     #[test]
-    fn collapsed_fold_title_modifier_state_has_no_inline_text_modifiers() {
+    fn collapsed_fold_title_modifier_state_reflects_implicit_text_style() {
         let (state, ..) = state! {
             doc {
                 root [font_size(1600)] {
@@ -460,8 +437,13 @@ mod tests {
             pending_modifiers: [bold]
         };
         let s = resolve_modifier_state(&state);
-        assert_eq!(s.bold, editor_common::Tri::Absent);
-        assert_eq!(s.font_size, editor_common::Tri::Absent);
+        assert_ne!(s.bold, editor_common::Tri::Absent);
+        assert_eq!(
+            s.font_size,
+            editor_common::Tri::Uniform {
+                value: FontSizeValue { value: 1050 }
+            }
+        );
     }
 
     #[test]
