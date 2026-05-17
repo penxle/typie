@@ -1,6 +1,4 @@
 import { Redis } from 'ioredis';
-import { env, production } from '#/env.ts';
-import type { RedisOptions } from 'ioredis';
+import { env } from '#/env.ts';
 
-const options: RedisOptions = production ? { name: 'primary', sentinels: [{ host: env.REDIS_URL }] } : { host: env.REDIS_URL, tls: {} };
-export const redis = new Redis(options);
+export const redis = new Redis({ host: env.REDIS_URL, tls: {} });
