@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.external.EditorExternalElementOverlay
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.editorGestures
 import co.typie.editor.input.editorInput
@@ -90,7 +92,9 @@ internal fun EditorView(
   Box(modifier) {
     val editor = runtime.editor ?: return@Box
     val focusManager = LocalFocusManager.current
-    LaunchedEffect(editor, themeVariant) { editor.setThemeVariant(themeVariant) }
+    LaunchedEffect(editor, themeVariant) {
+      editor.enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
+    }
     SideEffect { editor.focusManager = focusManager }
     DisposableEffect(editor, uiState) {
       onDispose {
@@ -102,7 +106,10 @@ internal fun EditorView(
     Box(
       Modifier.fillMaxWidth()
         .focusRequester(editor.focusRequester)
-        .onFocusChanged { uiState.updateFocus(it.isFocused) }
+        .onFocusChanged {
+          uiState.updateFocus(it.isFocused)
+          editor.enqueue(Message.System(SystemEvent.SetFocused(it.isFocused)))
+        }
         .editorInput(
           editor = editor,
           uiState = uiState,

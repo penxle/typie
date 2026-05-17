@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Size
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorVisibleArea
@@ -39,6 +41,7 @@ internal class EditorScreenState internal constructor(val viewportState: EditorV
     sceneInForeground = isForeground
     if (!isForeground) {
       uiState.updateFocus(false)
+      runtime.editor?.enqueue(Message.System(SystemEvent.SetFocused(false)))
       runtime.deactivateScene()
     }
   }
@@ -49,6 +52,7 @@ internal class EditorScreenState internal constructor(val viewportState: EditorV
     flushDrafts: suspend () -> Unit,
   ) {
     uiState.updateFocus(false)
+    runtime.editor?.enqueue(Message.System(SystemEvent.SetFocused(false)))
     runtime.deactivateScene()
     flushDrafts()
     withFrameNanos {}

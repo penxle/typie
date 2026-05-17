@@ -18,6 +18,9 @@
 
   let { element }: Props = $props();
 
+  const SELECTION_FOCUSED_ALPHA = 77 / 255;
+  const SELECTION_UNFOCUSED_ALPHA = 48 / 255;
+
   const ctx = getEditorContext();
   const theme = getThemeContext();
 
@@ -27,6 +30,7 @@
 
   const themeVariant = $derived(theme.currentThemeVariant);
   const selectionColor = $derived(THEME_COLORS[themeVariant].selection);
+  const selectionOpacity = $derived(ctx.editor?.focused ? SELECTION_FOCUSED_ALPHA : SELECTION_UNFOCUSED_ALPHA);
 
   const meta = $derived.by<{ icon: Component; label: string }>(() => {
     switch (element.data.type) {
@@ -121,7 +125,7 @@
   {#if element.is_selected}
     <div
       style:background-color={selectionColor}
-      style:opacity={64 / 255}
+      style:opacity={selectionOpacity}
       class={css({
         position: 'absolute',
         inset: '0',

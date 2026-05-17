@@ -340,14 +340,14 @@ pub enum MarkLayer {
 
 #[derive(Debug, Clone)]
 pub enum MarkData {
-    Selection,
+    Selection { focused: bool },
     Composition,
 }
 
 impl MarkData {
     pub fn layer(&self) -> MarkLayer {
         match self {
-            Self::Selection => MarkLayer::BelowContent,
+            Self::Selection { .. } => MarkLayer::BelowContent,
             Self::Composition => MarkLayer::AboveContent,
         }
     }
@@ -362,6 +362,20 @@ pub struct Mark {
 
 struct MarkStyle {
     color: Color,
+}
+
+const SELECTION_FOCUSED_ALPHA: u8 = 77;
+const SELECTION_UNFOCUSED_ALPHA: u8 = 48;
+
+fn selection_mark_color(theme: &Theme, focused: bool) -> Color {
+    theme.color_with_alpha(
+        "selection",
+        if focused {
+            SELECTION_FOCUSED_ALPHA
+        } else {
+            SELECTION_UNFOCUSED_ALPHA
+        },
+    )
 }
 
 pub struct Renderer {
@@ -387,8 +401,8 @@ impl Renderer {
 
     fn resolve_mark(&self, data: &MarkData) -> MarkStyle {
         match data {
-            MarkData::Selection => MarkStyle {
-                color: self.theme.color_with_alpha("selection", 64),
+            MarkData::Selection { focused } => MarkStyle {
+                color: selection_mark_color(&self.theme, *focused),
             },
             MarkData::Composition => MarkStyle {
                 color: self.theme.color("ui.text.default"),
@@ -1117,12 +1131,23 @@ mod tests {
 
     #[test]
     fn mark_data_layer_below_content() {
-        assert_eq!(MarkData::Selection.layer(), MarkLayer::BelowContent);
+        assert_eq!(
+            MarkData::Selection { focused: true }.layer(),
+            MarkLayer::BelowContent
+        );
     }
 
     #[test]
     fn mark_data_layer_above_content() {
         assert_eq!(MarkData::Composition.layer(), MarkLayer::AboveContent);
+    }
+
+    #[test]
+    fn selection_mark_alpha_depends_on_focus() {
+        let theme = Theme::new(ThemeVariant::LightWhite);
+
+        assert_eq!(selection_mark_color(&theme, true).a, 77);
+        assert_eq!(selection_mark_color(&theme, false).a, 48);
     }
 
     #[test]

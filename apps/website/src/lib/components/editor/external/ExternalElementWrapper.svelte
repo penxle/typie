@@ -16,6 +16,9 @@
 
   let { el, minHeight = '48px', containerEl = $bindable(), children }: Props = $props();
 
+  const SELECTION_FOCUSED_ALPHA = 77 / 255;
+  const SELECTION_UNFOCUSED_ALPHA = 48 / 255;
+
   const { editor } = getEditorContext();
   const theme = getThemeContext();
 
@@ -23,6 +26,7 @@
     THEME_COLORS[(theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant]
       .selection,
   );
+  const selectionOpacity = $derived(editor.isFocused ? SELECTION_FOCUSED_ALPHA : SELECTION_UNFOCUSED_ALPHA);
 
   let reportedHeight = $state<number>();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,7 +85,8 @@
   {#if el.isSelected}
     <div
       style:background-color={selectionColor}
-      class={css({ position: 'absolute', inset: '0', pointerEvents: 'none', opacity: '20' })}
+      style:opacity={selectionOpacity}
+      class={css({ position: 'absolute', inset: '0', pointerEvents: 'none' })}
     ></div>
   {/if}
 </div>

@@ -1,4 +1,4 @@
-import { createContext } from 'svelte';
+import { createContext, untrack } from 'svelte';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
@@ -85,20 +85,20 @@ export class Editor {
       $effect(() => {
         const el = self.inputEl;
         if (!el) {
-          self.#focused = false;
+          untrack(() => self.#setFocused(false));
           return;
         }
 
         const onFocus = () => {
-          self.#focused = true;
+          self.#setFocused(true);
         };
         const onBlur = () => {
-          self.#focused = false;
+          self.#setFocused(false);
         };
 
         el.addEventListener('focus', onFocus);
         el.addEventListener('blur', onBlur);
-        self.#focused = document.activeElement === el;
+        untrack(() => self.#setFocused(document.activeElement === el));
 
         return () => {
           el.removeEventListener('focus', onFocus);
@@ -159,6 +159,15 @@ export class Editor {
 
   get focused() {
     return this.#focused;
+  }
+
+  #setFocused(focused: boolean): void {
+    if (this.#focused === focused) {
+      return;
+    }
+
+    this.#focused = focused;
+    this.enqueue({ type: 'system', event: { type: 'set_focused', focused } });
   }
 
   localToOffset(page: number, x: number, y: number) {

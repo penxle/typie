@@ -35,8 +35,11 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             }
         }
 
-        SystemEvent::SetFocused { .. } => {
-            // stub
+        SystemEvent::SetFocused { focused } => {
+            if editor.focused != focused {
+                editor.focused = focused;
+                editor.push_event(EditorEvent::RenderInvalidated);
+            }
         }
 
         SystemEvent::SetThemeVariant { variant } => {
@@ -213,6 +216,46 @@ mod tests {
             },
         });
 
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn set_focused_invalidates_render_when_changed() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetFocused { focused: true },
+        });
+
+        assert!(editor.focused);
+        assert_eq!(events, vec![EditorEvent::RenderInvalidated]);
+    }
+
+    #[test]
+    fn set_focused_ignores_current_focus() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetFocused { focused: false },
+        });
+
+        assert!(!editor.focused);
         assert!(events.is_empty());
     }
 

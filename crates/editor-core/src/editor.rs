@@ -46,6 +46,7 @@ pub struct Editor {
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) drag_anchor: Option<Position>,
+    pub(crate) focused: bool,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,
     pub(crate) pending_ops: Vec<Op<DocOp>>,
@@ -62,6 +63,7 @@ impl Editor {
             renderer: Renderer::new(ThemeVariant::LightWhite, Arc::clone(&resource)),
             resource,
             drag_anchor: None,
+            focused: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
@@ -264,7 +266,9 @@ impl Editor {
 
         if let Some(rects) = self.selection_mark_rects() {
             marks.push(Mark {
-                data: MarkData::Selection,
+                data: MarkData::Selection {
+                    focused: self.focused,
+                },
                 rects,
             });
         }
@@ -489,6 +493,7 @@ impl Editor {
             renderer: Renderer::new(ThemeVariant::LightWhite, Arc::clone(&resource)),
             resource,
             drag_anchor: None,
+            focused: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
             pending_ops: Vec::new(),

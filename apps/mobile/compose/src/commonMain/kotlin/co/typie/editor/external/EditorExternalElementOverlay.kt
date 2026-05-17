@@ -34,6 +34,7 @@ import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
@@ -42,6 +43,9 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+private const val SELECTION_FOCUSED_ALPHA = 77f / 255f
+private const val SELECTION_UNFOCUSED_ALPHA = 48f / 255f
 
 @Composable
 internal fun EditorExternalElementOverlay(
@@ -67,6 +71,7 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   }
 
   val editor = LocalEditorRuntime.current.editor ?: return
+  val uiState = LocalEditorUiState.current
   val density = LocalDensity.current
   val safeZoom = if (displayZoom.isFinite() && displayZoom > 0f) displayZoom else 1f
   var reportedHeight by remember(element.nodeId) { mutableFloatStateOf(Float.NaN) }
@@ -125,7 +130,9 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
     }
 
     if (element.isSelected) {
-      Box(Modifier.matchParentSize().background(selectionColor.copy(alpha = 64f / 255f)))
+      val selectionAlpha =
+        if (uiState.focused) SELECTION_FOCUSED_ALPHA else SELECTION_UNFOCUSED_ALPHA
+      Box(Modifier.matchParentSize().background(selectionColor.copy(alpha = selectionAlpha)))
     }
   }
 }

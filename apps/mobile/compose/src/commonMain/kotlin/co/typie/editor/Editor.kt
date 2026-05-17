@@ -196,10 +196,6 @@ internal constructor(
     scheduleTick()
   }
 
-  fun setThemeVariant(variant: ThemeVariant) {
-    enqueue(Message.System(SystemEvent.SetThemeVariant(variant)))
-  }
-
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
     scope.launch(dispatcher) {
