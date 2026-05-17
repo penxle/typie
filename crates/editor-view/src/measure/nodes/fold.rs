@@ -10,6 +10,8 @@ use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
 use crate::style::{BorderMode, BoxStyle, Decoration, DecorationData, Direction};
 use crate::view_state::ViewState;
 
+use super::line_geometry::first_line_info;
+
 const FOLD_TITLE_PADDING_X: f32 = 12.0;
 const FOLD_TITLE_PADDING_Y: f32 = 8.0;
 const FOLD_TITLE_ICON_WIDTH: f32 = 20.0;
@@ -57,7 +59,7 @@ pub fn measure_fold_title(
         view_state,
     );
 
-    MeasuredNode {
+    let mut measured = MeasuredNode {
         width,
         height: children_height + padding.top + padding.bottom + border.top + border.bottom,
         content: MeasuredContent::Box(MeasuredBox {
@@ -69,21 +71,31 @@ pub fn measure_fold_title(
                 border_mode: BorderMode::Separate,
                 alignment: LayoutAlignment::Start,
                 scope: false,
-                decorations: vec![Decoration {
-                    id: 0,
-                    rect: Rect {
-                        x: FOLD_TITLE_PADDING_X,
-                        y: FOLD_TITLE_PADDING_Y,
-                        width: FOLD_TITLE_ICON_WIDTH,
-                        height: FOLD_TITLE_ICON_WIDTH,
-                    },
-                    data: DecorationData::Bool(expanded),
-                }],
+                decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
             children,
         }),
+    };
+
+    let icon_y = first_line_info(&measured)
+        .map(|info| info.top + (info.height - FOLD_TITLE_ICON_WIDTH) / 2.0)
+        .unwrap_or(FOLD_TITLE_PADDING_Y);
+
+    if let MeasuredContent::Box(ref mut b) = measured.content {
+        b.style.decorations.push(Decoration {
+            id: 0,
+            rect: Rect {
+                x: FOLD_TITLE_PADDING_X,
+                y: icon_y,
+                width: FOLD_TITLE_ICON_WIDTH,
+                height: FOLD_TITLE_ICON_WIDTH,
+            },
+            data: DecorationData::Bool(expanded),
+        });
     }
+
+    measured
 }
 
 pub fn measure_fold_content(
@@ -246,6 +258,35 @@ mod tests {
         assert_eq!(b.style.padding.right, 12.0);
         assert_eq!(b.style.padding.top, 8.0);
         assert_eq!(b.style.padding.bottom, 8.0);
+    }
+
+    #[test]
+    fn fold_title_icon_centered_on_first_line() {
+        let (doc, ft1) = doc! {
+            root {
+                fold {
+                    ft1: fold_title { text("Title") }
+                    fold_content { paragraph { text("Content") } }
+                }
+            }
+        };
+
+        let node = doc.node(ft1).unwrap();
+        let mut measurer = Measurer::new_test();
+        let result = measure_fold_title(&mut measurer, &doc, &node, 300.0, &ViewState::new());
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!()
+        };
+
+        let first_line_height = b.children[0].height;
+        let icon = b.style.decorations.first().expect("icon decoration");
+        let icon_center = icon.rect.y + icon.rect.height / 2.0;
+        let first_line_center = FOLD_TITLE_PADDING_Y + first_line_height / 2.0;
+
+        assert!(
+            (icon_center - first_line_center).abs() < 0.01,
+            "icon center {icon_center} should match first line center {first_line_center}",
+        );
     }
 
     #[test]

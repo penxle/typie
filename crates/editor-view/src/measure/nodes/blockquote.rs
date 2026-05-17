@@ -8,6 +8,8 @@ use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
 use crate::style::{Alignment, BorderMode, BoxStyle, Decoration, DecorationData, Direction};
 use crate::view_state::ViewState;
 
+use super::line_geometry::first_line_info;
+
 const BQ_LINE_WIDTH: f32 = 4.0;
 const BQ_CONTENT_PADDING: f32 = 16.0;
 const BQ_QUOTE_SIZE: f32 = 16.0;
@@ -80,12 +82,16 @@ pub fn measure_blockquote(
                     alignment: Alignment::Start,
                 },
             );
+            let icon_y = first_line_info(&measured)
+                .map(|info| info.top + (info.height - BQ_QUOTE_SIZE) / 2.0)
+                .unwrap_or(0.0);
+
             if let MeasuredContent::Box(ref mut b) = measured.content {
                 b.style.decorations.push(Decoration {
                     id: 0,
                     rect: Rect {
                         x: 0.0,
-                        y: 0.0,
+                        y: icon_y,
                         width: BQ_QUOTE_SIZE,
                         height: BQ_QUOTE_SIZE,
                     },
@@ -201,6 +207,32 @@ mod tests {
         };
 
         assert_eq!(b.style.padding.left, 32.0);
+    }
+
+    #[test]
+    fn left_quote_icon_centered_on_first_line() {
+        let (doc, bq1) = doc! { root { bq1: blockquote(variant: BlockquoteVariant::LeftQuote) { paragraph { text("hello") } } } };
+
+        let node = doc.node(bq1).unwrap();
+        let mut measurer = Measurer::new_test();
+        let result = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!()
+        };
+
+        let MeasuredContent::Box(ref paragraph) = b.children[0].content else {
+            panic!("first child should be a paragraph box")
+        };
+        let first_line_height = paragraph.children[0].height;
+
+        let icon = b.style.decorations.first().expect("icon decoration");
+        let icon_center = icon.rect.y + icon.rect.height / 2.0;
+        let first_line_center = first_line_height / 2.0;
+
+        assert!(
+            (icon_center - first_line_center).abs() < 0.01,
+            "icon center {icon_center} should match first line center {first_line_center}",
+        );
     }
 
     #[test]
