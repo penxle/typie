@@ -35,8 +35,7 @@ pub fn select_node_forward(tr: &mut Transaction) -> CommandResult {
         }
     };
 
-    let next_spec = next.spec();
-    if matches!(next.node(), Node::Text(_)) || (!next_spec.is_leaf() && !next_spec.monolithic) {
+    if matches!(next.node(), Node::Text(_)) || !next.spec().is_unit() {
         return Ok(false);
     }
 

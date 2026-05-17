@@ -114,6 +114,7 @@ mod tests {
                             child_range: None,
                         }),
                     }],
+                    nav: None,
                 }),
             },
         }
@@ -187,6 +188,7 @@ mod tests {
                             child_range: None,
                         }),
                     }],
+                    nav: None,
                 }),
             },
         };
@@ -235,6 +237,7 @@ mod tests {
                             child_range: None,
                         }),
                     }],
+                    nav: None,
                 }),
             },
         };
@@ -292,6 +295,7 @@ mod tests {
                             child_range: Some(0..0),
                         }),
                     }],
+                    nav: None,
                 }),
             },
         };
@@ -339,6 +343,7 @@ mod tests {
                             child_range: None,
                         }),
                     }],
+                    nav: None,
                 }),
             },
         };
@@ -397,6 +402,7 @@ mod tests {
                             index: 0,
                         }),
                     }],
+                    nav: None,
                 }),
             },
         };
@@ -458,6 +464,7 @@ mod tests {
                             }),
                         },
                     ],
+                    nav: None,
                 }),
             },
         };
@@ -509,6 +516,7 @@ mod tests {
                             child_range: None,
                         }),
                     }],
+                    nav: None,
                 }),
             },
         };

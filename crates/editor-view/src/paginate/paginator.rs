@@ -72,10 +72,21 @@ impl Paginator {
         child_index: usize,
     ) -> LayoutNode {
         match &node.content {
-            MeasuredContent::Box(b) => match b.style.direction {
-                Direction::Vertical => self.place_vertical(b, node.width),
-                Direction::Horizontal => self.place_horizontal(b, node),
-            },
+            MeasuredContent::Box(b) => {
+                let mut placed = match b.style.direction {
+                    Direction::Vertical => self.place_vertical(b, node.width),
+                    Direction::Horizontal => self.place_horizontal(b, node),
+                };
+                if b.style.monolithic
+                    && let LayoutContent::Box(lb) = &mut placed.content
+                {
+                    lb.nav = Some(NavUnit {
+                        parent_id,
+                        index: child_index,
+                    });
+                }
+                placed
+            }
             MeasuredContent::Line(l) => {
                 let y = self.accumulated_y;
                 let x = self.current_x;
@@ -230,6 +241,7 @@ impl Paginator {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
                 children,
+                nav: None,
             }),
         }
     }
@@ -282,6 +294,7 @@ impl Paginator {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
                 children,
+                nav: None,
             }),
         }
     }
@@ -480,6 +493,14 @@ fn place_node_at(
                     node_id: b.node_id,
                     style: b.style.clone(),
                     children,
+                    nav: if b.style.monolithic {
+                        Some(NavUnit {
+                            parent_id,
+                            index: child_index,
+                        })
+                    } else {
+                        None
+                    },
                 }),
             }
         }
@@ -520,11 +541,13 @@ fn place_node_at(
 mod tests {
     use super::*;
     use editor_common::EdgeInsets;
-    use editor_macros::doc;
+    use editor_macros::{doc, state};
     use editor_model::NodeId;
     use std::sync::Arc;
 
     use crate::measure::Measurer;
+    use crate::query::search::find_box_by_node_id;
+    use crate::view::View;
     use crate::view_state::ViewState;
 
     fn make_line(height: f32) -> Arc<MeasuredNode> {
@@ -1138,6 +1161,58 @@ mod tests {
             "last cell right must coincide with table right (got cell_right={}, table_right={})",
             last_cell0.rect.x + last_cell0.rect.width,
             table.rect.x + table.rect.width
+        );
+    }
+
+    fn nav_of(tree: &LayoutTree, id: NodeId) -> Option<NavUnit> {
+        match &find_box_by_node_id(&tree.root, id)?.content {
+            LayoutContent::Box(b) => b.nav,
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn monolithic_box_carries_nav_linkage() {
+        let (st, r, f, ..) = state! {
+            doc { r: root {
+                f: fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                paragraph { t: text("after") }
+            } }
+            selection: (t, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&st.doc);
+        let tree = view.layout_tree_for_test().expect("laid out");
+        assert_eq!(
+            nav_of(tree, f),
+            Some(NavUnit {
+                parent_id: r,
+                index: 0
+            })
+        );
+    }
+
+    #[test]
+    fn monolithic_box_in_table_cell_carries_nav_linkage() {
+        let (st, tc, f, ..) = state! {
+            doc { root {
+                table { table_row { tc: table_cell {
+                    f: fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                } } }
+                paragraph { t: text("after") }
+            } }
+            selection: (t, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&st.doc);
+        let tree = view.layout_tree_for_test().expect("laid out");
+        assert_eq!(
+            nav_of(tree, f),
+            Some(NavUnit {
+                parent_id: tc,
+                index: 0
+            }),
+            "fold nested in a table_cell must link to its cell parent at index 0 (place_node_at path)"
         );
     }
 }

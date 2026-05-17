@@ -26,6 +26,18 @@ pub fn find_line_at<'a>(tree: &'a LayoutTree, pos: &Position) -> Option<&'a Layo
 fn collect_lines<'a>(node: &'a LayoutNode, pos: &Position, out: &mut Vec<&'a LayoutNode>) {
     match &node.content {
         LayoutContent::Box(b) => {
+            // A monolithic box is terminal (atom-like) ONLY at its own bracket,
+            // so a node-selection of the block resolves to the block itself.
+            // For any interior position it stays transparent and recurses, so
+            // editing/navigation inside the block is unaffected.
+            if let Some(nv) = b.nav
+                && nv.parent_id == pos.node_id
+                && pos.offset >= nv.index
+                && pos.offset <= nv.index + 1
+            {
+                out.push(node);
+                return;
+            }
             for child in &b.children {
                 collect_lines(child, pos, out);
             }
@@ -455,6 +467,7 @@ mod tests {
                     monolithic: false,
                 },
                 children,
+                nav: None,
             }),
         }
     }
@@ -475,6 +488,7 @@ mod tests {
                     monolithic: false,
                 },
                 children,
+                nav: None,
             }),
         }
     }
@@ -888,6 +902,7 @@ mod tests {
                     monolithic: false,
                 },
                 children: vec![],
+                nav: None,
             }),
         }
     }
@@ -908,6 +923,7 @@ mod tests {
                     monolithic: false,
                 },
                 children,
+                nav: None,
             }),
         }
     }

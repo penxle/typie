@@ -30,11 +30,18 @@ pub enum SpacingKind {
     Fill,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NavUnit {
+    pub parent_id: NodeId,
+    pub index: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct LayoutBox {
     pub node_id: NodeId,
     pub style: BoxStyle,
     pub children: Vec<LayoutNode>,
+    pub nav: Option<NavUnit>,
 }
 
 #[derive(Debug, Clone)]

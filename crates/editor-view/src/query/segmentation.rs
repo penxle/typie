@@ -38,7 +38,7 @@ pub fn move_word_forward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) => {
+        _ if super::navigation::nav_anchor(line_node).is_some() => {
             let next = search::find_navigable_after(&tree.root, line_node)?;
             return confined_to_scope(tree, pos, next, false, true);
         }
@@ -64,7 +64,7 @@ pub fn move_word_backward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) => {
+        _ if super::navigation::nav_anchor(line_node).is_some() => {
             let prev = search::find_navigable_before(&tree.root, line_node)?;
             return confined_to_scope(tree, pos, prev, true, false);
         }
@@ -90,7 +90,7 @@ pub fn move_sentence_forward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) => {
+        _ if super::navigation::nav_anchor(line_node).is_some() => {
             let next = search::find_navigable_after(&tree.root, line_node)?;
             return confined_to_scope(tree, pos, next, false, true);
         }
@@ -116,7 +116,7 @@ pub fn move_sentence_backward(
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) => {
+        _ if super::navigation::nav_anchor(line_node).is_some() => {
             let prev = search::find_navigable_before(&tree.root, line_node)?;
             return confined_to_scope(tree, pos, prev, true, false);
         }
@@ -508,6 +508,7 @@ mod tests {
                         rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
                         content: LayoutContent::Line(line),
                     }],
+                    nav: None,
                 }),
             },
         }
@@ -545,6 +546,7 @@ mod tests {
                     node_id: para_id,
                     style: make_box_style(),
                     children: vec![line_node],
+                    nav: None,
                 }),
             },
         };
@@ -570,6 +572,7 @@ mod tests {
                     node_id: NodeId::new(),
                     style: make_box_style(),
                     children: vec![line_node],
+                    nav: None,
                 }),
             },
         };
@@ -596,6 +599,7 @@ mod tests {
                     node_id: NodeId::new(),
                     style: make_box_style(),
                     children: vec![line_node],
+                    nav: None,
                 }),
             },
         };
@@ -620,6 +624,7 @@ mod tests {
                     node_id: NodeId::new(),
                     style: make_box_style(),
                     children: vec![line_node],
+                    nav: None,
                 }),
             },
         };
@@ -707,6 +712,7 @@ mod tests {
                         make_text_line_node(p1, t1, 0.0, "a", 0..2),
                         make_empty_line_node(p1, 20.0, 2..2),
                     ],
+                    nav: None,
                 }),
             },
         };
@@ -748,6 +754,7 @@ mod tests {
                         monolithic: false,
                     },
                     children: vec![make_empty_line_node(p1, 0.0, 0..1)],
+                    nav: None,
                 }),
             },
         };
@@ -797,6 +804,7 @@ mod tests {
                     node_id: NodeId::ROOT,
                     style: make_box_style(),
                     children: vec![line_node],
+                    nav: None,
                 }),
             },
         };
@@ -835,6 +843,7 @@ mod tests {
                     node_id: NodeId::new(),
                     style: make_box_style(),
                     children: vec![line, atom],
+                    nav: None,
                 }),
             },
         };
@@ -889,6 +898,7 @@ mod tests {
                     node_id: NodeId::new(),
                     style: make_box_style(),
                     children: vec![atom, line],
+                    nav: None,
                 }),
             },
         };

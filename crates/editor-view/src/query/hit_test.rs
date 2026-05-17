@@ -313,6 +313,7 @@ mod tests {
                     monolithic: false,
                 },
                 children,
+                nav: None,
             }),
         }
     }
@@ -533,6 +534,7 @@ mod tests {
                     monolithic: true,
                 },
                 children: vec![line],
+                nav: None,
             }),
         };
         let tree = LayoutTree {
@@ -681,6 +683,7 @@ mod tests {
                             }),
                         },
                     ],
+                    nav: None,
                 }),
             },
         };

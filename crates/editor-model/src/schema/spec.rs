@@ -27,6 +27,10 @@ impl NodeSpec {
     pub fn is_leaf(&self) -> bool {
         self.content.is_leaf()
     }
+
+    pub fn is_unit(&self) -> bool {
+        (self.selectable && !self.inline && self.is_leaf()) || self.monolithic
+    }
 }
 
 impl Default for NodeSpec {
@@ -87,6 +91,42 @@ mod tests {
         assert!(!Schema::node_spec(NodeType::Paragraph).is_leaf());
         assert!(!Schema::node_spec(NodeType::Blockquote).is_leaf());
         assert!(!Schema::node_spec(NodeType::Table).is_leaf());
+    }
+
+    #[test]
+    fn is_unit_classifies_atoms_and_monolithic() {
+        for ty in [
+            NodeType::Image,
+            NodeType::File,
+            NodeType::Embed,
+            NodeType::Archived,
+            NodeType::HorizontalRule,
+            NodeType::Blockquote,
+            NodeType::Callout,
+            NodeType::Fold,
+            NodeType::Table,
+        ] {
+            assert!(Schema::node_spec(ty).is_unit(), "{ty:?} must be a unit");
+        }
+        for ty in [
+            NodeType::Root,
+            NodeType::Paragraph,
+            NodeType::ListItem,
+            NodeType::BulletList,
+            NodeType::OrderedList,
+            NodeType::FoldTitle,
+            NodeType::FoldContent,
+            NodeType::TableRow,
+            NodeType::TableCell,
+            NodeType::Text,
+            NodeType::HardBreak,
+            NodeType::PageBreak,
+        ] {
+            assert!(
+                !Schema::node_spec(ty).is_unit(),
+                "{ty:?} must not be a unit"
+            );
+        }
     }
 
     #[test]

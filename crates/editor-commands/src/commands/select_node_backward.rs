@@ -31,8 +31,7 @@ pub fn select_node_backward(tr: &mut Transaction) -> CommandResult {
         }
     };
 
-    let prev_spec = prev.spec();
-    if matches!(prev.node(), Node::Text(_)) || (!prev_spec.is_leaf() && !prev_spec.monolithic) {
+    if matches!(prev.node(), Node::Text(_)) || !prev.spec().is_unit() {
         return Ok(false);
     }
 

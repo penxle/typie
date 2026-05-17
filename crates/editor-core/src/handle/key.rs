@@ -754,4 +754,38 @@ mod tests {
         };
         assert_state_eq!(editor.state(), &expected);
     }
+
+    // Characterization guard for the editor-commands `is_unit()` gate change:
+    // an inline leaf (`hard_break`) as the backward/forward neighbor must be
+    // consumed by `delete_node_*` before `select_node_*` ever sees it, so the
+    // `is_unit` vs `leaf || monolithic` divergence is unreachable here.
+    #[test]
+    fn backspace_over_hard_break_is_unaffected_by_unit_gate() {
+        let (state, ..) = state! {
+            doc { root { paragraph { text("ab") hard_break t: text("cd") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("ab") t: text("cd") } } }
+            selection: (t, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_over_hard_break_is_unaffected_by_unit_gate() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("ab") hard_break text("cd") } } }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ab") text("cd") } } }
+            selection: (t1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
 }

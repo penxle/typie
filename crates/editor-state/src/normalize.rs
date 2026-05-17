@@ -109,18 +109,19 @@ fn subtree_violation(a_path: &[usize], h_path: &[usize]) -> bool {
     anc_slot == desc_child_idx || anc_slot == desc_child_idx + 1
 }
 
-fn is_atom_node(node: &NodeRef<'_>) -> bool {
-    let spec = Schema::node_spec(node.as_type());
-    // atom = selectable, non-inline, leaf. The is_leaf guard ensures a future
-    // selectable non-leaf container is not misclassified (equivalent under the current schema).
-    spec.selectable && !spec.inline && spec.is_leaf()
+fn is_unit_node(node: &NodeRef<'_>) -> bool {
+    // A node-selectable unit = atom (selectable, non-inline, leaf) OR a
+    // monolithic block (fold/table/callout/blockquote). Single source of
+    // truth lives on NodeSpec so editor-commands shares the same predicate.
+    Schema::node_spec(node.as_type()).is_unit()
 }
 
-/// At a container boundary, if the affinity-selected adjacent child is an atom,
-/// expands to that atom's node selection. Affinity convention: Upstream selects
-/// child[offset-1], Downstream selects child[offset]. Returns None for a text
-/// node position or when the adjacent child is not an atom.
-fn expand_atom_at(doc: &Doc, pos: Position) -> Option<Selection> {
+/// At a container boundary, if the affinity-selected adjacent child is a unit
+/// (atom or monolithic block), expands to that child's node selection. Affinity
+/// convention: Upstream selects child[offset-1], Downstream selects
+/// child[offset]. Returns None for a text node position or when the adjacent
+/// child is not a unit.
+fn expand_unit_at(doc: &Doc, pos: Position) -> Option<Selection> {
     let node = doc.node(pos.node_id)?;
     if matches!(node.node(), Node::Text(_)) {
         return None;
@@ -128,7 +129,7 @@ fn expand_atom_at(doc: &Doc, pos: Position) -> Option<Selection> {
     match pos.affinity {
         Affinity::Downstream => {
             let child = node.children().nth(pos.offset)?;
-            if is_atom_node(&child) {
+            if is_unit_node(&child) {
                 return Some(Selection::new(
                     Position {
                         node_id: pos.node_id,
@@ -146,7 +147,7 @@ fn expand_atom_at(doc: &Doc, pos: Position) -> Option<Selection> {
         Affinity::Upstream => {
             let prev_idx = pos.offset.checked_sub(1)?;
             let child = node.children().nth(prev_idx)?;
-            if is_atom_node(&child) {
+            if is_unit_node(&child) {
                 return Some(Selection::new(
                     Position {
                         node_id: pos.node_id,
@@ -165,9 +166,9 @@ fn expand_atom_at(doc: &Doc, pos: Position) -> Option<Selection> {
     None
 }
 
-/// Invariant: a normalized selection must never be collapsed at an atom boundary.
-fn collapsed_or_atom(doc: &Doc, pos: Position) -> Selection {
-    if let Some(node_sel) = expand_atom_at(doc, pos) {
+/// Invariant: a normalized selection must never be collapsed at a unit boundary.
+fn collapsed_or_unit(doc: &Doc, pos: Position) -> Selection {
+    if let Some(node_sel) = expand_unit_at(doc, pos) {
         return node_sel;
     }
     Selection::collapsed(pos)
@@ -185,7 +186,7 @@ impl<'a> ResolvedSelection<'a> {
         let h_bd = boundary_identity(doc, h_in);
 
         if a_bd == h_bd {
-            return collapsed_or_atom(doc, normalize_position(doc, h_in));
+            return collapsed_or_unit(doc, normalize_position(doc, h_in));
         }
 
         let (a_aff, h_aff) = if a_bd < h_bd {
@@ -210,7 +211,7 @@ impl<'a> ResolvedSelection<'a> {
         let h_resolved = h.resolve(doc).expect("normalized head resolves");
         if subtree_violation(a_resolved.path(), h_resolved.path()) {
             // Preserve the caller's original head affinity in the fallback.
-            return collapsed_or_atom(doc, normalize_position(doc, h_in));
+            return collapsed_or_unit(doc, normalize_position(doc, h_in));
         }
 
         Selection { anchor: a, head: h }
@@ -225,13 +226,14 @@ impl Selection {
         self.resolve(doc).map(|r| r.normalize())
     }
 
-    /// Navigation extend must treat a selection that already brackets an atom
-    /// differently from a text/collapsed selection: it re-anchors to the atom's
-    /// far edge so the atom stays selected while the range grows. This predicate
-    /// is that classification gate. Callers pass selections already validated by
-    /// `normalize`; an unnormalized/out-of-range selection harmlessly returns
-    /// false. Direction-agnostic (forward or reversed atom selection both true).
-    pub fn is_atom_node_selection(&self, doc: &Doc) -> bool {
+    /// Navigation extend must treat a selection that already brackets a unit
+    /// (atom or monolithic block) differently from a text/collapsed selection:
+    /// it re-anchors to the unit's far edge so the unit stays selected while the
+    /// range grows. This predicate is that classification gate. Callers pass
+    /// selections already validated by `normalize`; an unnormalized/out-of-range
+    /// selection harmlessly returns false. Direction-agnostic (forward or
+    /// reversed unit selection both true).
+    pub fn is_unit_node_selection(&self, doc: &Doc) -> bool {
         if self.anchor.node_id != self.head.node_id {
             return false;
         }
@@ -253,7 +255,7 @@ impl Selection {
         }
         node.children()
             .nth(lo)
-            .is_some_and(|child| is_atom_node(&child))
+            .is_some_and(|child| is_unit_node(&child))
     }
 }
 
@@ -1304,7 +1306,7 @@ mod tests {
     }
 
     #[test]
-    fn is_atom_node_selection_classifies_correctly() {
+    fn is_unit_node_selection_classifies_correctly() {
         let (d, r, t) = doc! {
             r: root {
                 image
@@ -1323,11 +1325,11 @@ mod tests {
                 affinity: Affinity::Upstream,
             },
         );
-        assert!(atom.is_atom_node_selection(&d));
-        assert!(Selection::new(atom.head, atom.anchor).is_atom_node_selection(&d));
-        assert!(!Selection::collapsed(Position::new(t, 0)).is_atom_node_selection(&d));
+        assert!(atom.is_unit_node_selection(&d));
+        assert!(Selection::new(atom.head, atom.anchor).is_unit_node_selection(&d));
+        assert!(!Selection::collapsed(Position::new(t, 0)).is_unit_node_selection(&d));
         assert!(
-            !Selection::new(Position::new(t, 0), Position::new(t, 1)).is_atom_node_selection(&d)
+            !Selection::new(Position::new(t, 0), Position::new(t, 1)).is_unit_node_selection(&d)
         );
         assert!(
             !Selection::new(
@@ -1342,7 +1344,7 @@ mod tests {
                     affinity: Affinity::Upstream
                 },
             )
-            .is_atom_node_selection(&d)
+            .is_unit_node_selection(&d)
         );
     }
 
@@ -1363,6 +1365,69 @@ mod tests {
         assert!(
             !out.is_collapsed(),
             "leading atom must node-select, got {:?}",
+            out
+        );
+        assert_eq!(
+            out.anchor,
+            Position {
+                node_id: root_id,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            out.head,
+            Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+    }
+
+    #[test]
+    fn is_unit_node_selection_true_for_monolithic() {
+        let (d, ..) = doc! {
+            root {
+                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                paragraph {}
+            }
+        };
+        let root_id = NodeId::ROOT;
+        let fold_sel = Selection::new(
+            Position {
+                node_id: root_id,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        assert!(fold_sel.is_unit_node_selection(&d));
+        assert!(Selection::new(fold_sel.head, fold_sel.anchor).is_unit_node_selection(&d));
+    }
+
+    #[test]
+    fn expand_unit_at_expands_caret_adjacent_to_monolithic() {
+        let (d, ..) = doc! {
+            root {
+                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                paragraph { text("b") }
+            }
+        };
+        let root_id = NodeId::ROOT;
+        let sel = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        });
+        let out = sel.normalize(&d).unwrap();
+        assert!(
+            !out.is_collapsed(),
+            "caret bracketing a leading fold must node-select it, got {:?}",
             out
         );
         assert_eq!(

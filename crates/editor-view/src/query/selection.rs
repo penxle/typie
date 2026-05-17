@@ -29,8 +29,14 @@ pub fn selection_rects(
     // Resolve which Line/Atom each endpoint belongs to up front so soft-wrap
     // boundary positions are disambiguated by affinity (via `find_line_at`)
     // rather than by the permissive per-line `line_contains_position`.
-    let from_owner = super::search::find_line_at(tree, &from);
-    let to_owner = super::search::find_line_at(tree, &to);
+    // A monolithic box is now resolvable by `find_line_at` (navigation needs
+    // that). For rect purposes a monolithic-bracket endpoint is a container
+    // boundary, not an interior Line/Atom owner — drop the nav-box so the
+    // box-level phase machine and the `fully && monolithic` branch still fire.
+    let not_nav_box =
+        |n: &&LayoutNode| !matches!(&n.content, LayoutContent::Box(b) if b.nav.is_some());
+    let from_owner = super::search::find_line_at(tree, &from).filter(not_nav_box);
+    let to_owner = super::search::find_line_at(tree, &to).filter(not_nav_box);
     let mut phase = Phase::Before;
     let mut rects = Vec::new();
 

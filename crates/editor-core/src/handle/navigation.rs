@@ -55,10 +55,10 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 let final_selection = if extend {
                     let doc = &editor.state.doc;
                     // Re-anchoring is sound only when the current selection
-                    // already brackets an atom and the move is a vertical line
-                    // step; otherwise the gesture anchor must stay put so
-                    // ordinary Shift selection (shrink/reverse, horizontal,
-                    // word) is unaffected.
+                    // already brackets a unit (atom or monolithic block) and the
+                    // move is a vertical line step; otherwise the gesture anchor
+                    // must stay put so ordinary Shift selection (shrink/reverse,
+                    // horizontal, word) is unaffected.
                     let vertical_line = matches!(
                         movement,
                         Movement::Line {
@@ -66,17 +66,17 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                             ..
                         }
                     );
-                    let fixed = if vertical_line && selection.is_atom_node_selection(doc) {
-                        // Re-anchor to the atom edge opposite the travel
-                        // direction so the already-selected atom stays in the
+                    let fixed = if vertical_line && selection.is_unit_node_selection(doc) {
+                        // Re-anchor to the unit edge opposite the travel
+                        // direction so the already-selected unit stays in the
                         // range as it grows.
                         farther_endpoint(doc, new_selection.head, selection.anchor, selection.head)
                     } else {
                         selection.anchor
                     };
                     // The farther-from-fixed head rule generalizes to every
-                    // extend: a no-op for collapsed targets, and for an atom
-                    // target it pulls the whole atom in one step.
+                    // extend: a no-op for collapsed targets, and for a unit
+                    // target it pulls the whole unit in one step.
                     let head =
                         farther_endpoint(doc, fixed, new_selection.anchor, new_selection.head);
                     Selection::new(fixed, head)
@@ -383,5 +383,74 @@ mod tests {
         let e2 = Position::new(t2, 2);
         let between = Position::new(t1, 1);
         assert_eq!(super::farther_endpoint(doc, between, e1, e2), e2);
+    }
+
+    fn arrow(editor: &mut Editor, movement: Movement) {
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement,
+                extend: false,
+            },
+        });
+    }
+
+    #[test]
+    fn arrow_right_from_fold_node_selection_moves_off_the_fold() {
+        let (state, _, after) = state! {
+            doc { r1: root {
+                fold { fold_title { text("123123") } fold_content { paragraph { text("123") } } }
+                paragraph { after: text("1231231232131") }
+            } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        let before = editor.state().selection;
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        );
+        let moved = editor.state().selection;
+
+        assert_ne!(
+            (before.anchor, before.head),
+            (moved.anchor, moved.head),
+            "arrow-right from a fold node-selection must change the selection (was a silent no-op)"
+        );
+        assert!(moved.is_collapsed());
+        assert_eq!(moved.head.node_id, after);
+        assert_eq!(moved.head.offset, 0);
+    }
+
+    #[test]
+    fn arrow_down_from_fold_node_selection_is_not_a_noop() {
+        let (state, ..) = state! {
+            doc { r1: root {
+                fold { fold_title { text("123123") } fold_content { paragraph { text("123") } } }
+                paragraph { text("1231231232131") }
+            } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let before = editor.state().selection;
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        assert_ne!(
+            (before.anchor, before.head),
+            (
+                editor.state().selection.anchor,
+                editor.state().selection.head
+            ),
+            "arrow-down from a fold node-selection must not be a silent no-op"
+        );
     }
 }

@@ -131,17 +131,17 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
             }
             Some(landed(next, false, true))
         }
-        LayoutContent::Atom(a) => {
+        _ => {
+            let nv = nav_anchor(line_node)?;
             if let Some(next) = search::find_navigable_after(&tree.root, line_node) {
                 Some(landed(next, false, true))
             } else {
                 Some(Selection::collapsed(Position::new(
-                    a.parent_id,
-                    a.index + 1,
+                    nv.parent_id,
+                    nv.index + 1,
                 )))
             }
         }
-        _ => None,
     }
 }
 
@@ -198,14 +198,14 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
             }
             Some(landed(prev, true, false))
         }
-        LayoutContent::Atom(a) => {
+        _ => {
+            let nv = nav_anchor(line_node)?;
             if let Some(prev) = search::find_navigable_before(&tree.root, line_node) {
                 Some(landed(prev, true, false))
             } else {
-                Some(Selection::collapsed(Position::new(a.parent_id, a.index)))
+                Some(Selection::collapsed(Position::new(nv.parent_id, nv.index)))
             }
         }
-        _ => None,
     }
 }
 
@@ -330,30 +330,49 @@ fn last_position_in_line(line: &LayoutLine) -> Position {
 }
 
 pub(crate) fn first_position_in(node: &LayoutNode) -> Position {
-    match &node.content {
-        LayoutContent::Line(line) => first_position_in_line(line),
-        LayoutContent::Atom(atom) => Position::new(atom.parent_id, atom.index),
-        LayoutContent::Box(_) | LayoutContent::Spacing(_) => unreachable!(),
+    if let LayoutContent::Line(line) = &node.content {
+        return first_position_in_line(line);
     }
+    if let Some(nv) = nav_anchor(node) {
+        return Position::new(nv.parent_id, nv.index);
+    }
+    unreachable!()
 }
 
 pub(crate) fn last_position_in(node: &LayoutNode) -> Position {
+    if let LayoutContent::Line(line) = &node.content {
+        return last_position_in_line(line);
+    }
+    if let Some(nv) = nav_anchor(node) {
+        return Position::new(nv.parent_id, nv.index);
+    }
+    unreachable!()
+}
+
+/// A navigable unit's `(parent, index)` bracket. An atom carries it directly;
+/// a monolithic box carries it via `nav` (only set at the block's own bracket,
+/// per `collect_lines`). Anything else has no bracket. This is the single read
+/// site that unifies atom and monolithic-block navigation.
+pub(crate) fn nav_anchor(node: &LayoutNode) -> Option<NavUnit> {
     match &node.content {
-        LayoutContent::Line(line) => last_position_in_line(line),
-        LayoutContent::Atom(atom) => Position::new(atom.parent_id, atom.index),
-        LayoutContent::Box(_) | LayoutContent::Spacing(_) => unreachable!(),
+        LayoutContent::Atom(a) => Some(NavUnit {
+            parent_id: a.parent_id,
+            index: a.index,
+        }),
+        LayoutContent::Box(b) => b.nav,
+        _ => None,
     }
 }
 
-fn atom_selection(a: &LayoutAtom, forward: bool) -> Selection {
+fn unit_selection(nv: NavUnit, forward: bool) -> Selection {
     let front = Position {
-        node_id: a.parent_id,
-        offset: a.index,
+        node_id: nv.parent_id,
+        offset: nv.index,
         affinity: Affinity::Downstream,
     };
     let back = Position {
-        node_id: a.parent_id,
-        offset: a.index + 1,
+        node_id: nv.parent_id,
+        offset: nv.index + 1,
         affinity: Affinity::Upstream,
     };
     if forward {
@@ -368,38 +387,25 @@ fn atom_selection(a: &LayoutAtom, forward: bool) -> Selection {
 /// node selection. An atom does not have a "start/end", so `at_end` is irrelevant
 /// there, and a Line does not have a direction, so `forward` is irrelevant there.
 pub(crate) fn landed(node: &LayoutNode, at_end: bool, forward: bool) -> Selection {
-    match &node.content {
-        LayoutContent::Atom(a) => atom_selection(a, forward),
-        _ => {
-            let pos = if at_end {
-                last_position_in(node)
-            } else {
-                first_position_in(node)
-            };
-            Selection::collapsed(pos)
-        }
+    if let Some(nv) = nav_anchor(node) {
+        return unit_selection(nv, forward);
     }
+    let pos = if at_end {
+        last_position_in(node)
+    } else {
+        first_position_in(node)
+    };
+    Selection::collapsed(pos)
 }
 
 fn navigate_to(node: &LayoutNode, preferred_x: f32) -> Selection {
-    match &node.content {
-        LayoutContent::Line(line) => {
-            Selection::collapsed(position_in_line(line, &node.rect, preferred_x))
-        }
-        LayoutContent::Atom(atom) => Selection::new(
-            Position {
-                node_id: atom.parent_id,
-                offset: atom.index,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: atom.parent_id,
-                offset: atom.index + 1,
-                affinity: Affinity::Upstream,
-            },
-        ),
-        _ => unreachable!("navigate_to called on non-navigable"),
+    if let LayoutContent::Line(line) = &node.content {
+        return Selection::collapsed(position_in_line(line, &node.rect, preferred_x));
     }
+    if let Some(nv) = nav_anchor(node) {
+        return unit_selection(nv, true);
+    }
+    unreachable!("navigate_to called on non-navigable")
 }
 
 fn position_in_line(line: &LayoutLine, rect: &editor_common::Rect, x: f32) -> Position {
@@ -482,6 +488,7 @@ mod tests {
                     monolithic: false,
                 },
                 children,
+                nav: None,
             }),
         }
     }
@@ -1965,5 +1972,148 @@ mod tests {
             sel.head.node_id, c1,
             "ArrowUp from the paragraph below a fold must enter the fold content, not skip the fold"
         );
+    }
+
+    #[test]
+    fn fold_node_selection_arrow_right_steps_out_to_next_paragraph() {
+        let (st, r, after) = state! {
+            doc { r: root {
+                fold { fold_title { text("123123") } fold_content { paragraph { text("123") } } }
+                paragraph { after: text("1231231232131") }
+            } }
+            selection: (after, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&st.doc);
+        let head = Position {
+            node_id: r,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sel = view
+            .resolve_movement(
+                &head,
+                &Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .expect("arrow-right must move from a fold node-selection");
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, after);
+        assert_eq!(sel.head.offset, 0);
+    }
+
+    #[test]
+    fn fold_node_selection_arrow_left_steps_out_backward() {
+        let (st, r, before) = state! {
+            doc { r: root {
+                paragraph { before: text("prev") }
+                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                paragraph { text("after") }
+            } }
+            selection: (before, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&st.doc);
+        let head = Position {
+            node_id: r,
+            offset: 2,
+            affinity: Affinity::Upstream,
+        };
+        let sel = view
+            .resolve_movement(
+                &head,
+                &Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+                &Resource::new_test(),
+            )
+            .expect("arrow-left must move from a fold node-selection");
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, before);
+        assert_eq!(sel.head.offset, 4);
+    }
+
+    #[test]
+    fn fold_node_selection_arrow_down_resolves() {
+        let (st, r, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("123123") } fold_content { paragraph { text("123") } } }
+                paragraph { t: text("1231231232131") }
+            } }
+            selection: (t, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&st.doc);
+        let head = Position {
+            node_id: r,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sel = view.resolve_movement(
+            &head,
+            &Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+            &Resource::new_test(),
+        );
+        assert!(
+            sel.is_some(),
+            "arrow-down from a fold node-selection must resolve"
+        );
+    }
+
+    #[test]
+    fn word_forward_from_fold_node_selection_steps_out() {
+        let (st, r, after) = state! {
+            doc { r: root {
+                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                paragraph { after: text("hello world") }
+            } }
+            selection: (after, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&st.doc);
+        let head = Position {
+            node_id: r,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sel = view
+            .resolve_movement(
+                &head,
+                &Movement::Word {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .expect("word-forward from a fold node-selection must step out");
+        assert_eq!(sel.head.node_id, after);
+    }
+
+    #[test]
+    fn caret_inside_fold_content_still_resolves_after_parity_change() {
+        let (st, c1, ..) = state! {
+            doc { root {
+                fold { fold_title { text("t") } fold_content { paragraph { c1: text("abc") } } }
+                paragraph { text("after") }
+            } }
+            selection: (c1, 1)
+        };
+        let mut view = View::new_test();
+        view.layout(&st.doc);
+        let sel = view
+            .resolve_movement(
+                &Position::new(c1, 1),
+                &Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .expect("interior fold caret must still navigate");
+        assert_eq!(sel.head.node_id, c1);
+        assert_eq!(sel.head.offset, 2);
     }
 }
