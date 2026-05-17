@@ -1,10 +1,28 @@
+import type { Rect } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { EditorEventHandler } from '../types';
+
+const pointInRect = (x: number, y: number, r: Rect): boolean => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
 
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) {
     return;
+  }
+
+  const hit = editor.interactiveHitTest(local.page, local.x, local.y);
+  if (hit) {
+    const editMode = !editor.readOnly;
+    if (hit.type === 'fold_title') {
+      const onText = editMode && hit.text_rect !== undefined && pointInRect(local.x, local.y, hit.text_rect);
+      if (!onText) {
+        editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
+        return;
+      }
+    } else if (hit.type === 'callout_icon' && editMode) {
+      editor.enqueue({ type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } });
+      return;
+    }
   }
 
   const { page, x, y } = local;
@@ -29,11 +47,19 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
   PointerState.of(editor).enqueueMoveThrottled(editor, local.page, local.x, local.y);
 };
 
-export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (editor) => {
+export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+    return;
+  }
+
   editor.enqueue({ type: 'pointer', event: { type: 'up' } });
 };
 
-export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor) => {
+export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+    return;
+  }
+
   editor.enqueue({ type: 'pointer', event: { type: 'cancel' } });
 };
 

@@ -9,6 +9,7 @@ import type {
   Editor as WasmEditor,
   EditorEvent,
   ExternalElement,
+  InteractiveHit,
   Message,
   ModifierState,
   PlainRootNode,
@@ -47,6 +48,8 @@ export class Editor {
   inputEl = $state<HTMLInputElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
   scrollContainerEl = $state<HTMLDivElement>();
+
+  readOnly = false;
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
@@ -207,6 +210,10 @@ export class Editor {
     const localX = Math.max(0, Math.min(clientX - rect.left, size.width));
     localY = Math.max(0, Math.min(localY, size.height));
     return { page: lo, x: localX, y: localY };
+  }
+
+  interactiveHitTest(page: number, x: number, y: number): InteractiveHit | undefined {
+    return this.#wasm.interactive_hit_test(page, x, y);
   }
 
   on<K extends EditorEvent['type']>(event: K, callback: EditorEventListener<K>): () => void {
