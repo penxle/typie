@@ -36,6 +36,15 @@ query EditorScreen_Query($entityId: ID!) {
             size
             url
           }
+
+          ... on Embed {
+            id
+            url
+            title
+            description
+            thumbnailUrl
+            html
+          }
         }
         ...FontLoader_Document
       }
@@ -82,5 +91,16 @@ mutation EditorScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInpu
     height
     ratio
     placeholder
+  }
+}
+
+mutation EditorScreen_UnfurlEmbed_Mutation($input: UnfurlEmbedInput!) {
+  unfurlEmbed(input: $input) {
+    id
+    url
+    title
+    description
+    thumbnailUrl
+    html
   }
 }

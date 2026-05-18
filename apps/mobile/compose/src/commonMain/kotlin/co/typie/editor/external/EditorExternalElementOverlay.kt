@@ -24,6 +24,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.icons.Lucide
 import co.typie.ui.theme.AppShapes
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -100,7 +101,10 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
           )
         is ExternalElementData.File ->
           EditorFileExternalElement(data = data, nodeId = element.nodeId)
-        else -> EditorGenericExternalElement(data = data)
+        is ExternalElementData.Embed ->
+          EditorEmbedExternalElement(data = data, nodeId = element.nodeId)
+        is ExternalElementData.Archived ->
+          EditorExternalElementPlaceholder(icon = Lucide.Archive, text = "보관된 블록")
       }
     }
 

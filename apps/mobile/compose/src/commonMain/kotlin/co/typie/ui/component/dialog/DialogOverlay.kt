@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
+import co.typie.ext.pointerIgnore
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppTheme
 
@@ -79,7 +80,7 @@ fun DialogOverlay(state: Dialog) {
 
     Box(
       modifier =
-        Modifier.align(Alignment.Center).width(280.dp).graphicsLayer {
+        Modifier.align(Alignment.Center).width(280.dp).pointerIgnore().graphicsLayer {
           alpha = progress
           translationY = (1f - progress) * offsetPx
         }

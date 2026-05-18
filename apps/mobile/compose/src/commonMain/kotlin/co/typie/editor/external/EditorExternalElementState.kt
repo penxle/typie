@@ -8,10 +8,12 @@ import androidx.compose.runtime.mutableStateMapOf
 internal class EditorExternalElementState {
   val images = EditorExternalImageElementState()
   val files = EditorExternalFileElementState()
+  val embeds = EditorExternalEmbedElementState()
 
   fun clear() {
     images.clear()
     files.clear()
+    embeds.clear()
   }
 }
 
@@ -37,6 +39,17 @@ internal class EditorExternalFileElementState {
   }
 }
 
+@Stable
+internal class EditorExternalEmbedElementState {
+  val assets = mutableStateMapOf<String, EditorEmbedAsset>()
+  val unfurls = mutableStateMapOf<String, EditorEmbedUnfurl>()
+
+  fun clear() {
+    assets.clear()
+    unfurls.clear()
+  }
+}
+
 internal data class EditorFileAsset(
   val id: String,
   val name: String,
@@ -52,6 +65,17 @@ internal data class EditorImageAsset(
   val ratio: Double,
   val placeholder: String?,
 )
+
+internal data class EditorEmbedAsset(
+  val id: String,
+  val url: String,
+  val title: String?,
+  val description: String?,
+  val thumbnailUrl: String?,
+  val html: String?,
+)
+
+internal class EditorEmbedUnfurl
 
 internal class EditorImageUpload(
   val bytes: ByteArray,

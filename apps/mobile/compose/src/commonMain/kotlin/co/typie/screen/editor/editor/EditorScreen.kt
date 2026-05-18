@@ -38,6 +38,7 @@ import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.body.toEditorDocumentLayoutSpec
+import co.typie.editor.external.EditorEmbedAsset
 import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.EditorFileAsset
 import co.typie.editor.external.EditorImageAsset
@@ -139,21 +140,36 @@ fun EditorScreen(entityId: String) {
       for (asset in document?.assets.orEmpty()) {
         when (asset.__typename) {
           "Image" -> {
-            val image = asset.onImage ?: continue
-            externalElementState.images.assets[image.id] =
-              EditorImageAsset(
-                id = image.id,
-                url = image.url,
-                width = image.width,
-                height = image.height,
-                ratio = image.ratio,
-                placeholder = image.placeholder,
-              )
+            asset.onImage?.let { image ->
+              externalElementState.images.assets[image.id] =
+                EditorImageAsset(
+                  id = image.id,
+                  url = image.url,
+                  width = image.width,
+                  height = image.height,
+                  ratio = image.ratio,
+                  placeholder = image.placeholder,
+                )
+            }
           }
           "File" -> {
-            val file = asset.onFile ?: continue
-            externalElementState.files.assets[file.id] =
-              EditorFileAsset(id = file.id, name = file.name, url = file.url, size = file.size)
+            asset.onFile?.let { file ->
+              externalElementState.files.assets[file.id] =
+                EditorFileAsset(id = file.id, name = file.name, url = file.url, size = file.size)
+            }
+          }
+          "Embed" -> {
+            asset.onEmbed?.let { embed ->
+              externalElementState.embeds.assets[embed.id] =
+                EditorEmbedAsset(
+                  id = embed.id,
+                  url = embed.url,
+                  title = embed.title,
+                  description = embed.description,
+                  thumbnailUrl = embed.thumbnailUrl,
+                  html = embed.html,
+                )
+            }
           }
         }
       }
