@@ -10,38 +10,63 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
             InsertionOp::Text { text } => {
                 commands::chain!(
                     tr,
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::insert_paragraph_after_unit_selection(),
+                        |tr| commands::chain!(
+                            tr,
+                            commands::optional!(commands::ensure_paragraph()),
+                            commands::optional!(commands::delete_selection()),
+                        ),
+                    ),
                     commands::insert_text(&text),
                 )?;
             }
             InsertionOp::Break {
                 kind: Break::Paragraph,
             } => {
-                commands::chain!(
+                commands::first!(
                     tr,
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
-                    |tr| commands::first!(
+                    commands::insert_paragraph_after_unit_selection(),
+                    |tr| commands::chain!(
                         tr,
-                        commands::lift_paragraph_forward(),
-                        commands::split_paragraph(),
+                        commands::optional!(commands::ensure_paragraph()),
+                        commands::optional!(commands::delete_selection()),
+                        |tr| commands::first!(
+                            tr,
+                            commands::lift_paragraph_forward(),
+                            commands::split_paragraph(),
+                        ),
                     ),
                 )?;
             }
             InsertionOp::Break { kind: Break::Line } => {
                 commands::chain!(
                     tr,
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::insert_paragraph_after_unit_selection(),
+                        |tr| commands::chain!(
+                            tr,
+                            commands::optional!(commands::ensure_paragraph()),
+                            commands::optional!(commands::delete_selection()),
+                        ),
+                    ),
                     commands::insert_hard_break(),
                 )?;
             }
             InsertionOp::Break { kind: Break::Page } => {
                 commands::chain!(
                     tr,
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::insert_paragraph_after_unit_selection(),
+                        |tr| commands::chain!(
+                            tr,
+                            commands::optional!(commands::ensure_paragraph()),
+                            commands::optional!(commands::delete_selection()),
+                        ),
+                    ),
                     commands::split_paragraph(),
                     commands::insert_page_break_into_prev_paragraph(),
                 )?;
@@ -49,8 +74,15 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
             InsertionOp::Fragment { fragment } => {
                 commands::chain!(
                     tr,
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::insert_paragraph_after_unit_selection(),
+                        |tr| commands::chain!(
+                            tr,
+                            commands::optional!(commands::ensure_paragraph()),
+                            commands::optional!(commands::delete_selection()),
+                        ),
+                    ),
                     commands::insert_fragment(fragment.clone()),
                 )?;
             }
@@ -142,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_text_replaces_node_selection_with_paragraph() {
+    fn insert_text_preserves_unit_selection_inserts_after() {
         let (state, ..) = state! {
             doc { r: root {
                 paragraph { text("a") }
@@ -158,6 +190,7 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
+                horizontal_rule
                 paragraph { t1: text("b") }
                 paragraph { text("c") }
             } }
@@ -204,18 +237,17 @@ mod tests {
                 kind: Break::Paragraph,
             },
         });
-        // Predicted: ensure_paragraph → [a, p_new(empty), c].
-        // lift_paragraph_forward returns false (next sibling is paragraph).
-        // split_paragraph splits empty paragraph at offset 0 → 2 empty paragraphs.
-        // Cursor at the new (second) paragraph.
+        // A paragraph break after a selected unit is just the new paragraph
+        // itself: the unit is preserved and one empty paragraph is inserted
+        // after it with the cursor inside. No split runs on top of that.
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
-                paragraph
-                p2: paragraph
+                horizontal_rule
+                p1: paragraph
                 paragraph { text("c") }
             } }
-            selection: (p2, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -234,12 +266,12 @@ mod tests {
         editor.apply(Message::Insertion {
             op: InsertionOp::Break { kind: Break::Line },
         });
-        // Predicted: ensure_paragraph → [a, p_new(empty), c], cursor (p_new, 0).
-        // insert_hard_break Case D: inserts hard_break into empty paragraph,
-        // cursor moves to (p_new, 1).
+        // Unit preserved; an empty paragraph is inserted after it and the line
+        // break lands inside that fresh paragraph.
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
+                horizontal_rule
                 p1: paragraph { hard_break }
                 paragraph { text("c") }
             } }
@@ -262,15 +294,12 @@ mod tests {
         editor.apply(Message::Insertion {
             op: InsertionOp::Break { kind: Break::Page },
         });
-        // Predicted:
-        //   ensure_paragraph → [a, p_new(empty), c], cursor (p_new, 0).
-        //   split_paragraph: splits empty p_new at offset 0 → 2 empty paragraphs,
-        //     cursor at new (second) paragraph.
-        //   insert_page_break_into_prev_paragraph: appends page_break to p_new
-        //     (the first empty paragraph, now the prev sibling).
+        // Unit preserved; the page break needs a paragraph host, so the inserted
+        // paragraph is split and the marker lands in the leading half.
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
+                horizontal_rule
                 paragraph { page_break }
                 p2: paragraph
                 paragraph { text("c") }
@@ -281,9 +310,9 @@ mod tests {
     }
 
     #[test]
-    fn insert_fragment_replaces_node_selection() {
+    fn insert_fragment_preserves_unit_selection_inserts_after() {
         // Use hr fragment as a stable default-constructible block-level leaf.
-        // The chain replaces the selected hr with a fresh hr at the same position.
+        // The selected hr is preserved and the fragment is inserted after it.
         let (state, ..) = state! {
             doc { r: root {
                 paragraph { text("a") }
@@ -303,6 +332,7 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
+                horizontal_rule
                 horizontal_rule
                 paragraph { t1: text("c") }
             } }

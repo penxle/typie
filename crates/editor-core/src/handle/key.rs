@@ -12,23 +12,31 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
     editor.transact(|tr| {
         match (event.key, event.modifiers) {
             (Key::Enter, m) if m.shift => {
-                commands::chain!(
+                commands::first!(
                     tr,
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
-                    commands::insert_hard_break(),
+                    commands::insert_paragraph_before_unit_selection(),
+                    |tr| commands::chain!(
+                        tr,
+                        commands::optional!(commands::ensure_paragraph()),
+                        commands::optional!(commands::delete_selection()),
+                        commands::insert_hard_break(),
+                    ),
                 )?;
             }
             (Key::Enter, _) => {
-                commands::chain!(
+                commands::first!(
                     tr,
-                    commands::optional!(commands::delete_selection()),
-                    |tr| commands::first!(
+                    commands::insert_paragraph_after_unit_selection(),
+                    |tr| commands::chain!(
                         tr,
-                        commands::lift_empty_list_item(),
-                        commands::split_list_item(),
-                        commands::lift_last_paragraph(),
-                        commands::split_paragraph(),
+                        commands::optional!(commands::delete_selection()),
+                        |tr| commands::first!(
+                            tr,
+                            commands::lift_empty_list_item(),
+                            commands::split_list_item(),
+                            commands::lift_last_paragraph(),
+                            commands::split_paragraph(),
+                        ),
                     ),
                 )?;
             }
@@ -160,6 +168,54 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { paragraph { text("hel") hard_break {} t1: text("lo") } } }
             selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_on_unit_node_selection_inserts_paragraph_after() {
+        let (state, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { text("c") }
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                horizontal_rule
+                p1: paragraph
+                paragraph { text("c") }
+            } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn shift_enter_on_unit_node_selection_inserts_paragraph_above() {
+        let (state, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { text("c") }
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key_shift(Key::Enter));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                p1: paragraph
+                horizontal_rule
+                paragraph { text("c") }
+            } }
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
