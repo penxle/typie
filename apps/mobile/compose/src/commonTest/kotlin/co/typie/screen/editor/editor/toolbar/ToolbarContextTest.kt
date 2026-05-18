@@ -67,6 +67,7 @@ class ToolbarContextTest {
 
     assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Image), context.pageKeys)
     assertEquals(EditorToolbarPageKey.Image, context.autoTargetPageKey)
+    assertEquals("image", context.selectedNodeId)
   }
 
   @Test

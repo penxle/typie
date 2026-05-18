@@ -38,6 +38,9 @@ import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.body.toEditorDocumentLayoutSpec
+import co.typie.editor.external.EditorExternalElementState
+import co.typie.editor.external.EditorFileAsset
+import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.rememberEditorZoomController
@@ -103,6 +106,7 @@ fun EditorScreen(entityId: String) {
   val scope = rememberCoroutineScope()
   val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
   val uiState = remember(entityId) { EditorUiState() }
+  val externalElementState = remember(entityId) { EditorExternalElementState() }
   val zoomController = rememberEditorZoomController(key = entityId)
   val screenState = rememberEditorScreenState(key = entityId)
   val loading = model.query.state !is QueryState.Success
@@ -128,6 +132,15 @@ fun EditorScreen(entityId: String) {
       serverSubtitle = document?.subtitle,
       loading = loading,
     )
+  }
+  LaunchedEffect(document?.assets, loading, externalElementState) {
+    if (!loading) {
+      for (asset in document?.assets.orEmpty()) {
+        val file = asset.onFile ?: continue
+        externalElementState.files.assets[file.id] =
+          EditorFileAsset(id = file.id, name = file.name, url = file.url, size = file.size)
+      }
+    }
   }
   LaunchedEffect(runtime.error) {
     runtime.error ?: return@LaunchedEffect
@@ -402,6 +415,7 @@ fun EditorScreen(entityId: String) {
     CompositionLocalProvider(
       LocalEditorRuntime provides runtime,
       LocalEditorUiState provides uiState,
+      LocalEditorExternalElementState provides externalElementState,
       LocalEditorZoomController provides zoomController,
       LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
       LocalHazeState provides toolbarBackdropHazeState,

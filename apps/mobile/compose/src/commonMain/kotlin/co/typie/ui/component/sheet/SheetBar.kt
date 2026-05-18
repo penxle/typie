@@ -1,12 +1,6 @@
 package co.typie.ui.component.sheet
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ui.component.Spinner
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -123,7 +118,7 @@ fun SheetBarButton(
       contentAlignment = Alignment.Center,
     ) {
       if (loading) {
-        SheetBarSpinner(color = resolvedTint)
+        Spinner(color = resolvedTint)
       } else {
         Icon(
           icon = icon,
@@ -160,35 +155,10 @@ fun SheetBarTextButton(
       contentAlignment = Alignment.Center,
     ) {
       if (loading) {
-        SheetBarSpinner(color = color)
+        Spinner(color = color)
       } else {
         Text(text = text, style = AppTheme.typography.action, color = color)
       }
     }
-  }
-}
-
-@Composable
-private fun SheetBarSpinner(color: Color, modifier: Modifier = Modifier) {
-  val transition = rememberInfiniteTransition()
-  val rotation by
-    transition.animateFloat(
-      initialValue = 0f,
-      targetValue = 360f,
-      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
-    )
-
-  Canvas(modifier.size(16.dp)) {
-    drawArc(
-      color = color,
-      startAngle = rotation,
-      sweepAngle = 220f,
-      useCenter = false,
-      style =
-        androidx.compose.ui.graphics.drawscope.Stroke(
-          width = 1.5.dp.toPx(),
-          cap = androidx.compose.ui.graphics.StrokeCap.Round,
-        ),
-    )
   }
 }

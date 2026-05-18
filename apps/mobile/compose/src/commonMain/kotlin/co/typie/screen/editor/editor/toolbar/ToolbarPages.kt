@@ -74,7 +74,11 @@ internal fun rememberEditorToolbarPages(
         EditorToolbarPageKey.Text -> textToolbarPage
         EditorToolbarPageKey.Image ->
           editorImageToolbarPage(toolbarContext.selectedNode as? PlainNode.Image)
-        EditorToolbarPageKey.File -> editorFileToolbarPage()
+        EditorToolbarPageKey.File ->
+          editorFileToolbarPage(
+            file = toolbarContext.selectedNode as? PlainNode.File,
+            nodeId = toolbarContext.selectedNodeId,
+          )
         EditorToolbarPageKey.Embed -> editorEmbedToolbarPage()
         EditorToolbarPageKey.Archived -> editorArchivedToolbarPage()
         EditorToolbarPageKey.HorizontalRule -> editorHorizontalRuleToolbarPage()

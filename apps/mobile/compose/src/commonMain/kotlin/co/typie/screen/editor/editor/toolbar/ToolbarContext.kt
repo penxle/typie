@@ -11,6 +11,7 @@ internal data class EditorToolbarContext(
   val pageKeys: List<EditorToolbarPageKey>,
   val autoTargetPageKey: EditorToolbarPageKey?,
   val selectedNode: PlainNode? = null,
+  val selectedNodeId: String? = null,
   val listMode: EditorToolbarListMode? = null,
   val tableMode: EditorToolbarTableMode? = null,
 )
@@ -82,6 +83,7 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
     pageKeys = pageKeys,
     autoTargetPageKey = selectedPageKey,
     selectedNode = selectedBlock?.node,
+    selectedNodeId = selectedBlock?.id,
     listMode = listMode,
     tableMode = tableMode,
   )

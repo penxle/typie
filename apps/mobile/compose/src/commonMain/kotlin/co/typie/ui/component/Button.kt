@@ -1,16 +1,11 @@
 package co.typie.ui.component
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -106,7 +101,7 @@ fun Button(
         Row(modifier = Modifier.pressScale(0.95f), verticalAlignment = Alignment.CenterVertically) {
           Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {
             if (debouncedLoading) {
-              ButtonSpinner(
+              Spinner(
                 color = colors.text,
                 modifier = Modifier.graphicsLayer { this.alpha = spinnerAlpha },
               )
@@ -147,29 +142,5 @@ fun Button(
         }
       }
     }
-  }
-}
-
-@Composable
-private fun ButtonSpinner(color: Color, modifier: Modifier = Modifier) {
-  val transition = rememberInfiniteTransition()
-  val rotation by
-    transition.animateFloat(
-      initialValue = 0f,
-      targetValue = 360f,
-      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
-    )
-  Canvas(modifier.size(16.dp)) {
-    drawArc(
-      color = color,
-      startAngle = rotation,
-      sweepAngle = 220f,
-      useCenter = false,
-      style =
-        androidx.compose.ui.graphics.drawscope.Stroke(
-          width = 1.5.dp.toPx(),
-          cap = androidx.compose.ui.graphics.StrokeCap.Round,
-        ),
-    )
   }
 }

@@ -268,6 +268,7 @@ apollo {
     )
 
     mapScalar("Binary", "kotlin.ByteArray", "co.typie.graphql.adapter.BinaryAdapter")
+    mapScalar("BigInt", "kotlin.Long", "com.apollographql.apollo.api.LongAdapter")
     mapScalar("DateTime", "kotlin.time.Instant", "co.typie.graphql.adapter.InstantAdapter")
     mapScalar(
       "JSON",

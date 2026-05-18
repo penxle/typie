@@ -7,10 +7,12 @@ import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.InspectStateOptions
+import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainRootNode
+import co.typie.editor.ffi.PointerStyle
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
@@ -53,6 +55,11 @@ internal class FakeFfiEditor(
   override fun modifierState(): ModifierState = modifierStateProvider()
 
   override fun blockState(): BlockState = blockStateProvider()
+
+  override fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? = null
+
+  override fun pointerStyle(page: Int, x: Float, y: Float, readOnly: Boolean): PointerStyle =
+    PointerStyle.Default
 
   override fun pageSizes(): List<Size> = pageSizesProvider()
 
