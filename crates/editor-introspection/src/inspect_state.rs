@@ -25,7 +25,7 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     if options.show_node_ids {
         write!(output, " ({})", root.id()).unwrap();
     }
-    let mut root_mods: Vec<Modifier> = root.modifiers().cloned().collect();
+    let mut root_mods: Vec<Modifier> = root.explicit_modifiers().cloned().collect();
     root_mods.sort_by_key(|m| m.as_type());
     write_modifiers_tree(&non_default_root_modifiers(&root_mods), &mut output);
     output.push('\n');
@@ -76,7 +76,7 @@ fn write_tree_node(
     }
 
     write_node_attrs_tree(node_ref.node(), output);
-    let mut mods: Vec<Modifier> = node_ref.modifiers().cloned().collect();
+    let mut mods: Vec<Modifier> = node_ref.explicit_modifiers().cloned().collect();
     mods.sort_by_key(|m| m.as_type());
     write_modifiers_tree(&mods, output);
     output.push('\n');
