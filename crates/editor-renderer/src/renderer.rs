@@ -550,38 +550,6 @@ impl<'a> RenderVisitor<'a> {
         }
     }
 
-    fn paint_fold_title_background(&mut self, expanded: bool) {
-        if !self.on(RenderLayer::Background) {
-            return;
-        }
-        let Some(frame) = self.box_stack.last() else {
-            return;
-        };
-        let t = self
-            .root_transform
-            .translate(frame.local_rect.x, frame.local_rect.y);
-        let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
-        // 펼쳐졌으면 아래쪽은 separator 가 이어받으므로 각진 모서리.
-        let top = if frame.edges.top { inner_radius } else { 0.0 };
-        let bottom = if !expanded && frame.edges.bottom {
-            inner_radius
-        } else {
-            0.0
-        };
-        let radii = CornerRadii {
-            top_left: top,
-            top_right: top,
-            bottom_left: bottom,
-            bottom_right: bottom,
-        };
-        let fill_color = self.renderer.theme.color("ui.surface.muted");
-        let fill_path = Path::rrect(
-            Rect::from_xywh(0.0, 0.0, frame.local_rect.width, frame.local_rect.height),
-            radii,
-        );
-        self.sink.fill_path(&fill_path, fill_color, t);
-    }
-
     fn render_glyph_runs(
         &mut self,
         glyph_runs: &[editor_view::glyph_run::GlyphRun],
@@ -676,6 +644,32 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                         let tail = build_message_tail(inner_rect.width, inner_rect.height, is_sent);
                         self.sink.fill_path(&tail, color, t);
                     }
+                }
+                Some(Node::FoldTitle(_)) => {
+                    let expanded = style
+                        .decorations
+                        .iter()
+                        .find_map(|d| match d.data {
+                            DecorationData::Bool(b) => Some(b),
+                            _ => None,
+                        })
+                        .unwrap_or(true);
+                    let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
+                    let top = if edges.top { inner_radius } else { 0.0 };
+                    let bottom = if !expanded && edges.bottom {
+                        inner_radius
+                    } else {
+                        0.0
+                    };
+                    let radii = CornerRadii {
+                        top_left: top,
+                        top_right: top,
+                        bottom_left: bottom,
+                        bottom_right: bottom,
+                    };
+                    let color = self.renderer.theme.color("ui.surface.muted");
+                    let path = Path::rrect(inner_rect, radii);
+                    self.sink.fill_path(&path, color, t);
                 }
                 _ => {}
             }
@@ -985,12 +979,6 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
     }
 
     fn decoration(&mut self, local_rect: Rect, data: &DecorationData) {
-        let parent_node = self.box_stack.last().and_then(|f| f.node.as_ref());
-
-        if let (Some(Node::FoldTitle(_)), DecorationData::Bool(expanded)) = (parent_node, data) {
-            self.paint_fold_title_background(*expanded);
-        }
-
         if !self.on(RenderLayer::Content) {
             return;
         }
@@ -1297,5 +1285,104 @@ mod tests {
         assert!((r.y - 59.0).abs() < 0.01); // 80 - 70 * 0.3
         assert!((r.width - 50.0).abs() < 0.01);
         assert!((r.height - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn fold_title_background_drawn_on_every_page_fragment() {
+        use editor_common::EdgeInsets;
+        use editor_macros::doc;
+        use editor_view::style::{Alignment, BorderMode, Decoration, Direction};
+
+        #[derive(Default)]
+        struct RecordingSink {
+            fills: Vec<Color>,
+        }
+        impl RenderSink for RecordingSink {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, _r: Rect, c: Color, _t: Transform) {
+                self.fills.push(c);
+            }
+            fn fill_path(&mut self, _p: &Path, c: Color, _t: Transform) {
+                self.fills.push(c);
+            }
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+        }
+
+        let (doc, ft) = doc! {
+            root {
+                fold {
+                    ft: fold_title { text("Title") }
+                    fold_content { paragraph { text("c") } }
+                }
+            }
+        };
+
+        let mut renderer = Renderer::new(
+            ThemeVariant::LightWhite,
+            Arc::new(Mutex::new(Resource::new_test())),
+        );
+        let muted = renderer.theme.color("ui.surface.muted");
+
+        let icon_rect = Rect::from_xywh(12.0, 8.0, 20.0, 20.0);
+        let style = BoxStyle {
+            direction: Direction::Vertical,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::ZERO,
+            border_mode: BorderMode::Separate,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![Decoration {
+                id: 0,
+                rect: icon_rect,
+                data: DecorationData::Bool(true),
+            }],
+            monolithic: false,
+        };
+
+        let mut sink = RecordingSink::default();
+        {
+            let mut v = renderer.page_visitor(
+                &mut sink,
+                &doc,
+                1.0,
+                LayerSet::of(&[RenderLayer::Background]),
+            );
+
+            v.box_enter(
+                ft,
+                Rect::from_xywh(0.0, 500.0, 300.0, 80.0),
+                &style,
+                Edges {
+                    top: true,
+                    bottom: false,
+                    left: true,
+                    right: true,
+                },
+            );
+            v.decoration(icon_rect, &DecorationData::Bool(true));
+            v.box_exit();
+
+            v.box_enter(
+                ft,
+                Rect::from_xywh(0.0, -40.0, 300.0, 80.0),
+                &style,
+                Edges {
+                    top: false,
+                    bottom: true,
+                    left: true,
+                    right: true,
+                },
+            );
+            v.box_exit();
+        }
+
+        let muted_fills = sink.fills.iter().filter(|c| **c == muted).count();
+        assert_eq!(
+            muted_fills, 2,
+            "fold title background must be painted on every page fragment, got {muted_fills}",
+        );
     }
 }

@@ -51,3 +51,4 @@ toml.workspace = true
 
 [dev-dependencies]
 editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-resource = { path = "../editor-resource", features = ["test-utils"] }
