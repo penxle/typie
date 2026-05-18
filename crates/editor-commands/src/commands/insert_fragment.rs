@@ -106,30 +106,24 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
         .ok_or(CommandError::NodeNotFound(subtree_id))?;
 
     if inserted.spec().is_leaf() {
-        if let Some(next) = inserted.next_sibling()
-            && let Some(pos) = next.first_cursor_position()
-        {
-            tr.set_selection(Selection::collapsed(pos))?;
-        } else {
-            let parent = inserted
-                .parent()
-                .ok_or(CommandError::NoParent(subtree_id))?;
-            let idx = inserted
-                .index()
-                .ok_or(CommandError::orphan_child(subtree_id, parent.id()))?;
-            tr.set_selection(Selection::new(
-                Position {
-                    node_id: parent.id(),
-                    offset: idx,
-                    affinity: Affinity::Downstream,
-                },
-                Position {
-                    node_id: parent.id(),
-                    offset: idx + 1,
-                    affinity: Affinity::Upstream,
-                },
-            ))?;
-        }
+        let parent = inserted
+            .parent()
+            .ok_or(CommandError::NoParent(subtree_id))?;
+        let idx = inserted
+            .index()
+            .ok_or(CommandError::orphan_child(subtree_id, parent.id()))?;
+        tr.set_selection(Selection::new(
+            Position {
+                node_id: parent.id(),
+                offset: idx,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: parent.id(),
+                offset: idx + 1,
+                affinity: Affinity::Upstream,
+            },
+        ))?;
     } else if let Some(pos) = inserted.first_cursor_position() {
         tr.set_selection(Selection::collapsed(pos))?;
     }
