@@ -155,6 +155,7 @@ mod tests {
                     decorations,
                     monolithic: false,
                 },
+                nav: None,
                 children,
             }),
         }
