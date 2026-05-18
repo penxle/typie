@@ -147,6 +147,7 @@ mod tests {
         assert_eq!(elements.len(), 4);
         assert_eq!(elements[0].node_id, img);
         assert_eq!(elements[0].page_idx, 0);
+        assert_eq!(elements[0].bounds.width, elements[1].bounds.width);
         assert_eq!(elements[0].bounds.height, 1.0);
         assert_eq!(
             elements.iter().map(|el| el.node_id).collect::<Vec<_>>(),

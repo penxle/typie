@@ -24,7 +24,7 @@ import co.typie.graphql.type.FontFamilyState
 import co.typie.graphql.type.FontState
 import co.typie.graphql.type.PersistBlobAsFontInput
 import co.typie.graphql.watchQuery
-import co.typie.platform.PlatformFile
+import co.typie.platform.PickedFile
 import co.typie.result.Result
 import co.typie.result.Task
 import co.typie.result.result
@@ -49,7 +49,7 @@ class FontSettingsViewModel : ViewModel() {
   }
 
   internal fun uploadFonts(
-    files: List<PlatformFile>
+    files: List<PickedFile>
   ): Task<FontUploadProgress, FontUploadResult?, Nothing> = task {
     if (isUploading || files.isEmpty()) return@task null
 

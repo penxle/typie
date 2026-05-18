@@ -18,7 +18,7 @@ import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.UpdateDocumentsOptionInput
 import co.typie.graphql.type.UpdateFoldersOptionInput
 import co.typie.graphql.watchQuery
-import co.typie.platform.PlatformFile
+import co.typie.platform.PickedFile
 import co.typie.result.Result
 import co.typie.result.result
 
@@ -61,7 +61,7 @@ internal class EntityShareViewModel(
 
   override suspend fun uploadFoldersThumbnail(
     folderIds: List<String>,
-    file: PlatformFile,
+    file: PickedFile,
   ): Result<ShareThumbnailResult, Nothing> = result {
     if (folderIds.isEmpty()) {
       return@result ShareThumbnailResult(id = "", url = "")
@@ -199,7 +199,7 @@ internal class EntityShareViewModel(
 
   override suspend fun uploadDocumentsThumbnail(
     documentIds: List<String>,
-    file: PlatformFile,
+    file: PickedFile,
   ): Result<ShareThumbnailResult, Nothing> = result {
     if (documentIds.isEmpty()) {
       return@result ShareThumbnailResult(id = "", url = "")

@@ -31,7 +31,7 @@ import co.typie.graphql.type.SiteDateDisplay
 import co.typie.graphql.type.UpdateSiteInput
 import co.typie.graphql.type.UpdateSiteSlugInput
 import co.typie.graphql.watchQuery
-import co.typie.platform.PlatformFile
+import co.typie.platform.PickedFile
 import co.typie.result.Result
 import co.typie.result.Task
 import co.typie.result.loading
@@ -103,7 +103,7 @@ class SpaceSettingsViewModel : ViewModel() {
 
   val usersiteHost: String = Konfig.USERSITE_HOST.removePrefix("*.").removePrefix(".")
 
-  fun uploadLogo(file: PlatformFile): Task<Unit, Unit, Nothing> = task {
+  fun uploadLogo(file: PickedFile): Task<Unit, Unit, Nothing> = task {
     emit(Unit)
 
     val path =

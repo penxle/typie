@@ -56,6 +56,7 @@ import co.typie.ui.theme.shadow
 import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -73,7 +74,10 @@ internal fun rememberEditorToolbarPages(
           editorMainToolbarPage(hasTextPage = EditorToolbarPageKey.Text in toolbarContext.pageKeys)
         EditorToolbarPageKey.Text -> textToolbarPage
         EditorToolbarPageKey.Image ->
-          editorImageToolbarPage(toolbarContext.selectedNode as? PlainNode.Image)
+          editorImageToolbarPage(
+            image = toolbarContext.selectedNode as? PlainNode.Image,
+            nodeId = toolbarContext.selectedNodeId,
+          )
         EditorToolbarPageKey.File ->
           editorFileToolbarPage(
             file = toolbarContext.selectedNode as? PlainNode.File,
@@ -95,6 +99,7 @@ internal fun rememberEditorToolbarPages(
 @Composable
 internal fun EditorToolbarPages(
   pages: List<EditorToolbarPage>,
+  commandScope: CoroutineScope,
   pagerState: ToolbarPagerState = rememberToolbarPagerState(),
   autoTargetPageKey: EditorToolbarPageKey? = null,
   autoTargetRevision: Long = 0L,
@@ -560,6 +565,7 @@ internal fun EditorToolbarPages(
               val pageScope =
                 EditorToolbarPageScope(
                   activeBottomPanel = activeBottomPanel,
+                  commandScope = commandScope,
                   hasNextPage = index < lastPageIndex,
                   navigateToPage = ::navigateToPage,
                   toggleBottomPanel = onBottomPanelToggle,

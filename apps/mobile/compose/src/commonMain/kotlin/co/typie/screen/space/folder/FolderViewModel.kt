@@ -40,7 +40,7 @@ import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.graphql.type.UpdateFoldersOptionInput
 import co.typie.graphql.watchQuery
-import co.typie.platform.PlatformFile
+import co.typie.platform.PickedFile
 import co.typie.result.Result
 import co.typie.result.result
 
@@ -88,13 +88,13 @@ class FolderViewModel :
 
   suspend fun uploadFolderThumbnail(
     folderId: String,
-    file: PlatformFile,
+    file: PickedFile,
   ): Result<FolderThumbnailResult, Nothing> =
     uploadFoldersThumbnail(folderIds = listOf(folderId), file = file)
 
   suspend fun uploadFoldersThumbnail(
     folderIds: List<String>,
-    file: PlatformFile,
+    file: PickedFile,
   ): Result<FolderThumbnailResult, Nothing> = result {
     if (folderIds.isEmpty()) {
       return@result FolderThumbnailResult(id = "", url = "")

@@ -1,7 +1,6 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import co.typie.domain.blob.BlobService
@@ -17,7 +16,7 @@ import co.typie.graphql.executeMutation
 import co.typie.graphql.type.PersistBlobAsFileInput
 import co.typie.icons.Lucide
 import co.typie.platform.FilePickerSelectionMode
-import co.typie.platform.PlatformFile
+import co.typie.platform.PickedFile
 import co.typie.platform.rememberFilePicker
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
@@ -46,7 +45,6 @@ private fun EditorFileToolbar(
   val toast = LocalToast.current
   val uriHandler = LocalUriHandler.current
   val fileState = LocalEditorExternalElementState.current.files
-  val coroutineScope = rememberCoroutineScope()
   val fileId = file?.id
   val asset = fileId?.let(fileState.assets::get)
   val uploading = nodeId?.let { fileState.uploads.containsKey(it) } == true
@@ -57,7 +55,7 @@ private fun EditorFileToolbar(
       val selectedNodeId = nodeId ?: return@rememberFilePicker
       val selectedFile = files.firstOrNull() ?: return@rememberFilePicker
 
-      coroutineScope.launch {
+      scope.commandScope.launch {
         val upload =
           EditorFileUpload(name = selectedFile.filename, size = selectedFile.bytes.size.toLong())
         fileState.uploads[selectedNodeId] = upload
@@ -115,7 +113,7 @@ private fun EditorFileToolbar(
   }
 }
 
-private suspend fun uploadFileAsset(file: PlatformFile): EditorFileAsset {
+private suspend fun uploadFileAsset(file: PickedFile): EditorFileAsset {
   val path = BlobService.uploadBytes(file.bytes, filename = file.filename, mimeType = file.mimeType)
   val uploaded =
     Apollo.executeMutation(

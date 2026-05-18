@@ -40,6 +40,7 @@ import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.EditorFileAsset
+import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
@@ -136,9 +137,25 @@ fun EditorScreen(entityId: String) {
   LaunchedEffect(document?.assets, loading, externalElementState) {
     if (!loading) {
       for (asset in document?.assets.orEmpty()) {
-        val file = asset.onFile ?: continue
-        externalElementState.files.assets[file.id] =
-          EditorFileAsset(id = file.id, name = file.name, url = file.url, size = file.size)
+        when (asset.__typename) {
+          "Image" -> {
+            val image = asset.onImage ?: continue
+            externalElementState.images.assets[image.id] =
+              EditorImageAsset(
+                id = image.id,
+                url = image.url,
+                width = image.width,
+                height = image.height,
+                ratio = image.ratio,
+                placeholder = image.placeholder,
+              )
+          }
+          "File" -> {
+            val file = asset.onFile ?: continue
+            externalElementState.files.assets[file.id] =
+              EditorFileAsset(id = file.id, name = file.name, url = file.url, size = file.size)
+          }
+        }
       }
     }
   }

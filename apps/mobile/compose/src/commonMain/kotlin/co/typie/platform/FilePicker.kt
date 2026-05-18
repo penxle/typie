@@ -2,7 +2,13 @@ package co.typie.platform
 
 import androidx.compose.runtime.Composable
 
-data class PlatformFile(val bytes: ByteArray, val filename: String, val mimeType: String?)
+data class PickedFile(
+  val bytes: ByteArray,
+  val filename: String,
+  val mimeType: String?,
+  val imageWidth: Int? = null,
+  val imageHeight: Int? = null,
+)
 
 enum class FilePickerSelectionMode {
   Single,
@@ -12,7 +18,7 @@ enum class FilePickerSelectionMode {
 @Composable
 expect fun rememberFilePicker(
   selectionMode: FilePickerSelectionMode = FilePickerSelectionMode.Single,
-  onResult: (List<PlatformFile>) -> Unit,
+  onResult: (List<PickedFile>) -> Unit,
 ): (mimeType: String) -> Unit
 
 internal fun pickedFilename(originalFilename: String?, mimeType: String?): String {

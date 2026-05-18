@@ -12,12 +12,11 @@ pub fn measure_atom(node: &NodeRef<'_>, width: f32, view_state: &ViewState) -> M
     let node_id = node.id();
 
     let (w, h) = match node.node() {
-        Node::Image(img) => {
-            let w = (*img.proportion.get() as f32 / 100.0) * width;
+        Node::Image(_) => {
             let h = view_state
                 .external_height(node_id)
                 .unwrap_or(DEFAULT_EXTERNAL_HEIGHT);
-            (w, h)
+            (width, h)
         }
         Node::HorizontalRule(_) => (width, HORIZONTAL_RULE_HEIGHT),
         _ => {
@@ -58,7 +57,7 @@ mod tests {
     }
 
     #[test]
-    fn image_with_external_height() {
+    fn image_with_external_height_uses_container_width() {
         let (doc, i1) = doc! { root { i1: image(proportion: 50) } };
 
         let node = doc.node(i1).unwrap();
@@ -66,18 +65,18 @@ mod tests {
         vs.external_heights.insert(i1, 200.0);
         let result = measure_atom(&node, 400.0, &vs);
 
-        assert_eq!(result.width, 200.0);
+        assert_eq!(result.width, 400.0);
         assert_eq!(result.height, 200.0);
     }
 
     #[test]
-    fn image_without_external_height_uses_placeholder() {
+    fn image_without_external_height_uses_container_width_and_placeholder_height() {
         let (doc, i1) = doc! { root { i1: image(proportion: 80) } };
 
         let node = doc.node(i1).unwrap();
         let result = measure_atom(&node, 400.0, &ViewState::new());
 
-        assert_eq!(result.width, 320.0);
+        assert_eq!(result.width, 400.0);
         assert_eq!(result.height, 1.0);
     }
 

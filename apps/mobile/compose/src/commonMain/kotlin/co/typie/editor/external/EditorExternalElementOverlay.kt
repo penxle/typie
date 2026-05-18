@@ -66,6 +66,7 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   val themeVariant = currentEditorThemeVariant()
   val selectionColor =
     remember(themeVariant) { EditorTheme.resolve(themeVariant).colors.getValue("selection") }
+  val selectionAlpha = if (uiState.focused) SELECTION_FOCUSED_ALPHA else SELECTION_UNFOCUSED_ALPHA
 
   Box(
     Modifier.offset {
@@ -90,6 +91,13 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   ) {
     context(renderScope) {
       when (val data = element.data) {
+        is ExternalElementData.Image ->
+          EditorImageExternalElement(
+            data = data,
+            nodeId = element.nodeId,
+            boundsWidth = element.bounds.width,
+            selected = element.isSelected,
+          )
         is ExternalElementData.File ->
           EditorFileExternalElement(data = data, nodeId = element.nodeId)
         else -> EditorGenericExternalElement(data = data)
@@ -97,8 +105,6 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
     }
 
     if (element.isSelected) {
-      val selectionAlpha =
-        if (uiState.focused) SELECTION_FOCUSED_ALPHA else SELECTION_UNFOCUSED_ALPHA
       Box(Modifier.matchParentSize().background(selectionColor.copy(alpha = selectionAlpha)))
     }
   }

@@ -192,6 +192,7 @@ internal fun EditorToolbarHost(
       ) {
         EditorToolbarPages(
           pages = pages,
+          commandScope = commandScope,
           pagerState = pagerState,
           autoTargetPageKey = toolbarContext.autoTargetPageKey,
           autoTargetRevision = editorState.version,

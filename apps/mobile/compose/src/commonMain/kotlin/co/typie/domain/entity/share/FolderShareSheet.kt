@@ -16,7 +16,7 @@ import co.typie.form.FormState
 import co.typie.graphql.fragment.FolderShare_entity
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
-import co.typie.platform.PlatformFile
+import co.typie.platform.PickedFile
 import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
 import co.typie.result.Result
@@ -76,7 +76,7 @@ internal interface FolderShareSheetModel {
 
   suspend fun uploadFoldersThumbnail(
     folderIds: List<String>,
-    file: PlatformFile,
+    file: PickedFile,
   ): Result<ShareThumbnailResult, Nothing>
 
   suspend fun removeFoldersThumbnail(folderIds: List<String>): Result<Unit, Nothing>

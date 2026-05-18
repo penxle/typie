@@ -21,7 +21,7 @@ import co.typie.graphql.text
 import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.UpdateUserInput
 import co.typie.graphql.watchQuery
-import co.typie.platform.PlatformFile
+import co.typie.platform.PickedFile
 import co.typie.result.Result
 import co.typie.result.Task
 import co.typie.result.loading
@@ -65,7 +65,7 @@ class UpdateProfileViewModel : ViewModel() {
   var isSubmitting by mutableStateOf(false)
     private set
 
-  fun uploadAvatar(file: PlatformFile): Task<Unit, Unit, Nothing> = task {
+  fun uploadAvatar(file: PickedFile): Task<Unit, Unit, Nothing> = task {
     emit(Unit)
 
     val path =

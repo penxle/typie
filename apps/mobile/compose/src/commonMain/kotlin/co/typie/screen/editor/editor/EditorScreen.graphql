@@ -21,6 +21,15 @@ query EditorScreen_Query($entityId: ID!) {
         assets {
           __typename
 
+          ... on Image {
+            id
+            url
+            width
+            height
+            ratio
+            placeholder
+          }
+
           ... on File {
             id
             name
@@ -62,5 +71,16 @@ mutation EditorScreen_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!
     name
     size
     url
+  }
+}
+
+mutation EditorScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+  persistBlobAsImage(input: $input) {
+    id
+    url
+    width
+    height
+    ratio
+    placeholder
   }
 }

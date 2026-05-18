@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import co.typie.editor.ffi.Message
 import co.typie.ui.icon.IconData
+import kotlinx.coroutines.CoroutineScope
 
 internal val ToolbarHorizontalPadding = 16.dp
 internal val ToolbarBottomPadding = 6.dp
@@ -87,6 +88,7 @@ internal class EditorToolbarPage(
 
 internal class EditorToolbarPageScope(
   val activeBottomPanel: EditorToolbarBottomPanelKey?,
+  val commandScope: CoroutineScope,
   val hasNextPage: Boolean,
   val navigateToPage: (EditorToolbarPageKey) -> Unit,
   val toggleBottomPanel: (EditorToolbarBottomPanelKey) -> Unit,
