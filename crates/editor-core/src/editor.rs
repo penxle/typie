@@ -3,7 +3,9 @@ use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{DocOp, ModifierState, Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
-use editor_state::{DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, State};
+use editor_state::{
+    DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, State,
+};
 use editor_transaction::{Effect, HistoryMeta, Transaction};
 use editor_view::{PageRect, PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
@@ -45,7 +47,7 @@ pub struct Editor {
     pub(crate) history: History,
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
-    pub(crate) drag_anchor: Option<Position>,
+    pub(crate) drag_anchor: Option<Selection>,
     pub(crate) focused: bool,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,

@@ -1,45 +1,8 @@
-use std::cmp::Ordering;
-
-use editor_model::Doc;
-use editor_state::{Position, Selection};
+use editor_state::{Selection, farther_endpoint};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
-
-/// Returns whichever of `e1`/`e2` lies farther from `reference` in document
-/// order (`ResolvedPosition` Ord is `(path, affinity)`, `Upstream < Downstream`).
-/// A collapsed target has `e1 == e2`, so the unchanged endpoint is returned and
-/// ordinary non-atom navigation behaves exactly as before.
-fn farther_endpoint(doc: &Doc, reference: Position, e1: Position, e2: Position) -> Position {
-    if e1 == e2 {
-        return e2;
-    }
-    let (Some(r), Some(r1), Some(r2)) = (reference.resolve(doc), e1.resolve(doc), e2.resolve(doc))
-    else {
-        return e2;
-    };
-    match (r1.cmp(&r), r2.cmp(&r)) {
-        (Ordering::Less | Ordering::Equal, Ordering::Less | Ordering::Equal) => {
-            if r1 <= r2 {
-                e1
-            } else {
-                e2
-            }
-        }
-        (Ordering::Greater | Ordering::Equal, Ordering::Greater | Ordering::Equal) => {
-            if r1 >= r2 {
-                e1
-            } else {
-                e2
-            }
-        }
-        // Real callers only pass adjacent atom-bracket pairs or equal endpoints,
-        // so a reference strictly between the two never occurs; this arm is a
-        // defensive fallback, not a meaningful answer.
-        _ => e2,
-    }
-}
 
 pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(), EditorError> {
     match op {
@@ -97,7 +60,6 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::Affinity;
     use editor_state::Position;
     use editor_state::assert_state_eq;
 
@@ -301,88 +263,6 @@ mod tests {
             editor.state().selection.is_collapsed(),
             "replace must collapse the selection, not leave a stale node-selection"
         );
-    }
-
-    #[test]
-    fn farther_endpoint_picks_correct_edge() {
-        let (state, ..) = state! {
-            doc {
-                root {
-                    image
-                    image
-                    paragraph { t1: text("x") }
-                }
-            }
-            selection: (t1, 0)
-        };
-        let doc = &state.doc;
-        let text = state.selection.head.node_id;
-        let root = state
-            .doc
-            .node(text)
-            .unwrap()
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .id();
-        // The second atom sits at root child index 1, so its node selection is
-        // front=(root,1,Down), back=(root,2,Up).
-        let front = Position {
-            node_id: root,
-            offset: 1,
-            affinity: Affinity::Downstream,
-        };
-        let back = Position {
-            node_id: root,
-            offset: 2,
-            affinity: Affinity::Upstream,
-        };
-
-        let ref_below = Position {
-            node_id: text,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        };
-        assert_eq!(super::farther_endpoint(doc, ref_below, front, back), front);
-
-        let ref_above = Position {
-            node_id: root,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        };
-        assert_eq!(super::farther_endpoint(doc, ref_above, front, back), back);
-
-        let collapsed = Position {
-            node_id: text,
-            offset: 1,
-            affinity: Affinity::Downstream,
-        };
-        assert_eq!(
-            super::farther_endpoint(doc, ref_below, collapsed, collapsed),
-            collapsed
-        );
-    }
-
-    /// The fallback arm is unreachable for real navigation callers (adjacent
-    /// atom-bracket endpoints leave no addressable position between them), so
-    /// it is exercised here only as a pure-function contract check.
-    #[test]
-    fn farther_endpoint_reference_between_returns_e2() {
-        let (state, t1, t2) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("ab") }
-                    paragraph { t2: text("cd") }
-                }
-            }
-            selection: (t1, 0)
-        };
-        let doc = &state.doc;
-        let e1 = Position::new(t1, 0);
-        let e2 = Position::new(t2, 2);
-        let between = Position::new(t1, 1);
-        assert_eq!(super::farther_endpoint(doc, between, e1, e2), e2);
     }
 
     fn arrow(editor: &mut Editor, movement: Movement) {

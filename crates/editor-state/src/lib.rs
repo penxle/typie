@@ -28,6 +28,7 @@ pub use cursor_position::*;
 pub use error::*;
 pub use flat::*;
 pub use modifier_resolution::*;
+pub use normalize::farther_endpoint;
 pub use pending_modifier::*;
 pub use position::*;
 pub use resolved_position::*;

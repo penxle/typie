@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use editor_model::{Doc, Node, NodeRef, Schema};
 
 use crate::affinity::Affinity;
@@ -256,6 +258,42 @@ impl Selection {
         node.children()
             .nth(lo)
             .is_some_and(|child| is_unit_node(&child))
+    }
+}
+
+/// Returns whichever of `e1`/`e2` lies farther from `reference` in document
+/// order (`ResolvedPosition` Ord is `(path, affinity)`, `Upstream < Downstream`).
+/// A collapsed target has `e1 == e2`, so the unchanged endpoint is returned and
+/// ordinary non-unit navigation behaves exactly as before. Pairs naturally with
+/// [`Selection::is_unit_node_selection`]: re-anchor an extend to the unit edge
+/// farther from the moving end so a bracketed unit stays selected as it grows.
+pub fn farther_endpoint(doc: &Doc, reference: Position, e1: Position, e2: Position) -> Position {
+    if e1 == e2 {
+        return e2;
+    }
+    let (Some(r), Some(r1), Some(r2)) = (reference.resolve(doc), e1.resolve(doc), e2.resolve(doc))
+    else {
+        return e2;
+    };
+    match (r1.cmp(&r), r2.cmp(&r)) {
+        (Ordering::Less | Ordering::Equal, Ordering::Less | Ordering::Equal) => {
+            if r1 <= r2 {
+                e1
+            } else {
+                e2
+            }
+        }
+        (Ordering::Greater | Ordering::Equal, Ordering::Greater | Ordering::Equal) => {
+            if r1 >= r2 {
+                e1
+            } else {
+                e2
+            }
+        }
+        // Real callers only pass adjacent unit-bracket pairs or equal endpoints,
+        // so a reference strictly between the two never occurs; this arm is a
+        // defensive fallback, not a meaningful answer.
+        _ => e2,
     }
 }
 
@@ -1346,6 +1384,88 @@ mod tests {
             )
             .is_unit_node_selection(&d)
         );
+    }
+
+    #[test]
+    fn farther_endpoint_picks_correct_edge() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    image
+                    image
+                    paragraph { t1: text("x") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let doc = &state.doc;
+        let text = state.selection.head.node_id;
+        let root = state
+            .doc
+            .node(text)
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .id();
+        // The second atom sits at root child index 1, so its node selection is
+        // front=(root,1,Down), back=(root,2,Up).
+        let front = Position {
+            node_id: root,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        };
+        let back = Position {
+            node_id: root,
+            offset: 2,
+            affinity: Affinity::Upstream,
+        };
+
+        let ref_below = Position {
+            node_id: text,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        assert_eq!(farther_endpoint(doc, ref_below, front, back), front);
+
+        let ref_above = Position {
+            node_id: root,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        assert_eq!(farther_endpoint(doc, ref_above, front, back), back);
+
+        let collapsed = Position {
+            node_id: text,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        };
+        assert_eq!(
+            farther_endpoint(doc, ref_below, collapsed, collapsed),
+            collapsed
+        );
+    }
+
+    /// The fallback arm is unreachable for real callers (adjacent unit-bracket
+    /// endpoints leave no addressable position between them), so it is
+    /// exercised here only as a pure-function contract check.
+    #[test]
+    fn farther_endpoint_reference_between_returns_e2() {
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("ab") }
+                    paragraph { t2: text("cd") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let doc = &state.doc;
+        let e1 = Position::new(t1, 0);
+        let e2 = Position::new(t2, 2);
+        let between = Position::new(t1, 1);
+        assert_eq!(farther_endpoint(doc, between, e1, e2), e2);
     }
 
     #[test]

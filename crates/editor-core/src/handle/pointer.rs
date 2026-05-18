@@ -1,4 +1,6 @@
-use editor_state::{Selection, cell_rect_selection, enclosing_table_cell, table_cell_ids};
+use editor_state::{
+    Selection, cell_rect_selection, enclosing_table_cell, farther_endpoint, table_cell_ids,
+};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -6,19 +8,15 @@ use crate::message::*;
 
 /// The anchor cell for the current drag: the live cell-rect's anchor cell if
 /// the selection is already a cell-rect (the latch's source of truth — also
-/// correct after Shift-click, where `drag_anchor` is a `(TableRow, _)`
-/// position with no `TableCell` ancestor), else the cell enclosing the drag
-/// anchor position.
-fn drag_anchor_cell(
-    editor: &Editor,
-    drag_anchor: &editor_state::Position,
-) -> Option<editor_model::NodeId> {
+/// correct after Shift-click, where `pos` is a `(TableRow, _)` position with
+/// no `TableCell` ancestor), else the cell enclosing `pos`.
+fn drag_anchor_cell(editor: &Editor, pos: &editor_state::Position) -> Option<editor_model::NodeId> {
     if let Some(resolved) = editor.state.selection.resolve(&editor.state.doc)
         && let Some(cr) = resolved.as_cell_rect()
     {
         return Some(cr.anchor_cell.id());
     }
-    enclosing_table_cell(&editor.state.doc, drag_anchor.node_id)
+    enclosing_table_cell(&editor.state.doc, pos.node_id)
 }
 
 pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<(), EditorError> {
@@ -76,30 +74,26 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                 })?;
             }
 
-            // Drag anchor is promotion-aware: a drag started in the gutter near
-            // a monolithic block must anchor at the block boundary, not at the
-            // nearest leaf inside it — otherwise the promoted Move forms an
-            // adjacent slot/descendant range that normalize collapses. Plain
-            // (non-promoting) positions make ext_hit == raw_hit, so the anchor
-            // is unchanged where promotion does not apply.
+            // Arm the whole selection, not a point: a unit (image/monolithic)
+            // click yields a two-position bracket, so Move can re-anchor to the
+            // edge that keeps the unit enveloped whichever way the drag goes. A
+            // text caret or promoted gutter slot is collapsed, so a single point
+            // is preserved as before. Non-shift keeps ext_hit's gutter promotion.
             editor.drag_anchor = (count == 1).then(|| {
                 if modifiers.shift {
-                    editor.state.selection.anchor
+                    Selection::collapsed(editor.state.selection.anchor)
                 } else {
-                    ext_hit
-                        .as_ref()
-                        .map(|h| h.head)
-                        .unwrap_or(editor.state.selection.anchor)
+                    ext_hit.unwrap_or_else(|| Selection::collapsed(editor.state.selection.anchor))
                 }
             });
         }
 
         PointerEvent::Move { page, x, y } => {
-            let Some(anchor) = editor.drag_anchor else {
+            let Some(armed) = editor.drag_anchor else {
                 return Ok(());
             };
 
-            if let Some(a) = drag_anchor_cell(editor, &anchor) {
+            if let Some(a) = drag_anchor_cell(editor, &armed.head) {
                 let cells = table_cell_ids(&editor.state.doc, a);
                 if let Some(h) = editor.view.nearest_node_box(page, x, y, &cells) {
                     let is_cell_mode = editor
@@ -121,7 +115,16 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             }
 
             if let Some(hit) = editor.view.hit_test_extending(page, x, y) {
-                let new_selection = Selection::new(anchor, hit.head);
+                // Re-anchor to the armed edge farther from the pointer, then take
+                // the hit edge farther from that anchor. A unit (image/monolithic)
+                // armed click or a unit under the pointer stays fully enveloped
+                // whichever way the drag goes; a collapsed text caret or promoted
+                // slot has equal endpoints, so both steps degenerate to the plain
+                // anchor→hit selection.
+                let doc = &editor.state.doc;
+                let fixed = farther_endpoint(doc, hit.head, armed.anchor, armed.head);
+                let head = farther_endpoint(doc, fixed, hit.anchor, hit.head);
+                let new_selection = Selection::new(fixed, head);
                 editor.view.clear_preferred_x();
                 editor.transact(|tr| {
                     tr.set_selection(new_selection)?;
@@ -323,6 +326,239 @@ mod tests {
             "drag anchor must survive an intermediate collapse"
         );
         assert_ne!(sel.anchor, sel.head);
+    }
+
+    #[test]
+    fn drag_down_from_first_image_keeps_it_selected() {
+        use editor_state::{Affinity, Position};
+
+        let (state, r1, i0, i1, i2) = state! {
+            doc { r1: root { i0: image i1: image i2: image paragraph {} } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let mut editor = Editor::new_test(state);
+        for id in [i0, i1, i2] {
+            editor
+                .view
+                .set_external_height(&editor.state.doc, id, 100.0);
+        }
+        editor.view.layout(&editor.state.doc);
+
+        let atom_center = |editor: &Editor, idx: usize| {
+            let sel = Selection::new(
+                Position {
+                    node_id: r1,
+                    offset: idx,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: idx + 1,
+                    affinity: Affinity::Upstream,
+                },
+            );
+            let resolved = sel.resolve(&editor.state.doc).unwrap();
+            let rects = editor.view.selection_rects(&resolved);
+            let pr = &rects[0];
+            (
+                pr.page_idx,
+                pr.rect.x + pr.rect.width / 2.0,
+                pr.rect.y + pr.rect.height / 2.0,
+            )
+        };
+
+        let (p0, x0, y0) = atom_center(&editor, 0);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: p0,
+                x: x0,
+                y: y0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        assert_eq!(
+            editor.state().selection,
+            Selection::new(
+                Position {
+                    node_id: r1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+            ),
+            "Down on the first image must node-select it"
+        );
+
+        let (p2, x2, y2) = atom_center(&editor, 2);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: p2,
+                x: x2,
+                y: y2,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Selection::new(
+                Position {
+                    node_id: r1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: 3,
+                    affinity: Affinity::Upstream,
+                },
+            ),
+            "dragging down from the first image must keep it selected: \
+             anchor stays at the image's leading edge (r1,0), not its trailing edge (r1,1)"
+        );
+    }
+
+    #[test]
+    fn drag_up_from_trailing_paragraph_to_top_selects_all() {
+        use editor_state::{Affinity, Position};
+
+        let (state, r1, i0, i1, i2, p1) = state! {
+            doc { r1: root { i0: image i1: image i2: image p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        for id in [i0, i1, i2] {
+            editor
+                .view
+                .set_external_height(&editor.state.doc, id, 100.0);
+        }
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: 5.0,
+                y: 9999.0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        let sel = editor.state().selection;
+        assert!(
+            sel.is_collapsed(),
+            "Down on the trailing paragraph collapses"
+        );
+        assert_eq!(sel.head.node_id, p1);
+        assert_eq!(sel.head.offset, 0);
+        assert!(editor.drag_anchor.is_some());
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: 0,
+                x: 5.0,
+                y: -9999.0,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Selection::new(
+                Position {
+                    node_id: p1,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+            ),
+            "dragging up to the top must envelope the first image: \
+             head reaches the doc start (r1,0), not the gap after image0 (r1,1)"
+        );
+    }
+
+    #[test]
+    fn drag_up_from_last_image_keeps_it_selected() {
+        use editor_state::{Affinity, Position};
+
+        let (state, r1, i0, i1, i2) = state! {
+            doc { r1: root { i0: image i1: image i2: image paragraph {} } }
+            selection: (r1, 2, >) -> (r1, 3, <)
+        };
+        let mut editor = Editor::new_test(state);
+        for id in [i0, i1, i2] {
+            editor
+                .view
+                .set_external_height(&editor.state.doc, id, 100.0);
+        }
+        editor.view.layout(&editor.state.doc);
+
+        let atom_center = |editor: &Editor, idx: usize| {
+            let sel = Selection::new(
+                Position {
+                    node_id: r1,
+                    offset: idx,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: idx + 1,
+                    affinity: Affinity::Upstream,
+                },
+            );
+            let resolved = sel.resolve(&editor.state.doc).unwrap();
+            let rects = editor.view.selection_rects(&resolved);
+            let pr = &rects[0];
+            (
+                pr.page_idx,
+                pr.rect.x + pr.rect.width / 2.0,
+                pr.rect.y + pr.rect.height / 2.0,
+            )
+        };
+
+        let (p2, x2, y2) = atom_center(&editor, 2);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: p2,
+                x: x2,
+                y: y2,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let (p0, x0, y0) = atom_center(&editor, 0);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: p0,
+                x: x0,
+                y: y0,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Selection::new(
+                Position {
+                    node_id: r1,
+                    offset: 3,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+            ),
+            "dragging up from the last image must keep it selected: \
+             anchor stays at the image's trailing edge (r1,3), not its leading edge (r1,2)"
+        );
     }
 
     #[test]
