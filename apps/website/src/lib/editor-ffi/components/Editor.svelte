@@ -92,6 +92,7 @@
 
 <div
   style:--page-gap={isPaginated ? `${PAGE_GAP}px` : undefined}
+  style:cursor={ctx.editor?.pointerStyle}
   class={css(
     {
       position: 'relative',
@@ -125,6 +126,7 @@
   onpointerdown={handle(ctx.editor, handlePointerDown)}
   onpointermove={handle(ctx.editor, handlePointerMove)}
   onpointerup={handle(ctx.editor, handlePointerUp)}
+  onscroll={() => ctx.editor?.refreshPointerStyle()}
   role="textbox"
   tabindex={0}
   bind:clientWidth

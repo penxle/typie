@@ -1,4 +1,4 @@
-import { createContext, untrack } from 'svelte';
+import { createContext, tick, untrack } from 'svelte';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
@@ -13,6 +13,7 @@ import type {
   Message,
   ModifierState,
   PlainRootNode,
+  PointerStyle,
   Selection,
   Size,
   ThemeVariant,
@@ -39,6 +40,7 @@ export const setupEditorContext = () => setEditorContext(new EditorContext());
 
 export class Editor {
   #wasm!: WasmEditor;
+  #destroyed = false;
 
   #queued = false;
   #rafId: number | null = null;
@@ -63,6 +65,10 @@ export class Editor {
   #blockState = $state<BlockState>();
   #focused = $state(false);
   #effectCleanup: (() => void) | null = null;
+
+  #pointerStyle = $state<PointerStyle>('default');
+  #lastPointerClient: { x: number; y: number } | null = null;
+  #pointerStyleDomRefreshQueued = false;
 
   private constructor() {
     // no-op
@@ -170,6 +176,10 @@ export class Editor {
     this.enqueue({ type: 'system', event: { type: 'set_focused', focused } });
   }
 
+  get pointerStyle() {
+    return this.#pointerStyle;
+  }
+
   localToOffset(page: number, x: number, y: number) {
     const el = this.pageEls[page];
     if (!el) {
@@ -223,6 +233,39 @@ export class Editor {
 
   interactiveHitTest(page: number, x: number, y: number): InteractiveHit | undefined {
     return this.#wasm.interactive_hit_test(page, x, y);
+  }
+
+  updatePointerHover(clientX: number, clientY: number): void {
+    this.#lastPointerClient = { x: clientX, y: clientY };
+    this.refreshPointerStyle();
+  }
+
+  refreshPointerStyle(): void {
+    if (this.#destroyed) {
+      return;
+    }
+
+    const pointer = this.#lastPointerClient;
+    if (!pointer) {
+      return;
+    }
+
+    const local = this.clientToLocal(pointer.x, pointer.y);
+    this.#pointerStyle = local ? this.#wasm.pointer_style(local.page, local.x, local.y, this.readOnly) : 'default';
+  }
+
+  refreshPointerStyleAfterDomUpdate(): void {
+    if (this.#destroyed || !this.#lastPointerClient || this.#pointerStyleDomRefreshQueued) {
+      return;
+    }
+
+    this.#pointerStyleDomRefreshQueued = true;
+    void tick().then(() => {
+      this.#pointerStyleDomRefreshQueued = false;
+      if (!this.#destroyed) {
+        this.refreshPointerStyle();
+      }
+    });
   }
 
   on<K extends EditorEvent['type']>(event: K, callback: EditorEventListener<K>): () => void {
@@ -349,9 +392,18 @@ export class Editor {
     if (fields.includes('block')) {
       this.#blockState = this.#wasm.block_state();
     }
+
+    const pageDomChanged = fields.includes('root_attrs') || fields.includes('page_sizes');
+    if (pageDomChanged) {
+      this.refreshPointerStyleAfterDomUpdate();
+    } else if (fields.some((field) => ['doc', 'external_elements', 'modifiers', 'block'].includes(field))) {
+      this.refreshPointerStyle();
+    }
   };
 
   destroy(): void {
+    this.#destroyed = true;
+
     unregister(this);
 
     this.#effectCleanup?.();

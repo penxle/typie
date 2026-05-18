@@ -12,7 +12,7 @@ use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
-use crate::query::{CursorMetrics, SelectionRect};
+use crate::query::{CursorMetrics, PointerStyle, SelectionRect};
 use crate::view_state::{PendingStyle, ViewState};
 use crate::viewport::Viewport;
 
@@ -207,6 +207,26 @@ impl View {
         let result = self.layout.as_ref()?;
         let page = result.pages.get(page_idx)?;
         crate::query::interactive_hit_test(&result.tree, page, doc, x, y)
+    }
+
+    pub fn pointer_style_at(
+        &self,
+        doc: &Doc,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        read_only: bool,
+    ) -> Option<PointerStyle> {
+        let result = self.layout.as_ref()?;
+        let page = result.pages.get(page_idx)?;
+        Some(crate::query::pointer_style_at(
+            &result.tree,
+            page,
+            doc,
+            x,
+            y,
+            read_only,
+        ))
     }
 
     pub fn select_word_at(

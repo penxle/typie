@@ -113,6 +113,17 @@ impl Editor {
             .interactive_hit_test(&self.state.doc, page_idx, x, y)
     }
 
+    pub fn pointer_style(
+        &self,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        read_only: bool,
+    ) -> Option<editor_view::PointerStyle> {
+        self.view
+            .pointer_style_at(&self.state.doc, page_idx, x, y, read_only)
+    }
+
     pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
         self.renderer.set_theme_variant(variant)
     }

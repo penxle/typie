@@ -578,6 +578,8 @@ export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph
 
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" } | { type: "cancel" };
 
+export type PointerStyle = "default" | "text" | "pointer";
+
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
 export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
@@ -621,6 +623,7 @@ declare class Editor {
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
     modifier_state(): ModifierState;
     page_sizes(): Size[];
+    pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
     receive_remote_changeset(payload: Uint8Array): void;
     render_page_to_buffer(page: number, width: number, height: number): Uint8Array;
     root_attrs(): PlainRootNode;

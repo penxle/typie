@@ -87,6 +87,22 @@ impl Editor {
         })
     }
 
+    pub fn pointer_style(
+        &self,
+        page: u32,
+        x: f32,
+        y: f32,
+        read_only: bool,
+    ) -> EditorResult<Complex<editor_view::PointerStyle>> {
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .pointer_style(page as usize, x, y, read_only)
+                .unwrap_or(editor_view::PointerStyle::Default)
+                .into_ffi()?)
+        })
+    }
+
     pub fn inspect_state(
         &self,
         options: Option<Complex<editor_introspection::InspectStateOptions>>,

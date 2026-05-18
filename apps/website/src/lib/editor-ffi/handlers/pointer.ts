@@ -34,6 +34,8 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
 };
 
 export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  editor.updatePointerHover(e.clientX, e.clientY);
+
   if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
     return;
   }

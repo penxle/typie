@@ -5,6 +5,7 @@ pub(crate) mod grapheme;
 pub(crate) mod hit_test;
 pub(crate) mod interactive;
 pub(crate) mod navigation;
+pub(crate) mod pointer_style;
 pub(crate) mod search;
 pub(crate) mod segmentation;
 pub(crate) mod selection;
@@ -17,5 +18,7 @@ pub(crate) use hit_test::{closest_hit_test, closest_hit_test_extending, exact_hi
 pub use interactive::InteractiveHit;
 pub(crate) use interactive::interactive_hit_test;
 pub(crate) use navigation::resolve_movement;
+pub use pointer_style::PointerStyle;
+pub(crate) use pointer_style::pointer_style_at;
 pub use selection::{SelectionRect, SelectionRectKind};
 pub use visit::{Edges, LineMetrics, PageVisitor, visit_page};
