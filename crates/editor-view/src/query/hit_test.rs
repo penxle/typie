@@ -85,6 +85,18 @@ pub fn closest_hit_test_extending(
 /// `(parent, idx + 1)`. Without this, dragging the selection past a
 /// monolithic container (e.g. fold) stalls at the container's innermost text
 /// position, making it impossible to select the container as a unit.
+///
+/// Only a true escape into the gutter promotes when escaping *above* the box.
+/// The inter-block gap directly above the box (between it and its previous
+/// sibling) belongs to the *approach* toward the box, not an escape past it:
+/// `closest_navigable` can pick the box's own leading text there, and that
+/// text caret — not a unit promotion — is the intended drag-extend target.
+/// So `above` promotion requires the click to be past the previous sibling
+/// too (or there to be no previous sibling at all). The `below` direction
+/// needs no such guard: once the click is past the box's bottom,
+/// `closest_navigable` resolves to the *next* sibling's text rather than back
+/// into the box, so this function is never even reached via the box for a
+/// gap directly below a box that has a following sibling.
 fn promote_outside_y(root: &LayoutNode, leaf: &LayoutNode, click_y: f32) -> Option<Position> {
     let mut path: Vec<(&LayoutNode, usize)> = Vec::new();
     if !build_path(root, leaf, &mut path) {
@@ -102,6 +114,13 @@ fn promote_outside_y(root: &LayoutNode, leaf: &LayoutNode, click_y: f32) -> Opti
         let below = click_y >= ancestor.rect.y + ancestor.rect.height;
         if above || below {
             let (parent_box_node, idx) = path[k - 1];
+            if above
+                && idx > 0
+                && let Some(prev) = nth_content_child(parent_box_node, idx - 1)
+                && click_y >= prev.rect.y + prev.rect.height
+            {
+                continue;
+            }
             if let LayoutContent::Box(parent_box) = &parent_box_node.content {
                 let slot = if below { idx + 1 } else { idx };
                 return Some(Position::new(parent_box.node_id, slot));
@@ -109,6 +128,18 @@ fn promote_outside_y(root: &LayoutNode, leaf: &LayoutNode, click_y: f32) -> Opti
         }
     }
     None
+}
+
+/// The `n`-th non-spacing child of `parent`, matching the content indexing
+/// that [`build_path`] uses (`Spacing` children are skipped there too).
+fn nth_content_child(parent: &LayoutNode, n: usize) -> Option<&LayoutNode> {
+    let LayoutContent::Box(b) = &parent.content else {
+        return None;
+    };
+    b.children
+        .iter()
+        .filter(|c| !matches!(c.content, LayoutContent::Spacing(_)))
+        .nth(n)
 }
 
 fn build_path<'a>(

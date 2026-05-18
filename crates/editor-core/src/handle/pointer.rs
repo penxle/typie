@@ -1188,4 +1188,75 @@ mod tests {
             "head extends to the shift-clicked cell"
         );
     }
+
+    #[test]
+    fn drag_down_into_leading_gap_of_fold_keeps_text_selection() {
+        // Caret in the empty paragraph above a fold; drag straight down so the
+        // pointer lands in the inter-block gap directly above the fold, with x
+        // over the fold-title text. The gap is the *approach* to the fold, not
+        // an escape past it, so the head must stay a plain text caret in the
+        // fold-title text — not promote the whole fold to a ROOT-slot unit
+        // selection.
+        let (state, p1, f1, _, t1) = state! {
+            doc {
+                root {
+                    p1: paragraph {}
+                    f1: fold {
+                        ft1: fold_title {
+                            t1: text("1234")
+                        }
+                        fold_content {
+                            paragraph {
+                                text("12341234")
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        let p1_rect = editor.view.node_box_rects(&[p1])[0].rect;
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: p1_rect.x + 5.0,
+                y: p1_rect.y + p1_rect.height / 2.0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let f1_rect = editor.view.node_box_rects(&[f1])[0].rect;
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: 0,
+                x: f1_rect.x + 50.0,
+                y: f1_rect.y - 2.0,
+            },
+        });
+
+        let sel = editor.state().selection;
+        assert_ne!(
+            sel.anchor.node_id,
+            editor_model::NodeId::ROOT,
+            "anchor must stay a text caret, not a ROOT slot, got {sel:?}"
+        );
+        assert_ne!(
+            sel.head.node_id,
+            editor_model::NodeId::ROOT,
+            "head must not promote the fold to a ROOT-slot unit selection, got {sel:?}"
+        );
+        assert_eq!(
+            sel.anchor.node_id, p1,
+            "anchor stays in the leading empty paragraph"
+        );
+        assert_eq!(
+            sel.head.node_id, t1,
+            "head lands in the fold-title text, not on the fold node"
+        );
+    }
 }
