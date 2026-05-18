@@ -330,13 +330,13 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root {
+            doc { r: root {
                 paragraph { text("a") }
                 horizontal_rule
                 horizontal_rule
-                paragraph { t1: text("c") }
+                paragraph { text("c") }
             } }
-            selection: (t1, 0)
+            selection: (r, 2, >) -> (r, 3, <)
         };
         assert_state_eq!(editor.state(), &expected);
     }
