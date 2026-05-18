@@ -36,6 +36,7 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_state::assert_state_eq;
 
     use super::*;
 
@@ -118,5 +119,36 @@ mod tests {
                 modifier: editor_model::Modifier::FontSize { value: 2400 }
             }]
         );
+    }
+
+    #[test]
+    fn toggle_italic_skips_fold_title_and_applies_to_paragraph_via_message() {
+        let (state, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: ModifierType::Italic,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") [italic] } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 }

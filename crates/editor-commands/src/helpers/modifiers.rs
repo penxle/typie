@@ -82,6 +82,33 @@ pub(crate) fn is_text_applicable(modifier_type: ModifierType) -> bool {
         .contains(&NodeType::Text)
 }
 
+pub(crate) fn is_modifier_applicable_to_node(node: &NodeRef, modifier_type: ModifierType) -> bool {
+    let context = &Schema::modifier_spec(modifier_type).context;
+    let targets = context.rightmost_node_types();
+    if !targets.contains(&node.as_type()) {
+        return false;
+    }
+
+    let mut path: Vec<NodeType> = node.ancestors().map(|a| a.as_type()).collect();
+    path.reverse();
+    context.matches(&path)
+}
+
+pub(crate) fn filter_applicable_node_ids(
+    doc: &Doc,
+    node_ids: &[NodeId],
+    modifier_type: ModifierType,
+) -> Vec<NodeId> {
+    node_ids
+        .iter()
+        .copied()
+        .filter(|node_id| {
+            doc.node(*node_id)
+                .is_some_and(|node| is_modifier_applicable_to_node(&node, modifier_type))
+        })
+        .collect()
+}
+
 pub(crate) fn resolve_applicable_target_collapsed<'a>(
     doc: &'a Doc,
     cursor_node_id: NodeId,

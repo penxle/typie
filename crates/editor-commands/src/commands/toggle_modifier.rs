@@ -4,6 +4,7 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{
     check_range_all_has_modifier, collect_text_nodes_in_range, compact_and_restore_selection,
+    filter_applicable_node_ids,
 };
 use crate::{CommandError, CommandResult};
 
@@ -34,17 +35,26 @@ pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> Com
     let to = Position::from(resolved.to());
 
     let node_ids = collect_text_nodes_in_range(tr, &from, &to)?;
+    let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, modifier_type);
+
+    if applicable_node_ids.is_empty() {
+        compact_and_restore_selection(tr, &node_ids)?;
+        return Ok(false);
+    }
 
     let doc = tr.doc();
-    let nodes: Vec<_> = node_ids.iter().filter_map(|id| doc.node(*id)).collect();
+    let nodes: Vec<_> = applicable_node_ids
+        .iter()
+        .filter_map(|id| doc.node(*id))
+        .collect();
     let all_have = check_range_all_has_modifier(&nodes, modifier_type);
 
     if all_have {
-        for &node_id in &node_ids {
+        for &node_id in &applicable_node_ids {
             tr.remove_modifier(node_id, modifier.clone())?;
         }
     } else {
-        for &node_id in &node_ids {
+        for &node_id in &applicable_node_ids {
             let doc = tr.doc();
             let node = doc
                 .node(node_id)
@@ -246,6 +256,109 @@ mod tests {
                 t1: text("HelloWorld") [italic]
             } } }
             selection: (t1, 0) -> (t1, 10)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_italic_skips_fold_title_applies_to_paragraph() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") [italic] } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_underline_skips_fold_title_applies_to_paragraph() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(
+            &mut tr,
+            ModifierType::Underline
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") [underline] } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_strikethrough_skips_fold_title_applies_to_paragraph() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(
+            &mut tr,
+            ModifierType::Strikethrough
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { t2: text("Body") [strikethrough] } }
+                }
+            } }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_italic_on_fold_title_only_is_noop() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { text("Body") } }
+                }
+            } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let (actual, ..) =
+            transact_fail!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { text("Body") } }
+                }
+            } }
+            selection: (t1, 0) -> (t1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }

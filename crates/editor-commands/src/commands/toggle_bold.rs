@@ -4,7 +4,8 @@ use editor_state::{PendingModifier, PendingModifiers, Position, resolve_effectiv
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    collect_text_nodes_in_range, compact_and_restore_selection, resolve_inherited_modifiers,
+    collect_text_nodes_in_range, compact_and_restore_selection, filter_applicable_node_ids,
+    resolve_inherited_modifiers,
 };
 use crate::{CommandError, CommandResult};
 
@@ -23,18 +24,24 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let to = Position::from(resolved.to());
 
     let node_ids = collect_text_nodes_in_range(tr, &from, &to)?;
+    let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, ModifierType::Bold);
+
+    if applicable_node_ids.is_empty() {
+        compact_and_restore_selection(tr, &node_ids)?;
+        return Ok(false);
+    }
 
     let doc = tr.doc();
-    let nodes = node_ids
+    let nodes = applicable_node_ids
         .iter()
         .filter_map(|id| doc.node(*id))
         .collect::<Vec<_>>();
     let is_bold = check_range_is_bold(&nodes);
 
     if is_bold {
-        toggle_bold_off_range(tr, resource, &node_ids)?;
+        toggle_bold_off_range(tr, resource, &applicable_node_ids)?;
     } else {
-        toggle_bold_on_range(tr, resource, &node_ids)?;
+        toggle_bold_on_range(tr, resource, &applicable_node_ids)?;
     }
 
     compact_and_restore_selection(tr, &node_ids)?;
@@ -705,6 +712,35 @@ mod tests {
                 }
             }
             selection: (t1, 0) -> (t1, 9)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_bold_skips_fold_title_applies_to_paragraph() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { t2: text("Body") } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { t2: text("Body") [font_weight(700)] } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 4)
         };
         assert_state_eq!(&actual, &expected);
     }

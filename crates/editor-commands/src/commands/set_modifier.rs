@@ -4,8 +4,8 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{
     collect_applicable_targets_in_range, collect_text_nodes_in_range,
-    compact_and_restore_selection, is_text_applicable, resolve_applicable_target_collapsed,
-    resolve_inherited_modifiers,
+    compact_and_restore_selection, filter_applicable_node_ids, is_text_applicable,
+    resolve_applicable_target_collapsed, resolve_inherited_modifiers,
 };
 use crate::{CommandError, CommandResult};
 
@@ -88,12 +88,14 @@ fn set_modifier_range_text(tr: &mut Transaction, modifier: &Modifier) -> Command
     let to = Position::from(resolved.to());
 
     let node_ids = collect_text_nodes_in_range(tr, &from, &to)?;
+    let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, modifier.as_type());
 
-    if node_ids.is_empty() {
+    if applicable_node_ids.is_empty() {
+        compact_and_restore_selection(tr, &node_ids)?;
         return Ok(false);
     }
 
-    for &node_id in &node_ids {
+    for &node_id in &applicable_node_ids {
         let doc = tr.doc();
         let node = doc
             .node(node_id)
@@ -372,6 +374,37 @@ mod tests {
                 }
             }
             selection: (t1, 0) -> (t1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_set_font_size_skips_fold_title_applies_to_paragraph() {
+        let (initial, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { t2: text("Body") } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 4)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { t2: text("Body") [font_size(2400)] } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 4)
         };
         assert_state_eq!(&actual, &expected);
     }
