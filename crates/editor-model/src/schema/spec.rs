@@ -136,7 +136,6 @@ mod tests {
             NodeType::Callout,
             NodeType::Fold,
             NodeType::Table,
-            NodeType::HorizontalRule,
         ] {
             assert!(
                 Schema::node_spec(ty).monolithic,
@@ -146,6 +145,7 @@ mod tests {
         for ty in [
             NodeType::Root,
             NodeType::Paragraph,
+            NodeType::HorizontalRule,
             NodeType::ListItem,
             NodeType::FoldTitle,
             NodeType::FoldContent,

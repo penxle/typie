@@ -77,7 +77,6 @@ impl Default for SchemaInner {
                 },
                 NodeType::HorizontalRule => NodeSpec {
                     selectable: true,
-                    monolithic: true,
                     ..Default::default()
                 },
                 NodeType::BulletList => NodeSpec {
