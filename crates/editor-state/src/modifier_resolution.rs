@@ -109,7 +109,7 @@ pub fn resolve_modifier_state(state: &State) -> ModifierState {
 /// Per-modifier `Tri` aggregate over the inclusive range `[from, to]`.
 ///
 /// For each `ModifierType`, walks every node in the selection range whose path
-/// matches the modifier's schema context, then folds their effective values
+/// matches the modifier's selection target, then folds their effective values
 /// (own ⨁ inherited) into one of `Absent` / `Uniform` / `Mixed`.
 pub fn resolve_modifier_state_in_range(
     state: &State,
@@ -120,16 +120,14 @@ pub fn resolve_modifier_state_in_range(
     let nodes = collect_nodes_in_range(state, from, to);
 
     for ty in ModifierType::iter() {
-        let context = &Schema::modifier_spec(ty).context;
-        // Two-step filter: type prefilter via `ContextExpr::rightmost_node_types` + `ContextExpr::matches`.
-        // The prefilter is necessary because `Not(...)` contexts (e.g. Bold's `!FoldTitle > Text`)
-        // are permissive — `context.matches` succeeds for any path that doesn't fit the negated
-        // pattern, including ancestor paths. Restricting evaluation to the modifier's actual
-        // target types prevents absent values from non-targets corrupting the aggregate.
-        let targets = context.rightmost_node_types();
+        let target = &Schema::modifier_spec(ty).target;
+        // `target` is the explicit selection scope (a positive expression).
+        // Prefilter by its leaf node types, then run the full `matches` check,
+        // so non-target nodes never contribute Absent to the aggregate.
+        let targets = target.rightmost_node_types();
         debug_assert!(
             !targets.is_empty(),
-            "modifier {ty:?} has no resolvable target types from {context:?}"
+            "modifier {ty:?} has no resolvable target types from {target:?}"
         );
         let mut canonical: Option<Modifier> = None;
         let mut absent_seen = false;
@@ -140,7 +138,7 @@ pub fn resolve_modifier_state_in_range(
                 continue;
             }
             let path = root_to_node_type_path(node);
-            if !context.matches(&path) {
+            if !target.matches(&path) {
                 continue;
             }
 

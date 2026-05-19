@@ -135,76 +135,92 @@ impl Default for SchemaInner {
             },
             modifiers: enum_map! {
                 ModifierType::Bold => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::Italic => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::Underline => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::Strikethrough => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::FontSize => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Root | Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::FontFamily => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Root | Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::FontWeight => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Root | Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::TextColor => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Root | Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::BackgroundColor => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Root | Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::LetterSpacing => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Root | Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::Link => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     expand: Expand::None,
                     inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::Ruby => ModifierSpec {
-                    context: context_expr!(!FoldTitle > Text),
+                    context: context_expr!(Paragraph > Text),
+                    target: context_expr!(Paragraph > Text),
                     expand: Expand::None,
                     inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::LineHeight => ModifierSpec {
-                    context: context_expr!(Paragraph),
+                    context: context_expr!(Root | Paragraph),
+                    target: context_expr!(Paragraph),
                     expand: Expand::None,
                     ..Default::default()
                 },
                 ModifierType::BlockGap => ModifierSpec {
                     context: context_expr!(Root),
+                    target: context_expr!(Root),
                     expand: Expand::None,
                     inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::ParagraphIndent => ModifierSpec {
                     context: context_expr!(Root),
+                    target: context_expr!(Root),
                     expand: Expand::None,
                     inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::Alignment => ModifierSpec {
                     context: context_expr!(Paragraph | Image | Table),
+                    target: context_expr!(Paragraph | Image | Table),
                     expand: Expand::None,
                     inheritable: false,
                     ..Default::default()

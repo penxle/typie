@@ -55,7 +55,7 @@ impl PendingModifier {
 
 fn is_valid_pending_modifier_type(ty: ModifierType) -> bool {
     Schema::modifier_spec(ty)
-        .context
+        .target
         .rightmost_node_types()
         .contains(&NodeType::Text)
 }

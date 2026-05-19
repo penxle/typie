@@ -77,21 +77,21 @@ pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
 
 pub(crate) fn is_text_applicable(modifier_type: ModifierType) -> bool {
     Schema::modifier_spec(modifier_type)
-        .context
+        .target
         .rightmost_node_types()
         .contains(&NodeType::Text)
 }
 
 pub(crate) fn is_modifier_applicable_to_node(node: &NodeRef, modifier_type: ModifierType) -> bool {
-    let context = &Schema::modifier_spec(modifier_type).context;
-    let targets = context.rightmost_node_types();
+    let target = &Schema::modifier_spec(modifier_type).target;
+    let targets = target.rightmost_node_types();
     if !targets.contains(&node.as_type()) {
         return false;
     }
 
     let mut path: Vec<NodeType> = node.ancestors().map(|a| a.as_type()).collect();
     path.reverse();
-    context.matches(&path)
+    target.matches(&path)
 }
 
 pub(crate) fn filter_applicable_node_ids(
@@ -114,11 +114,11 @@ pub(crate) fn resolve_applicable_target_collapsed<'a>(
     cursor_node_id: NodeId,
     modifier_type: ModifierType,
 ) -> Option<NodeRef<'a>> {
-    let context = &Schema::modifier_spec(modifier_type).context;
-    let targets = context.rightmost_node_types();
+    let target = &Schema::modifier_spec(modifier_type).target;
+    let targets = target.rightmost_node_types();
     debug_assert!(
         !targets.is_empty(),
-        "modifier {modifier_type:?} has no resolvable target types from {context:?}"
+        "modifier {modifier_type:?} has no resolvable target types from {target:?}"
     );
 
     let cursor = doc.node(cursor_node_id)?;
@@ -128,7 +128,7 @@ pub(crate) fn resolve_applicable_target_collapsed<'a>(
         }
         let mut path: Vec<NodeType> = n.ancestors().map(|a| a.as_type()).collect();
         path.reverse();
-        if context.matches(&path) {
+        if target.matches(&path) {
             return Some(n);
         }
     }
@@ -140,17 +140,17 @@ pub(crate) fn collect_applicable_targets_in_range<'a>(
     resolved: &ResolvedSelection<'a>,
     modifier_type: ModifierType,
 ) -> Vec<NodeRef<'a>> {
-    let context = &Schema::modifier_spec(modifier_type).context;
-    let targets = context.rightmost_node_types();
+    let target = &Schema::modifier_spec(modifier_type).target;
+    let targets = target.rightmost_node_types();
     debug_assert!(
         !targets.is_empty(),
-        "modifier {modifier_type:?} has no resolvable target types from {context:?}"
+        "modifier {modifier_type:?} has no resolvable target types from {target:?}"
     );
     let mut out = Vec::new();
     let Some(root) = doc.root() else {
         return out;
     };
-    walk_collect_targets(&root, resolved, &targets, context, &mut out);
+    walk_collect_targets(&root, resolved, &targets, target, &mut out);
     out
 }
 
@@ -158,7 +158,7 @@ fn walk_collect_targets<'a>(
     node: &NodeRef<'a>,
     rs: &ResolvedSelection<'a>,
     targets: &[NodeType],
-    context: &ContextExpr,
+    target: &ContextExpr,
     out: &mut Vec<NodeRef<'a>>,
 ) {
     if !rs.intersects_subtree(node) {
@@ -167,12 +167,12 @@ fn walk_collect_targets<'a>(
     if targets.contains(&node.as_type()) {
         let mut path: Vec<NodeType> = node.ancestors().map(|a| a.as_type()).collect();
         path.reverse();
-        if context.matches(&path) {
+        if target.matches(&path) {
             out.push(*node);
         }
     }
     for child in node.children() {
-        walk_collect_targets(&child, rs, targets, context, out);
+        walk_collect_targets(&child, rs, targets, target, out);
     }
 }
 

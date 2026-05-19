@@ -50,7 +50,18 @@ impl Default for NodeSpec {
 
 #[derive(Debug, Clone)]
 pub struct ModifierSpec {
+    /// Placement validity: which root-to-node ancestor paths may carry this
+    /// modifier. The transaction validator rejects a modifier whose node's
+    /// path does not match. Includes every node where the modifier may
+    /// legally live — for document-default styles that includes `Root`.
     pub context: ContextExpr,
+    /// Selection target: which node a selection-driven apply/aggregate
+    /// operates on. Consumed by toolbar state and command target resolution.
+    /// Always a subset of `context`: every selection target is a legal
+    /// placement, but a legal placement (e.g. `Root` holding a document
+    /// default) is not necessarily a selection target. A concrete positive
+    /// expression (no `Not`/`Any`/`GlobStar`/`SelfRef`), never `Any`.
+    pub target: ContextExpr,
     pub expand: Expand,
     pub overlap: bool,
     pub inheritable: bool,
@@ -60,6 +71,7 @@ impl Default for ModifierSpec {
     fn default() -> Self {
         Self {
             context: ContextExpr::Any,
+            target: ContextExpr::Any,
             expand: Expand::After,
             overlap: false,
             inheritable: true,

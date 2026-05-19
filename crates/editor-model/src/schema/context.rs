@@ -23,18 +23,12 @@ impl ContextExpr {
         }
     }
 
-    /// Walk a `ContextExpr` to its rightmost-leaf node positions to discover the
-    /// concrete `NodeType`s (e.g. `Bold` → `[Text]`, `Alignment` →
-    /// `[Paragraph, Image, Table]`). Used as a type-level prefilter for modifier
-    /// targets so the aggregator doesn't conflate ancestors with actual targets
-    /// when the context uses `Not(...)` (which is permissive over ancestor paths).
-    ///
-    /// Contract: assumes `Not(...)` wraps a `Child(...)` whose deepest leaf is the
-    /// actual target (e.g. `!FoldTitle > Text` means "Text not under FoldTitle";
-    /// target is `Text`). A bare `Not(Node(X))` would incorrectly return `[X]`, but
-    /// no current modifier uses that shape. The `debug_assert!` at the call site
-    /// catches degenerate cases (e.g. `Any` / `GlobStar` / `SelfRef`) where the
-    /// recursion bottoms out without yielding any concrete type.
+    /// The concrete leaf `NodeType`s a `target` expression resolves to
+    /// (e.g. `Paragraph > Text` → `[Text]`, `Paragraph | Image | Table` →
+    /// `[Paragraph, Image, Table]`). Selection consumers use this as a
+    /// type prefilter before the full `matches` check, so non-target node
+    /// types never enter selection aggregation. `target` expressions are
+    /// positive, so the result is exactly the set of selectable node types.
     pub fn rightmost_node_types(&self) -> Vec<NodeType> {
         match self {
             ContextExpr::Node(t) => vec![*t],
