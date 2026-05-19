@@ -13,7 +13,7 @@ use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
 use crate::query::{CursorMetrics, PointerStyle, SelectionRect};
-use crate::view_state::{PendingStyle, ViewState};
+use crate::view_state::{GapPhantom, PendingStyle, ViewState};
 use crate::viewport::Viewport;
 
 #[derive(Debug)]
@@ -54,6 +54,7 @@ impl View {
         new_doc: &Doc,
         ops: &[Op<DocOp>],
         new_pending_style: Option<PendingStyle>,
+        new_gap_phantom: Option<GapPhantom>,
     ) -> bool {
         let nodes_invalidated = self.measurer.invalidate_with_doc_ops(old_doc, new_doc, ops);
         let attrs_changed = ops.iter().any(
@@ -78,9 +79,20 @@ impl View {
             }
         }
 
-        let dirty = nodes_invalidated || attrs_changed || pending_changed;
+        let gap_changed = self.view_state.gap_phantom != new_gap_phantom;
+        if gap_changed {
+            for gp in [self.view_state.gap_phantom, new_gap_phantom]
+                .into_iter()
+                .flatten()
+            {
+                self.measurer.invalidate_with_ancestors(new_doc, gp.parent);
+            }
+        }
+
+        let dirty = nodes_invalidated || attrs_changed || pending_changed || gap_changed;
         // IMPORTANT: assign pending_style before compute — compute reads view_state.pending_style.
         self.view_state.pending_style = new_pending_style;
+        self.view_state.gap_phantom = new_gap_phantom;
         if dirty {
             self.compute(new_doc);
             self.view_state.preferred_x = None;
@@ -107,6 +119,7 @@ impl View {
     pub fn layout(&mut self, doc: &Doc) {
         self.measurer.clear_cache();
         self.view_state.pending_style = None;
+        self.view_state.gap_phantom = None;
         self.compute(doc);
         self.view_state.preferred_x = None;
     }
@@ -261,6 +274,11 @@ impl View {
         );
         self.view_state.preferred_x = new_preferred_x;
         selection
+    }
+
+    pub fn editable_position_inside(&self, node_id: NodeId, at_end: bool) -> Option<Position> {
+        let result = self.layout.as_ref()?;
+        query::navigation::editable_position_inside(&result.tree, node_id, at_end)
     }
 
     pub fn cursor_metrics(&self, doc: &Doc, pos: &Position) -> Option<CursorMetrics> {
@@ -538,7 +556,7 @@ mod tests {
                 modifier: Modifier::FontSize { value: 9600 },
             }],
         });
-        view.reconcile_with_ops(&doc, &doc, &[], pending_style);
+        view.reconcile_with_ops(&doc, &doc, &[], pending_style, None);
         let pending = view.cursor_metrics(&doc, &pos).unwrap();
 
         assert!(pending.caret.height > baseline.caret.height);
@@ -564,7 +582,7 @@ mod tests {
                 modifier: Modifier::FontSize { value: 9600 },
             }],
         });
-        view.reconcile_with_ops(&doc, &doc, &[], pending_style);
+        view.reconcile_with_ops(&doc, &doc, &[], pending_style, None);
         let after = view.cursor_metrics(&doc, &pos).unwrap();
 
         assert!((after.caret.height - baseline.caret.height).abs() < 0.01);
@@ -624,7 +642,7 @@ mod tests {
                 },
             },
         )];
-        let changed = view.reconcile_with_ops(&doc, &new_doc, &ops, None);
+        let changed = view.reconcile_with_ops(&doc, &new_doc, &ops, None, None);
         assert!(
             changed,
             "reconcile_with_ops should return true for root attr change"
@@ -670,7 +688,7 @@ mod tests {
                 },
             },
         )];
-        let changed = view.reconcile_with_ops(&doc, &doc, &ops, None);
+        let changed = view.reconcile_with_ops(&doc, &doc, &ops, None, None);
         assert!(changed, "attrs_changed branch returns true");
         assert_eq!(view.pages()[0].size.width, 400.0);
     }
@@ -773,7 +791,7 @@ mod tests {
                 },
             },
         )];
-        let changed = view.reconcile_with_ops(&doc_old, &doc_new, &ops, None);
+        let changed = view.reconcile_with_ops(&doc_old, &doc_new, &ops, None, None);
         assert!(changed);
         assert_ne!(view.pages()[0].size.width, old_page_width);
     }
@@ -821,7 +839,7 @@ mod tests {
                 },
             },
         )];
-        let changed = view.reconcile_with_ops(&doc_old, &doc_new, &ops, None);
+        let changed = view.reconcile_with_ops(&doc_old, &doc_new, &ops, None, None);
         assert!(changed);
         assert_eq!(view.pages()[0].size.width, 700.0);
     }
@@ -856,7 +874,7 @@ mod tests {
                 },
             },
         };
-        let dirty = view.reconcile_with_ops(&doc_old, &doc_new, &[op], None);
+        let dirty = view.reconcile_with_ops(&doc_old, &doc_new, &[op], None, None);
         assert!(dirty);
     }
 
@@ -1133,6 +1151,33 @@ mod interactive_tests {
         assert!(
             matches!(hit, Some(InteractiveHit::FoldTitle { id, .. }) if id == f1),
             "got {hit:?}"
+        );
+    }
+
+    #[test]
+    fn gap_phantom_change_triggers_recompute_without_ops() {
+        let (doc, ..) = doc! {
+            root {
+                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let changed = view.reconcile_with_ops(
+            &doc,
+            &doc,
+            &[],
+            None,
+            Some(GapPhantom {
+                parent: editor_model::NodeId::ROOT,
+                index: 1,
+            }),
+        );
+        assert!(
+            changed,
+            "gap_phantom change must trigger recompute even with no doc ops"
         );
     }
 }

@@ -7,7 +7,7 @@ use editor_state::{
     DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, State,
 };
 use editor_transaction::{Effect, HistoryMeta, Transaction};
-use editor_view::{PageRect, PendingStyle, View, Viewport};
+use editor_view::{GapPhantom, PageRect, PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -39,6 +39,21 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
         node_id: textblock.id(),
         modifiers: state.pending_modifiers.clone(),
     })
+}
+
+fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
+    use editor_state::GapCursor;
+    let rs = state.selection.resolve(&state.doc)?;
+    match rs.as_gap_cursor()? {
+        GapCursor::LeadingUnit { .. } => Some(GapPhantom {
+            parent: NodeId::ROOT,
+            index: 0,
+        }),
+        GapCursor::BetweenMonolithic { parent, index, .. } => Some(GapPhantom {
+            parent: parent.id(),
+            index,
+        }),
+    }
 }
 
 pub struct Editor {
@@ -200,10 +215,14 @@ impl Editor {
 
         let ops = std::mem::take(&mut self.pending_ops);
         let pending_style = normalize_pending_style(&self.state);
-        let dirty = !ops.is_empty()
-            && self
-                .view
-                .reconcile_with_ops(&old_doc, &self.state.doc, &ops, pending_style);
+        let gap_phantom = normalize_gap_phantom(&self.state);
+        let dirty = self.view.reconcile_with_ops(
+            &old_doc,
+            &self.state.doc,
+            &ops,
+            pending_style,
+            gap_phantom,
+        );
 
         let mut fields: HashSet<StateField> = HashSet::new();
 
@@ -1480,6 +1499,80 @@ mod tests {
                 Some(editor_view::InteractiveHit::FoldTitle { id, .. }) if id == f1
             ),
             "got {hit:?}"
+        );
+    }
+
+    #[test]
+    fn normalize_gap_phantom_some_for_leading_unit() {
+        let (state, ..) = state! {
+            doc { root: root { image paragraph { text("b") } } }
+            selection: (root, 0, <)
+        };
+        let gp = super::normalize_gap_phantom(&state).expect("leading image is a gap");
+        assert_eq!(gp.parent, editor_model::NodeId::ROOT);
+        assert_eq!(gp.index, 0);
+    }
+
+    #[test]
+    fn normalize_gap_phantom_none_for_normal_caret() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hi") } } }
+            selection: (t, 1)
+        };
+        assert!(super::normalize_gap_phantom(&state).is_none());
+    }
+
+    #[test]
+    fn normalize_gap_phantom_some_between_two_folds() {
+        let (state, ..) = state! {
+            doc {
+                root: root {
+                    fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
+                    fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
+                    paragraph {}
+                }
+            }
+            selection: (root, 1)
+        };
+        let gp = super::normalize_gap_phantom(&state).expect("between two folds");
+        assert_eq!(gp.parent, editor_model::NodeId::ROOT);
+        assert_eq!(gp.index, 1);
+    }
+
+    #[test]
+    fn gap_cursor_yields_caret_then_recovers() {
+        let (state, _, t) = state! {
+            doc { root: root { image paragraph { t: text("b") } } }
+            selection: (root, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        // Prime the measurer cache before the gap appears; reconcile needs a
+        // populated layout to invalidate when gap_phantom flips on. layout()
+        // itself clears gap_phantom, so it must run before the gap tick.
+        editor.view.layout(&editor.state.doc);
+        let _ = editor.tick().unwrap();
+        let st = editor.state();
+        assert!(
+            editor
+                .view()
+                .cursor_metrics(&st.doc, &st.selection.head)
+                .is_some(),
+            "gap cursor must produce a caret via the phantom line"
+        );
+
+        editor.enqueue(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(t, 1)),
+            },
+        });
+        let _ = editor.tick().unwrap();
+        let st2 = editor.state();
+        assert!(
+            editor
+                .view()
+                .cursor_metrics(&st2.doc, &st2.selection.head)
+                .is_some(),
+            "normal caret still valid after leaving the gap (phantom space recovered)"
         );
     }
 

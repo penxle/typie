@@ -8,12 +8,24 @@ pub struct PendingStyle {
     pub modifiers: PendingModifiers,
 }
 
+/// A gap cursor's phantom-paragraph descriptor. View-only — the document
+/// is not mutated. `parent` is the gap's container (the document root for
+/// a leading-unit gap, or the between-monolithic parent container);
+/// `index` is the child slot the phantom occupies. Mirrors `PendingStyle`
+/// as a ViewState-driven layout input.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GapPhantom {
+    pub parent: NodeId,
+    pub index: usize,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ViewState {
     pub fold_states: HashMap<NodeId, bool>,
     pub external_heights: HashMap<NodeId, f32>,
     pub preferred_x: Option<f32>,
     pub pending_style: Option<PendingStyle>,
+    pub gap_phantom: Option<GapPhantom>,
 }
 
 impl ViewState {
@@ -58,5 +70,21 @@ mod tests {
             }],
         };
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn gap_phantom_default_is_none() {
+        let vs = ViewState::new();
+        assert!(vs.gap_phantom.is_none());
+    }
+
+    #[test]
+    fn gap_phantom_equality() {
+        let parent = NodeId::new();
+        let a = GapPhantom { parent, index: 1 };
+        let b = GapPhantom { parent, index: 1 };
+        let c = GapPhantom { parent, index: 2 };
+        assert_eq!(a, b);
+        assert_ne!(a, c);
     }
 }

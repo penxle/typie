@@ -1,4 +1,5 @@
 use editor_common::{Axis, Direction, Movement};
+use editor_model::NodeId;
 use editor_resource::Resource;
 use editor_state::{Affinity, Position, Selection};
 
@@ -347,6 +348,35 @@ pub(crate) fn last_position_in(node: &LayoutNode) -> Position {
         return Position::new(nv.parent_id, nv.index);
     }
     unreachable!()
+}
+
+/// First (`at_end=false`) / last (`at_end=true`) editable caret position
+/// *inside* `node_id`'s subtree — descends past the node's own `nav`
+/// bracket into its children. `None` when the node is not a Box (atoms
+/// have no inner navigable) or has no navigable descendant.
+pub(crate) fn editable_position_inside(
+    tree: &LayoutTree,
+    node_id: NodeId,
+    at_end: bool,
+) -> Option<Position> {
+    let boxed = search::find_box_by_node_id(&tree.root, node_id)?;
+    let b = match &boxed.content {
+        LayoutContent::Box(b) => b,
+        _ => return None,
+    };
+    let nav = if at_end {
+        b.children
+            .iter()
+            .rev()
+            .find_map(search::find_last_navigable)
+    } else {
+        b.children.iter().find_map(search::find_first_navigable)
+    }?;
+    Some(if at_end {
+        last_position_in(nav)
+    } else {
+        first_position_in(nav)
+    })
 }
 
 /// A navigable unit's `(parent, index)` bracket. An atom carries it directly;
@@ -2115,5 +2145,46 @@ mod tests {
             .expect("interior fold caret must still navigate");
         assert_eq!(sel.head.node_id, c1);
         assert_eq!(sel.head.offset, 2);
+    }
+
+    #[test]
+    fn editable_position_inside_fold_returns_inner_first() {
+        // state!/doc! returns ids in label declaration order (here: r, then t).
+        let (state, _, t) = state! {
+            doc {
+                r: root {
+                    fold { fold_title { t: text("title") } fold_content { paragraph { text("body") } } }
+                    paragraph { text("after") }
+                }
+            }
+            selection: (t, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+        let fold_id = state
+            .doc
+            .node(t)
+            .unwrap()
+            .ancestors()
+            .find(|n| matches!(n.node(), editor_model::Node::Fold(_)))
+            .unwrap()
+            .id();
+        let pos = view
+            .editable_position_inside(fold_id, false)
+            .expect("fold has inner navigable");
+        assert_eq!(pos.node_id, t);
+        assert_eq!(pos.offset, 0);
+    }
+
+    #[test]
+    fn editable_position_inside_atom_is_none() {
+        let (state, r) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+        let image_id = state.doc.node(r).unwrap().children().next().unwrap().id();
+        assert!(view.editable_position_inside(image_id, false).is_none());
     }
 }

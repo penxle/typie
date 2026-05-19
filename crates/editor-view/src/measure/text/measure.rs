@@ -8,7 +8,7 @@ use crate::view_state::ViewState;
 use super::resolve::{apply_pending_to_style, resolve_text_style};
 use super::strut::compute_strut;
 
-fn build_strut_only_line(
+pub(crate) fn build_strut_only_line(
     measurer: &mut Measurer,
     paragraph_id: editor_model::NodeId,
     base_style: &super::resolve::ResolvedTextStyle,

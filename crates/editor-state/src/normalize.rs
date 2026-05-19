@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use editor_model::{Doc, Node, NodeRef, Schema};
 
 use crate::affinity::Affinity;
+use crate::gap_cursor::between_monolithic_at;
 use crate::position::Position;
 use crate::resolved_selection::ResolvedSelection;
 use crate::selection::Selection;
@@ -168,8 +169,16 @@ fn expand_unit_at(doc: &Doc, pos: Position) -> Option<Selection> {
     None
 }
 
-/// Invariant: a normalized selection must never be collapsed at a unit boundary.
+/// Invariant: a normalized selection must never be collapsed at a unit
+/// boundary, except a gap cursor between two monolithic blocks, which is
+/// preserved collapsed so it can render a phantom paragraph and accept
+/// insertion there. The between-monolithic predicate is the single source
+/// of truth shared with gap-cursor classification, so the two stay
+/// consistent.
 fn collapsed_or_unit(doc: &Doc, pos: Position) -> Selection {
+    if between_monolithic_at(doc, pos.node_id, pos.offset) {
+        return Selection::collapsed(pos);
+    }
     if let Some(node_sel) = expand_unit_at(doc, pos) {
         return node_sel;
     }
@@ -1563,6 +1572,135 @@ mod tests {
             Position {
                 node_id: root_id,
                 offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_collapsed_between_two_folds_stays_collapsed() {
+        let (d, ..) = doc! {
+            root {
+                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            }
+        };
+        let root_id = NodeId::ROOT;
+        for aff in [Affinity::Downstream, Affinity::Upstream] {
+            let sel = Selection::collapsed(Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: aff,
+            });
+            let out = sel.normalize(&d).unwrap();
+            assert!(
+                out.is_collapsed(),
+                "between two folds must stay collapsed, got {:?}",
+                out
+            );
+            assert_eq!(out.head.node_id, root_id);
+            assert_eq!(out.head.offset, 1);
+        }
+    }
+
+    #[test]
+    fn normalize_between_folds_idempotent() {
+        let (d, ..) = doc! {
+            root {
+                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            }
+        };
+        let sel = Selection::collapsed(Position {
+            node_id: NodeId::ROOT,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        });
+        let once = sel.normalize(&d).unwrap();
+        let twice = once.normalize(&d).unwrap();
+        assert_eq!(
+            once, twice,
+            "between-monolithic gap normalize must be idempotent"
+        );
+    }
+
+    #[test]
+    fn normalize_leading_unit_upstream_stays_collapsed() {
+        let (d, ..) = doc! { root { image paragraph { text("b") } } };
+        let root_id = NodeId::ROOT;
+        let sel = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 0,
+            affinity: Affinity::Upstream,
+        });
+        let out = sel.normalize(&d).unwrap();
+        assert!(
+            out.is_collapsed(),
+            "(root,0,Up) must stay collapsed, got {:?}",
+            out
+        );
+        assert_eq!(out.head.node_id, root_id);
+        assert_eq!(out.head.offset, 0);
+        assert_eq!(out.head.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn normalize_leading_unit_downstream_still_node_selects() {
+        let (d, ..) = doc! { root { image paragraph { text("b") } } };
+        let root_id = NodeId::ROOT;
+        let sel = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        });
+        let out = sel.normalize(&d).unwrap();
+        assert!(
+            !out.is_collapsed(),
+            "leading unit Downstream must node-select, got {:?}",
+            out
+        );
+        assert_eq!(
+            out.anchor,
+            Position {
+                node_id: root_id,
+                offset: 0,
+                affinity: Affinity::Downstream
+            }
+        );
+        assert_eq!(
+            out.head,
+            Position {
+                node_id: root_id,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_atom_atom_boundary_unaffected_by_carveout() {
+        let (d, ..) = doc! {
+            root { paragraph { text("x") } image horizontal_rule paragraph { text("y") } }
+        };
+        let root_id = NodeId::ROOT;
+        let down = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 2,
+            affinity: Affinity::Downstream,
+        })
+        .normalize(&d)
+        .unwrap();
+        assert!(
+            !down.is_collapsed(),
+            "image↔hr Downstream must still node-select"
+        );
+        assert_eq!(
+            down.head,
+            Position {
+                node_id: root_id,
+                offset: 3,
                 affinity: Affinity::Upstream
             }
         );

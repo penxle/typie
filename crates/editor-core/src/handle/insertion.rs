@@ -12,6 +12,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     tr,
                     |tr| commands::first!(
                         tr,
+                        commands::materialize_gap_paragraph(),
                         commands::insert_paragraph_after_unit_selection(),
                         |tr| commands::chain!(
                             tr,
@@ -27,6 +28,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
             } => {
                 commands::first!(
                     tr,
+                    commands::materialize_gap_paragraph(),
                     commands::insert_paragraph_after_unit_selection(),
                     |tr| commands::chain!(
                         tr,
@@ -45,6 +47,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     tr,
                     |tr| commands::first!(
                         tr,
+                        commands::materialize_gap_paragraph(),
                         commands::insert_paragraph_after_unit_selection(),
                         |tr| commands::chain!(
                             tr,
@@ -60,6 +63,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     tr,
                     |tr| commands::first!(
                         tr,
+                        commands::materialize_gap_paragraph(),
                         commands::insert_paragraph_after_unit_selection(),
                         |tr| commands::chain!(
                             tr,
@@ -76,6 +80,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     tr,
                     |tr| commands::first!(
                         tr,
+                        commands::materialize_gap_paragraph(),
                         commands::insert_paragraph_after_unit_selection(),
                         |tr| commands::chain!(
                             tr,
@@ -337,6 +342,110 @@ mod tests {
                 paragraph { text("c") }
             } }
             selection: (r, 2, >) -> (r, 3, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn type_text_at_leading_gap_creates_paragraph_with_text() {
+        // Leading-unit gap: collapsed Upstream caret before root's first
+        // child (an image). Typing must materialize a real paragraph
+        // there and land the text in it.
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "hi".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } image paragraph { text("b") } } }
+            selection: (t1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn type_text_at_between_folds_gap_creates_paragraph() {
+        // Between-monolithic gap between two folds (the trailing paragraph
+        // makes the slot paragraph-admittable). Typing materializes a
+        // paragraph at that slot and lands the text in it.
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "z".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                paragraph { t1: text("z") }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn fragment_at_leading_gap_places_block_no_leftover_paragraph() {
+        // Inserting a block fragment into the materialized empty paragraph
+        // replaces it (existing "block into empty paragraph" behavior), so
+        // the gap yields the block at index 0 with no leftover paragraph.
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Fragment {
+                fragment: editor_model::Fragment::leaf(editor_model::PlainNode::HorizontalRule(
+                    editor_model::PlainHorizontalRuleNode::default(),
+                )),
+            },
+        });
+        let root = editor.state().doc.node(editor_model::NodeId::ROOT).unwrap();
+        let kinds: Vec<_> = root.children().map(|c| c.node().clone()).collect();
+        assert!(
+            matches!(kinds.first(), Some(editor_model::Node::HorizontalRule(_))),
+            "gap fragment must place the block at index 0 (no leftover empty paragraph)"
+        );
+        assert!(matches!(kinds.get(1), Some(editor_model::Node::Image(_))));
+        assert!(
+            !root
+                .children()
+                .any(|c| matches!(c.node(), editor_model::Node::Paragraph(_))
+                    && c.children().next().is_none()),
+            "no leftover empty paragraph from materialization"
+        );
+        // Caret position is insert_fragment-internal behavior already
+        // covered by existing insert_fragment tests; only structure is
+        // asserted here.
+    }
+
+    #[test]
+    fn type_text_with_normal_caret_unaffected() {
+        // Non-gap caret: materialize_gap_paragraph returns Ok(false) so
+        // the existing first! fallback path is preserved exactly.
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: " w".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("hello w") } } }
+            selection: (t1, 7)
         };
         assert_state_eq!(editor.state(), &expected);
     }
