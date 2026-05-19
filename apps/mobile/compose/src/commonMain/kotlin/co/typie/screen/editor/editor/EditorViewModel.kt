@@ -55,7 +55,11 @@ class EditorViewModel(val entityId: String) : ViewModel() {
       placeholderData = placeholderData(),
       onInitialData = { data ->
         viewEntity(data.entity.site.id)
-        FontLoader.loadFonts(data.entity.node.onDocument!!.fontLoader_Document)
+        FontLoader.loadFonts(
+          data.entity.node.onDocument!!.fontLoader_Document.fontFamilies.map {
+            it.fontLoader_FontFamily
+          }
+        )
       },
     ) {
       EditorScreen_Query(entityId = entityId)

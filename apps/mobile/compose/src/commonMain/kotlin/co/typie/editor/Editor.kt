@@ -15,6 +15,7 @@ import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ModifierState
+import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
@@ -372,24 +373,58 @@ internal constructor(
       dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
       onError: (Editor, Throwable) -> Unit = { _, _ -> },
     ): Editor =
-      withContext(Dispatchers.Default) {
-        val inner = PlatformModule.editorHost.createEditorFromGraph(graph, viewport)
-        val editor = Editor(inner, scope, dispatcher, onError)
+      createInitialized(
+        scope = scope,
+        themeVariant = themeVariant,
+        dispatcher = dispatcher,
+        onError = onError,
+        createInner = { PlatformModule.editorHost.createEditorFromGraph(graph, viewport) },
+      )
 
-        editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
+    suspend fun createFromDoc(
+      doc: PlainDoc,
+      viewport: Viewport,
+      scope: CoroutineScope,
+      themeVariant: ThemeVariant = ThemeVariant.LightWhite,
+      dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+      onError: (Editor, Throwable) -> Unit = { _, _ -> },
+    ): Editor =
+      createInitialized(
+        scope = scope,
+        themeVariant = themeVariant,
+        dispatcher = dispatcher,
+        onError = onError,
+        createInner = { PlatformModule.editorHost.createEditorFromDoc(doc, viewport) },
+      )
 
-        try {
-          editor.awaitOrThrow {
-            enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
-            enqueue(Message.System(SystemEvent.Initialize))
+    private suspend fun createInitialized(
+      scope: CoroutineScope,
+      themeVariant: ThemeVariant,
+      dispatcher: CoroutineDispatcher,
+      onError: (Editor, Throwable) -> Unit,
+      createInner: () -> co.typie.editor.ffi.Editor,
+    ): Editor {
+      var createdEditor: Editor? = null
+      return try {
+        val editor =
+          withContext(Dispatchers.Default) {
+            val editor = Editor(createInner(), scope, dispatcher, onError)
+            createdEditor = editor
+
+            editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
+            editor.awaitOrThrow {
+              enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
+              enqueue(Message.System(SystemEvent.Initialize))
+            }
+            editor
           }
-        } catch (e: Throwable) {
-          editor.dispose()
-          throw e
-        }
 
         EditorRegistry.register(editor)
+        createdEditor = null
         editor
+      } finally {
+        createdEditor?.dispose()
       }
+    }
   }
 }

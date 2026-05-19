@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,7 +35,6 @@ import co.typie.editor.EditorValues
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.matchWeight
 import co.typie.ext.clickable
-import co.typie.ext.excludeBottom
 import co.typie.ext.imePadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.PresetSettingsScreen_Query
@@ -92,22 +94,42 @@ fun PresetSettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
+  val screenBackground =
+    when (model.preset.layout) {
+      is PresetPageLayout.Continuous -> AppTheme.colors.surfaceDefault
+      is PresetPageLayout.Paginated -> AppTheme.colors.surfaceInset
+    }
+
   Screen(
     loadable = model.query,
-    background = AppTheme.colors.surfaceInset,
+    background = screenBackground,
     contentPadding = PaddingValues.Zero,
   ) { contentPadding ->
     val colors = AppTheme.colors
+    val layoutDirection = LocalLayoutDirection.current
+    val topBarClearance = contentPadding.calculateTopPadding()
     val previewHeight = 200.dp
+    val previewContainerHeight = topBarClearance + previewHeight
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
 
-    Box(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeBottom())) {
+    Box(
+      modifier =
+        Modifier.fillMaxSize()
+          .imePadding()
+          .padding(
+            start = contentPadding.calculateStartPadding(layoutDirection),
+            end = contentPadding.calculateEndPadding(layoutDirection),
+          )
+    ) {
       Column(
         modifier =
           Modifier.fillMaxSize()
             .verticalScroll(scrollState)
             .background(colors.surfaceDefault)
-            .padding(top = previewHeight + 12.dp, bottom = contentPadding.calculateBottomPadding())
+            .padding(
+              top = previewContainerHeight + 12.dp,
+              bottom = contentPadding.calculateBottomPadding(),
+            )
             .padding(AppTheme.spacings.scrollBottomPadding)
       ) {
         FontSection(model = model, sheet = sheet, onSave = ::save)
@@ -126,19 +148,18 @@ fun PresetSettingsScreen() {
       }
 
       Box(modifier = Modifier.fillMaxWidth()) {
-        Box(
-          modifier =
-            Modifier.fillMaxWidth()
-              .height(previewHeight)
-              .background(colors.surfaceInset, previewShape)
-              .zIndex(1f)
+        PresetPreview(
+          preset = model.preset,
+          modifier = Modifier.fillMaxWidth().height(previewContainerHeight).zIndex(1f),
+          shape = previewShape,
+          contentTopPadding = topBarClearance,
         )
 
         Box(
           modifier =
             Modifier.fillMaxWidth()
               .height(16.dp + AppShapes.xl / 2)
-              .offset(y = previewHeight - AppShapes.xl / 2)
+              .offset(y = previewContainerHeight - AppShapes.xl / 2)
               .background(
                 Brush.verticalGradient(
                   colors = listOf(colors.surfaceInset, colors.surfaceInset.copy(alpha = 0f))

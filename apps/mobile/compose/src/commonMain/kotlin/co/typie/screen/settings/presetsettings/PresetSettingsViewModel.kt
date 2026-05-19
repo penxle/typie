@@ -4,6 +4,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.editor.FontLoader
 import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.PresetSettingsScreen_Query
@@ -11,6 +12,7 @@ import co.typie.graphql.PresetSettingsScreen_UpdatePreferences_Mutation
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
+import co.typie.graphql.type.FontFamilySource
 import co.typie.graphql.type.FontFamilyState
 import co.typie.graphql.type.FontState
 import co.typie.graphql.type.UpdatePreferencesInput
@@ -24,7 +26,23 @@ import kotlinx.serialization.json.encodeToJsonElement
 
 internal class PresetSettingsViewModel : ViewModel() {
   val query =
-    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderData(),
+      onInitialData = { data ->
+        FontLoader.loadFonts(
+          data.me.documentFontFamilies
+            .filter { it.state == FontFamilyState.ACTIVE }
+            .map { family ->
+              val activeFontIds =
+                family.fonts.filter { it.state == FontState.ACTIVE }.map { it.id }.toSet()
+              family.fontLoader_FontFamily.copy(
+                fonts = family.fontLoader_FontFamily.fonts.filter { it.id in activeFontIds }
+              )
+            }
+        )
+      },
+    ) {
       PresetSettingsScreen_Query()
     }
 
@@ -34,7 +52,7 @@ internal class PresetSettingsViewModel : ViewModel() {
 
   val fontFamilies by derivedStateOf {
     query.data.me.documentFontFamilies
-      .filter { it.state == FontFamilyState.ACTIVE }
+      .filter { it.state == FontFamilyState.ACTIVE && it.source != FontFamilySource.FALLBACK }
       .map { family ->
         family.copy(fonts = family.fonts.filter { font -> font.state == FontState.ACTIVE })
       }

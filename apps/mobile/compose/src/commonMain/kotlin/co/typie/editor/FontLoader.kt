@@ -7,7 +7,8 @@ import co.typie.editor.ffi.FontFamilySource
 import co.typie.editor.ffi.FontWeight
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
-import co.typie.graphql.fragment.FontLoader_Document
+import co.typie.graphql.fragment.FontLoader_FontFamily
+import co.typie.graphql.type.FontFamilySource as GraphqlFontFamilySource
 import co.typie.network.Http
 import co.typie.platform.PlatformModule
 import co.typie.serialization.json
@@ -47,16 +48,16 @@ object FontLoader {
 
   private fun fontKey(family: String, weight: Int): String = "$family:$weight"
 
-  suspend fun loadFonts(document: FontLoader_Document) =
+  suspend fun loadFonts(families: List<FontLoader_FontFamily>) =
     withContext(Dispatchers.Default) {
-      updateFontPaths(document.fontFamilies)
-      PlatformModule.editorHost.setFonts(document.fontFamilies.map { it.toFfi() })
+      updateFontPaths(families)
+      PlatformModule.editorHost.setFonts(families.map { it.toFfi() })
       for (editor in EditorRegistry.snapshot()) {
         editor.enqueue(Message.System(SystemEvent.FontsChanged))
       }
     }
 
-  private fun updateFontPaths(families: List<FontLoader_Document.FontFamily>) {
+  private fun updateFontPaths(families: List<FontLoader_FontFamily>) {
     for (family in families) {
       for (font in family.fonts) {
         fontPaths[fontKey(family.familyName, font.weight)] = FontPathEntry(font.path, font.hash)
@@ -248,16 +249,15 @@ object FontLoader {
   }
 }
 
-private fun FontLoader_Document.FontFamily.toFfi(): FontFamily =
+private fun FontLoader_FontFamily.toFfi(): FontFamily =
   FontFamily(
     name = familyName,
     source =
       when (source) {
-        co.typie.graphql.type.FontFamilySource.DEFAULT -> FontFamilySource.Default
-        co.typie.graphql.type.FontFamilySource.USER -> FontFamilySource.User
-        co.typie.graphql.type.FontFamilySource.FALLBACK -> FontFamilySource.Fallback
-        co.typie.graphql.type.FontFamilySource.UNKNOWN__ ->
-          error("Unknown FontFamilySource from server: $source")
+        GraphqlFontFamilySource.DEFAULT -> FontFamilySource.Default
+        GraphqlFontFamilySource.USER -> FontFamilySource.User
+        GraphqlFontFamilySource.FALLBACK -> FontFamilySource.Fallback
+        GraphqlFontFamilySource.UNKNOWN__ -> error("Unknown FontFamilySource from server: $source")
       },
     weights =
       fonts.map { f ->

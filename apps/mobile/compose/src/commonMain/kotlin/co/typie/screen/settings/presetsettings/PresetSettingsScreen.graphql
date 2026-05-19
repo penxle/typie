@@ -3,7 +3,8 @@ query PresetSettingsScreen_Query {
     id
     preferences
 
-    documentFontFamilies {
+    documentFontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
+      ...FontLoader_FontFamily
       id
       familyName
       displayName
