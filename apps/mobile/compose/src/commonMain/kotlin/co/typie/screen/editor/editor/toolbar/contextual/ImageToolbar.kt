@@ -3,12 +3,21 @@ package co.typie.screen.editor.editor.toolbar.contextual
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import co.typie.domain.blob.BlobService
+import co.typie.editor.Editor
 import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.EditorImageUpload
 import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.Fragment
+import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_PersistBlobAsImage_Mutation
 import co.typie.graphql.executeMutation
@@ -42,55 +51,104 @@ private fun EditorImageToolbar(
   modifier: Modifier = Modifier,
 ) {
   val toast = LocalToast.current
+  val runtime = LocalEditorRuntime.current
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val imageState = LocalEditorExternalElementState.current.images
   val imageId = image?.id
   val uploading = nodeId?.let { imageState.uploads.containsKey(it) } == true
   val hasImage = imageId != null || uploading
 
   val picker =
-    rememberFilePicker(selectionMode = FilePickerSelectionMode.Single) { files ->
+    rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { files ->
       val selectedNodeId = nodeId ?: return@rememberFilePicker
-      val selectedImage = files.firstOrNull() ?: return@rememberFilePicker
-      val width = selectedImage.imageWidth
-      val height = selectedImage.imageHeight
-      if (width == null || height == null || width <= 0 || height <= 0) {
+      if (files.isEmpty()) {
+        return@rememberFilePicker
+      }
+      val imageUploads = files.mapNotNull { file ->
+        val upload = file.toImageUploadOrNull() ?: return@mapNotNull null
+        file to upload
+      }
+      if (imageUploads.isEmpty()) {
         toast.error("이미지를 불러올 수 없어요.")
         return@rememberFilePicker
       }
+      val skippedImageCount = files.size - imageUploads.size
+      val (selectedImage, selectedUpload) = imageUploads.first()
+      val restUploads = imageUploads.drop(1)
 
       scope.commandScope.launch {
-        val upload =
-          EditorImageUpload(
-            bytes = selectedImage.bytes,
-            name = selectedImage.filename,
-            width = width,
-            height = height,
-          )
-        imageState.uploads[selectedNodeId] = upload
-        try {
-          // TODO(TR-38): Check restrictedBlob before starting image uploads and surface the
-          // plan upgrade flow instead of letting the upload proceed.
-          val uploaded = uploadImageAsset(selectedImage)
-          if (imageState.uploads[selectedNodeId] !== upload) {
-            return@launch
-          }
-          imageState.assets[uploaded.id] = uploaded
-          scope.sendMessage(
-            Message.Node(
-              NodeOp.SetAttrs(
-                id = selectedNodeId,
-                attrs = PlainNode.Image(id = uploaded.id, proportion = image?.proportion ?: 100),
-              )
+        imageState.uploads[selectedNodeId] = selectedUpload
+
+        val restNodeIds =
+          try {
+            insertImagePlaceholders(
+              editor = runtime.editor,
+              bringIntoViewRequests = bringIntoViewRequests,
+              count = restUploads.size,
             )
-          )
-        } catch (error: CancellationException) {
-          throw error
-        } catch (_: Throwable) {
-          toast.error("이미지 업로드에 실패했어요.")
-        } finally {
-          if (imageState.uploads[selectedNodeId] === upload) {
-            imageState.uploads.remove(selectedNodeId)
+          } catch (error: CancellationException) {
+            throw error
+          } catch (_: Throwable) {
+            toast.error("이미지 업로드에 실패했어요.")
+            emptyList()
           }
+
+        if (skippedImageCount > 0 || restNodeIds.size < restUploads.size) {
+          toast.error("일부 이미지를 삽입하지 못했어요.")
+        }
+
+        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+          imageState.uploads[newNodeId] = pending.second
+        }
+
+        fun launchUpload(
+          targetNodeId: String,
+          file: PickedFile,
+          upload: EditorImageUpload,
+          proportion: Int,
+        ) {
+          launch {
+            try {
+              // TODO(TR-38): Check restrictedBlob before starting image uploads and surface the
+              // plan upgrade flow instead of letting the upload proceed.
+              val uploaded = uploadImageAsset(file)
+              if (imageState.uploads[targetNodeId] !== upload) {
+                return@launch
+              }
+              imageState.assets[uploaded.id] = uploaded
+              scope.sendMessage(
+                Message.Node(
+                  NodeOp.SetAttrs(
+                    id = targetNodeId,
+                    attrs = PlainNode.Image(id = uploaded.id, proportion = proportion),
+                  )
+                )
+              )
+            } catch (error: CancellationException) {
+              throw error
+            } catch (_: Throwable) {
+              toast.error("이미지 업로드에 실패했어요.")
+            } finally {
+              if (imageState.uploads[targetNodeId] === upload) {
+                imageState.uploads.remove(targetNodeId)
+              }
+            }
+          }
+        }
+
+        launchUpload(
+          targetNodeId = selectedNodeId,
+          file = selectedImage,
+          upload = selectedUpload,
+          proportion = image?.proportion ?: 100,
+        )
+        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+          launchUpload(
+            targetNodeId = newNodeId,
+            file = pending.first,
+            upload = pending.second,
+            proportion = 100,
+          )
         }
       }
     }
@@ -114,6 +172,43 @@ private fun EditorImageToolbar(
         }
       },
     )
+  }
+}
+
+private fun PickedFile.toImageUploadOrNull(): EditorImageUpload? {
+  val width = imageWidth
+  val height = imageHeight
+  if (width == null || height == null || width <= 0 || height <= 0) {
+    return null
+  }
+
+  return EditorImageUpload(bytes = bytes, name = filename, width = width, height = height)
+}
+
+private suspend fun insertImagePlaceholders(
+  editor: Editor?,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
+  count: Int,
+): List<String> {
+  if (editor == null || count <= 0) {
+    return emptyList()
+  }
+
+  val beforeNodeIds = editor.imageExternalNodeIds().toSet()
+  editor.awaitWithBringIntoView(bringIntoViewRequests) {
+    repeat(count) {
+      enqueue(Message.Insertion(InsertionOp.Fragment(Fragment(node = PlainNode.Image(id = null)))))
+    }
+    beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+  }
+
+  return editor.imageExternalNodeIds().filterNot(beforeNodeIds::contains)
+}
+
+private fun Editor.imageExternalNodeIds(): List<String> = externalElements.mapNotNull { element ->
+  when (element.data) {
+    is ExternalElementData.Image -> element.nodeId
+    else -> null
   }
 }
 

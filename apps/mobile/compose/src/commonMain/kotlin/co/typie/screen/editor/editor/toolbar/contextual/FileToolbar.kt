@@ -4,12 +4,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import co.typie.domain.blob.BlobService
+import co.typie.editor.Editor
 import co.typie.editor.external.EditorFileAsset
 import co.typie.editor.external.EditorFileUpload
 import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.Fragment
+import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_PersistBlobAsFile_Mutation
 import co.typie.graphql.executeMutation
@@ -43,6 +52,8 @@ private fun EditorFileToolbar(
   modifier: Modifier = Modifier,
 ) {
   val toast = LocalToast.current
+  val runtime = LocalEditorRuntime.current
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val uriHandler = LocalUriHandler.current
   val fileState = LocalEditorExternalElementState.current.files
   val fileId = file?.id
@@ -51,35 +62,67 @@ private fun EditorFileToolbar(
   val hasFile = fileId != null || uploading
 
   val picker =
-    rememberFilePicker(selectionMode = FilePickerSelectionMode.Single) { files ->
+    rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { files ->
       val selectedNodeId = nodeId ?: return@rememberFilePicker
       val selectedFile = files.firstOrNull() ?: return@rememberFilePicker
+      val selectedUpload = selectedFile.toFileUpload()
+      val restUploads = files.drop(1).map { file -> file to file.toFileUpload() }
 
       scope.commandScope.launch {
-        val upload =
-          EditorFileUpload(name = selectedFile.filename, size = selectedFile.bytes.size.toLong())
-        fileState.uploads[selectedNodeId] = upload
-        try {
-          // TODO(TR-38): Check restrictedBlob before starting file uploads and surface the
-          // plan upgrade flow instead of letting the upload proceed.
-          val uploaded = uploadFileAsset(selectedFile)
-          if (fileState.uploads[selectedNodeId] !== upload) {
-            return@launch
-          }
-          fileState.assets[uploaded.id] = uploaded
-          scope.sendMessage(
-            Message.Node(
-              NodeOp.SetAttrs(id = selectedNodeId, attrs = PlainNode.File(id = uploaded.id))
+        fileState.uploads[selectedNodeId] = selectedUpload
+
+        val restNodeIds =
+          try {
+            insertFilePlaceholders(
+              editor = runtime.editor,
+              bringIntoViewRequests = bringIntoViewRequests,
+              count = restUploads.size,
             )
-          )
-        } catch (error: CancellationException) {
-          throw error
-        } catch (_: Throwable) {
-          toast.error("파일 업로드에 실패했어요.")
-        } finally {
-          if (fileState.uploads[selectedNodeId] === upload) {
-            fileState.uploads.remove(selectedNodeId)
+          } catch (error: CancellationException) {
+            throw error
+          } catch (_: Throwable) {
+            toast.error("파일 업로드에 실패했어요.")
+            emptyList()
           }
+
+        if (restNodeIds.size < restUploads.size) {
+          toast.error("일부 파일을 삽입하지 못했어요.")
+        }
+
+        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+          fileState.uploads[newNodeId] = pending.second
+        }
+
+        fun launchUpload(targetNodeId: String, file: PickedFile, upload: EditorFileUpload) {
+          launch {
+            try {
+              // TODO(TR-38): Check restrictedBlob before starting file uploads and surface the
+              // plan upgrade flow instead of letting the upload proceed.
+              val uploaded = uploadFileAsset(file)
+              if (fileState.uploads[targetNodeId] !== upload) {
+                return@launch
+              }
+              fileState.assets[uploaded.id] = uploaded
+              scope.sendMessage(
+                Message.Node(
+                  NodeOp.SetAttrs(id = targetNodeId, attrs = PlainNode.File(id = uploaded.id))
+                )
+              )
+            } catch (error: CancellationException) {
+              throw error
+            } catch (_: Throwable) {
+              toast.error("파일 업로드에 실패했어요.")
+            } finally {
+              if (fileState.uploads[targetNodeId] === upload) {
+                fileState.uploads.remove(targetNodeId)
+              }
+            }
+          }
+        }
+
+        launchUpload(targetNodeId = selectedNodeId, file = selectedFile, upload = selectedUpload)
+        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+          launchUpload(targetNodeId = newNodeId, file = pending.first, upload = pending.second)
         }
       }
     }
@@ -110,6 +153,36 @@ private fun EditorFileToolbar(
         }
       },
     )
+  }
+}
+
+private fun PickedFile.toFileUpload(): EditorFileUpload =
+  EditorFileUpload(name = filename, size = bytes.size.toLong())
+
+private suspend fun insertFilePlaceholders(
+  editor: Editor?,
+  bringIntoViewRequests: EditorBringIntoViewRequests,
+  count: Int,
+): List<String> {
+  if (editor == null || count <= 0) {
+    return emptyList()
+  }
+
+  val beforeNodeIds = editor.fileExternalNodeIds().toSet()
+  editor.awaitWithBringIntoView(bringIntoViewRequests) {
+    repeat(count) {
+      enqueue(Message.Insertion(InsertionOp.Fragment(Fragment(node = PlainNode.File(id = null)))))
+    }
+    beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+  }
+
+  return editor.fileExternalNodeIds().filterNot(beforeNodeIds::contains)
+}
+
+private fun Editor.fileExternalNodeIds(): List<String> = externalElements.mapNotNull { element ->
+  when (element.data) {
+    is ExternalElementData.File -> element.nodeId
+    else -> null
   }
 }
 
