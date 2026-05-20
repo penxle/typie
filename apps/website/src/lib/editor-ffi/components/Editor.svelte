@@ -125,9 +125,9 @@
   ondrop={(e) => {
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
+    e.preventDefault();
     const imageFiles = [...files].filter((file) => file.type.startsWith('image/'));
     if (imageFiles.length === 0) return;
-    e.preventDefault();
     ctx.editor?.insertImagesFromFiles(imageFiles);
   }}
   onfocusin={() => ctx.editor?.focus()}

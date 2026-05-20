@@ -63,10 +63,10 @@ builder.mutationFields((t) => ({
 
       await assertSitePermission({ userId: ctx.session.userId, siteId: docEntity.siteId });
 
+      let graph = await readMergedGraph(input.documentId);
+
       let opsCount: number;
-      let graph: Uint8Array;
       try {
-        graph = await readMergedGraph(input.documentId);
         opsCount = await wasm.use((host) => {
           const count = host.peek_changeset_ops_count(input.changesets);
           if (count > 0) {
