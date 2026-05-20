@@ -206,6 +206,9 @@ export const processImageUpload = async ({
     editor.inflightImages.set(nodeId, { url: objectUrl, width, height });
 
     const uploadedImage = await uploadImage(file);
+    if (!editor.inflightImages.has(nodeId)) {
+      return { ok: false, error: new Error('Upload cancelled') };
+    }
     editor.imageAssets.set(uploadedImage.id, uploadedImage);
     editor.enqueue(
       createSetImageAttrsMessage({
