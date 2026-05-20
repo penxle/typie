@@ -38,7 +38,6 @@ pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> Com
     let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, modifier_type);
 
     if applicable_node_ids.is_empty() {
-        compact_and_restore_selection(tr, &node_ids)?;
         return Ok(false);
     }
 

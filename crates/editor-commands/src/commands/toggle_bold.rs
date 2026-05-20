@@ -27,7 +27,6 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, ModifierType::Bold);
 
     if applicable_node_ids.is_empty() {
-        compact_and_restore_selection(tr, &node_ids)?;
         return Ok(false);
     }
 
@@ -712,6 +711,35 @@ mod tests {
                 }
             }
             selection: (t1, 0) -> (t1, 9)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_bold_on_fold_title_only_is_noop() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { text("Body") } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let (actual, ..) = transact_fail!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { text("Body") } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }

@@ -91,7 +91,6 @@ fn set_modifier_range_text(tr: &mut Transaction, modifier: &Modifier) -> Command
     let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, modifier.as_type());
 
     if applicable_node_ids.is_empty() {
-        compact_and_restore_selection(tr, &node_ids)?;
         return Ok(false);
     }
 
@@ -405,6 +404,37 @@ mod tests {
                 }
             }
             selection: (t1, 0) -> (t2, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_set_font_size_on_fold_title_only_is_noop() {
+        let (initial, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { text("Body") } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let (actual, ..) = transact_fail!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    fold {
+                        fold_title { t1: text("Title") }
+                        fold_content { paragraph { text("Body") } }
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
