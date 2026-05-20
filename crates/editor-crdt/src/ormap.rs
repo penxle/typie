@@ -25,14 +25,11 @@ pub enum OrMapOp<K, V> {
     },
 }
 
-/// **Reference impl — do not embed in an editor as-is.**
-/// `get()` / `contains_key()` / `iter()` / `len()` are O(n) full-scan over entries.
-/// Editor integration must replace this with an inverted index `K → HashSet<Dot>`
-/// (or a per-K winner cache) before exposing `OrMap<K, V>` to user-facing operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OrMap<K, V> {
+pub struct OrMap<K: Clone + Eq + Hash, V: Clone + Eq> {
     entries: imbl::HashMap<Dot, OrMapEntry<K, V>>,
     pending_tombstones: imbl::HashSet<Dot>,
+    by_key: imbl::HashMap<K, imbl::HashSet<Dot>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,64 +39,44 @@ struct OrMapEntry<K, V> {
     alive: bool,
 }
 
-impl<K, V> OrMap<K, V> {
+impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
     pub fn new() -> Self {
         Self {
             entries: imbl::HashMap::new(),
             pending_tombstones: imbl::HashSet::new(),
+            by_key: imbl::HashMap::new(),
         }
     }
 }
 
 impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
     pub fn len(&self) -> usize {
-        self.iter().count()
+        self.by_key.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.by_key.is_empty()
     }
 
     pub fn contains_key(&self, key: &K) -> bool {
-        self.get(key).is_some()
+        self.by_key.contains_key(key)
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.entries
-            .iter()
-            .filter(|(_, e)| e.alive && &e.key == key)
-            .max_by_key(|(d, _)| *d)
-            .map(|(_, e)| &e.value)
+        let dots = self.by_key.get(key)?;
+        let winner = dots.iter().max()?;
+        self.entries.get(winner).map(|e| &e.value)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> + '_ {
-        let mut winners: std::collections::HashMap<&K, (Dot, &V)> =
-            std::collections::HashMap::new();
-        for (dot, entry) in self.entries.iter() {
-            if !entry.alive {
-                continue;
-            }
-            winners
-                .entry(&entry.key)
-                .and_modify(|(d, v)| {
-                    if *dot > *d {
-                        *d = *dot;
-                        *v = &entry.value;
-                    }
-                })
-                .or_insert((*dot, &entry.value));
-        }
-        winners.into_iter().map(|(k, (_, v))| (k, v))
+        self.by_key.iter().filter_map(|(k, dots)| {
+            let winner = dots.iter().max()?;
+            self.entries.get(winner).map(|e| (k, &e.value))
+        })
     }
 
     pub fn tags_for<'a>(&'a self, key: &'a K) -> impl Iterator<Item = &'a Dot> + 'a {
-        self.entries.iter().filter_map(move |(dot, e)| {
-            if e.alive && &e.key == key {
-                Some(dot)
-            } else {
-                None
-            }
-        })
+        self.by_key.get(key).into_iter().flat_map(|s| s.iter())
     }
 
     pub fn apply(&self, id: Dot, op: OrMapOp<K, V>) -> Result<Self, CrdtError> {
@@ -117,18 +94,31 @@ impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
             return Ok(self.clone());
         }
         let alive = !self.pending_tombstones.contains(&id);
+        let new_by_key = if alive {
+            let updated = self
+                .by_key
+                .get(&key)
+                .cloned()
+                .unwrap_or_else(imbl::HashSet::new)
+                .update(id);
+            self.by_key.update(key.clone(), updated)
+        } else {
+            self.by_key.clone()
+        };
         let entry = OrMapEntry { key, value, alive };
         Ok(Self {
             entries: self.entries.update(id, entry),
             pending_tombstones: self.pending_tombstones.without(&id),
+            by_key: new_by_key,
         })
     }
 
     fn apply_unset(&self, observed: Vec<Dot>) -> Self {
         let mut entries = self.entries.clone();
         let mut pending = self.pending_tombstones.clone();
+        let mut by_key = self.by_key.clone();
         for dot in observed {
-            match entries.get(&dot) {
+            match entries.get(&dot).cloned() {
                 Some(entry) if entry.alive => {
                     let new_entry = OrMapEntry {
                         key: entry.key.clone(),
@@ -136,6 +126,14 @@ impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
                         alive: false,
                     };
                     entries = entries.update(dot, new_entry);
+                    if let Some(set) = by_key.get(&entry.key).cloned() {
+                        let updated = set.without(&dot);
+                        by_key = if updated.is_empty() {
+                            by_key.without(&entry.key)
+                        } else {
+                            by_key.update(entry.key, updated)
+                        };
+                    }
                 }
                 Some(_) => {}
                 None => {
@@ -146,11 +144,12 @@ impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
         Self {
             entries,
             pending_tombstones: pending,
+            by_key,
         }
     }
 }
 
-impl<K, V> Default for OrMap<K, V> {
+impl<K: Clone + Eq + Hash, V: Clone + Eq> Default for OrMap<K, V> {
     fn default() -> Self {
         Self::new()
     }
