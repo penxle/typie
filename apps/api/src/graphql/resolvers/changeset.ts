@@ -64,10 +64,20 @@ builder.mutationFields((t) => ({
       await assertSitePermission({ userId: ctx.session.userId, siteId: docEntity.siteId });
 
       let opsCount: number;
+      let graph: Uint8Array;
       try {
-        opsCount = await wasm.use((host) => host.peek_changeset_ops_count(input.changesets));
+        graph = await readMergedGraph(input.documentId);
+        opsCount = await wasm.use((host) => {
+          const count = host.peek_changeset_ops_count(input.changesets);
+          if (count > 0) {
+            const candidate = host.apply(graph, input.changesets);
+            host.verify_plain(host.to_plain(candidate));
+          }
+          return count;
+        });
       } catch {
-        throw new TypieError({ code: 'invalid_changeset_payload' });
+        await enqueueJob('document:changesets:collect', input.documentId);
+        throw new TypieError({ code: 'invalid_changeset_payload', status: 400 });
       }
 
       if (opsCount > 0) {
@@ -83,7 +93,7 @@ builder.mutationFields((t) => ({
 
       // Compute heads after lpush so the merged graph reflects this push.
       // Receivers of the broadcast see heads that include the just-pushed bundle.
-      const graph = await readMergedGraph(input.documentId);
+      graph = await readMergedGraph(input.documentId);
       const heads = await wasm.use((host) => host.heads(graph));
 
       if (opsCount > 0) {

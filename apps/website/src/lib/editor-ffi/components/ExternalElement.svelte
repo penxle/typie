@@ -9,6 +9,7 @@
   import ImageIcon from '~icons/lucide/image';
   import { THEME_COLORS } from '$lib/editor/theme';
   import { getEditorContext } from '../editor.svelte';
+  import ExternalImage from './ExternalImage.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
   import type { Component } from 'svelte';
 
@@ -79,58 +80,62 @@
   });
 </script>
 
-<div
-  style:left={`${element.bounds.x}px`}
-  style:top={`${element.bounds.y}px`}
-  style:width={`${element.bounds.width}px`}
-  class={css({
-    position: 'absolute',
-    userSelect: 'none',
-    display: 'flex',
-    justifyContent: 'center',
-    visibility: reportedHeight === undefined ? 'hidden' : 'visible',
-  })}
-  data-external-element
-  data-node-id={element.node_id}
->
-  <div bind:this={containerEl} class={css({ width: 'full', minHeight: '48px' })}>
-    <div
-      class={flex({
-        align: 'center',
-        gap: '12px',
-        width: 'full',
-        minHeight: '48px',
-        paddingX: '14px',
-        paddingY: '12px',
-        borderRadius: '4px',
-        backgroundColor: 'surface.muted',
-        color: 'text.disabled',
-        fontSize: '14px',
-      })}
-    >
-      <Icon class={css({ flexShrink: '0' })} icon={meta.icon} size={20} />
-      <span
-        class={css({
-          minWidth: '0',
-          overflow: 'hidden',
-          whiteSpace: 'nowrap',
-          textOverflow: 'ellipsis',
+{#if element.data.type === 'image'}
+  <ExternalImage {element} />
+{:else}
+  <div
+    style:left={`${element.bounds.x}px`}
+    style:top={`${element.bounds.y}px`}
+    style:width={`${element.bounds.width}px`}
+    class={css({
+      position: 'absolute',
+      userSelect: 'none',
+      display: 'flex',
+      justifyContent: 'center',
+      visibility: reportedHeight === undefined ? 'hidden' : 'visible',
+    })}
+    data-external-element
+    data-node-id={element.node_id}
+  >
+    <div bind:this={containerEl} class={css({ width: 'full', minHeight: '48px' })}>
+      <div
+        class={flex({
+          align: 'center',
+          gap: '12px',
+          width: 'full',
+          minHeight: '48px',
+          paddingX: '14px',
+          paddingY: '12px',
+          borderRadius: '4px',
+          backgroundColor: 'surface.muted',
+          color: 'text.disabled',
+          fontSize: '14px',
         })}
       >
-        {meta.label}
-      </span>
+        <Icon class={css({ flexShrink: '0' })} icon={meta.icon} size={20} />
+        <span
+          class={css({
+            minWidth: '0',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          })}
+        >
+          {meta.label}
+        </span>
+      </div>
     </div>
-  </div>
 
-  {#if element.is_selected}
-    <div
-      style:background-color={selectionColor}
-      style:opacity={selectionOpacity}
-      class={css({
-        position: 'absolute',
-        inset: '0',
-        pointerEvents: 'none',
-      })}
-    ></div>
-  {/if}
-</div>
+    {#if element.is_selected}
+      <div
+        style:background-color={selectionColor}
+        style:opacity={selectionOpacity}
+        class={css({
+          position: 'absolute',
+          inset: '0',
+          pointerEvents: 'none',
+        })}
+      ></div>
+    {/if}
+  </div>
+{/if}

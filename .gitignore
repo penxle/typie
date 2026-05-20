@@ -32,7 +32,10 @@ vite.config.ts.timestamp-*
 
 .claude/worktrees/
 .superpowers/
+.openchrome/
 docs/superpowers/
+docs/tasks/
+docs/file-based-planning-workflow/
 
 *.tsx.js
 *.tsx.d.ts

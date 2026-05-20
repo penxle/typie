@@ -12,7 +12,8 @@ export type DebugEvent =
   | { kind: 'push.success'; durationMs: number }
   | { kind: 'push.error'; message: string }
   | { kind: 'subscription.received'; bytes: number }
-  | { kind: 'poll.applied'; bytes: number };
+  | { kind: 'poll.applied'; bytes: number }
+  | { kind: 'poll.error'; message: string };
 
 export type TimelineEntry = { id: number; ts: number } & DebugEvent;
 
@@ -29,6 +30,9 @@ export const eventCategory = (kind: DebugEvent['kind']): DebugEventCategory => {
       return 'subscription';
     }
     case 'poll.applied': {
+      return 'poll';
+    }
+    case 'poll.error': {
       return 'poll';
     }
   }

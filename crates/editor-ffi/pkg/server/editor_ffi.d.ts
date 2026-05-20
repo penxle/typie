@@ -410,6 +410,7 @@ export interface PlainHorizontalRuleNode {
 export interface PlainImageNode {
     id: string | undefined;
     proportion?: number;
+    upload_id?: string | undefined;
 }
 
 export interface PlainListItemNode {}
@@ -508,7 +509,7 @@ export type Effect = { load_font: { family: string; weight: number; codepoints: 
 
 export type EmbedNodeAttr = { type: "id" } & string | undefined;
 
-export type ExternalElementData = { type: "image"; id: string | undefined; proportion: number } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
+export type ExternalElementData = { type: "image"; id: string | undefined; upload_id: string | undefined; proportion: number } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
 
 export type FileNodeAttr = { type: "id" } & string | undefined;
 
@@ -536,7 +537,7 @@ export type HorizontalRuleNodeAttr = { type: "variant" } & HorizontalRuleVariant
 
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
 
-export type ImageNodeAttr = ({ type: "id" } & string | undefined) | ({ type: "proportion" } & number);
+export type ImageNodeAttr = ({ type: "id" } & string | undefined) | ({ type: "proportion" } & number) | ({ type: "upload_id" } & string | undefined);
 
 export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment };
 
@@ -562,7 +563,7 @@ export type NodeAttr = { type: "root"; attr: RootNodeAttr } | { type: "paragraph
 
 export type NodeId = string;
 
-export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: PlainNode } | { type: "table"; id: NodeId; op: TableOp };
+export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: PlainNode } | { type: "set_image_id"; id: NodeId; image_id: string } | { type: "set_image_proportion"; id: NodeId; proportion: number } | { type: "table"; id: NodeId; op: TableOp };
 
 export type OrderedListNodeAttr = void;
 

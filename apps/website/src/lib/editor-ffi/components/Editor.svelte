@@ -117,6 +117,19 @@
       if (ctx.editor) ctx.editor.scrollContainerEl = undefined;
     };
   }}
+  ondragover={(e) => {
+    if (e.dataTransfer?.types.includes('Files')) {
+      e.preventDefault();
+    }
+  }}
+  ondrop={(e) => {
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    const imageFiles = [...files].filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+    ctx.editor?.insertImagesFromFiles(imageFiles);
+  }}
   onfocusin={() => ctx.editor?.focus()}
   onfocusout={() => {
     if (!window.document.hasFocus()) return;

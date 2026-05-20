@@ -1,14 +1,17 @@
 <script lang="ts">
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
+  import { getAppContext } from '@typie/ui/context';
   import { onDestroy, untrack } from 'svelte';
   import EditorComponent from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
+  import { PlanUpgradeDialog } from '../../plan-upgrade-dialog.svelte';
   import { DebugBus } from './@debug/debug-bus.svelte';
   import DebugPanel from './@debug/DebugPanel.svelte';
   import BottomToolbar from './BottomToolbar.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
+  import { describeSyncError } from './sync/errors';
   import { Pusher } from './sync/pusher.svelte';
   import TopToolbar from './TopToolbar.svelte';
   import type { DocumentEditorV2_document$key } from '$mearie';
@@ -25,6 +28,18 @@
       fragment DocumentEditorV2_document on Document {
         id
         title
+        assets {
+          __typename
+
+          ... on Image {
+            id
+            url
+            originalUrl
+            width
+            height
+            placeholder
+          }
+        }
         state {
           graph
           updatedAt
@@ -38,6 +53,7 @@
   );
 
   const ctx = setupEditorContext();
+  const app = getAppContext();
   const bus = new DebugBus();
   const clientId = crypto.randomUUID();
   let pusher = $state<Pusher | null>(null);
@@ -166,15 +182,21 @@
       const ed = ctx.editor;
       const heads = lastConfirmedHeads;
       if (!ed || heads === null) return;
-      const result = await pullDocumentChangesets({
-        input: { documentId: document.data.id, heads: heads.toBase64() },
-      });
-      const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.changesets);
-      if (missing.length > 0) {
-        ed.receiveRemoteChangeset(missing);
-        bus.emit({ kind: 'poll.applied', bytes: missing.length });
+      try {
+        const result = await pullDocumentChangesets({
+          input: { documentId: document.data.id, heads: heads.toBase64() },
+        });
+        const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.changesets);
+        if (missing.length > 0) {
+          ed.receiveRemoteChangeset(missing);
+          bus.emit({ kind: 'poll.applied', bytes: missing.length });
+        }
+        lastConfirmedHeads = Uint8Array.fromBase64(result.pullDocumentChangesets.heads);
+      } catch (err) {
+        const message = describeSyncError(err);
+        bus.emit({ kind: 'poll.error', message });
+        console.warn('DocumentEditorV2: poll failed', message, err);
       }
-      lastConfirmedHeads = Uint8Array.fromBase64(result.pullDocumentChangesets.heads);
     }, 10_000);
 
     return () => {
@@ -183,6 +205,37 @@
       ps.stop();
       pusher = null;
     };
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
+
+    for (const asset of document.data.assets) {
+      if (asset.__typename !== 'Image') continue;
+      editor.imageAssets.set(asset.id, {
+        id: asset.id,
+        url: asset.url,
+        originalUrl: asset.originalUrl,
+        width: asset.width,
+        height: asset.height,
+        placeholder: asset.placeholder,
+      });
+    }
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
+
+    editor.restrictedBlob =
+      Number(app.state.usage.limit.totalBlobSize) !== -1 &&
+      Number(app.state.usage.current.totalBlobSize) >= Number(app.state.usage.limit.totalBlobSize);
+    editor.setEditBlockedHandler(() => {
+      PlanUpgradeDialog.show({
+        message: '현재 플랜의 최대 업로드 가능 용량을 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 업로드하세요.',
+      });
+    });
   });
 
   onDestroy(() => {

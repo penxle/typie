@@ -73,7 +73,11 @@
   })}
   role="toolbar"
 >
-  <ToolbarButton icon={ImageIcon} label="이미지" onclick={() => enqueue(insertFragment({ node: { type: 'image', id: undefined } }))} />
+  <ToolbarButton
+    icon={ImageIcon}
+    label="이미지"
+    onclick={() => enqueue(insertFragment({ node: { type: 'image', id: undefined, upload_id: undefined } }))}
+  />
   <ToolbarButton icon={PaperclipIcon} label="파일" onclick={() => enqueue(insertFragment({ node: { type: 'file', id: undefined } }))} />
   <ToolbarButton icon={FileUpIcon} label="임베드" onclick={() => enqueue(insertFragment({ node: { type: 'embed', id: undefined } }))} />
 

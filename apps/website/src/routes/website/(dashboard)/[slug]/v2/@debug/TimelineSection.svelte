@@ -38,6 +38,9 @@
       case 'poll.applied': {
         return `poll.applied (${entry.bytes}B)`;
       }
+      case 'poll.error': {
+        return `poll.error: ${entry.message}`;
+      }
     }
   }
 

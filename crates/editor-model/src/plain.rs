@@ -410,6 +410,7 @@ mod tests {
                 modifiers: BTreeMap::new(),
                 node: PlainNode::Image(PlainImageNode {
                     id: Some("img-001".to_string()),
+                    upload_id: None,
                     proportion: 50,
                 }),
             },

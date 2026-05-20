@@ -1,4 +1,6 @@
+import { nanoid } from 'nanoid';
 import { createContext, tick, untrack } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
@@ -21,6 +23,21 @@ import type {
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { EditorEventListener } from './types';
+
+export type ImageAsset = {
+  id: string;
+  url: string;
+  originalUrl: string;
+  width: number;
+  height: number;
+  placeholder: string;
+};
+
+export type InflightImage = {
+  url: string;
+  width: number;
+  height: number;
+};
 
 let wasmInitPromise: Promise<void> | null = null;
 
@@ -53,6 +70,11 @@ export class Editor {
   scrollContainerEl = $state<HTMLDivElement>();
 
   readOnly = false;
+  restrictedBlob = $state(false);
+  imageAssets = $state(new SvelteMap<string, ImageAsset>());
+  inflightImages = $state(new SvelteMap<string, InflightImage>());
+  uploadQueue = new SvelteMap<string, File>();
+  #onEditBlocked?: (reason: 'restrictedBlob') => void;
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
@@ -171,6 +193,73 @@ export class Editor {
 
   get focused() {
     return this.#focused;
+  }
+
+  setEditBlockedHandler(handler: (reason: 'restrictedBlob') => void): void {
+    this.#onEditBlocked = handler;
+  }
+
+  queueUpload(uploadId: string, file: File): void {
+    this.uploadQueue.set(uploadId, file);
+    setTimeout(() => {
+      if (this.uploadQueue.has(uploadId)) {
+        this.uploadQueue.delete(uploadId);
+        console.warn('Upload timed out for', uploadId);
+      }
+    }, 30_000);
+  }
+
+  popUpload(uploadId: string): File | undefined {
+    const file = this.uploadQueue.get(uploadId);
+    if (file) {
+      this.uploadQueue.delete(uploadId);
+    }
+    return file;
+  }
+
+  clearImageUpload(uploadId?: string): void {
+    if (uploadId) {
+      this.uploadQueue.delete(uploadId);
+      this.inflightImages.delete(uploadId);
+    }
+  }
+
+  hasExternalElement(nodeId: string): boolean {
+    return this.#externalElements.some((element) => element.node_id === nodeId);
+  }
+
+  blockBlobEdit(): boolean {
+    if (!this.restrictedBlob) {
+      return false;
+    }
+    this.#onEditBlocked?.('restrictedBlob');
+    return true;
+  }
+
+  insertImagesFromFiles(files: Iterable<File>): boolean {
+    if (this.blockBlobEdit()) {
+      return false;
+    }
+
+    let handled = false;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        continue;
+      }
+
+      const uploadId = nanoid();
+      this.queueUpload(uploadId, file);
+      this.enqueue({
+        type: 'insertion',
+        op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined, upload_id: uploadId } } },
+      });
+      handled = true;
+    }
+
+    if (handled) {
+      this.focus();
+    }
+    return handled;
   }
 
   #setFocused(focused: boolean): void {

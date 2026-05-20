@@ -341,6 +341,7 @@ mod tests {
         let plain_before = state.doc.to_plain();
         let new_node = editor_model::PlainNode::Image(editor_model::PlainImageNode {
             id: Some("new-image-id".to_string()),
+            upload_id: None,
             proportion: 50,
         });
         let old_node = state.doc.get_entry(im1).unwrap().node.to_plain();

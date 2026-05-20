@@ -11,10 +11,20 @@ use crate::paginate::{LayoutContent, LayoutNode, LayoutTree};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExternalElementData {
-    Image { id: Option<String>, proportion: u32 },
-    File { id: Option<String> },
-    Embed { id: Option<String> },
-    Archived { id: Option<String> },
+    Image {
+        id: Option<String>,
+        upload_id: Option<String>,
+        proportion: u32,
+    },
+    File {
+        id: Option<String>,
+    },
+    Embed {
+        id: Option<String>,
+    },
+    Archived {
+        id: Option<String>,
+    },
 }
 
 #[ffi]
@@ -107,6 +117,7 @@ fn external_element_data(doc: &Doc, node_id: NodeId) -> Option<ExternalElementDa
     match doc.node(node_id)?.node() {
         Node::Image(img) => Some(ExternalElementData::Image {
             id: img.id.get().clone(),
+            upload_id: img.upload_id.get().clone(),
             proportion: *img.proportion.get(),
         }),
         Node::File(file) => Some(ExternalElementData::File {

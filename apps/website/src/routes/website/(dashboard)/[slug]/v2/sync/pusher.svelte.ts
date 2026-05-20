@@ -1,4 +1,4 @@
-import { isAggregatedError, isExchangeError, isGraphQLError } from '@mearie/svelte';
+import { describeSyncError, isPermanentSyncError } from './errors';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
 import type { PusherEvent, PushStatus } from './types';
 
@@ -6,22 +6,6 @@ const IDLE_MS = 500;
 const MAX_WAIT_MS = 3000;
 const BACKOFF_BASE_MS = 2000;
 const BACKOFF_CAP_MS = 30_000;
-
-const PERMANENT_CODES = new Set(['invalid_changeset_payload']);
-
-function isPermanent(err: unknown): boolean {
-  if (!isAggregatedError(err)) return false;
-  for (const e of err.errors) {
-    if (isGraphQLError(e)) {
-      const code = e.extensions?.code;
-      if (typeof code === 'string' && PERMANENT_CODES.has(code)) return true;
-    } else if (isExchangeError(e, 'http')) {
-      const status = e.extensions?.statusCode;
-      if (typeof status === 'number' && status >= 400 && status < 500) return true;
-    }
-  }
-  return false;
-}
 
 type PusherOpts = {
   editor: Editor;
@@ -108,7 +92,7 @@ export class Pusher {
       await this.opts.pushFn(bundle);
     } catch (err) {
       this.inflight = false;
-      this.opts.onEvent?.({ kind: 'push.error', message: String(err) });
+      this.opts.onEvent?.({ kind: 'push.error', message: describeSyncError(err) });
       this.handleFailure(err);
       return;
     }
@@ -124,9 +108,9 @@ export class Pusher {
   }
 
   private handleFailure(err: unknown): void {
-    if (isPermanent(err)) {
+    if (isPermanentSyncError(err)) {
       this.status = 'error';
-      console.error('Pusher: permanent failure', err);
+      console.error('Pusher: permanent failure', describeSyncError(err), err);
       return;
     }
     this.status = 'retrying';

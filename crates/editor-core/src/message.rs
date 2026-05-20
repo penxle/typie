@@ -139,6 +139,8 @@ pub enum TableOp {
 pub enum NodeOp {
     Delete { id: NodeId },
     SetAttrs { id: NodeId, attrs: PlainNode },
+    SetImageId { id: NodeId, image_id: String },
+    SetImageProportion { id: NodeId, proportion: u32 },
     Table { id: NodeId, op: TableOp },
 }
 
