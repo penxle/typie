@@ -97,6 +97,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@react-email/ui": "6.0.1",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

@@ -1,6 +1,7 @@
 export { default as EmailUpdatedEmail } from './EmailUpdatedEmail.tsx.js';
 export { default as EmailUpdateEmail } from './EmailUpdateEmail.tsx.js';
 export { default as PasswordResetEmail } from './PasswordResetEmail.tsx.js';
+export { default as PlanChangeEmail } from './PlanChangeEmail.tsx.js';
 export { default as PreorderCodeEmail } from './PreorderCodeEmail.tsx.js';
 export { default as PreorderCompletedEmail } from './PreorderCompletedEmail.tsx.js';
 export { default as SignUpEmail } from './SignUpEmail.tsx.js';
