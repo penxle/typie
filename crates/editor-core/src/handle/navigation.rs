@@ -816,6 +816,97 @@ mod tests {
         assert_eq!(s.head.offset, 6);
     }
 
+    // Backward selection (head at sorted start) across two paragraphs;
+    // arrow-right must collapse to the sorted end, not step one grapheme
+    // from head.
+    #[test]
+    fn arrow_right_from_backward_multi_paragraph_text_range_collapses_to_sorted_end() {
+        let (state, _, p2) = state! {
+            doc {
+                root {
+                    paragraph { p1: text("hello") }
+                    paragraph { p2: text("world") }
+                }
+            }
+            selection: (p2, 3) -> (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, p2);
+        assert_eq!(s.head.offset, 3);
+    }
+
+    // Multi-node range at root level (not a unit selection): arrow-left
+    // lands at the caret position before the sorted-start block boundary,
+    // i.e. the end of the previous leaf.
+    #[test]
+    fn arrow_left_from_multi_node_container_selection_lands_before_block_boundary() {
+        let (state, _, before) = state! {
+            doc {
+                r: root {
+                    paragraph { before: text("before") }
+                    paragraph { text("a") }
+                    paragraph { text("b") }
+                    paragraph { text("after") }
+                }
+            }
+            selection: (r, 1) -> (r, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, before);
+        assert_eq!(s.head.offset, 6);
+    }
+
+    // Word Left across two paragraphs: stepping movement runs from the
+    // sorted start, not from head, and actually advances by a word.
+    #[test]
+    fn word_left_from_multi_paragraph_text_range_moves_word_from_sorted_start() {
+        let (state, p1, _) = state! {
+            doc {
+                root {
+                    paragraph { p1: text("hello world") }
+                    paragraph { p2: text("foo bar") }
+                }
+            }
+            selection: (p1, 8) -> (p2, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Word {
+                direction: Direction::Backward,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, p1);
+        assert_eq!(s.head.offset, 6);
+    }
+
     #[test]
     fn arrow_left_from_block_boundary_selection_lands_at_previous_leaf_end() {
         let (state, _, prev) = state! {
