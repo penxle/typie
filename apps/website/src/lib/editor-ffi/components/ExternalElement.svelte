@@ -6,9 +6,10 @@
   import ArchiveIcon from '~icons/lucide/archive';
   import FileIcon from '~icons/lucide/file';
   import FileUpIcon from '~icons/lucide/file-up';
-  import ImageIcon from '~icons/lucide/image';
   import { THEME_COLORS } from '$lib/editor/theme';
+  import { getExternalElementPlaceholderLabel } from '$lib/editor-ffi/image';
   import { getEditorContext } from '../editor.svelte';
+  import ExternalImage from './ExternalImage.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
   import type { Component } from 'svelte';
 
@@ -32,19 +33,24 @@
   const selectionColor = $derived(THEME_COLORS[themeVariant].selection);
   const selectionOpacity = $derived(ctx.editor?.focused ? SELECTION_FOCUSED_ALPHA : SELECTION_UNFOCUSED_ALPHA);
 
-  const meta = $derived.by<{ icon: Component; label: string }>(() => {
+  const meta = $derived.by<{ icon: Component; label: string } | null>(() => {
+    const label = getExternalElementPlaceholderLabel(element.data);
+    if (!label) {
+      return null;
+    }
+
     switch (element.data.type) {
       case 'image': {
-        return { icon: ImageIcon, label: '이미지' };
+        return null;
       }
       case 'file': {
-        return { icon: FileIcon, label: '파일' };
+        return { icon: FileIcon, label };
       }
       case 'embed': {
-        return { icon: FileUpIcon, label: '임베드' };
+        return { icon: FileUpIcon, label };
       }
       case 'archived': {
-        return { icon: ArchiveIcon, label: '보관된 블록' };
+        return { icon: ArchiveIcon, label };
       }
     }
   });
@@ -93,33 +99,37 @@
   data-external-element
   data-node-id={element.node_id}
 >
-  <div bind:this={containerEl} class={css({ width: 'full', minHeight: '48px' })}>
-    <div
-      class={flex({
-        align: 'center',
-        gap: '12px',
-        width: 'full',
-        minHeight: '48px',
-        paddingX: '14px',
-        paddingY: '12px',
-        borderRadius: '4px',
-        backgroundColor: 'surface.muted',
-        color: 'text.disabled',
-        fontSize: '14px',
-      })}
-    >
-      <Icon class={css({ flexShrink: '0' })} icon={meta.icon} size={20} />
-      <span
-        class={css({
-          minWidth: '0',
-          overflow: 'hidden',
-          whiteSpace: 'nowrap',
-          textOverflow: 'ellipsis',
+  <div bind:this={containerEl} class={css({ width: 'full' })}>
+    {#if element.data.type === 'image'}
+      <ExternalImage {element} />
+    {:else if meta}
+      <div
+        class={flex({
+          align: 'center',
+          gap: '12px',
+          width: 'full',
+          minHeight: '48px',
+          paddingX: '14px',
+          paddingY: '12px',
+          borderRadius: '4px',
+          backgroundColor: 'surface.muted',
+          color: 'text.disabled',
+          fontSize: '14px',
         })}
       >
-        {meta.label}
-      </span>
-    </div>
+        <Icon class={css({ flexShrink: '0' })} icon={meta.icon} size={20} />
+        <span
+          class={css({
+            minWidth: '0',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          })}
+        >
+          {meta.label}
+        </span>
+      </div>
+    {/if}
   </div>
 
   {#if element.is_selected}

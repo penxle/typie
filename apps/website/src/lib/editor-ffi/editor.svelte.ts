@@ -1,7 +1,10 @@
 import { createContext, tick, untrack } from 'svelte';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
+import { assignPendingImageFiles } from './handlers/upload';
+import { createDropImageSelectionMessages } from './image';
 import { register, unregister } from './registry';
 import type {
   BlockState,
@@ -21,6 +24,21 @@ import type {
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { EditorEventListener } from './types';
+
+export type ImageAsset = {
+  id: string;
+  url: string;
+  originalUrl: string;
+  width: number;
+  height: number;
+  placeholder?: string | null;
+};
+
+export type InflightImage = {
+  url: string;
+  width: number;
+  height: number;
+};
 
 let wasmInitPromise: Promise<void> | null = null;
 
@@ -71,6 +89,11 @@ export class Editor {
   #pointerStyle = $state<PointerStyle>('default');
   #lastPointerClient: { x: number; y: number } | null = null;
   #pointerStyleDomRefreshQueued = false;
+
+  #pendingImageFiles: File[] = [];
+  imageAssets = new SvelteMap<string, ImageAsset>();
+  inflightImages = new SvelteMap<string, InflightImage>();
+  pendingImageFilesByNode = new SvelteMap<string, File>();
 
   private constructor() {
     // no-op
@@ -291,6 +314,80 @@ export class Editor {
     this.#scheduleTick();
   }
 
+  insertImagesFromFiles(files: Iterable<File>): boolean {
+    let handled = false;
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        continue;
+      }
+
+      this.#pendingImageFiles.push(file);
+      this.enqueue({
+        type: 'insertion',
+        op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
+      });
+      handled = true;
+    }
+
+    if (handled) {
+      this.focus();
+    }
+
+    return handled;
+  }
+
+  insertImagesFromDrop(files: Iterable<File>, clientX: number, clientY: number): boolean {
+    const local = this.clientToLocal(clientX, clientY);
+    for (const message of createDropImageSelectionMessages(local)) {
+      this.enqueue(message);
+    }
+    return this.insertImagesFromFiles(files);
+  }
+
+  dequeuePendingImageFile(nodeId: string): File | undefined {
+    const file = this.pendingImageFilesByNode.get(nodeId);
+    if (file) {
+      this.pendingImageFilesByNode.delete(nodeId);
+    }
+    return file;
+  }
+
+  #reconcilePendingImageFiles(): void {
+    const imageElements = this.#externalElements.filter((element) => element.data.type === 'image');
+
+    const validNodeIds = new SvelteSet<string>();
+    for (const element of imageElements) {
+      if (element.data.type === 'image' && !element.data.id) {
+        validNodeIds.add(element.node_id);
+      }
+    }
+    // snapshot keys before mutating the map below
+    // eslint-disable-next-line unicorn/no-useless-spread
+    for (const nodeId of [...this.pendingImageFilesByNode.keys()]) {
+      if (!validNodeIds.has(nodeId)) {
+        this.pendingImageFilesByNode.delete(nodeId);
+      }
+    }
+
+    if (this.#pendingImageFiles.length === 0) {
+      return;
+    }
+
+    const candidates = imageElements.map((element) => ({
+      nodeId: element.node_id,
+      imageId: element.data.type === 'image' ? element.data.id : undefined,
+      assigned: this.pendingImageFilesByNode.has(element.node_id),
+      inflight: this.inflightImages.has(element.node_id),
+    }));
+
+    const { assignments, remainingFiles } = assignPendingImageFiles(candidates, this.#pendingImageFiles);
+    this.#pendingImageFiles = remainingFiles;
+    for (const { nodeId, file } of assignments) {
+      this.pendingImageFilesByNode.set(nodeId, file);
+    }
+  }
+
   #scheduleTick(): void {
     if (!this.#queued) {
       this.#queued = true;
@@ -385,6 +482,7 @@ export class Editor {
 
     if (fields.includes('external_elements')) {
       this.#externalElements = this.#wasm.external_elements();
+      this.#reconcilePendingImageFiles();
     }
 
     if (fields.includes('root_attrs')) {

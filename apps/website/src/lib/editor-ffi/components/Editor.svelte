@@ -10,6 +10,7 @@
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
+  import { getDataTransferImageFiles } from '../handlers/upload';
   import Caret from './Caret.svelte';
   import CaretPositioned from './CaretPositioned.svelte';
   import Input from './Input.svelte';
@@ -88,6 +89,22 @@
     ctx.editor?.destroy();
     ctx.editor = undefined;
   });
+
+  const handleDrop = (event: DragEvent) => {
+    event.preventDefault();
+
+    const editor = ctx.editor;
+    if (!editor) {
+      return;
+    }
+
+    const files = getDataTransferImageFiles(event.dataTransfer);
+    if (files.length === 0) {
+      return;
+    }
+
+    editor.insertImagesFromDrop(files, event.clientX, event.clientY);
+  };
 </script>
 
 <div
@@ -117,6 +134,8 @@
       if (ctx.editor) ctx.editor.scrollContainerEl = undefined;
     };
   }}
+  ondragover={(event) => event.preventDefault()}
+  ondrop={handleDrop}
   onfocusin={() => ctx.editor?.focus()}
   onfocusout={() => {
     if (!window.document.hasFocus()) return;
