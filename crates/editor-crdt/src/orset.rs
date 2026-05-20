@@ -18,14 +18,11 @@ pub enum OrSetOp<T> {
     },
 }
 
-/// **Reference impl — do not embed in an editor as-is.**
-/// `iter()` / `len()` / `contains()` are O(n) full-scan over entries.
-/// Editor integration must replace this with an inverted index `T → HashSet<Dot>`
-/// or a cached live element set.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OrSet<T> {
+pub struct OrSet<T: Clone + Eq + Hash> {
     entries: imbl::HashMap<Dot, Entry<T>>,
     pending_tombstones: imbl::HashSet<Dot>,
+    by_elem: imbl::HashMap<T, imbl::HashSet<Dot>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,40 +36,28 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
         Self {
             entries: imbl::HashMap::new(),
             pending_tombstones: imbl::HashSet::new(),
+            by_elem: imbl::HashMap::new(),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.iter().count()
+        self.by_elem.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.by_elem.is_empty()
     }
 
     pub fn contains(&self, elem: &T) -> bool {
-        self.entries.iter().any(|(_, e)| e.alive && &e.elem == elem)
+        self.by_elem.contains_key(elem)
     }
 
     pub fn tags_for<'a>(&'a self, elem: &'a T) -> impl Iterator<Item = &'a Dot> + 'a {
-        self.entries.iter().filter_map(move |(dot, e)| {
-            if e.alive && &e.elem == elem {
-                Some(dot)
-            } else {
-                None
-            }
-        })
+        self.by_elem.get(elem).into_iter().flat_map(|s| s.iter())
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> + '_ {
-        let mut seen: std::collections::HashSet<&T> = std::collections::HashSet::new();
-        self.entries.iter().filter_map(move |(_, e)| {
-            if e.alive && seen.insert(&e.elem) {
-                Some(&e.elem)
-            } else {
-                None
-            }
-        })
+        self.by_elem.keys()
     }
 
     /// Returns `Err` if the same `Dot` arrives with a different `elem`.
@@ -99,10 +84,22 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
             return Ok(self.clone());
         }
         let alive = !self.pending_tombstones.contains(&id);
+        let new_by_elem = if alive {
+            let updated = self
+                .by_elem
+                .get(&elem)
+                .cloned()
+                .unwrap_or_else(imbl::HashSet::new)
+                .update(id);
+            self.by_elem.update(elem.clone(), updated)
+        } else {
+            self.by_elem.clone()
+        };
         let entry = Entry { elem, alive };
         Ok(Self {
             entries: self.entries.update(id, entry),
             pending_tombstones: self.pending_tombstones.without(&id),
+            by_elem: new_by_elem,
         })
     }
 
@@ -115,14 +112,26 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
                 elem: entry.elem.clone(),
                 alive: false,
             };
+            let new_by_elem = if let Some(set) = self.by_elem.get(&entry.elem).cloned() {
+                let updated = set.without(&observed);
+                if updated.is_empty() {
+                    self.by_elem.without(&entry.elem)
+                } else {
+                    self.by_elem.update(entry.elem.clone(), updated)
+                }
+            } else {
+                self.by_elem.clone()
+            };
             return Self {
                 entries: self.entries.update(observed, new_entry),
                 pending_tombstones: self.pending_tombstones.clone(),
+                by_elem: new_by_elem,
             };
         }
         Self {
             entries: self.entries.clone(),
             pending_tombstones: self.pending_tombstones.update(observed),
+            by_elem: self.by_elem.clone(),
         }
     }
 }
