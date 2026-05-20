@@ -1,7 +1,7 @@
-use editor_model::{NodeId, Schema};
+use editor_model::{Node, NodeId, Schema};
 use editor_state::{
-    Affinity, GapCursor, Position, Selection, farther_endpoint, gap_cursor_selection_between,
-    gap_cursor_selection_leading,
+    Affinity, GapCursor, Position, ResolvedPosition, Selection, farther_endpoint,
+    gap_cursor_selection_between, gap_cursor_selection_leading,
 };
 
 use crate::editor::Editor;
@@ -23,6 +23,8 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 } | Movement::Sentence {
                     direction: Direction::Backward
                 } | Movement::Block {
+                    direction: Direction::Backward
+                } | Movement::Page {
                     direction: Direction::Backward
                 } | Movement::Document {
                     direction: Direction::Backward
@@ -96,8 +98,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 // adjacent gap becomes that gap cursor. The builders return
                 // Some only for a valid leading-unit / between-monolithic gap
                 // (they encapsulate the both-monolithic + paragraph-admittable
-                // checks), so a non-gap move falls through to normal movement.
-                // Independent of resolve_movement's result.
+                // checks), so a non-gap move falls through to the range
+                // endpoint policy below. Independent of resolve_movement's
+                // result.
                 if selection.is_unit_node_selection(&editor.state.doc) {
                     let parent = selection.anchor.node_id;
                     let idx = selection.anchor.offset.min(selection.head.offset);
@@ -118,22 +121,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     }
                 }
 
-                // Inner-edge entry: a collapsed caret at the first
-                // (backward) / last (forward) inner navigable of a
-                // monolithic that borders a valid gap becomes that gap
-                // cursor — the exact inverse of gap exit, so the gap is a
-                // stable stop in both directions. Only stepping movements
-                // (Grapheme/Word/Sentence/Block/Line) trigger this; Page
-                // and Document are excluded — a paged/absolute jump must
-                // not be intercepted by an intermediate gap. (A positive
-                // allowlist is required: the upstream `backward` flag does
-                // not classify Page, so a negative `!Document` gate would
-                // misclassify Page's direction.) Ancestors are
-                // innermost-first, so one keypress crosses exactly one
-                // boundary. The owned target is resolved while the
-                // doc/view borrows are live, then applied, so the mutable
-                // transact does not overlap them.
-                let stepping = matches!(
+                let can_stop_at_gap = matches!(
                     movement,
                     Movement::Grapheme { .. }
                         | Movement::Word { .. }
@@ -141,46 +129,79 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         | Movement::Block { .. }
                         | Movement::Line { .. }
                 );
-                if selection.is_collapsed() && stepping {
-                    let head = selection.head;
-                    let target: Option<Selection> = {
-                        let doc = &editor.state.doc;
-                        let mut found = None;
-                        if let Some(start) = doc.node(head.node_id) {
-                            for m in start.ancestors() {
-                                if !Schema::node_spec(m.as_type()).monolithic {
-                                    continue;
-                                }
-                                let (Some(p), Some(i)) = (m.parent(), m.index()) else {
-                                    continue;
-                                };
-                                let pid = p.id();
-                                let Some(edge) =
-                                    editor.view.editable_position_inside(m.id(), !backward)
-                                else {
-                                    continue;
-                                };
-                                if edge.node_id != head.node_id || edge.offset != head.offset {
-                                    continue;
-                                }
-                                let cand = if backward {
-                                    if pid == NodeId::ROOT && i == 0 {
-                                        gap_cursor_selection_leading(doc)
-                                    } else {
-                                        gap_cursor_selection_between(doc, pid, i)
-                                    }
-                                } else {
-                                    gap_cursor_selection_between(doc, pid, i + 1)
-                                };
-                                if let Some(sel) = cand {
-                                    found = Some(sel);
-                                    break;
-                                }
+
+                // Non-extended range navigation uses a sorted endpoint as the
+                // movement base: backward starts from `from`, forward starts
+                // from `to`.
+                if !selection.is_collapsed() {
+                    let Some(resolved) = selection.resolve(&editor.state.doc) else {
+                        return Ok(());
+                    };
+                    let base = if backward {
+                        resolved.from()
+                    } else {
+                        resolved.to()
+                    };
+                    let left_or_right = matches!(movement, Movement::Grapheme { .. });
+                    let base_position = Position::from(base);
+
+                    let target = if left_or_right && base.is_inline_position() {
+                        // Left/Right from inline content only collapses the range.
+                        Selection::collapsed(base_position)
+                    } else if !left_or_right
+                        && can_stop_at_gap
+                        && let Some(sel) =
+                            gap_cursor_from_inner_edge(editor, base_position, backward)
+                    {
+                        // Vertical/word/block movement can stop at an adjacent
+                        // gap before asking the view for geometric movement.
+                        sel
+                    } else {
+                        let view_target = {
+                            let resource_guard = editor.resource.lock().unwrap();
+                            editor
+                                .view
+                                .resolve_movement(&base_position, &movement, &resource_guard)
+                        };
+
+                        match view_target {
+                            Some(sel) => sel,
+                            None if base.is_block_position() => {
+                                // Block positions are container boundaries, so
+                                // the view has no caret rect to move from.
+                                Selection::collapsed(move_from_block_position(
+                                    editor, base, !backward,
+                                ))
+                            }
+                            None => {
+                                // Inline positions have a caret base. If the
+                                // view has no destination, the range simply
+                                // collapses to that base.
+                                Selection::collapsed(base_position)
                             }
                         }
-                        found
                     };
-                    if let Some(sel) = target {
+
+                    editor.transact(|tr| {
+                        tr.set_selection(target)?;
+                        Ok(())
+                    })?;
+                    return Ok(());
+                }
+
+                // Inner-edge entry: a collapsed caret at the first
+                // (backward) / last (forward) inner navigable of a
+                // monolithic that borders a valid gap becomes that gap
+                // cursor — the exact inverse of gap exit, so the gap is a
+                // stable stop in both directions. Only movements that can stop
+                // at a gap (Grapheme/Word/Sentence/Block/Line) trigger this;
+                // Page and Document are excluded because paged/absolute jumps
+                // must not be intercepted by an intermediate gap. Ancestors
+                // are innermost-first, so one keypress crosses exactly one
+                // boundary.
+                if can_stop_at_gap {
+                    if let Some(sel) = gap_cursor_from_inner_edge(editor, selection.head, backward)
+                    {
                         editor.transact(|tr| {
                             tr.set_selection(sel)?;
                             Ok(())
@@ -190,12 +211,12 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 }
             }
 
-            let resource_guard = editor.resource.lock().unwrap();
-            let new_selection =
+            let new_selection = {
+                let resource_guard = editor.resource.lock().unwrap();
                 editor
                     .view
-                    .resolve_movement(&selection.head, &movement, &resource_guard);
-            drop(resource_guard);
+                    .resolve_movement(&selection.head, &movement, &resource_guard)
+            };
             if let Some(new_selection) = new_selection {
                 let final_selection = if extend {
                     let doc = &editor.state.doc;
@@ -237,6 +258,190 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
         }
     }
     Ok(())
+}
+
+fn gap_cursor_from_inner_edge(
+    editor: &Editor,
+    head: Position,
+    backward: bool,
+) -> Option<Selection> {
+    let doc = &editor.state.doc;
+    let start = doc.node(head.node_id)?;
+    for monolithic in start.ancestors() {
+        if !Schema::node_spec(monolithic.as_type()).monolithic {
+            continue;
+        }
+        let (Some(parent), Some(index)) = (monolithic.parent(), monolithic.index()) else {
+            continue;
+        };
+        let Some(edge) = editor
+            .view
+            .editable_position_inside(monolithic.id(), !backward)
+        else {
+            continue;
+        };
+        if edge.node_id != head.node_id || edge.offset != head.offset {
+            continue;
+        }
+        let parent_id = parent.id();
+        return if backward {
+            if parent_id == NodeId::ROOT && index == 0 {
+                gap_cursor_selection_leading(doc)
+            } else {
+                gap_cursor_selection_between(doc, parent_id, index)
+            }
+        } else {
+            gap_cursor_selection_between(doc, parent_id, index + 1)
+        };
+    }
+    None
+}
+
+fn move_from_block_position(
+    editor: &Editor,
+    position: &ResolvedPosition<'_>,
+    go_forward: bool,
+) -> Position {
+    debug_assert!(position.is_block_position());
+
+    let doc = position.doc();
+    let node = doc
+        .node(position.node_id())
+        .expect("resolved position node exists");
+    let children: Vec<NodeId> = node.children().map(|child| child.id()).collect();
+
+    if go_forward {
+        if position.offset() < children.len()
+            && let Some(pos) = leaf_block_edge(editor, children[position.offset()], false)
+        {
+            return pos;
+        }
+
+        if let Some(next_pos) = find_next_cursor_position_forward(editor, position.node_id()) {
+            return next_pos;
+        }
+
+        if let Some(last) = children.last().copied()
+            && let Some(pos) = leaf_block_edge(editor, last, true)
+        {
+            return pos;
+        }
+
+        if let Some(pos) = leaf_block_edge(editor, NodeId::ROOT, true) {
+            return pos;
+        }
+
+        Position::from(position)
+    } else {
+        if position.offset() > 0 && !children.is_empty() {
+            let child_idx = (position.offset() - 1).min(children.len() - 1);
+            if let Some(pos) = leaf_block_edge(editor, children[child_idx], true) {
+                return pos;
+            }
+        }
+
+        if let Some(prev_pos) = find_prev_cursor_position_backward(editor, position.node_id()) {
+            return prev_pos;
+        }
+
+        if let Some(first) = children.first().copied()
+            && let Some(pos) = leaf_block_edge(editor, first, false)
+        {
+            return pos;
+        }
+
+        if let Some(pos) = leaf_block_edge(editor, NodeId::ROOT, false) {
+            return pos;
+        }
+
+        Position::from(position)
+    }
+}
+
+fn leaf_block_edge(editor: &Editor, node_id: NodeId, at_end: bool) -> Option<Position> {
+    let doc = &editor.state.doc;
+    let node = doc.node(node_id)?;
+    let spec = Schema::node_spec(node.as_type());
+    if let Node::Text(t) = node.node() {
+        return Some(Position {
+            node_id,
+            offset: if at_end { t.text.len() } else { 0 },
+            affinity: if at_end {
+                Affinity::Upstream
+            } else {
+                Affinity::Downstream
+            },
+        });
+    }
+
+    if let Some(pos) = editor.view.editable_position_inside(node_id, at_end) {
+        return Some(pos);
+    }
+
+    if spec.is_textblock() {
+        return Some(Position {
+            node_id,
+            offset: if at_end { node.children().count() } else { 0 },
+            affinity: if at_end {
+                Affinity::Upstream
+            } else {
+                Affinity::Downstream
+            },
+        });
+    }
+
+    let child_id = if at_end {
+        node.last_child().map(|child| child.id())
+    } else {
+        node.first_child().map(|child| child.id())
+    };
+    if spec.is_leaf() || child_id.is_none() {
+        let parent = node.parent()?;
+        let idx = node.index()?;
+        return Some(Position {
+            node_id: parent.id(),
+            offset: if at_end { idx + 1 } else { idx },
+            affinity: if at_end {
+                Affinity::Upstream
+            } else {
+                Affinity::Downstream
+            },
+        });
+    }
+
+    leaf_block_edge(editor, child_id?, at_end)
+}
+
+fn find_next_cursor_position_forward(editor: &Editor, node_id: NodeId) -> Option<Position> {
+    let doc = &editor.state.doc;
+    let mut current_id = node_id;
+    loop {
+        let current = doc.node(current_id)?;
+        let parent = current.parent()?;
+        let idx = current.index()?;
+        let siblings: Vec<NodeId> = parent.children().map(|child| child.id()).collect();
+        if let Some(next) = siblings.get(idx + 1).copied() {
+            return leaf_block_edge(editor, next, false);
+        }
+        current_id = parent.id();
+    }
+}
+
+fn find_prev_cursor_position_backward(editor: &Editor, node_id: NodeId) -> Option<Position> {
+    let doc = &editor.state.doc;
+    let mut current_id = node_id;
+    loop {
+        let current = doc.node(current_id)?;
+        let parent = current.parent()?;
+        let idx = current.index()?;
+        let siblings: Vec<NodeId> = parent.children().map(|child| child.id()).collect();
+        if idx > 0
+            && let Some(prev) = siblings.get(idx - 1).copied()
+        {
+            return leaf_block_edge(editor, prev, true);
+        }
+        current_id = parent.id();
+    }
 }
 
 /// Exit a gap into `node_id`'s inner content; if it has none (e.g. an
@@ -494,6 +699,141 @@ mod tests {
     }
 
     #[test]
+    fn arrow_left_from_text_selection_collapses_to_sorted_start_without_extra_move() {
+        let (state, t) = state! {
+            doc {
+                root {
+                    paragraph { t: text("abcd") }
+                }
+            }
+            selection: (t, 1) -> (t, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, t);
+        assert_eq!(s.head.offset, 1);
+    }
+
+    #[test]
+    fn arrow_right_from_backward_text_selection_collapses_to_sorted_end_without_extra_move() {
+        let (state, t) = state! {
+            doc {
+                root {
+                    paragraph { t: text("abcd") }
+                }
+            }
+            selection: (t, 3) -> (t, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, t);
+        assert_eq!(s.head.offset, 3);
+    }
+
+    #[test]
+    fn word_left_from_text_selection_moves_from_sorted_start() {
+        let (state, t) = state! {
+            doc {
+                root {
+                    paragraph { t: text("hello world") }
+                }
+            }
+            selection: (t, 6) -> (t, 11)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Word {
+                direction: Direction::Backward,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, t);
+        assert_eq!(s.head.offset, 0);
+    }
+
+    #[test]
+    fn arrow_down_from_backward_text_selection_moves_from_sorted_end() {
+        let (state, _, next) = state! {
+            doc {
+                root {
+                    paragraph { text("abcdef") }
+                    paragraph { current: text("abcdef") }
+                    paragraph { next: text("abcdef") }
+                }
+            }
+            selection: (current, 6) -> (current, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, next);
+        assert_eq!(s.head.offset, 6);
+    }
+
+    #[test]
+    fn arrow_left_from_block_boundary_selection_lands_at_previous_leaf_end() {
+        let (state, _, prev) = state! {
+            doc {
+                r: root {
+                    paragraph { prev: text("prev") }
+                    image
+                    paragraph { text("next") }
+                }
+            }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, prev);
+        assert_eq!(s.head.offset, 4);
+    }
+
+    #[test]
     fn arrow_right_from_fold_node_selection_moves_off_the_fold() {
         let (state, _, after) = state! {
             doc { r1: root {
@@ -736,6 +1076,32 @@ mod tests {
         );
         assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
         assert_eq!(s.head.offset, 0);
+    }
+
+    #[test]
+    fn arrow_up_from_leading_fold_title_range_enters_gap() {
+        let (state, ..) = state! {
+            doc { root {
+                fold { fold_title { title: text("Title") } fold_content { paragraph { text("c") } } }
+                paragraph { text("after") }
+            } }
+            selection: (title, 0) -> (title, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let expected =
+            gap_cursor_selection_leading(&editor.state.doc).expect("leading fold gap is valid");
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+
+        let s = editor.state().selection;
+        assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
     #[test]
@@ -1039,14 +1405,9 @@ mod tests {
     #[test]
     fn page_backward_from_inside_callout_ignores_gap() {
         // Caret in the FIRST callout. If Page were wrongly admitted to the
-        // stepping allowlist it would take the forward branch (the
-        // `backward` flag does not classify Page), and the forward
-        // between-gap here is valid (callout#1 | callout#2, with a
-        // paragraph-admittable slot) — so a broken allowlist would enter a
-        // gap and fail this guard. A caret in the second callout instead
-        // makes that forward between-gap land on the trailing paragraph
-        // (structurally invalid), so the guard would pass vacuously and
-        // catch nothing — do not use that shape.
+        // stepping allowlist, the valid leading gap here would catch it.
+        // A caret in the second callout would make the adjacent forward gap
+        // structurally invalid, so the guard would pass vacuously.
         let (state, ..) = state! {
             doc {
                 root {

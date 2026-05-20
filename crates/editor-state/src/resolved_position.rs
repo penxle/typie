@@ -58,6 +58,19 @@ impl<'a> ResolvedPosition<'a> {
         &self.path
     }
 
+    pub fn is_inline_position(&self) -> bool {
+        let node = self
+            .doc
+            .node(self.position.node_id)
+            .expect("resolved position node exists");
+        let spec = node.spec();
+        spec.inline || spec.is_textblock()
+    }
+
+    pub fn is_block_position(&self) -> bool {
+        !self.is_inline_position()
+    }
+
     fn grapheme_boundaries(&self, resource: &Resource) -> Option<Vec<usize>> {
         let node = self.doc.node(self.position.node_id)?;
         let Node::Text(text_node) = node.node() else {
