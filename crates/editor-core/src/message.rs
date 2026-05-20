@@ -94,6 +94,7 @@ pub enum DeletionOp {
 pub enum ModifierOp {
     Toggle { modifier_type: ModifierType },
     Set { modifier: Modifier },
+    SetOnNode { id: NodeId, modifier: Modifier },
     ClearAll,
 }
 

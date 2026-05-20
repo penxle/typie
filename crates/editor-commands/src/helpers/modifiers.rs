@@ -2,6 +2,9 @@ use editor_model::{
     ContextExpr, Doc, Expand, Modifier, ModifierType, Node, NodeId, NodeRef, NodeType, Schema,
 };
 use editor_state::{PendingModifier, PendingModifiers, ResolvedSelection};
+use editor_transaction::Transaction;
+
+use crate::CommandError;
 
 pub(crate) fn resolve_effective_modifiers(
     node: &NodeRef,
@@ -180,6 +183,38 @@ pub(crate) fn check_range_all_has_modifier(nodes: &[NodeRef], modifier_type: Mod
     nodes
         .iter()
         .all(|node| node.modifiers().any(|m| m.as_type() == modifier_type))
+}
+
+pub(crate) fn is_unit_variant(modifier: &Modifier) -> bool {
+    matches!(
+        modifier,
+        Modifier::Bold | Modifier::Italic | Modifier::Underline | Modifier::Strikethrough
+    )
+}
+
+pub(crate) fn apply_modifier_to_node(
+    tr: &mut Transaction,
+    target: &NodeRef<'_>,
+    modifier: &Modifier,
+) -> Result<(), CommandError> {
+    let modifier_type = modifier.as_type();
+    let target_id = target.id();
+
+    let inherited = resolve_inherited_modifiers(target);
+    let inherited_value = inherited.iter().find(|m| m.as_type() == modifier_type);
+
+    if let Some(existing) = target
+        .explicit_modifiers()
+        .find(|m| m.as_type() == modifier_type)
+    {
+        tr.remove_modifier(target_id, existing.clone())?;
+    }
+
+    if inherited_value != Some(modifier) {
+        tr.add_modifier(target_id, modifier.clone())?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

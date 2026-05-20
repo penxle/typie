@@ -11,8 +11,9 @@
   import { values } from '$lib/editor/values';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
+  import { defaultContinuousLayout, defaultPaginatedLayout, setRootLayoutMode } from './root-attrs';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { LayoutMode, Message, Modifier, ModifierType, Tri } from '@typie/editor-ffi/browser';
+  import type { Message, Modifier, ModifierType, Tri } from '@typie/editor-ffi/browser';
   import type { BottomToolbar_document$key } from '$mearie';
 
   type Props = {
@@ -126,22 +127,6 @@
 
   const setModifier = (modifier: Modifier) => {
     enqueue({ type: 'modifier', op: { type: 'set', modifier } });
-  };
-
-  const setLayoutMode = (type: LayoutMode['type']) => {
-    const layout_mode: LayoutMode =
-      type === 'paginated'
-        ? {
-            type: 'paginated',
-            page_width: 794,
-            page_height: 1123,
-            page_margin_top: 94,
-            page_margin_bottom: 94,
-            page_margin_left: 94,
-            page_margin_right: 94,
-          }
-        : { type: 'continuous', max_width: 600 };
-    enqueue({ type: 'node', op: { type: 'set_attrs', id: '0', attrs: { type: 'root', layout_mode } } });
   };
 
   const selectStyle = css.raw({
@@ -331,7 +316,10 @@
 
   <select
     class={css(selectStyle)}
-    onchange={(e) => setLayoutMode(e.currentTarget.value as LayoutMode['type'])}
+    onchange={(e) => {
+      setRootLayoutMode(ctx.editor, e.currentTarget.value === 'paginated' ? defaultPaginatedLayout() : defaultContinuousLayout());
+      ctx.editor?.focus();
+    }}
     value={ctx.editor?.rootAttrs?.layout_mode.type ?? 'continuous'}
   >
     <option value="paginated">페이지</option>

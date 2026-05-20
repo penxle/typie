@@ -192,6 +192,21 @@ impl Editor {
     }
 }
 
+#[cfg(feature = "wasm")]
+#[editor_macros::ffi_export(wasm)]
+impl Editor {
+    pub fn root_modifiers(&self) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
+        self.with_inner(|inner| {
+            let doc = &inner.editor.state().doc;
+            let modifiers = doc
+                .node(editor_model::NodeId::ROOT)
+                .map(|n| n.explicit_modifiers().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            Ok(modifiers.into_ffi()?)
+        })
+    }
+}
+
 #[cfg(not(feature = "wasm-server"))]
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
 #[cfg_attr(feature = "wasm-browser", editor_macros::ffi_export(wasm))]

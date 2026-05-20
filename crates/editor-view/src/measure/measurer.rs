@@ -61,6 +61,16 @@ impl Measurer {
         for id in &affected_in_old {
             invalidated = self.invalidate_with_ancestors(old_doc, *id) || invalidated;
         }
+        for op in ops {
+            if let DocOp::Modifier { node_id, .. } = &op.payload {
+                let doc_for_subtree = if new_doc.node(*node_id).is_some() {
+                    new_doc
+                } else {
+                    old_doc
+                };
+                invalidated = self.invalidate_descendants(doc_for_subtree, *node_id) || invalidated;
+            }
+        }
         invalidated
     }
 
@@ -70,6 +80,18 @@ impl Measurer {
             && let Some(parent) = node_ref.parent()
         {
             invalidated = self.invalidate_with_ancestors(doc, parent.id()) || invalidated;
+        }
+        invalidated
+    }
+
+    pub fn invalidate_descendants(&mut self, doc: &Doc, node_id: NodeId) -> bool {
+        let Some(node_ref) = doc.node(node_id) else {
+            return false;
+        };
+        let mut invalidated = false;
+        for child in node_ref.children() {
+            invalidated = self.cache.invalidate(child.id()) || invalidated;
+            invalidated = self.invalidate_descendants(doc, child.id()) || invalidated;
         }
         invalidated
     }
@@ -388,6 +410,51 @@ mod tests {
         assert!(
             measurer.cache.get(sibling).is_some(),
             "unrelated sibling must be preserved"
+        );
+    }
+
+    #[test]
+    fn doc_ops_modifier_on_root_invalidates_descendant_subtree() {
+        use editor_crdt::{Dot, OrMapOp};
+        use editor_model::{DocOp, Modifier, ModifierType};
+
+        let mut measurer = Measurer::new_test();
+        let (doc, p, t) = doc! {
+            root {
+                p: paragraph {
+                    t: text("hello")
+                }
+            }
+        };
+
+        measurer.cache.insert(NodeId::ROOT, dummy());
+        measurer.cache.insert(p, dummy());
+        measurer.cache.insert(t, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Modifier {
+                node_id: NodeId::ROOT,
+                op: OrMapOp::Set {
+                    key: ModifierType::FontSize,
+                    value: Modifier::FontSize { value: 2400 },
+                },
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(NodeId::ROOT).is_none(),
+            "root must be invalidated"
+        );
+        assert!(
+            measurer.cache.get(p).is_none(),
+            "descendant paragraph must be invalidated"
+        );
+        assert!(
+            measurer.cache.get(t).is_none(),
+            "descendant text must be invalidated"
         );
     }
 

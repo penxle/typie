@@ -1,20 +1,13 @@
-use editor_model::{Modifier, NodeRef};
+use editor_model::Modifier;
 use editor_state::{PendingModifier, PendingModifiers, Position};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    collect_applicable_targets_in_range, collect_text_nodes_in_range,
-    compact_and_restore_selection, filter_applicable_node_ids, is_text_applicable,
+    apply_modifier_to_node, collect_applicable_targets_in_range, collect_text_nodes_in_range,
+    compact_and_restore_selection, filter_applicable_node_ids, is_text_applicable, is_unit_variant,
     resolve_applicable_target_collapsed, resolve_inherited_modifiers,
 };
 use crate::{CommandError, CommandResult};
-
-fn is_unit_variant(modifier: &Modifier) -> bool {
-    matches!(
-        modifier,
-        Modifier::Bold | Modifier::Italic | Modifier::Underline | Modifier::Strikethrough
-    )
-}
 
 pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
     if is_unit_variant(&modifier) {
@@ -133,31 +126,6 @@ fn set_modifier_range_block(tr: &mut Transaction, modifier: &Modifier) -> Comman
     }
 
     Ok(true)
-}
-
-fn apply_modifier_to_node(
-    tr: &mut Transaction,
-    target: &NodeRef<'_>,
-    modifier: &Modifier,
-) -> Result<(), CommandError> {
-    let modifier_type = modifier.as_type();
-    let target_id = target.id();
-
-    let inherited = resolve_inherited_modifiers(target);
-    let inherited_value = inherited.iter().find(|m| m.as_type() == modifier_type);
-
-    if let Some(existing) = target
-        .explicit_modifiers()
-        .find(|m| m.as_type() == modifier_type)
-    {
-        tr.remove_modifier(target_id, existing.clone())?;
-    }
-
-    if inherited_value != Some(modifier) {
-        tr.add_modifier(target_id, modifier.clone())?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

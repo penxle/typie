@@ -11,6 +11,7 @@ import type {
   ExternalElement,
   InteractiveHit,
   Message,
+  Modifier,
   ModifierState,
   PlainRootNode,
   PointerStyle,
@@ -62,6 +63,7 @@ export class Editor {
   #externalElements = $state<ExternalElement[]>([]);
   #rootAttrs = $state<PlainRootNode>();
   #modifierState = $state<ModifierState>();
+  #rootModifiers = $state<Modifier[]>();
   #blockState = $state<BlockState>();
   #focused = $state(false);
   #effectCleanup: (() => void) | null = null;
@@ -137,6 +139,10 @@ export class Editor {
 
   get rootAttrs() {
     return this.#rootAttrs;
+  }
+
+  get rootModifiers() {
+    return this.#rootModifiers;
   }
 
   get modifierState() {
@@ -387,6 +393,7 @@ export class Editor {
 
     if (fields.includes('modifiers')) {
       this.#modifierState = this.#wasm.modifier_state();
+      this.#rootModifiers = this.#wasm.root_modifiers();
     }
 
     if (fields.includes('block')) {

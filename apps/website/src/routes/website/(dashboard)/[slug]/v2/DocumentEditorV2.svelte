@@ -8,6 +8,7 @@
   import { DebugBus } from './@debug/debug-bus.svelte';
   import DebugPanel from './@debug/DebugPanel.svelte';
   import BottomToolbar from './BottomToolbar.svelte';
+  import SettingsPanel from './SettingsPanel.svelte';
   import { Pusher } from './sync/pusher.svelte';
   import TopToolbar from './TopToolbar.svelte';
   import type { DocumentEditorV2_document$key } from '$mearie';
@@ -30,6 +31,7 @@
         }
         ...Editor_document
         ...BottomToolbar_document
+        ...SettingsPanel_document
       }
     `),
     () => document$key,
@@ -40,6 +42,7 @@
   const clientId = crypto.randomUUID();
   let pusher = $state<Pusher | null>(null);
   let debugOpen = $state(true);
+  let settingsOpen = $state(false);
 
   // Server-confirmed heads. Tracks dots the server is known to have ingested
   // (self-pushed bundles + remote bundles received via subscription/poll).
@@ -215,42 +218,80 @@
           </span>
         {/if}
       </h1>
-      <button
-        class={css({
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          paddingX: '10px',
-          paddingY: '4px',
-          borderRadius: '[10px]',
-          borderWidth: '1px',
-          borderColor: debugOpen ? 'border.default' : 'border.subtle',
-          backgroundColor: debugOpen ? 'surface.muted' : 'transparent',
-          color: debugOpen ? 'text.default' : 'text.muted',
-          cursor: 'pointer',
-          fontFamily: 'ui',
-          fontSize: '10px',
-          fontWeight: 'semibold',
-          letterSpacing: '[0.12em]',
-          textTransform: 'uppercase',
-          transition: '[all 120ms]',
-          _hover: { borderColor: 'border.default', backgroundColor: 'surface.muted' },
-        })}
-        aria-pressed={debugOpen}
-        onclick={() => (debugOpen = !debugOpen)}
-        type="button"
-      >
-        <span
+      <div class={css({ display: 'flex', alignItems: 'center', gap: '8px' })}>
+        <button
           class={css({
-            width: '6px',
-            height: '6px',
-            borderRadius: 'full',
-            backgroundColor: debugOpen ? 'text.default' : 'border.default',
-            transition: '[background-color 120ms]',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            paddingX: '10px',
+            paddingY: '4px',
+            borderRadius: '[10px]',
+            borderWidth: '1px',
+            borderColor: settingsOpen ? 'border.default' : 'border.subtle',
+            backgroundColor: settingsOpen ? 'surface.muted' : 'transparent',
+            color: settingsOpen ? 'text.default' : 'text.muted',
+            cursor: 'pointer',
+            fontFamily: 'ui',
+            fontSize: '10px',
+            fontWeight: 'semibold',
+            letterSpacing: '[0.12em]',
+            textTransform: 'uppercase',
+            transition: '[all 120ms]',
+            _hover: { borderColor: 'border.default', backgroundColor: 'surface.muted' },
           })}
-        ></span>
-        Debug
-      </button>
+          aria-pressed={settingsOpen}
+          onclick={() => (settingsOpen = !settingsOpen)}
+          type="button"
+        >
+          <span
+            class={css({
+              width: '6px',
+              height: '6px',
+              borderRadius: 'full',
+              backgroundColor: settingsOpen ? 'text.default' : 'border.default',
+              transition: '[background-color 120ms]',
+            })}
+          ></span>
+          Settings
+        </button>
+        <button
+          class={css({
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            paddingX: '10px',
+            paddingY: '4px',
+            borderRadius: '[10px]',
+            borderWidth: '1px',
+            borderColor: debugOpen ? 'border.default' : 'border.subtle',
+            backgroundColor: debugOpen ? 'surface.muted' : 'transparent',
+            color: debugOpen ? 'text.default' : 'text.muted',
+            cursor: 'pointer',
+            fontFamily: 'ui',
+            fontSize: '10px',
+            fontWeight: 'semibold',
+            letterSpacing: '[0.12em]',
+            textTransform: 'uppercase',
+            transition: '[all 120ms]',
+            _hover: { borderColor: 'border.default', backgroundColor: 'surface.muted' },
+          })}
+          aria-pressed={debugOpen}
+          onclick={() => (debugOpen = !debugOpen)}
+          type="button"
+        >
+          <span
+            class={css({
+              width: '6px',
+              height: '6px',
+              borderRadius: 'full',
+              backgroundColor: debugOpen ? 'text.default' : 'border.default',
+              transition: '[background-color 120ms]',
+            })}
+          ></span>
+          Debug
+        </button>
+      </div>
     </header>
 
     <TopToolbar />
@@ -260,5 +301,6 @@
     {/if}
   </div>
 
+  <SettingsPanel document$key={document.data} onClose={() => (settingsOpen = false)} open={settingsOpen} />
   <DebugPanel {bus} onClose={() => (debugOpen = false)} open={debugOpen} {snapshot} />
 </div>

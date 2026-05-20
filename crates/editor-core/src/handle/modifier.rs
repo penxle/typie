@@ -26,6 +26,10 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
             commands::set_modifier(tr, modifier)?;
             Ok(())
         }),
+        ModifierOp::SetOnNode { id, modifier } => editor.transact(|tr| {
+            commands::set_node_modifier(tr, id, modifier)?;
+            Ok(())
+        }),
         ModifierOp::ClearAll => editor.transact(|tr| {
             commands::clear_all_modifiers(tr)?;
             Ok(())
@@ -39,6 +43,8 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
+    use crate::event::EditorEvent;
+    use crate::state_field::StateField;
 
     #[test]
     fn clear_all_collapsed_unsets_effective_inline() {
@@ -119,6 +125,37 @@ mod tests {
                 modifier: editor_model::Modifier::FontSize { value: 2400 }
             }]
         );
+    }
+
+    #[test]
+    fn set_on_node_root_sets_document_default_font_family() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("Pretendard".to_string()), font_weight(400)] {
+                    paragraph { t1: text("Hello") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let events = editor.apply(Message::Modifier {
+            op: ModifierOp::SetOnNode {
+                id: editor_model::NodeId::ROOT,
+                modifier: editor_model::Modifier::FontFamily {
+                    value: "Paperlogy".to_string(),
+                },
+            },
+        });
+
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EditorEvent::StateChanged { fields } if fields.contains(&StateField::Modifiers)
+        )));
+        let root = editor.state().doc.node(editor_model::NodeId::ROOT).unwrap();
+        assert!(root.explicit_modifiers().any(
+            |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "Paperlogy")
+        ));
     }
 
     #[test]
