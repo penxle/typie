@@ -143,42 +143,36 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         resolved.to()
                     };
                     let left_or_right = matches!(movement, Movement::Grapheme { .. });
-                    let base_position = Position::from(base);
 
-                    let target = if left_or_right && base.is_inline_position() {
-                        // Left/Right from inline content only collapses the range.
-                        Selection::collapsed(base_position)
-                    } else if !left_or_right
-                        && can_stop_at_gap
-                        && let Some(sel) =
-                            gap_cursor_from_inner_edge(editor, base_position, backward)
-                    {
-                        // Vertical/word/block movement can stop at an adjacent
-                        // gap before asking the view for geometric movement.
-                        sel
+                    let target = if base.is_inline_position() {
+                        let base_position = Position::from(base);
+                        if left_or_right {
+                            Selection::collapsed(base_position)
+                        } else if can_stop_at_gap
+                            && let Some(sel) =
+                                gap_cursor_from_inner_edge(editor, base_position, backward)
+                        {
+                            // Monolithic inner-edge endpoint behaves like a
+                            // collapsed caret at that edge: gap cursor entry.
+                            sel
+                        } else {
+                            view_movement_or_collapse(editor, &base_position, &movement)
+                        }
                     } else {
-                        let view_target = {
-                            let resource_guard = editor.resource.lock().unwrap();
-                            editor
-                                .view
-                                .resolve_movement(&base_position, &movement, &resource_guard)
-                        };
-
-                        match view_target {
-                            Some(sel) => sel,
-                            None if base.is_block_position() => {
-                                // Block positions are container boundaries, so
-                                // the view has no caret rect to move from.
-                                Selection::collapsed(move_from_block_position(
-                                    editor, base, !backward,
-                                ))
-                            }
-                            None => {
-                                // Inline positions have a caret base. If the
-                                // view has no destination, the range simply
-                                // collapses to that base.
-                                Selection::collapsed(base_position)
-                            }
+                        // A block boundary is an abstract position with no
+                        // drawable caret, so the view cannot resolve movement
+                        // from it. Descend into the real caret inside the
+                        // adjacent text block first, then either stop there
+                        // (Left/Right) or run the stepping movement from it.
+                        let landed = move_from_block_position(editor, base, !backward);
+                        if left_or_right {
+                            Selection::collapsed(landed)
+                        } else if can_stop_at_gap
+                            && let Some(sel) = gap_cursor_from_inner_edge(editor, landed, backward)
+                        {
+                            sel
+                        } else {
+                            view_movement_or_collapse(editor, &landed, &movement)
                         }
                     };
 
@@ -295,6 +289,23 @@ fn gap_cursor_from_inner_edge(
         };
     }
     None
+}
+
+/// Ask the view to resolve `movement` from `base`. If the view has no
+/// destination, the range simply collapses to `base` — a no-op step from
+/// a caret-capable position is still a valid collapse.
+fn view_movement_or_collapse(
+    editor: &mut Editor,
+    base: &Position,
+    movement: &Movement,
+) -> Selection {
+    let view_target = {
+        let resource_guard = editor.resource.lock().unwrap();
+        editor
+            .view
+            .resolve_movement(base, movement, &resource_guard)
+    };
+    view_target.unwrap_or_else(|| Selection::collapsed(*base))
 }
 
 fn move_from_block_position(
