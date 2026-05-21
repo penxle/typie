@@ -120,6 +120,16 @@ fn expand_line(
         }
     }
 
+    let mut ruby_annotations = line.ruby_annotations.clone();
+    if delta != 0.0 {
+        for ann in &mut ruby_annotations {
+            ann.baseline_y += delta;
+            for g in &mut ann.glyphs {
+                g.y += delta;
+            }
+        }
+    }
+
     MeasuredNode {
         width,
         height: new_height,
@@ -131,6 +141,7 @@ fn expand_line(
             cursor_ascent: line.cursor_ascent,
             cursor_descent: line.cursor_descent,
             glyph_runs,
+            ruby_annotations,
             text_indent: line.text_indent,
             child_range: line.child_range.clone(),
         }),

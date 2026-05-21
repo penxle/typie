@@ -315,6 +315,7 @@ mod tests {
                         n
                     ],
                 )],
+                ruby_annotations: vec![],
                 text_indent: 0.0,
                 child_range: None,
             }),
@@ -695,6 +696,7 @@ mod tests {
                                 cursor_ascent: 14.0,
                                 cursor_descent: 4.0,
                                 glyph_runs: vec![GlyphRun::make_test_run(t1, 0, "a", 0.0, gs(1))],
+                                ruby_annotations: vec![],
                                 text_indent: 0.0,
                                 child_range: Some(0..2),
                             }),
@@ -709,6 +711,7 @@ mod tests {
                                 cursor_ascent: 14.0,
                                 cursor_descent: 4.0,
                                 glyph_runs: vec![],
+                                ruby_annotations: vec![],
                                 text_indent: 0.0,
                                 child_range: Some(2..2),
                             }),

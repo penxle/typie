@@ -1,6 +1,7 @@
 use editor_common::Rect;
 use editor_model::{Doc, Node, NodeId};
 use editor_resource::Resource;
+use editor_view::glyph_run::RubyAnnotation;
 use editor_view::style::{BoxStyle, DecorationData};
 use editor_view::{Edges, LineMetrics, PageRect, PageVisitor};
 use std::sync::{Arc, Mutex};
@@ -21,8 +22,8 @@ fn bake_mask_to_premul_rgba(mask: &[u8], width: u32, height: u32, color: Color) 
     let color_b = color.b as u32;
     let color_a = color.a as u32;
 
-    // legacy blit 공식과 동일: a = (m * color_a) >> 8, rgb_premul = (a * c) >> 8.
-    // zero canvas 위에서 legacy 의 직접 블릿 출력과 byte-exact 일치하도록 선택했다.
+    // Matches the legacy blit formula: a = (m * color_a) >> 8, rgb_premul = (a * c) >> 8,
+    // so output is byte-exact with the old direct-blit path on a zero canvas.
     let mut data = Vec::with_capacity((width * height * 4) as usize);
     for &m in mask {
         let a = (m as u32 * color_a) >> 8;
@@ -590,6 +591,65 @@ impl<'a> RenderVisitor<'a> {
             }
         }
     }
+    fn render_ruby_annotations(
+        &mut self,
+        rubies: &[editor_view::glyph_run::RubyAnnotation],
+        base_transform: Transform,
+    ) {
+        use editor_view::glyph_run::GraphemeSpan;
+
+        for ann in rubies {
+            let color = self.renderer.theme.color(&ann.color);
+
+            let adapter = editor_view::glyph_run::GlyphRun {
+                family_id: ann.family_id,
+                weight: ann.weight,
+                font_size: ann.font_size,
+                synthesis: ann.synthesis,
+                color: ann.color.clone(),
+                background_color: None,
+                glyphs: ann.glyphs.clone(),
+                decoration: editor_view::glyph_run::TextDecoration::default(),
+                node_id: editor_model::NodeId::ROOT,
+                offset: 0,
+                text: String::new(),
+                x: ann.x,
+                width: ann.width,
+                graphemes: Vec::<GraphemeSpan>::new(),
+            };
+
+            let resource = Arc::clone(&self.renderer.resource);
+            let resource_guard = resource.lock().unwrap();
+            let positioned = crate::glyph::rasterize(
+                &adapter,
+                &resource_guard.font_registry,
+                &mut self.renderer.scale_ctx,
+                &mut self.renderer.glyph_cache,
+                self.scale_factor,
+                base_transform,
+            );
+            drop(resource_guard);
+
+            for pg in &positioned {
+                let image = match pg.raster.content {
+                    Content::Mask => bake_mask_to_premul_rgba(
+                        &pg.raster.data,
+                        pg.raster.width,
+                        pg.raster.height,
+                        color,
+                    ),
+                    Content::Color => Image {
+                        data: pg.raster.data.clone(),
+                        width: pg.raster.width,
+                        height: pg.raster.height,
+                    },
+                };
+                let t = Transform::IDENTITY.translate(pg.blit_x as f32, pg.blit_y as f32);
+                let rect = Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
+                self.sink.draw_image(&image, rect, t);
+            }
+        }
+    }
 }
 
 impl<'a> PageVisitor for RenderVisitor<'a> {
@@ -625,8 +685,8 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                         *bq.variant.get(),
                         editor_model::BlockquoteVariant::MessageSent
                     );
-                    // 신 아키텍처의 Edges<bool>.bottom = true 는 "박스 하단이 페이지 안 = 잘리지 않음 = 마지막 fragment".
-                    // legacy SplitEdges.bottom = true 와 정반대 의미라 부정 없이 그대로 사용.
+                    // Edges<bool>.bottom = true means "box bottom is inside the page = not clipped = last fragment",
+                    // the opposite of legacy SplitEdges.bottom, so no negation is needed here.
                     let has_tail = edges.bottom;
                     let token = if is_sent {
                         "ui.blockquote.message-sent"
@@ -795,6 +855,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         local_rect: Rect,
         metrics: LineMetrics,
         glyph_runs: &[editor_view::glyph_run::GlyphRun],
+        ruby_annotations: &[RubyAnnotation],
     ) {
         if !self.on(RenderLayer::Content) {
             return;
@@ -829,6 +890,8 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     .fill_rect(strikethrough_rect(metrics, run.x, run.width), color, t);
             }
         }
+
+        self.render_ruby_annotations(ruby_annotations, t);
     }
 
     fn atom(&mut self, node_id: NodeId, local_rect: Rect) {
@@ -1160,7 +1223,7 @@ mod tests {
         assert_eq!(quad_count, 3);
         assert_eq!(close_count, 1);
 
-        // Sent 꼬리는 우측 (width 보다 큰 x 좌표) 으로 overflow 한다.
+        // The sent tail overflows to the right past the box width.
         let max_x = path
             .elements
             .iter()
@@ -1210,7 +1273,7 @@ mod tests {
         assert!((radii.top_left - 18.0).abs() < 0.01);
         assert!((radii.top_right - 18.0).abs() < 0.01);
         assert!((radii.bottom_left - 18.0).abs() < 0.01);
-        // 꼬리가 있는 sent 면 우하단 직각.
+        // The sent tail makes bottom-right a sharp corner.
         assert!(radii.bottom_right.abs() < 0.01);
     }
 
@@ -1238,7 +1301,7 @@ mod tests {
         let radii = message_bubble_radii(18.0, &edges, true, true);
         assert!(radii.top_left.abs() < 0.01);
         assert!(radii.top_right.abs() < 0.01);
-        // bottom_left 는 라운드, bottom_right 는 꼬리로 직각.
+        // bottom_left remains rounded; bottom_right is sharp due to the tail.
         assert!((radii.bottom_left - 18.0).abs() < 0.01);
         assert!(radii.bottom_right.abs() < 0.01);
     }
@@ -1251,7 +1314,7 @@ mod tests {
             left: true,
             right: true,
         };
-        // bottom split 이면 호출부에서 has_tail = false 로 넘긴다.
+        // The call site passes has_tail = false when the bottom edge is split.
         let radii = message_bubble_radii(18.0, &edges, true, false);
         assert!((radii.top_left - 18.0).abs() < 0.01);
         assert!((radii.top_right - 18.0).abs() < 0.01);
@@ -1285,6 +1348,82 @@ mod tests {
         assert!((r.y - 59.0).abs() < 0.01); // 80 - 70 * 0.3
         assert!((r.width - 50.0).abs() < 0.01);
         assert!((r.height - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn line_with_ruby_annotation_invokes_ruby_raster_path() {
+        use editor_view::glyph_run::{Glyph, RubyAnnotation, Synthesis};
+
+        // Pretendard-Regular 'A' (U+0041) is glyph id 3, which has an outline.
+        const TEST_FONT: &[u8] = include_bytes!("../../../assets/Pretendard-Regular.ttf");
+
+        #[derive(Default)]
+        struct CountingSink {
+            image_draws: usize,
+        }
+        impl RenderSink for CountingSink {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {}
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {
+                self.image_draws += 1;
+            }
+        }
+
+        let mut resource = Resource::new_test();
+        let compressed = editor_resource::compress_zstd(TEST_FONT);
+        resource.add_font_base("test", 400, &compressed).unwrap();
+        let family_id = resource
+            .font_registry
+            .intern_id("test")
+            .expect("test font must be registered");
+
+        let doc = editor_model::Doc::empty();
+        let mut renderer = Renderer::new(ThemeVariant::LightWhite, Arc::new(Mutex::new(resource)));
+
+        let mut sink = CountingSink::default();
+        let mut v =
+            renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Content]));
+
+        let ruby = RubyAnnotation {
+            family_id,
+            weight: 400,
+            font_size: 8.0,
+            synthesis: Synthesis::default(),
+            color: "text.black".to_string(),
+            ascent: 6.0,
+            descent: 2.0,
+            glyphs: vec![Glyph {
+                id: 3,
+                x: 0.0,
+                y: 0.0,
+            }], // 'A'
+            x: 0.0,
+            baseline_y: -8.0,
+            width: 10.0,
+        };
+
+        v.line(
+            editor_model::NodeId::ROOT,
+            Rect::from_xywh(0.0, 0.0, 100.0, 20.0),
+            LineMetrics {
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+            },
+            &[],
+            &[ruby],
+        );
+
+        // No base glyphs, but at least one ruby glyph raster must have been produced.
+        // The exact image_draws count depends on glyph cache state, but must be > 0.
+        assert!(
+            sink.image_draws > 0,
+            "ruby annotation glyph must be rasterized"
+        );
     }
 
     #[test]

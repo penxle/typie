@@ -37,6 +37,7 @@ pub(crate) fn build_strut_only_line(
             cursor_ascent: strut.ascent,
             cursor_descent: strut.descent,
             glyph_runs: vec![],
+            ruby_annotations: vec![],
             text_indent: indent,
             child_range: Some(child_range),
         }),
@@ -175,13 +176,53 @@ fn measure_segment(
                 &segmenters.grapheme,
             );
 
-            let n = lines.len();
+            // identify_ruby_groups inspects all paragraph children, not just this segment's slice.
+            // group_offsets accumulates consumed char counts across lines for wrap distribution.
+            let ruby_groups = super::ruby::identify_ruby_groups(paragraph);
+            let mut group_offsets = vec![0usize; ruby_groups.len()];
+
+            let mut resource = measurer.resource.lock().unwrap();
+            let mut line_outputs: Vec<(
+                super::extract::ExtractedLine,
+                Vec<crate::glyph_run::RubyAnnotation>,
+            )> = Vec::with_capacity(lines.len());
+            for line in lines {
+                let ruby_annotations = super::ruby::build_ruby_annotations_for_line(
+                    &line,
+                    width,
+                    &ruby_groups,
+                    &mut group_offsets,
+                    &mut resource,
+                );
+                line_outputs.push((line, ruby_annotations));
+            }
+            drop(resource);
+
+            let n = line_outputs.len();
             let cursor_ascent = strut.ascent;
             let cursor_descent = strut.descent;
-            lines
+            line_outputs
                 .into_iter()
                 .enumerate()
-                .map(|(i, line)| {
+                .map(|(i, (line, ruby_annotations))| {
+                    let max_ruby_ascent = ruby_annotations
+                        .iter()
+                        .map(|r| r.ascent)
+                        .fold(0.0, f32::max);
+                    let max_ruby_descent = ruby_annotations
+                        .iter()
+                        .map(|r| r.descent)
+                        .fold(0.0, f32::max);
+                    let extra_top = if ruby_annotations.is_empty() {
+                        0.0
+                    } else {
+                        max_ruby_ascent + max_ruby_descent + super::ruby::RUBY_GAP
+                    };
+
+                    let new_ascent = line.ascent + extra_top;
+                    let new_baseline = line.baseline + extra_top;
+                    let new_height = line.height + extra_top;
+
                     let line_child_range = if n == 1 {
                         Some(child_range.clone())
                     } else if i == 0 {
@@ -191,17 +232,45 @@ fn measure_segment(
                     } else {
                         None
                     };
+
+                    // shift base glyph y to match the shifted baseline.
+                    let glyph_runs = line
+                        .glyph_runs
+                        .into_iter()
+                        .map(|mut r| {
+                            if extra_top != 0.0 {
+                                for g in &mut r.glyphs {
+                                    g.y += extra_top;
+                                }
+                            }
+                            r
+                        })
+                        .collect::<Vec<_>>();
+
+                    // shift ruby glyph y by the same extra_top to keep them relative to the new baseline.
+                    let ruby_annotations = ruby_annotations
+                        .into_iter()
+                        .map(|mut a| {
+                            a.baseline_y += extra_top;
+                            for g in &mut a.glyphs {
+                                g.y += extra_top;
+                            }
+                            a
+                        })
+                        .collect::<Vec<_>>();
+
                     Arc::new(MeasuredNode {
                         width,
-                        height: line.height,
+                        height: new_height,
                         content: MeasuredContent::Line(MeasuredLine {
                             node_id: paragraph_id,
-                            baseline: line.baseline,
-                            ascent: line.ascent,
+                            baseline: new_baseline,
+                            ascent: new_ascent,
                             descent: line.descent,
                             cursor_ascent,
                             cursor_descent,
-                            glyph_runs: line.glyph_runs,
+                            glyph_runs,
+                            ruby_annotations,
                             text_indent: indent,
                             child_range: line_child_range,
                         }),
@@ -486,6 +555,236 @@ mod tests {
                 assert!(l.child_range.is_none(), "middle line owns no boundary");
             }
         }
+    }
+
+    #[test]
+    fn adjacent_same_ruby_text_one_annotation() {
+        let (d, p1) = doc! {
+            root {
+                p1: paragraph {
+                    text("굵게") [font_weight(700), ruby(text: "루비".to_string())]
+                    text("보통")  [ruby(text: "루비".to_string())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&d, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(
+            l.ruby_annotations.len(),
+            1,
+            "adjacent identical ruby runs must be merged"
+        );
+    }
+
+    #[test]
+    fn adjacent_different_ruby_two_annotations() {
+        let (d, p1) = doc! {
+            root {
+                p1: paragraph {
+                    text("A") [ruby(text: "a".to_string())]
+                    text("B") [ruby(text: "b".to_string())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&d, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.ruby_annotations.len(), 2);
+    }
+
+    #[test]
+    fn no_ruby_no_annotations() {
+        let (d, p1) = doc! { root { p1: paragraph { text("hello") } } };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&d, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert!(l.ruby_annotations.is_empty());
+    }
+
+    #[test]
+    fn line_height_grows_when_ruby_added() {
+        let (d1, p1) = doc! { root { p1: paragraph { text("ABCD") } } };
+        let (d2, p2) = doc! {
+            root {
+                p2: paragraph { text("ABCD") [ruby(text: "xy".to_string())] }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+
+        let m1 = measurer.measure(&d1, p1, 400.0, &vs);
+        measurer.clear_cache();
+        let m2 = measurer.measure(&d2, p2, 400.0, &vs);
+
+        let height1 = match &m1.content {
+            MeasuredContent::Box(b) => b.children[0].height,
+            _ => panic!(),
+        };
+        let height2 = match &m2.content {
+            MeasuredContent::Box(b) => b.children[0].height,
+            _ => panic!(),
+        };
+        let line2 = match &m2.content {
+            MeasuredContent::Box(b) => match &b.children[0].content {
+                MeasuredContent::Line(l) => l,
+                _ => panic!(),
+            },
+            _ => panic!(),
+        };
+        assert_eq!(line2.ruby_annotations.len(), 1);
+        let ann = &line2.ruby_annotations[0];
+
+        let diff = height2 - height1;
+        let expected = ann.ascent + ann.descent + crate::measure::text::ruby::RUBY_GAP;
+        assert!(
+            (diff - expected).abs() < 0.1,
+            "line height increase must equal ruby ascent + ruby descent + RUBY_GAP (diff={}, expected={}, plain_h={}, ruby_h={})",
+            diff,
+            expected,
+            height1,
+            height2
+        );
+    }
+
+    #[test]
+    fn cursor_ascent_unaffected_by_ruby() {
+        let (d1, p1) = doc! { root { p1: paragraph { text("ABCD") } } };
+        let (d2, p2) = doc! {
+            root {
+                p2: paragraph { text("ABCD") [ruby(text: "xy".to_string())] }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+
+        let line_of = |measurer: &mut Measurer, doc: &editor_model::Doc, p| {
+            let m = measurer.measure(doc, p, 400.0, &vs);
+            match &m.content {
+                MeasuredContent::Box(b) => match &b.children[0].content {
+                    MeasuredContent::Line(l) => (l.cursor_ascent, l.cursor_descent),
+                    _ => panic!(),
+                },
+                _ => panic!(),
+            }
+        };
+        let (ca1, cd1) = line_of(&mut measurer, &d1, p1);
+        measurer.clear_cache();
+        let (ca2, cd2) = line_of(&mut measurer, &d2, p2);
+        assert!((ca1 - ca2).abs() < 0.01);
+        assert!((cd1 - cd2).abs() < 0.01);
+    }
+
+    #[test]
+    fn ruby_wraps_distributes_across_lines() {
+        // narrow width forces ruby to wrap across two lines.
+        let (d, p1) = doc! {
+            root {
+                p1: paragraph {
+                    text("AAAA AAAA AAAA AAAA") [ruby(text: "한글영문".to_string())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&d, p1, 50.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let mut ruby_lines_with_glyphs = 0;
+        for c in &b.children {
+            if let MeasuredContent::Line(l) = &c.content {
+                for ann in &l.ruby_annotations {
+                    if !ann.glyphs.is_empty() {
+                        ruby_lines_with_glyphs += 1;
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(
+            ruby_lines_with_glyphs >= 2,
+            "ruby must distribute across at least two lines with non-empty annotations when wrapped (got {})",
+            ruby_lines_with_glyphs
+        );
+    }
+
+    #[test]
+    fn ruby_positioned_above_base_visual_top() {
+        // post-correction ruby must sit above the base glyph's visual top.
+        let (d, p1) = doc! {
+            root { p1: paragraph { text("ABCD") [ruby(text: "xy".to_string())] } }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&d, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.ruby_annotations.len(), 1);
+        let ann = &l.ruby_annotations[0];
+
+        let base_glyph_y = l
+            .glyph_runs
+            .first()
+            .and_then(|r| r.glyphs.first())
+            .map(|g| g.y)
+            .expect("at least one base glyph must be present");
+
+        let ruby_descent_bottom_y = ann.baseline_y + ann.descent;
+        assert!(
+            ruby_descent_bottom_y < base_glyph_y,
+            "ruby descent bottom must be above base glyph visual y (ruby_bottom={}, base_y={})",
+            ruby_descent_bottom_y,
+            base_glyph_y
+        );
+    }
+
+    #[test]
+    fn ruby_baseline_y_shared_within_line() {
+        let (d, p1) = doc! {
+            root {
+                p1: paragraph {
+                    text("A") [ruby(text: "x".to_string())]
+                    text("B") [font_size(2400), ruby(text: "y".to_string())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&d, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.ruby_annotations.len(), 2);
+        assert!(
+            (l.ruby_annotations[0].baseline_y - l.ruby_annotations[1].baseline_y).abs() < 0.01,
+            "all ruby annotations on a line must share a common baseline_y"
+        );
     }
 
     #[test]

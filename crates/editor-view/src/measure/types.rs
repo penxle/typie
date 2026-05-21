@@ -2,7 +2,7 @@ use editor_model::NodeId;
 use std::ops::Range;
 use std::sync::Arc;
 
-use crate::glyph_run::GlyphRun;
+use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::style::BoxStyle;
 
 #[derive(Debug)]
@@ -42,6 +42,7 @@ pub struct MeasuredLine {
     pub cursor_ascent: f32,
     pub cursor_descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
+    pub ruby_annotations: Vec<RubyAnnotation>,
     pub text_indent: f32,
     /// Paragraph child-offset interval this visual line owns for matching
     /// container-anchored cursor positions. Matching is inclusive of both

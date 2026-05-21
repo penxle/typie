@@ -2,6 +2,7 @@ pub(crate) mod extract;
 pub(crate) mod layout;
 pub(crate) mod measure;
 pub(crate) mod resolve;
+pub(crate) mod ruby;
 pub(crate) mod segment;
 pub(crate) mod strut;
 pub(crate) mod style_run;

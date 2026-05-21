@@ -42,6 +42,7 @@ icu_segmenter = { workspace = true, features = ["serde"] }
 log.workspace = true
 parley.workspace = true
 serde.workspace = true
+smallvec.workspace = true
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
@@ -51,4 +52,3 @@ editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
 fontique.workspace = true
 icu_segmenter = { workspace = true, features = ["compiled_data", "auto"] }
-smallvec.workspace = true

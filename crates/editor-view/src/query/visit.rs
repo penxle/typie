@@ -1,7 +1,7 @@
 use editor_common::Rect;
 use editor_model::NodeId;
 
-use crate::glyph_run::GlyphRun;
+use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::page::LayoutPage;
 use crate::paginate::*;
 use crate::style::{BoxStyle, DecorationData};
@@ -36,6 +36,7 @@ pub trait PageVisitor {
         local_rect: Rect,
         metrics: LineMetrics,
         glyph_runs: &[GlyphRun],
+        ruby_annotations: &[RubyAnnotation],
     );
     fn atom(&mut self, node_id: NodeId, local_rect: Rect);
     fn decoration(&mut self, local_rect: Rect, data: &DecorationData);
@@ -98,7 +99,13 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
                 ascent: l.ascent,
                 descent: l.descent,
             };
-            visitor.line(l.node_id, local_rect, metrics, &l.glyph_runs);
+            visitor.line(
+                l.node_id,
+                local_rect,
+                metrics,
+                &l.glyph_runs,
+                &l.ruby_annotations,
+            );
         }
         LayoutContent::Atom(a) => {
             visitor.atom(a.node_id, local_rect);
@@ -152,7 +159,14 @@ mod tests {
             self.box_exit_count += 1;
         }
 
-        fn line(&mut self, _: NodeId, local_rect: Rect, metrics: LineMetrics, _: &[GlyphRun]) {
+        fn line(
+            &mut self,
+            _: NodeId,
+            local_rect: Rect,
+            metrics: LineMetrics,
+            _: &[GlyphRun],
+            _: &[RubyAnnotation],
+        ) {
             self.line_count += 1;
             self.line_local_rects.push(local_rect);
             self.last_line_metrics = Some(metrics);
@@ -178,6 +192,7 @@ mod tests {
                 cursor_ascent: height * 0.7,
                 cursor_descent: height * 0.1,
                 glyph_runs: vec![],
+                ruby_annotations: vec![],
                 text_indent: 0.0,
                 child_range: None,
             }),

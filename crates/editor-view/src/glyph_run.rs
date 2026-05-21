@@ -46,6 +46,21 @@ pub struct GlyphRun {
     pub graphemes: Vec<GraphemeSpan>,
 }
 
+#[derive(Debug, Clone)]
+pub struct RubyAnnotation {
+    pub family_id: FontId,
+    pub weight: u16,
+    pub font_size: f32,
+    pub synthesis: Synthesis,
+    pub color: String,
+    pub ascent: f32,
+    pub descent: f32,
+    pub glyphs: Vec<Glyph>,
+    pub x: f32,
+    pub baseline_y: f32,
+    pub width: f32,
+}
+
 #[cfg(test)]
 impl GlyphRun {
     pub fn make_test_run(

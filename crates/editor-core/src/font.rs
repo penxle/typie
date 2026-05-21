@@ -41,12 +41,21 @@ fn collect_for_node(node: &NodeRef<'_>, font_registry: &FontRegistry, output: &m
     let (family, weight) = resolve_font_for_node(node);
 
     if let Node::Text(text_node) = node.node() {
-        let codepoints: HashSet<u32> = text_node
+        let mut codepoints: HashSet<u32> = text_node
             .text
             .to_string()
             .chars()
             .map(|c| c as u32)
             .collect();
+        // Ruby annotations are shaped with the base node's (family, weight)
+        // (see editor_view::measure::text::ruby), so their codepoints belong to
+        // the same request key. Without this, ruby glyphs never trigger a font
+        // load and the view never re-invalidates when the chunk arrives.
+        for m in node.modifiers() {
+            if let Modifier::Ruby { text } = m {
+                codepoints.extend(text.chars().map(|c| c as u32));
+            }
+        }
         if !codepoints.is_empty() {
             output
                 .entry((family, weight))
@@ -122,6 +131,10 @@ pub(crate) fn derive_font_updates_from_ops(
             } => {
                 if matches!(key, ModifierType::FontFamily | ModifierType::FontWeight) {
                     affected_subtrees.insert(*node_id);
+                } else if matches!(key, ModifierType::Ruby) {
+                    // Ruby modifier only changes the ruby text on this single node;
+                    // base font and descendant scope are unaffected.
+                    affected_text_nodes.insert(*node_id);
                 }
             }
             DocOp::Modifier {
@@ -302,6 +315,26 @@ mod tests {
         assert_eq!(nodes.len(), 2);
         assert!(nodes[&t1].contains(&('A' as u32)));
         assert!(nodes[&t2].contains(&('C' as u32)));
+    }
+
+    #[test]
+    fn collect_includes_ruby_text_codepoints() {
+        let (doc, t1) = doc! {
+            root [font_family("Pretendard".to_string()), font_weight(400)] {
+                paragraph {
+                    t1: text("AB") [ruby(text: "한자".to_string())]
+                }
+            }
+        };
+
+        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
+
+        let key = ("Pretendard".to_string(), 400u16);
+        let cps = &result[&key][&t1];
+        assert!(cps.contains(&('A' as u32)));
+        assert!(cps.contains(&('B' as u32)));
+        assert!(cps.contains(&('한' as u32)));
+        assert!(cps.contains(&('자' as u32)));
     }
 
     #[test]

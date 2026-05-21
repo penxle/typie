@@ -156,6 +156,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -179,6 +180,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -202,6 +204,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -225,6 +228,7 @@ mod tests {
                 0.0,
                 vec![gs(20.0, 3), gs(10.0, 1), gs(10.0, 1)],
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -253,6 +257,7 @@ mod tests {
                 50.0,
                 ascii_spans(2, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -276,6 +281,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -301,6 +307,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -326,6 +333,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -354,6 +362,7 @@ mod tests {
                 0.0,
                 vec![gs(20.0, 3), gs(10.0, 1), gs(10.0, 1)],
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -379,6 +388,7 @@ mod tests {
             cursor_ascent: 14.0,
             cursor_descent: 4.0,
             glyph_runs: vec![],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -407,6 +417,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -432,6 +443,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -451,6 +463,7 @@ mod tests {
             cursor_ascent: 14.0,
             cursor_descent: 4.0,
             glyph_runs: vec![],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -474,6 +487,7 @@ mod tests {
                 GlyphRun::make_test_run(id1, 0, "ab", 0.0, ascii_spans(2, 10.0)),
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
             ],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -495,6 +509,7 @@ mod tests {
                 GlyphRun::make_test_run(id1, 0, "ab", 0.0, ascii_spans(2, 10.0)),
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
             ],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: None,
         };
@@ -514,6 +529,7 @@ mod tests {
             cursor_ascent: 14.0,
             cursor_descent: 4.0,
             glyph_runs: vec![],
+            ruby_annotations: vec![],
             text_indent: 32.0,
             child_range: None,
         };
@@ -531,6 +547,7 @@ mod tests {
             cursor_ascent: 14.0,
             cursor_descent: 4.0,
             glyph_runs: vec![],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: Some(0..1),
         };
@@ -551,6 +568,7 @@ mod tests {
             cursor_ascent: 14.0,
             cursor_descent: 4.0,
             glyph_runs: vec![],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: Some(2..2),
         };
@@ -571,6 +589,7 @@ mod tests {
             cursor_ascent: 14.0,
             cursor_descent: 4.0,
             glyph_runs: vec![],
+            ruby_annotations: vec![],
             text_indent: 0.0,
             child_range: Some(2..2),
         };

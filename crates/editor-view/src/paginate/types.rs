@@ -2,7 +2,7 @@ use editor_common::Rect;
 use editor_model::NodeId;
 use std::ops::Range;
 
-use crate::glyph_run::GlyphRun;
+use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::style::BoxStyle;
 
 #[derive(Debug)]
@@ -53,6 +53,7 @@ pub struct LayoutLine {
     pub cursor_ascent: f32,
     pub cursor_descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
+    pub ruby_annotations: Vec<RubyAnnotation>,
     pub text_indent: f32,
     /// Mirror of [`crate::measure::MeasuredLine::child_range`]; see that
     /// type for the inclusive-both matching contract and `None` semantics.

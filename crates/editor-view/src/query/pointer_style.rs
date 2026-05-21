@@ -115,6 +115,7 @@ mod tests {
                 cursor_ascent: h,
                 cursor_descent: 0.0,
                 glyph_runs: vec![],
+                ruby_annotations: vec![],
                 text_indent: 0.0,
                 child_range: None,
             }),
