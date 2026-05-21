@@ -220,22 +220,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
             if let Some(new_selection) = new_selection {
                 let final_selection = if extend {
                     let doc = &editor.state.doc;
-                    // Re-anchoring is sound only when the current selection
-                    // already brackets a unit (atom or monolithic block) and the
-                    // move is a vertical line step; otherwise the gesture anchor
-                    // must stay put so ordinary Shift selection (shrink/reverse,
-                    // horizontal, word) is unaffected.
-                    let vertical_line = matches!(
-                        movement,
-                        Movement::Line {
-                            axis: Axis::Vertical,
-                            ..
-                        }
-                    );
-                    let fixed = if vertical_line && selection.is_unit_node_selection(doc) {
-                        // Re-anchor to the unit edge opposite the travel
-                        // direction so the already-selected unit stays in the
-                        // range as it grows.
+                    let fixed = if selection.is_unit_node_selection(doc) {
                         farther_endpoint(doc, new_selection.head, selection.anchor, selection.head)
                     } else {
                         selection.anchor
@@ -512,6 +497,92 @@ mod tests {
                 extend: true,
             },
         });
+    }
+
+    fn shift_left(editor: &mut Editor) {
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+                extend: true,
+            },
+        });
+    }
+
+    fn shift_right(editor: &mut Editor) {
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                extend: true,
+            },
+        });
+    }
+
+    #[test]
+    fn shift_left_from_selected_lower_atom_includes_both() {
+        let (state, r) = state! {
+            doc {
+                r: root {
+                    image
+                    image
+                    paragraph { text("bottom") }
+                }
+            }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_left(&mut editor);
+
+        let s = editor.state().selection;
+        let (lo, hi) = if s.anchor.offset <= s.head.offset {
+            (s.anchor.offset, s.head.offset)
+        } else {
+            (s.head.offset, s.anchor.offset)
+        };
+        assert_eq!(s.anchor.node_id, r);
+        assert_eq!(s.head.node_id, r);
+        assert_eq!(
+            (lo, hi),
+            (0, 2),
+            "shift+left from image#1 node-selection must envelop both images"
+        );
+    }
+
+    #[test]
+    fn shift_right_from_selected_upper_atom_includes_both() {
+        let (state, r) = state! {
+            doc {
+                r: root {
+                    paragraph { text("top") }
+                    image
+                    image
+                }
+            }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_right(&mut editor);
+
+        let s = editor.state().selection;
+        let (lo, hi) = if s.anchor.offset <= s.head.offset {
+            (s.anchor.offset, s.head.offset)
+        } else {
+            (s.head.offset, s.anchor.offset)
+        };
+        assert_eq!(s.anchor.node_id, r);
+        assert_eq!(s.head.node_id, r);
+        assert_eq!(
+            (lo, hi),
+            (1, 3),
+            "shift+right from image#1 node-selection must envelop both images"
+        );
     }
 
     #[test]

@@ -44,8 +44,15 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                                 .filter(|&h| h != a)
                                 .and_then(|h| cell_rect_selection(&editor.state.doc, a, h))
                         });
-                        cell_sel
-                            .or_else(|| ext_hit.as_ref().map(|h| Selection::new(anchor, h.head)))
+                        cell_sel.or_else(|| {
+                            ext_hit.as_ref().map(|h| {
+                                let doc = &editor.state.doc;
+                                let cur = editor.state.selection;
+                                let fixed = farther_endpoint(doc, h.head, cur.anchor, cur.head);
+                                let head = farther_endpoint(doc, fixed, h.anchor, h.head);
+                                Selection::new(fixed, head)
+                            })
+                        })
                     } else {
                         raw_hit
                     }
@@ -326,6 +333,75 @@ mod tests {
             "drag anchor must survive an intermediate collapse"
         );
         assert_ne!(sel.anchor, sel.head);
+    }
+
+    #[test]
+    fn shift_click_first_image_from_selected_second_image_envelops_both() {
+        use editor_state::{Affinity, Position};
+
+        let (state, r1, i0, i1) = state! {
+            doc { r1: root { i0: image i1: image paragraph {} } }
+            selection: (r1, 1, >) -> (r1, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        for id in [i0, i1] {
+            editor
+                .view
+                .set_external_height(&editor.state.doc, id, 100.0);
+        }
+        editor.view.layout(&editor.state.doc);
+
+        let atom_center = |editor: &Editor, idx: usize| {
+            let sel = Selection::new(
+                Position {
+                    node_id: r1,
+                    offset: idx,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: idx + 1,
+                    affinity: Affinity::Upstream,
+                },
+            );
+            let resolved = sel.resolve(&editor.state.doc).unwrap();
+            let rects = editor.view.selection_rects(&resolved);
+            let pr = &rects[0];
+            (
+                pr.page_idx,
+                pr.rect.x + pr.rect.width / 2.0,
+                pr.rect.y + pr.rect.height / 2.0,
+            )
+        };
+
+        let (p0, x0, y0) = atom_center(&editor, 0);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: p0,
+                x: x0,
+                y: y0,
+                count: 1,
+                modifiers: InputModifiers {
+                    shift: true,
+                    ..Default::default()
+                },
+            },
+        });
+
+        let s = editor.state().selection;
+        let (lo, hi) = if s.anchor.offset <= s.head.offset {
+            (s.anchor.offset, s.head.offset)
+        } else {
+            (s.head.offset, s.anchor.offset)
+        };
+        assert_eq!(s.anchor.node_id, r1);
+        assert_eq!(s.head.node_id, r1);
+        assert_eq!(
+            (lo, hi),
+            (0, 2),
+            "shift+click image#0 from image#1 node-selection must envelop both images: \
+             anchor must re-anchor to the unit's trailing edge (r1,2), not stay at (r1,1)"
+        );
     }
 
     #[test]
