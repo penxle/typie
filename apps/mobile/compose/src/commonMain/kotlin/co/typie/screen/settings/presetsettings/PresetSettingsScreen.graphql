@@ -5,19 +5,7 @@ query PresetSettingsScreen_Query {
 
     documentFontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
       ...FontLoader_FontFamily
-      id
-      familyName
-      displayName
-      source
-      state
-
-      fonts {
-        id
-        weight
-        state
-        subfamilyDisplayName
-        url
-      }
+      ...EditorSettingsFontFamily_family
     }
   }
 }

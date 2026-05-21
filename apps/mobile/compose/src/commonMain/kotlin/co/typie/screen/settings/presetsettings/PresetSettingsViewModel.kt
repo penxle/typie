@@ -12,7 +12,6 @@ import co.typie.graphql.PresetSettingsScreen_UpdatePreferences_Mutation
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
-import co.typie.graphql.type.FontFamilySource
 import co.typie.graphql.type.FontFamilyState
 import co.typie.graphql.type.FontState
 import co.typie.graphql.type.UpdatePreferencesInput
@@ -32,10 +31,13 @@ internal class PresetSettingsViewModel : ViewModel() {
       onInitialData = { data ->
         FontLoader.loadFonts(
           data.me.documentFontFamilies
-            .filter { it.state == FontFamilyState.ACTIVE }
+            .filter { it.editorSettingsFontFamily_family.state == FontFamilyState.ACTIVE }
             .map { family ->
               val activeFontIds =
-                family.fonts.filter { it.state == FontState.ACTIVE }.map { it.id }.toSet()
+                family.editorSettingsFontFamily_family.fonts
+                  .filter { it.state == FontState.ACTIVE }
+                  .map { it.id }
+                  .toSet()
               family.fontLoader_FontFamily.copy(
                 fonts = family.fontLoader_FontFamily.fonts.filter { it.id in activeFontIds }
               )
@@ -51,11 +53,7 @@ internal class PresetSettingsViewModel : ViewModel() {
   }
 
   val fontFamilies by derivedStateOf {
-    query.data.me.documentFontFamilies
-      .filter { it.state == FontFamilyState.ACTIVE && it.source != FontFamilySource.FALLBACK }
-      .map { family ->
-        family.copy(fonts = family.fonts.filter { font -> font.state == FontState.ACTIVE })
-      }
+    query.data.me.documentFontFamilies.map { family -> family.editorSettingsFontFamily_family }
   }
 
   internal suspend fun updatePreset(preset: Preset): Result<Unit, Nothing> = result {

@@ -1,4 +1,4 @@
-package co.typie.screen.settings.presetsettings
+package co.typie.editor.preview
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -35,6 +35,7 @@ import co.typie.editor.EditorZoomController
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
+import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
@@ -71,23 +72,28 @@ private const val PreviewHintVisibleMillis = 850
 private const val PreviewHintFadeMillis = 180
 
 @Composable
-internal fun PresetPreview(
-  preset: Preset,
+internal fun EditorPreview(
+  layoutMode: LayoutMode,
+  runtime: EditorRuntime,
   modifier: Modifier = Modifier,
   shape: RoundedCornerShape,
   contentTopPadding: Dp = 0.dp,
+  document: PlainDoc? = null,
+  modifiers: List<EditorModifier> = emptyList(),
+  hintText: String = "미리보기 텍스트",
 ) {
   val colors = AppTheme.colors
   val scope = rememberCoroutineScope()
-  val doc = remember(preset.layout) { preset.toPreviewDoc() }
-  val modifiers = remember(preset) { preset.toPreviewModifiers().values.toList() }
-  val layoutSpec = remember(preset.layout) { preset.layout.toEditorDocumentLayoutSpec() }
+  val doc =
+    remember(document, layoutMode) {
+      (document ?: defaultPreviewDoc(layoutMode)).withPreviewRootModifiers(modifiers)
+    }
+  val layoutSpec = remember(layoutMode) { layoutMode.toEditorDocumentLayoutSpec() }
   val background =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Continuous -> colors.surfaceDefault
       is EditorDocumentLayoutSpec.Paginated -> colors.surfaceInset
     }
-  val runtime = remember(doc) { EditorRuntime(uiScope = scope) }
   val uiState = remember(doc) { EditorUiState() }
   val zoomController = remember { EditorZoomController(scope = scope) }
   val bringIntoViewRequests = remember(doc) { EditorBringIntoViewRequests() }
@@ -96,7 +102,7 @@ internal fun PresetPreview(
   val hintEvents = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
   val hintAlpha = remember { Animatable(0f) }
 
-  DisposableEffect(runtime) { onDispose { runtime.clear() } }
+  DisposableEffect(runtime, doc) { onDispose { runtime.clear() } }
   LaunchedEffect(hintEvents) {
     hintEvents.collectLatest {
       hintAlpha.animateTo(1f, tween(PreviewHintFadeMillis))
@@ -144,7 +150,7 @@ internal fun PresetPreview(
             LocalEditorZoomController provides zoomController,
             LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
           ) {
-            PresetEditorPreview(
+            EditorPreviewContent(
               doc = doc,
               modifiers = modifiers,
               editorScope = scope,
@@ -181,7 +187,7 @@ internal fun PresetPreview(
                 .background(colors.surfaceInset.copy(alpha = 0.36f), hintShape)
                 .padding(horizontal = 10.dp, vertical = 5.dp)
           ) {
-            Text(text = "미리보기 텍스트", style = AppTheme.typography.caption, color = colors.textMuted)
+            Text(text = hintText, style = AppTheme.typography.caption, color = colors.textMuted)
           }
         }
       }
@@ -190,7 +196,7 @@ internal fun PresetPreview(
 }
 
 @Composable
-private fun PresetEditorPreview(
+private fun EditorPreviewContent(
   doc: PlainDoc,
   modifiers: List<EditorModifier>,
   editorScope: CoroutineScope,
@@ -212,8 +218,10 @@ private fun PresetEditorPreview(
     }
 
     editor.await {
-      enqueue(Message.Selection(SelectionOp.All))
-      modifiers.forEach { modifier -> enqueue(Message.Modifier(ModifierOp.Set(modifier))) }
+      if (modifiers.isNotEmpty()) {
+        enqueue(Message.Selection(SelectionOp.All))
+        modifiers.forEach { modifier -> enqueue(Message.Modifier(ModifierOp.Set(modifier))) }
+      }
       enqueue(Message.Selection(SelectionOp.SetFlat(start = 0, end = 0)))
       enqueue(Message.System(SystemEvent.SetFocused(false)))
     }
@@ -264,7 +272,7 @@ private fun PresetEditorPreview(
       is EditorDocumentLayoutSpec.Continuous -> AppTheme.colors.surfaceDefault
       is EditorDocumentLayoutSpec.Paginated -> Color.Transparent
     }
-  PresetPreviewPageStack(
+  EditorPreviewPageStack(
     pageSpacing = pageSpacing,
     modifier = Modifier.fillMaxSize().clipToBounds().background(pageBackground),
   ) {
@@ -291,7 +299,7 @@ private fun PresetEditorPreview(
 }
 
 @Composable
-private fun PresetPreviewPageStack(
+private fun EditorPreviewPageStack(
   pageSpacing: Dp,
   modifier: Modifier = Modifier,
   content: @Composable () -> Unit,
@@ -320,21 +328,21 @@ private fun PresetPreviewPageStack(
   }
 }
 
-private fun Preset.toPreviewDoc(): PlainDoc {
-  val paragraphIds = PresetPreviewParagraphs.indices.map { index -> "${index * 2 + 1}" }
-  val textIds = PresetPreviewParagraphs.indices.map { index -> "${index * 2 + 2}" }
+private fun defaultPreviewDoc(layoutMode: LayoutMode): PlainDoc {
+  val paragraphIds = DefaultPreviewParagraphs.indices.map { index -> "${index * 2 + 1}" }
+  val textIds = DefaultPreviewParagraphs.indices.map { index -> "${index * 2 + 2}" }
   val nodes = buildMap {
     put(
       "0",
       PlainNodeEntry(
         parent = null,
         children = paragraphIds,
-        modifiers = toPreviewModifiers(),
-        node = PlainNode.Root(layoutMode = layout.toLayoutMode()),
+        modifiers = DefaultPreviewRootModifiers,
+        node = PlainNode.Root(layoutMode = layoutMode),
       ),
     )
 
-    PresetPreviewParagraphs.forEachIndexed { index, paragraph ->
+    DefaultPreviewParagraphs.forEachIndexed { index, paragraph ->
       put(
         paragraphIds[index],
         PlainNodeEntry(
@@ -358,48 +366,56 @@ private fun Preset.toPreviewDoc(): PlainDoc {
   return PlainDoc(nodes = nodes)
 }
 
-private fun Preset.toPreviewModifiers(): Map<ModifierType, EditorModifier> =
+private fun PlainDoc.withPreviewRootModifiers(modifiers: List<EditorModifier>): PlainDoc {
+  val rootEntry = nodes["0"] ?: return this
+  val rootModifiers =
+    DefaultPreviewRootModifiers + rootEntry.modifiers + modifiers.toPreviewRootModifierMap()
+  return PlainDoc(
+    nodes =
+      nodes +
+        ("0" to
+          PlainNodeEntry(
+            parent = rootEntry.parent,
+            children = rootEntry.children,
+            modifiers = rootModifiers,
+            node = rootEntry.node,
+          ))
+  )
+}
+
+private fun List<EditorModifier>.toPreviewRootModifierMap(): Map<ModifierType, EditorModifier> =
+  mapNotNull { modifier ->
+      val type =
+        when (modifier) {
+          is EditorModifier.FontFamily -> ModifierType.FontFamily
+          is EditorModifier.FontSize -> ModifierType.FontSize
+          is EditorModifier.FontWeight -> ModifierType.FontWeight
+          is EditorModifier.TextColor -> ModifierType.TextColor
+          is EditorModifier.BackgroundColor -> ModifierType.BackgroundColor
+          is EditorModifier.LetterSpacing -> ModifierType.LetterSpacing
+          is EditorModifier.LineHeight -> ModifierType.LineHeight
+          is EditorModifier.ParagraphIndent -> ModifierType.ParagraphIndent
+          is EditorModifier.BlockGap -> ModifierType.BlockGap
+          else -> null
+        }
+      type?.let { it to modifier }
+    }
+    .toMap()
+
+private val DefaultPreviewRootModifiers =
   mapOf(
-    ModifierType.FontFamily to EditorModifier.FontFamily(fontFamily),
-    ModifierType.FontSize to EditorModifier.FontSize(fontSize),
-    ModifierType.FontWeight to EditorModifier.FontWeight(fontWeight),
-    ModifierType.TextColor to EditorModifier.TextColor(textColor),
-    ModifierType.BackgroundColor to EditorModifier.BackgroundColor(backgroundColor),
-    ModifierType.LetterSpacing to EditorModifier.LetterSpacing(letterSpacing),
-    ModifierType.LineHeight to EditorModifier.LineHeight(lineHeight),
-    ModifierType.BlockGap to EditorModifier.BlockGap(blockGap),
-    ModifierType.ParagraphIndent to EditorModifier.ParagraphIndent(paragraphIndent),
+    ModifierType.FontFamily to EditorModifier.FontFamily("Pretendard"),
+    ModifierType.FontSize to EditorModifier.FontSize(1200),
+    ModifierType.FontWeight to EditorModifier.FontWeight(400),
+    ModifierType.TextColor to EditorModifier.TextColor("black"),
+    ModifierType.BackgroundColor to EditorModifier.BackgroundColor("none"),
+    ModifierType.LetterSpacing to EditorModifier.LetterSpacing(0),
+    ModifierType.LineHeight to EditorModifier.LineHeight(160),
+    ModifierType.ParagraphIndent to EditorModifier.ParagraphIndent(100),
+    ModifierType.BlockGap to EditorModifier.BlockGap(100),
   )
 
-private fun PresetPageLayout.toLayoutMode(): LayoutMode =
-  when (this) {
-    is PresetPageLayout.Continuous -> LayoutMode.Continuous(maxWidth = maxWidth)
-    is PresetPageLayout.Paginated ->
-      LayoutMode.Paginated(
-        pageWidth = pageWidth,
-        pageHeight = pageHeight,
-        pageMarginTop = pageMarginTop,
-        pageMarginBottom = pageMarginBottom,
-        pageMarginLeft = pageMarginLeft,
-        pageMarginRight = pageMarginRight,
-      )
-  }
-
-private fun PresetPageLayout.toEditorDocumentLayoutSpec(): EditorDocumentLayoutSpec =
-  when (this) {
-    is PresetPageLayout.Continuous -> EditorDocumentLayoutSpec.Continuous(maxWidth.toFloat())
-    is PresetPageLayout.Paginated ->
-      EditorDocumentLayoutSpec.Paginated(
-        pageWidth = pageWidth.toFloat(),
-        pageHeight = pageHeight.toFloat(),
-        pageMarginTop = pageMarginTop.toFloat(),
-        pageMarginBottom = pageMarginBottom.toFloat(),
-        pageMarginLeft = pageMarginLeft.toFloat(),
-        pageMarginRight = pageMarginRight.toFloat(),
-      )
-  }
-
-private val PresetPreviewParagraphs =
+private val DefaultPreviewParagraphs =
   listOf(
     "우리는 종종 완성된 글보다, 쓰기 시작한 마음을 더 오래 기억합니다. " +
       "아직 다듬어지지 않은 문장에도 그날의 온도와 망설임, 끝내 붙잡고 싶었던 생각이 남아 있습니다.",

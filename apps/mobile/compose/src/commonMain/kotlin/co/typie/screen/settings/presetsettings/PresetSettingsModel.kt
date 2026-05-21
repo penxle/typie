@@ -1,5 +1,6 @@
 package co.typie.screen.settings.presetsettings
 
+import co.typie.editor.ffi.LayoutMode
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -37,3 +38,31 @@ internal data class Preset(
 )
 
 @Serializable internal data class PresetPreferences(@EncodeDefault val template: Preset? = Preset())
+
+internal fun PresetPageLayout.toLayoutMode(): LayoutMode =
+  when (this) {
+    is PresetPageLayout.Continuous -> LayoutMode.Continuous(maxWidth = maxWidth)
+    is PresetPageLayout.Paginated ->
+      LayoutMode.Paginated(
+        pageWidth = pageWidth,
+        pageHeight = pageHeight,
+        pageMarginTop = pageMarginTop,
+        pageMarginBottom = pageMarginBottom,
+        pageMarginLeft = pageMarginLeft,
+        pageMarginRight = pageMarginRight,
+      )
+  }
+
+internal fun LayoutMode.toPresetPageLayout(): PresetPageLayout =
+  when (this) {
+    is LayoutMode.Continuous -> PresetPageLayout.Continuous(maxWidth = maxWidth)
+    is LayoutMode.Paginated ->
+      PresetPageLayout.Paginated(
+        pageWidth = pageWidth,
+        pageHeight = pageHeight,
+        pageMarginTop = pageMarginTop,
+        pageMarginBottom = pageMarginBottom,
+        pageMarginLeft = pageMarginLeft,
+        pageMarginRight = pageMarginRight,
+      )
+  }

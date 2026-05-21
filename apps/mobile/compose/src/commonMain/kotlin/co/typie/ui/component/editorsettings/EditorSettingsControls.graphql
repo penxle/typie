@@ -1,0 +1,14 @@
+fragment EditorSettingsFontFamily_family on DocumentFontFamily {
+  id
+  familyName
+  displayName
+  source
+  state
+
+  fonts {
+    id
+    weight
+    state
+    subfamilyDisplayName
+  }
+}

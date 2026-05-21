@@ -1,5 +1,7 @@
 package co.typie.editor
 
+import co.typie.editor.ffi.LayoutMode
+
 data class EditorOption<T>(val label: String, val value: T)
 
 fun <T> List<EditorOption<T>>.labelOf(value: T, fallback: () -> String): String =
@@ -22,18 +24,9 @@ data class EditorPageMarginOption(
 data class EditorPageLayoutOption(
   val label: String,
   val value: String,
-  val layout: PageLayout,
+  val layout: LayoutMode.Paginated,
   val margins: List<EditorPageMarginOption>,
-) {
-  data class PageLayout(
-    val pageWidth: Int,
-    val pageHeight: Int,
-    val pageMarginTop: Int,
-    val pageMarginBottom: Int,
-    val pageMarginLeft: Int,
-    val pageMarginRight: Int,
-  )
-}
+)
 
 object EditorValues {
   val fontWeight =
@@ -171,7 +164,7 @@ object EditorValues {
         label = "A4 (210mm × 297mm)",
         value = "a4",
         layout =
-          EditorPageLayoutOption.PageLayout(
+          LayoutMode.Paginated(
             pageWidth = 794,
             pageHeight = 1123,
             pageMarginTop = 94,
@@ -211,7 +204,7 @@ object EditorValues {
         label = "A5 (148mm × 210mm)",
         value = "a5",
         layout =
-          EditorPageLayoutOption.PageLayout(
+          LayoutMode.Paginated(
             pageWidth = 559,
             pageHeight = 794,
             pageMarginTop = 76,
@@ -251,7 +244,7 @@ object EditorValues {
         label = "B5 (176mm × 250mm)",
         value = "b5",
         layout =
-          EditorPageLayoutOption.PageLayout(
+          LayoutMode.Paginated(
             pageWidth = 665,
             pageHeight = 945,
             pageMarginTop = 57,
@@ -291,7 +284,7 @@ object EditorValues {
         label = "B6 (125mm × 176mm)",
         value = "b6",
         layout =
-          EditorPageLayoutOption.PageLayout(
+          LayoutMode.Paginated(
             pageWidth = 472,
             pageHeight = 665,
             pageMarginTop = 38,

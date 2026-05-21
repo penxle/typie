@@ -1,4 +1,4 @@
-package co.typie.screen.settings.presetsettings
+package co.typie.ui.component.editorsettings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -62,7 +62,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun PresetSnapSlider(
+internal fun EditorSettingsSnapSlider(
   label: String,
   value: Int,
   onValueChange: suspend (Int) -> Unit,

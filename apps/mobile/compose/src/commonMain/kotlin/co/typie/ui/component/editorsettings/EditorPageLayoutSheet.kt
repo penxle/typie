@@ -1,4 +1,4 @@
-package co.typie.screen.settings.presetsettings
+package co.typie.ui.component.editorsettings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.editor.ffi.LayoutMode
 import co.typie.ext.rememberTextInputBinding
 import co.typie.ext.textInputFocusable
 import co.typie.ui.component.Text
@@ -36,11 +37,20 @@ import co.typie.ui.theme.AppTheme
 
 private const val MIN_PAGE_SIZE_MM = 100
 private val MIN_CONTENT_SIZE_PX = mmToPx(50)
+private val DefaultPaginatedLayout =
+  LayoutMode.Paginated(
+    pageWidth = 794,
+    pageHeight = 1123,
+    pageMarginTop = 94,
+    pageMarginBottom = 94,
+    pageMarginLeft = 94,
+    pageMarginRight = 94,
+  )
 
 @Composable
 context(_: SheetScope<Unit>)
-internal fun PresetPageLayoutSheet(preset: Preset, onSave: (PresetPageLayout.Paginated) -> Unit) {
-  val initial = preset.layout as? PresetPageLayout.Paginated ?: PresetPageLayout.Paginated()
+internal fun EditorPageLayoutSheet(layout: LayoutMode, onSave: (LayoutMode.Paginated) -> Unit) {
+  val initial = layout as? LayoutMode.Paginated ?: DefaultPaginatedLayout
 
   var pageWidth by remember { mutableIntStateOf(initial.pageWidth) }
   var pageHeight by remember { mutableIntStateOf(initial.pageHeight) }
@@ -51,7 +61,7 @@ internal fun PresetPageLayoutSheet(preset: Preset, onSave: (PresetPageLayout.Pag
 
   fun save() {
     onSave(
-      PresetPageLayout.Paginated(
+      LayoutMode.Paginated(
         pageWidth = pageWidth,
         pageHeight = pageHeight,
         pageMarginTop = marginTop,
