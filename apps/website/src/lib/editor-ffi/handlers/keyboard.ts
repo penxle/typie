@@ -5,7 +5,7 @@ import type { EditorEventHandler } from '../types';
 type KeyBindingModifier = 'shift' | 'mod' | 'ctrl' | 'alt';
 
 type KeyBinding = {
-  key: string;
+  key: string | string[];
   modifiers?: KeyBindingModifier[];
   predicate?: (e: KeyboardEvent) => boolean;
   action: (editor: Editor, e: KeyboardEvent) => void;
@@ -196,8 +196,8 @@ const bindings: KeyBinding[] = [
     action: (ed) => ed.enqueue({ type: 'history', op: { type: 'redo' } }),
   },
 
-  { key: 'q', modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state') },
-  { key: 'w', modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state-as-macro') },
+  { key: ['q', 'ㅂ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state') },
+  { key: ['w', 'ㅈ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state-as-macro') },
 ];
 
 const move = (movement: Movement, extend: boolean): Message => ({
@@ -211,7 +211,7 @@ const del = (movement: Movement): Message => ({
 });
 
 const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {
-  if (binding.key !== e.key) return false;
+  if (Array.isArray(binding.key) ? !binding.key.includes(e.key) : binding.key !== e.key) return false;
 
   const mods = binding.modifiers ?? [];
   const expectShift = mods.includes('shift');
