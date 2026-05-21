@@ -87,6 +87,16 @@ impl Editor {
         })
     }
 
+    pub fn selection_endpoints(
+        &self,
+    ) -> EditorResult<Option<Complex<editor_view::SelectionEndpoints>>> {
+        self.with_inner(|inner| Ok(inner.editor.selection_endpoints().into_ffi()?))
+    }
+
+    pub fn selection_hit_test(&self, page: u32, x: f32, y: f32) -> EditorResult<bool> {
+        self.with_inner(|inner| Ok(inner.editor.selection_hit_test(page as usize, x, y)))
+    }
+
     pub fn pointer_style(
         &self,
         page: u32,
@@ -302,5 +312,66 @@ impl Editor {
     {
         let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut inner)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use editor_macros::state;
+
+    fn make_ffi_editor(initial: editor_state::State) -> Editor {
+        let mut core = editor_core::Editor::new_test(initial);
+        core.apply(editor_core::Message::System {
+            event: editor_core::SystemEvent::Initialize,
+        });
+        Editor::new(core)
+    }
+
+    #[test]
+    fn ffi_selection_endpoints_resolves_and_forwards() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 1) -> (t, 8)
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.selection_endpoints().expect("ffi call returns Ok");
+        assert!(
+            result.is_some(),
+            "range selection must produce endpoints through FFI",
+        );
+    }
+
+    #[test]
+    fn ffi_selection_endpoints_collapsed_is_none() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 2)
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.selection_endpoints().expect("ffi call returns Ok");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_selection_hit_test_resolves_and_forwards() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let editor = make_ffi_editor(initial);
+        let endpoints = editor
+            .selection_endpoints()
+            .expect("ffi call returns Ok")
+            .expect("range selection has endpoints");
+        let probe_x = endpoints.from.rect.x + 5.0;
+        let probe_y = endpoints.from.rect.y + endpoints.from.rect.height * 0.5;
+        let hit = editor
+            .selection_hit_test(0, probe_x, probe_y)
+            .expect("ffi call returns Ok");
+        assert!(
+            hit,
+            "probe inside selection rect must register as hit through FFI"
+        );
     }
 }

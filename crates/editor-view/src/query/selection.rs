@@ -1,5 +1,7 @@
 use editor_common::Rect;
+use editor_macros::ffi;
 use editor_state::{Affinity, Position};
+use serde::{Deserialize, Serialize};
 
 use crate::page::{LayoutPage, PageRect};
 use crate::paginate::*;
@@ -14,6 +16,14 @@ pub enum SelectionRectKind {
 }
 
 pub type SelectionRect = PageRect<SelectionRectKind>;
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SelectionEndpoints {
+    pub from: PageRect,
+    pub to: PageRect,
+}
 
 pub fn selection_rects(
     tree: &LayoutTree,
@@ -46,6 +56,87 @@ pub fn selection_rects(
     );
 
     rects
+}
+
+pub fn selection_endpoints(
+    tree: &LayoutTree,
+    pages: &[LayoutPage],
+    selection: &editor_state::ResolvedSelection<'_>,
+) -> Option<SelectionEndpoints> {
+    if selection.is_collapsed() {
+        return None;
+    }
+    let rects = selection_rects(tree, pages, selection);
+    let first = rects.first()?;
+    let last = rects.last()?;
+    Some(SelectionEndpoints {
+        from: PageRect::new(
+            first.page_idx,
+            Rect::from_xywh(first.rect.x, first.rect.y, 0.0, first.rect.height),
+        ),
+        to: PageRect::new(
+            last.page_idx,
+            Rect::from_xywh(
+                last.rect.x + last.rect.width,
+                last.rect.y,
+                0.0,
+                last.rect.height,
+            ),
+        ),
+    })
+}
+
+pub fn selection_hit_test(
+    tree: &LayoutTree,
+    pages: &[LayoutPage],
+    selection: &editor_state::ResolvedSelection<'_>,
+    page_idx: usize,
+    x: f32,
+    y: f32,
+) -> bool {
+    if selection.is_collapsed() {
+        return false;
+    }
+    let rects: Vec<Rect> = selection_rects(tree, pages, selection)
+        .into_iter()
+        .filter(|r| r.page_idx == page_idx)
+        .map(|r| r.rect)
+        .collect();
+    if rects.is_empty() {
+        return false;
+    }
+
+    let min_x = rects.iter().map(|r| r.x).fold(f32::INFINITY, f32::min);
+    let max_x = rects
+        .iter()
+        .map(|r| r.x + r.width)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let last_idx = rects.len() - 1;
+
+    for (i, rect) in rects.iter().enumerate() {
+        let (x_lo, x_hi) = if last_idx == 0 {
+            (rect.x, rect.x + rect.width)
+        } else if i == 0 {
+            (rect.x, max_x)
+        } else if i == last_idx {
+            (min_x, rect.x + rect.width)
+        } else {
+            (min_x, max_x)
+        };
+        if x >= x_lo && x <= x_hi && y >= rect.y && y <= rect.y + rect.height {
+            return true;
+        }
+    }
+
+    for pair in rects.windows(2) {
+        let gap_top = pair[0].y + pair[0].height;
+        let gap_bottom = pair[1].y;
+        if gap_top < gap_bottom && x >= min_x && x <= max_x && y >= gap_top && y <= gap_bottom {
+            return true;
+        }
+    }
+
+    false
 }
 
 // Whether `node` (as returned by `find_line_at`) should be treated as the
@@ -795,5 +886,220 @@ mod tests {
         assert!(rects[0].rect.width > 0.0);
         assert_eq!(rects[1].meta, SelectionRectKind::Text);
         assert!(rects[1].rect.width > 0.0);
+    }
+
+    #[test]
+    fn selection_endpoints_collapsed_returns_none() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
+        let view = layout(&doc);
+
+        let sel = Selection::collapsed(Position::new(t, 2));
+        let resolved = sel.resolve(&doc).unwrap();
+        let layout_tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        assert!(selection_endpoints(layout_tree, pages, &resolved).is_none());
+    }
+
+    #[test]
+    fn selection_hit_test_collapsed_is_false() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
+        let view = layout(&doc);
+        let resolved = Selection::collapsed(Position::new(t, 2))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        assert!(!selection_hit_test(tree, pages, &resolved, 0, 5.0, 5.0));
+    }
+
+    #[test]
+    fn selection_hit_test_single_line_inside_rect_is_true() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello world") } } };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rect = view.selection_rects(&resolved)[0].rect;
+
+        assert!(selection_hit_test(
+            tree,
+            pages,
+            &resolved,
+            0,
+            rect.x + rect.width * 0.5,
+            rect.y + rect.height * 0.5,
+        ));
+    }
+
+    #[test]
+    fn selection_hit_test_single_line_outside_rect_is_false() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello world") } } };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rect = view.selection_rects(&resolved)[0].rect;
+
+        assert!(!selection_hit_test(
+            tree,
+            pages,
+            &resolved,
+            0,
+            rect.x + rect.width + 5.0,
+            rect.y + rect.height * 0.5,
+        ));
+    }
+
+    #[test]
+    fn selection_hit_test_multi_line_extends_first_rect_to_max_x() {
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph { t1: text("hi") }
+                paragraph { t2: text("a much longer line") }
+            }
+        };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 18))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rects = view.selection_rects(&resolved);
+        let first = rects[0].rect;
+        let last = rects[1].rect;
+        let max_x = last.x + last.width;
+
+        assert!(max_x > first.x + first.width, "second line must be wider");
+
+        let probe_x = first.x + first.width + (max_x - (first.x + first.width)) * 0.5;
+        let probe_y = first.y + first.height * 0.5;
+        assert!(selection_hit_test(
+            tree, pages, &resolved, 0, probe_x, probe_y
+        ));
+    }
+
+    #[test]
+    fn selection_hit_test_multi_line_extends_last_rect_to_min_x() {
+        // callout's measured padding.left = CALLOUT_PADDING_X + CALLOUT_ICON_WIDTH
+        // + CALLOUT_ICON_CONTENT_GAP = 40, so the inner paragraph's line starts
+        // further right than the outer paragraph. The partial range (t1..t2) keeps
+        // the callout from collapsing into a Block rect, so a Text rect is emitted
+        // for the inner line — that's the last rect whose left edge envelope
+        // extension we want to exercise.
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph { t1: text("hi") }
+                callout(variant: CalloutVariant::Danger) {
+                    paragraph { t2: text("inside callout") }
+                }
+            }
+        };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 5))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rects = view.selection_rects(&resolved);
+        let first = rects[0].rect;
+        let last = rects.last().unwrap().rect;
+        let min_x = first.x.min(last.x);
+
+        assert!(
+            last.x > min_x,
+            "last line must start further right than envelope min_x",
+        );
+
+        let probe_x = min_x + (last.x - min_x) * 0.5;
+        let probe_y = last.y + last.height * 0.5;
+        assert!(selection_hit_test(
+            tree, pages, &resolved, 0, probe_x, probe_y
+        ));
+    }
+
+    #[test]
+    fn selection_hit_test_vertical_gap_inside_envelope_is_true() {
+        let (doc, t1, t2) = doc! {
+            root {
+                blockquote(variant: BlockquoteVariant::LeftLine) {
+                    paragraph { t1: text("first") }
+                }
+                blockquote(variant: BlockquoteVariant::LeftLine) {
+                    paragraph { t2: text("second") }
+                }
+            }
+        };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 6))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rects: Vec<_> = view
+            .selection_rects(&resolved)
+            .into_iter()
+            .filter(|r| r.page_idx == 0)
+            .collect();
+        assert!(rects.len() >= 2, "expected rects spanning two blocks");
+        let a = rects[0].rect;
+        let b = rects[1].rect;
+        let gap_top = a.y + a.height;
+        let gap_bottom = b.y;
+        assert!(gap_bottom > gap_top, "expected vertical gap between blocks");
+
+        let probe_y = (gap_top + gap_bottom) * 0.5;
+        let probe_x = a.x.min(b.x) + 1.0;
+        assert!(selection_hit_test(
+            tree, pages, &resolved, 0, probe_x, probe_y
+        ));
+    }
+
+    #[test]
+    fn selection_hit_test_outside_envelope_band_is_false() {
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph { t1: text("hi") }
+                paragraph { t2: text("a much longer line") }
+            }
+        };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 18))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rects = view.selection_rects(&resolved);
+        let last = rects[1].rect;
+
+        let probe_x = last.x + last.width + 50.0;
+        let probe_y = last.y + last.height * 0.5;
+        assert!(!selection_hit_test(
+            tree, pages, &resolved, 0, probe_x, probe_y
+        ));
+    }
+
+    #[test]
+    fn selection_hit_test_wrong_page_is_false() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello world") } } };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
+            .resolve(&doc)
+            .unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rect = view.selection_rects(&resolved)[0].rect;
+        let probe_x = rect.x + rect.width * 0.5;
+        let probe_y = rect.y + rect.height * 0.5;
+
+        assert!(selection_hit_test(
+            tree, pages, &resolved, 0, probe_x, probe_y
+        ));
+        assert!(!selection_hit_test(
+            tree, pages, &resolved, 1, probe_x, probe_y
+        ));
     }
 }

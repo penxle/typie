@@ -457,6 +457,11 @@ export interface RubyValue {
     text: string;
 }
 
+export interface SelectionEndpoints {
+    from: PageRect;
+    to: PageRect;
+}
+
 export interface Size {
     width: number;
     height: number;
@@ -629,6 +634,8 @@ declare class Editor {
     root_attrs(): PlainRootNode;
     root_modifiers(): Modifier[];
     selection(): Selection;
+    selection_endpoints(): SelectionEndpoints | undefined;
+    selection_hit_test(page: number, x: number, y: number): boolean;
     tick(): EditorEvent[];
 }
 

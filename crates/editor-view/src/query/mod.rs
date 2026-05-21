@@ -20,5 +20,5 @@ pub(crate) use interactive::interactive_hit_test;
 pub(crate) use navigation::resolve_movement;
 pub use pointer_style::PointerStyle;
 pub(crate) use pointer_style::pointer_style_at;
-pub use selection::{SelectionRect, SelectionRectKind};
+pub use selection::{SelectionEndpoints, SelectionRect, SelectionRectKind};
 pub use visit::{Edges, LineMetrics, PageVisitor, visit_page};

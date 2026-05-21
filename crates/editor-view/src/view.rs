@@ -12,7 +12,7 @@ use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
-use crate::query::{CursorMetrics, PointerStyle, SelectionRect};
+use crate::query::{CursorMetrics, PointerStyle, SelectionEndpoints, SelectionRect};
 use crate::view_state::{GapPhantom, PendingStyle, ViewState};
 use crate::viewport::Viewport;
 
@@ -303,6 +303,24 @@ impl View {
             return vec![];
         };
         query::selection::selection_rects(&result.tree, &result.pages, selection)
+    }
+
+    pub fn selection_endpoints(&self, selection: &ResolvedSelection) -> Option<SelectionEndpoints> {
+        let result = self.layout.as_ref()?;
+        query::selection::selection_endpoints(&result.tree, &result.pages, selection)
+    }
+
+    pub fn selection_hit_test(
+        &self,
+        selection: &ResolvedSelection,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> bool {
+        let Some(ref result) = self.layout else {
+            return false;
+        };
+        query::selection::selection_hit_test(&result.tree, &result.pages, selection, page_idx, x, y)
     }
 
     pub fn node_box_rects(&self, ids: &[NodeId]) -> Vec<SelectionRect> {
@@ -1053,6 +1071,211 @@ mod tests {
                 affinity: editor_state::Affinity::Downstream
             }
         );
+    }
+
+    #[test]
+    fn view_selection_endpoints_single_line_uses_first_and_last_rect_edges() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = Selection::new(Position::new(t, 1), Position::new(t, 4));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let only = &rects[0];
+
+        let endpoints = view.selection_endpoints(&resolved).unwrap();
+        assert_eq!(endpoints.from.page_idx, only.page_idx);
+        assert_eq!(endpoints.from.rect.x, only.rect.x);
+        assert_eq!(endpoints.from.rect.y, only.rect.y);
+        assert_eq!(endpoints.from.rect.width, 0.0);
+        assert_eq!(endpoints.from.rect.height, only.rect.height);
+
+        assert_eq!(endpoints.to.page_idx, only.page_idx);
+        assert_eq!(endpoints.to.rect.x, only.rect.x + only.rect.width);
+        assert_eq!(endpoints.to.rect.y, only.rect.y);
+        assert_eq!(endpoints.to.rect.width, 0.0);
+        assert_eq!(endpoints.to.rect.height, only.rect.height);
+    }
+
+    #[test]
+    fn view_selection_endpoints_anchor_after_head_still_uses_doc_order() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let forward = Selection::new(Position::new(t, 1), Position::new(t, 4))
+            .resolve(&doc)
+            .unwrap();
+        let reverse = Selection::new(Position::new(t, 4), Position::new(t, 1))
+            .resolve(&doc)
+            .unwrap();
+
+        let a = view.selection_endpoints(&forward).unwrap();
+        let b = view.selection_endpoints(&reverse).unwrap();
+        assert_eq!(a.from.rect.x, b.from.rect.x);
+        assert_eq!(a.to.rect.x, b.to.rect.x);
+    }
+
+    #[test]
+    fn view_selection_endpoints_multi_line_uses_first_and_last_only() {
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph { t1: text("hello") }
+                paragraph { t2: text("world") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = Selection::new(Position::new(t1, 2), Position::new(t2, 3));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let first = &rects[0];
+        let last = rects.last().unwrap();
+
+        let endpoints = view.selection_endpoints(&resolved).unwrap();
+        assert_eq!(endpoints.from.rect.x, first.rect.x);
+        assert_eq!(endpoints.from.rect.y, first.rect.y);
+        assert_eq!(endpoints.to.rect.x, last.rect.x + last.rect.width);
+        assert_eq!(endpoints.to.rect.y, last.rect.y);
+    }
+
+    #[test]
+    fn view_selection_endpoints_atom_uses_atom_left_and_right_edges() {
+        let (doc,) = doc! {
+            root {
+                paragraph { text("a") }
+                horizontal_rule {}
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 1),
+            Position::new(NodeId::ROOT, 2),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let atom = &rects[0];
+        assert_eq!(atom.meta, crate::query::SelectionRectKind::Atom);
+
+        let endpoints = view.selection_endpoints(&resolved).unwrap();
+        assert_eq!(endpoints.from.rect.x, atom.rect.x);
+        assert_eq!(endpoints.to.rect.x, atom.rect.x + atom.rect.width);
+        assert_eq!(endpoints.from.rect.height, atom.rect.height);
+        assert_eq!(endpoints.to.rect.height, atom.rect.height);
+    }
+
+    #[test]
+    fn view_selection_endpoints_block_uses_block_left_and_right_edges() {
+        let (doc,) = doc! {
+            root {
+                callout(variant: editor_model::CalloutVariant::Danger) {
+                    paragraph { text("hi") }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let block = &rects[0];
+        assert_eq!(block.meta, crate::query::SelectionRectKind::Block);
+
+        let endpoints = view.selection_endpoints(&resolved).unwrap();
+        assert_eq!(endpoints.from.rect.x, block.rect.x);
+        assert_eq!(endpoints.to.rect.x, block.rect.x + block.rect.width);
+    }
+
+    #[test]
+    fn view_selection_endpoints_multi_page_carries_per_page_idx() {
+        let (doc,) = doc! {
+            root (
+                layout_mode: editor_model::LayoutMode::Paginated {
+                    page_width: 400,
+                    page_height: 120,
+                    page_margin_top: 10,
+                    page_margin_bottom: 10,
+                    page_margin_left: 10,
+                    page_margin_right: 10,
+                }
+            ) {
+                fold {
+                    fold_title { text("title") }
+                    fold_content {
+                        paragraph { text("a") }
+                        paragraph { text("b") }
+                        paragraph { text("c") }
+                        paragraph { text("d") }
+                        paragraph { text("e") }
+                        paragraph { text("f") }
+                        paragraph { text("g") }
+                        paragraph { text("h") }
+                    }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        assert!(view.pages().len() >= 2);
+
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let first = &rects[0];
+        let last = rects.last().unwrap();
+        assert_ne!(first.page_idx, last.page_idx);
+
+        let endpoints = view.selection_endpoints(&resolved).unwrap();
+        assert_eq!(endpoints.from.page_idx, first.page_idx);
+        assert_eq!(endpoints.to.page_idx, last.page_idx);
+    }
+
+    #[test]
+    fn view_selection_endpoints_collapsed_returns_none() {
+        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let resolved = Selection::collapsed(Position::new(t, 2))
+            .resolve(&doc)
+            .unwrap();
+        assert!(view.selection_endpoints(&resolved).is_none());
+    }
+
+    #[test]
+    fn view_selection_hit_test_envelope_band() {
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph { t1: text("hi") }
+                paragraph { t2: text("a much longer line") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 18))
+            .resolve(&doc)
+            .unwrap();
+
+        let rects = view.selection_rects(&resolved);
+        let first = rects[0].rect;
+        let last = rects[1].rect;
+        let max_x = last.x + last.width;
+
+        let probe_x = first.x + first.width + 5.0;
+        let probe_y = first.y + first.height * 0.5;
+        assert!(probe_x < max_x);
+        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
+        assert!(!view.selection_hit_test(&resolved, 0, max_x + 10.0, probe_y));
     }
 }
 

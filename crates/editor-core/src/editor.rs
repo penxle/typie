@@ -130,6 +130,18 @@ impl Editor {
             .interactive_hit_test(&self.state.doc, page_idx, x, y)
     }
 
+    pub fn selection_endpoints(&self) -> Option<editor_view::SelectionEndpoints> {
+        let resolved = self.state.selection.resolve(&self.state.doc)?;
+        self.view.selection_endpoints(&resolved)
+    }
+
+    pub fn selection_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
+        let Some(resolved) = self.state.selection.resolve(&self.state.doc) else {
+            return false;
+        };
+        self.view.selection_hit_test(&resolved, page_idx, x, y)
+    }
+
     pub fn pointer_style(
         &self,
         page_idx: usize,
@@ -1500,6 +1512,69 @@ mod tests {
             ),
             "got {hit:?}"
         );
+    }
+
+    #[test]
+    fn editor_selection_endpoints_delegates_to_view() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 1) -> (t, 8)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let endpoints = editor
+            .selection_endpoints()
+            .expect("range selection has endpoints");
+        assert_eq!(endpoints.from.page_idx, 0);
+        assert!(endpoints.from.rect.width == 0.0);
+        assert!(endpoints.to.rect.x > endpoints.from.rect.x);
+    }
+
+    #[test]
+    fn editor_selection_endpoints_collapsed_is_none() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        assert!(editor.selection_endpoints().is_none());
+    }
+
+    #[test]
+    fn editor_selection_hit_test_inside_rect() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let rect = editor.view().selection_rects(&resolved)[0].rect;
+        let probe_x = rect.x + rect.width * 0.5;
+        let probe_y = rect.y + rect.height * 0.5;
+        assert!(editor.selection_hit_test(0, probe_x, probe_y));
+    }
+
+    #[test]
+    fn editor_selection_hit_test_collapsed_is_false() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        assert!(!editor.selection_hit_test(0, 10.0, 10.0));
     }
 
     #[test]

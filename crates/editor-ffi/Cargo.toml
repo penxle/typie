@@ -84,3 +84,6 @@ web-sys = { workspace = true, optional = true, features = [
 objc2.workspace = true
 objc2-core-foundation.workspace = true
 objc2-metal.workspace = true
+
+[dev-dependencies]
+editor-core = { path = "../editor-core", features = ["test-utils"] }
