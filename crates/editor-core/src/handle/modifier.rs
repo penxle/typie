@@ -30,6 +30,13 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
             commands::set_node_modifier(tr, id, modifier)?;
             Ok(())
         }),
+        ModifierOp::Edit {
+            modifier_type,
+            modifier,
+        } => editor.transact(|tr| {
+            commands::edit_modifier(tr, modifier_type, modifier)?;
+            Ok(())
+        }),
         ModifierOp::ClearAll => editor.transact(|tr| {
             commands::clear_all_modifiers(tr)?;
             Ok(())

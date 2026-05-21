@@ -1,5 +1,5 @@
 use editor_model::{
-    Expand, Modifier, ModifierState, ModifierType, Node, NodeRef, NodeType, Schema,
+    Expand, Modifier, ModifierState, ModifierType, Node, NodeId, NodeRef, NodeType, Schema,
 };
 use strum::IntoEnumIterator;
 
@@ -196,6 +196,60 @@ fn effective_modifier_on_node(node: &NodeRef<'_>, ty: ModifierType) -> Option<Mo
         }
     }
     None
+}
+
+pub fn resolve_modifier_span_at(
+    state: &State,
+    pos: &Position,
+    modifier_type: ModifierType,
+) -> Option<Vec<NodeId>> {
+    let doc = &state.doc;
+    let node = doc.node(pos.node_id)?;
+    if !matches!(node.node(), Node::Text(_)) {
+        return None;
+    }
+    let base = node
+        .explicit_modifiers()
+        .find(|m| m.as_type() == modifier_type)?
+        .clone();
+
+    let mut left_chain: Vec<NodeId> = Vec::new();
+    let mut cur = node;
+    while let Some(prev) = cur.prev_sibling() {
+        if !matches!(prev.node(), Node::Text(_)) {
+            break;
+        }
+        let m = prev
+            .explicit_modifiers()
+            .find(|m| m.as_type() == modifier_type);
+        if m != Some(&base) {
+            break;
+        }
+        left_chain.push(prev.id());
+        cur = prev;
+    }
+    left_chain.reverse();
+
+    let mut right_chain: Vec<NodeId> = Vec::new();
+    let mut cur = node;
+    while let Some(next) = cur.next_sibling() {
+        if !matches!(next.node(), Node::Text(_)) {
+            break;
+        }
+        let m = next
+            .explicit_modifiers()
+            .find(|m| m.as_type() == modifier_type);
+        if m != Some(&base) {
+            break;
+        }
+        right_chain.push(next.id());
+        cur = next;
+    }
+
+    let mut span = left_chain;
+    span.push(node.id());
+    span.extend(right_chain);
+    Some(span)
 }
 
 fn collect_nodes_in_range<'a>(
@@ -652,5 +706,78 @@ mod tests {
         };
         let s = resolve_modifier_state(&state);
         assert_eq!(s.bold, editor_common::Tri::Mixed);
+    }
+
+    #[test]
+    fn resolve_span_at_caret_inside_uniform_link_returns_node() {
+        let (state, t1, ..) = state! {
+            doc { root { paragraph { t1: text("Click") [link(href: "https://a.com".to_string())] } } }
+            selection: (t1, 2)
+        };
+        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        assert_eq!(span, Some(vec![t1]));
+    }
+
+    #[test]
+    fn resolve_span_extends_across_adjacent_same_href() {
+        let (state, t1, t2, ..) = state! {
+            doc { root { paragraph {
+                t1: text("Hello") [link(href: "https://a.com".to_string())]
+                t2: text("World") [link(href: "https://a.com".to_string())]
+            } } }
+            selection: (t1, 2)
+        };
+        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        assert_eq!(span, Some(vec![t1, t2]));
+    }
+
+    #[test]
+    fn resolve_span_stops_at_different_href() {
+        let (state, _t1, t2, ..) = state! {
+            doc { root { paragraph {
+                t1: text("Hello") [link(href: "https://a.com".to_string())]
+                t2: text("World") [link(href: "https://b.com".to_string())]
+            } } }
+            selection: (t2, 2)
+        };
+        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        assert_eq!(span, Some(vec![t2]));
+    }
+
+    #[test]
+    fn resolve_span_stops_at_non_modifier_text() {
+        let (state, _t0, t1, _t2, ..) = state! {
+            doc { root { paragraph {
+                t0: text("pre")
+                t1: text("link") [link(href: "https://a.com".to_string())]
+                t2: text("post")
+            } } }
+            selection: (t1, 2)
+        };
+        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        assert_eq!(span, Some(vec![t1]));
+    }
+
+    #[test]
+    fn resolve_span_returns_none_outside_any_link() {
+        let (state, t1, ..) = state! {
+            doc { root { paragraph { t1: text("plain") } } }
+            selection: (t1, 2)
+        };
+        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        assert_eq!(span, None);
+    }
+
+    #[test]
+    fn resolve_span_does_not_cross_paragraph_boundary() {
+        let (state, t1, _t2, ..) = state! {
+            doc { root {
+                paragraph { t1: text("a") [link(href: "https://a.com".to_string())] }
+                paragraph { t2: text("b") [link(href: "https://a.com".to_string())] }
+            } }
+            selection: (t1, 0)
+        };
+        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        assert_eq!(span, Some(vec![t1]));
     }
 }

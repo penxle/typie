@@ -92,9 +92,20 @@ pub enum DeletionOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ModifierOp {
-    Toggle { modifier_type: ModifierType },
-    Set { modifier: Modifier },
-    SetOnNode { id: NodeId, modifier: Modifier },
+    Toggle {
+        modifier_type: ModifierType,
+    },
+    Set {
+        modifier: Modifier,
+    },
+    SetOnNode {
+        id: NodeId,
+        modifier: Modifier,
+    },
+    Edit {
+        modifier_type: ModifierType,
+        modifier: Option<Modifier>,
+    },
     ClearAll,
 }
 

@@ -557,7 +557,7 @@ export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; even
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 
-export type ModifierOp = { type: "toggle"; modifier_type: ModifierType } | { type: "set"; modifier: Modifier } | { type: "set_on_node"; id: NodeId; modifier: Modifier } | { type: "clear_all" };
+export type ModifierOp = { type: "toggle"; modifier_type: ModifierType } | { type: "set"; modifier: Modifier } | { type: "set_on_node"; id: NodeId; modifier: Modifier } | { type: "edit"; modifier_type: ModifierType; modifier: Modifier | undefined } | { type: "clear_all" };
 
 export type Movement = { type: "grapheme"; direction: Direction } | { type: "word"; direction: Direction } | { type: "sentence"; direction: Direction } | { type: "line"; direction: Direction; axis: Axis } | { type: "block"; direction: Direction } | { type: "page"; direction: Direction } | { type: "document"; direction: Direction };
 

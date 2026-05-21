@@ -91,6 +91,36 @@ fn walk_text_nodes_in_range(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out:
     }
 }
 
+pub(crate) fn compact_textblock_preserving_caret(
+    tr: &mut Transaction,
+    caret: Position,
+) -> Result<(), CommandError> {
+    let doc = tr.doc();
+    let Some(node) = doc.node(caret.node_id) else {
+        return Ok(());
+    };
+    let Node::Text(text_node) = node.node() else {
+        return Ok(());
+    };
+    let at_end = caret.offset == text_node.text.len();
+    let Some(tb_id) = find_ancestor_textblock(&doc, caret.node_id) else {
+        return Ok(());
+    };
+    let Some(abs) = text_offset_in_textblock(&doc, tb_id, caret.node_id, caret.offset) else {
+        return Ok(());
+    };
+
+    let doc = tr.doc();
+    let tb = doc.node(tb_id).ok_or(CommandError::NodeNotFound(tb_id))?;
+    tr.apply_steps(compact(&tb))?;
+
+    let doc = tr.doc();
+    if let Some(new_pos) = position_from_text_offset(&doc, tb_id, abs, at_end) {
+        tr.set_selection(Selection::new(new_pos, new_pos))?;
+    }
+    Ok(())
+}
+
 pub(crate) fn compact_and_restore_selection(
     tr: &mut Transaction,
     node_ids: &[NodeId],

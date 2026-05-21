@@ -3,11 +3,13 @@
   import { css } from '@typie/styled-system/css';
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
+  import LinkIcon from '~icons/lucide/link';
   import RedoIcon from '~icons/lucide/redo';
   import RemoveFormattingIcon from '~icons/lucide/remove-formatting';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import UnderlineIcon from '~icons/lucide/underline';
   import UndoIcon from '~icons/lucide/undo';
+  import RubyIcon from '~icons/typie/ruby';
   import { values } from '$lib/editor/values';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
@@ -129,6 +131,60 @@
     enqueue({ type: 'modifier', op: { type: 'set', modifier } });
   };
 
+  type ButtonState = {
+    active: boolean;
+    disabled: boolean;
+    currentValue: string | undefined;
+  };
+
+  const isCollapsed = $derived.by(() => {
+    const s = ctx.editor?.selection;
+    if (!s) return true;
+    return s.anchor.node_id === s.head.node_id && s.anchor.offset === s.head.offset;
+  });
+
+  const linkButtonS = $derived.by<ButtonState>(() => {
+    const tri = ctx.editor?.modifierState?.link;
+    if (!tri) return { active: false, disabled: true, currentValue: undefined };
+    if (tri.type === 'uniform') return { active: true, disabled: false, currentValue: tri.value.href };
+    if (tri.type === 'mixed') return { active: false, disabled: true, currentValue: undefined };
+    return { active: false, disabled: isCollapsed, currentValue: undefined };
+  });
+
+  const rubyButtonS = $derived.by<ButtonState>(() => {
+    const tri = ctx.editor?.modifierState?.ruby;
+    if (!tri) return { active: false, disabled: true, currentValue: undefined };
+    if (tri.type === 'uniform') return { active: true, disabled: false, currentValue: tri.value.text };
+    if (tri.type === 'mixed') return { active: false, disabled: true, currentValue: undefined };
+    return { active: false, disabled: isCollapsed, currentValue: undefined };
+  });
+
+  const normalizeUrl = (input: string): string => (/^[a-z][a-z0-9+.-]*:/i.test(input) ? input : `https://${input}`);
+
+  const editLink = () => {
+    if (linkButtonS.disabled) return;
+    const result = window.prompt('URL을 입력하세요 (비우고 확인을 누르면 제거)', linkButtonS.currentValue ?? '');
+    if (result === null) {
+      ctx.editor?.focus();
+      return;
+    }
+    const trimmed = result.trim();
+    const modifier: Modifier | undefined = trimmed === '' ? undefined : { type: 'link', href: normalizeUrl(trimmed) };
+    enqueue({ type: 'modifier', op: { type: 'edit', modifier_type: 'link', modifier } });
+  };
+
+  const editRuby = () => {
+    if (rubyButtonS.disabled) return;
+    const result = window.prompt('루비 텍스트를 입력하세요 (비우고 확인을 누르면 제거)', rubyButtonS.currentValue ?? '');
+    if (result === null) {
+      ctx.editor?.focus();
+      return;
+    }
+    const trimmed = result.trim();
+    const modifier: Modifier | undefined = trimmed === '' ? undefined : { type: 'ruby', text: trimmed };
+    enqueue({ type: 'modifier', op: { type: 'edit', modifier_type: 'ruby', modifier } });
+  };
+
   const selectStyle = css.raw({
     fontSize: '12px',
     paddingX: '4px',
@@ -187,6 +243,11 @@
     label="밑줄"
     onclick={() => toggleModifier('underline')}
   />
+
+  <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
+
+  <ToolbarButton active={linkButtonS.active} disabled={linkButtonS.disabled} icon={LinkIcon} label="링크" onclick={editLink} />
+  <ToolbarButton active={rubyButtonS.active} disabled={rubyButtonS.disabled} icon={RubyIcon} label="루비" onclick={editRuby} />
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
