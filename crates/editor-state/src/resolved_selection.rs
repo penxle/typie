@@ -119,6 +119,10 @@ impl<'a> ResolvedSelection<'a> {
             }
         }
 
+        if node_path.as_slice() > from_path && node_path.as_slice() < to_path {
+            return true;
+        }
+
         false
     }
 
@@ -388,6 +392,38 @@ mod tests {
         };
         let rs = state.selection.resolve(&state.doc).unwrap();
         let p1_ref = state.doc.node(p1).unwrap();
+        assert!(rs.intersects_subtree(&p1_ref));
+    }
+
+    #[test]
+    fn intersects_subtree_descendant_inside_band_across_rows_returns_true() {
+        let (state, tr1, c1, p1, tr2, ..) = state! {
+            doc {
+                root {
+                    table {
+                        tr1: table_row {
+                            table_cell { paragraph { text("a") } }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            c1: table_cell {
+                                p1: paragraph { text("mid") }
+                            }
+                            table_cell { paragraph {} }
+                        }
+                        tr2: table_row {
+                            table_cell { paragraph { text("z") } }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                }
+            }
+            selection: (tr1, 0, >) -> (tr2, 2, <)
+        };
+        let rs = state.selection.resolve(&state.doc).unwrap();
+        let c1_ref = state.doc.node(c1).unwrap();
+        let p1_ref = state.doc.node(p1).unwrap();
+        assert!(rs.intersects_subtree(&c1_ref));
         assert!(rs.intersects_subtree(&p1_ref));
     }
 

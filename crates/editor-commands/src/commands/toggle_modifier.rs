@@ -363,6 +363,57 @@ mod tests {
     }
 
     #[test]
+    fn range_toggle_italic_cell_bracket_across_rows_applies_to_all_cells() {
+        let (initial, tr1, tr2, ..) = state! {
+            doc {
+                root {
+                    table {
+                        tr1: table_row {
+                            table_cell { paragraph { text("1") } }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                        }
+                        tr2: table_row {
+                            table_cell { paragraph {} }
+                            table_cell { paragraph {} }
+                            table_cell { paragraph { text("1234") } }
+                            table_cell { paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (tr1, 0, >) -> (tr2, 4, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+
+        assert_eq!(actual.selection.anchor.node_id, tr1);
+        assert_eq!(actual.selection.anchor.offset, 0);
+        assert_eq!(actual.selection.head.node_id, tr2);
+        assert_eq!(actual.selection.head.offset, 4);
+
+        let mut italic_texts = Vec::new();
+        for desc in actual.doc.root().unwrap().descendants() {
+            if let editor_model::Node::Text(t) = desc.node()
+                && desc
+                    .modifiers()
+                    .any(|m| m.as_type() == ModifierType::Italic)
+            {
+                italic_texts.push(t.text.to_string());
+            }
+        }
+        italic_texts.sort();
+        assert_eq!(italic_texts, vec!["1", "1234"]);
+    }
+
+    #[test]
     fn range_toggle_partial_selection_splits() {
         let (initial, ..) = state! {
             doc { root { paragraph {

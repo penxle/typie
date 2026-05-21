@@ -1,5 +1,5 @@
-use editor_model::{Doc, Node, NodeId};
-use editor_state::{Position, Selection};
+use editor_model::{Doc, Node, NodeId, NodeRef};
+use editor_state::{Position, ResolvedSelection, Selection};
 use editor_transaction::{Transaction, compact};
 
 use crate::CommandError;
@@ -56,30 +56,41 @@ pub(crate) fn collect_text_nodes_in_range(
     };
 
     let doc = tr.doc();
-    let from_path = doc
-        .node(from_start_id)
-        .ok_or(CommandError::NodeNotFound(from_start_id))?
-        .path();
-    let to_path = doc
+    let from_pos = if from_needs_split {
+        Position::new(from_start_id, 0)
+    } else {
+        *from
+    };
+    let to_end_node = doc
         .node(to_end_id)
-        .ok_or(CommandError::NodeNotFound(to_end_id))?
-        .path();
+        .ok_or(CommandError::NodeNotFound(to_end_id))?;
+    let to_pos = match to_end_node.node() {
+        Node::Text(t) => Position::new(to_end_id, t.text.len()),
+        _ => Position::new(to_end_id, to.offset),
+    };
 
+    let resolved = Selection::new(from_pos, to_pos)
+        .resolve(&doc)
+        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+    let root = doc.root().expect("root must exist");
     let mut result = Vec::new();
-    for desc in doc.root().expect("root must exist").descendants() {
-        if !matches!(desc.node(), Node::Text(_)) {
-            continue;
-        }
-        let path = desc.path();
-        if path >= from_path && path <= to_path {
-            result.push(desc.id());
-        }
-    }
-
+    walk_text_nodes_in_range(&root, &resolved, &mut result);
     Ok(result)
 }
 
-/// Compact affected textblocks and restore selection from absolute text offsets.
+fn walk_text_nodes_in_range(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out: &mut Vec<NodeId>) {
+    if !rs.intersects_subtree(node) {
+        return;
+    }
+    if matches!(node.node(), Node::Text(_)) {
+        out.push(node.id());
+        return;
+    }
+    for child in node.children() {
+        walk_text_nodes_in_range(&child, rs, out);
+    }
+}
+
 pub(crate) fn compact_and_restore_selection(
     tr: &mut Transaction,
     node_ids: &[NodeId],
@@ -94,7 +105,19 @@ pub(crate) fn compact_and_restore_selection(
         }
     }
 
-    let sel_offsets = selection_offsets_in_textblocks(&doc, node_ids);
+    let original = tr.selection();
+    let endpoints_are_text = doc
+        .node(original.anchor.node_id)
+        .is_some_and(|n| matches!(n.node(), Node::Text(_)))
+        && doc
+            .node(original.head.node_id)
+            .is_some_and(|n| matches!(n.node(), Node::Text(_)));
+
+    let sel_offsets = if endpoints_are_text {
+        selection_offsets_in_textblocks(&doc, node_ids)
+    } else {
+        None
+    };
 
     for tb_id in &textblock_ids {
         let doc = tr.doc();
