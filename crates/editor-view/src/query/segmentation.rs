@@ -148,11 +148,13 @@ pub fn select_word_at(
 
     if line.glyph_runs.is_empty() {
         let para = pos.doc().node(line.node_id)?;
-        let paragraph_has_no_text = para.children().all(|c| match c.node() {
+        // hard_break is selectable content, so it disqualifies the
+        // unit-select fallback in favor of the adjacent-hard_break branch.
+        let paragraph_truly_empty = para.children().all(|c| match c.node() {
             editor_model::Node::Text(t) => t.text.is_empty(),
-            _ => true,
+            _ => false,
         });
-        if paragraph_has_no_text {
+        if paragraph_truly_empty {
             let parent_id = para.parent()?.id();
             let index = para.index()?;
             return Some(Selection::new(
@@ -164,6 +166,26 @@ pub fn select_word_at(
                 Position {
                     node_id: parent_id,
                     offset: index + 1,
+                    affinity: Affinity::Upstream,
+                },
+            ));
+        }
+        // Trailing empty line (`start == end`) owns no hard_break — fall
+        // through to collapsed so the double-click is a visual no-op.
+        if let Some(range) = &line.child_range
+            && range.start < range.end
+            && let Some(child) = para.children().nth(range.start)
+            && matches!(child.node(), editor_model::Node::HardBreak(_))
+        {
+            return Some(Selection::new(
+                Position {
+                    node_id: line.node_id,
+                    offset: range.start,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: line.node_id,
+                    offset: range.end,
                     affinity: Affinity::Upstream,
                 },
             ));
@@ -694,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn select_word_at_on_empty_hard_break_line_collapses() {
+    fn select_word_at_on_trailing_empty_hard_break_line_collapses() {
         use editor_macros::doc;
         let (doc_, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
         let t1 = doc_.node(p1).unwrap().children().next().unwrap().id();
@@ -729,13 +751,57 @@ mod tests {
         };
         let resolved = pos.resolve(&doc_).unwrap();
         let sel = select_word_at(&tree, &resolved, &resource.segmenters).unwrap();
-        assert!(
-            sel.is_collapsed(),
-            "expected collapsed selection, got: {:?}",
-            sel
-        );
+        assert!(sel.is_collapsed());
         assert_eq!(sel.head.node_id, p1);
         assert_eq!(sel.head.offset, 2);
+    }
+
+    #[test]
+    fn select_word_at_between_consecutive_hard_breaks_selects_the_hard_break() {
+        use editor_macros::doc;
+        let (doc_, p1) = doc! {
+            root { p1: paragraph { text("a") hard_break hard_break text("b") } }
+        };
+        let children: Vec<_> = doc_.node(p1).unwrap().children().collect();
+        let t_a = children[0].id();
+        let t_b = children[3].id();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 60.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: LayoutDirection::Vertical,
+                        padding: editor_common::EdgeInsets::ZERO,
+                        border: editor_common::EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                        monolithic: false,
+                    },
+                    children: vec![
+                        make_text_line_node(p1, t_a, 0.0, "a", 0..2),
+                        make_empty_line_node(p1, 20.0, 2..3),
+                        make_text_line_node(p1, t_b, 40.0, "b", 3..4),
+                    ],
+                    nav: None,
+                }),
+            },
+        };
+        let resource = editor_resource::Resource::new_test();
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 2,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let resolved = pos.resolve(&doc_).unwrap();
+        let sel = select_word_at(&tree, &resolved, &resource.segmenters).unwrap();
+        assert!(!sel.is_collapsed());
+        assert_eq!(sel.anchor.node_id, p1);
+        assert_eq!(sel.anchor.offset, 2);
+        assert_eq!(sel.head.node_id, p1);
+        assert_eq!(sel.head.offset, 3);
     }
 
     #[test]

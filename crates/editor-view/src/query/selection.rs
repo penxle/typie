@@ -162,6 +162,27 @@ fn attached(node: &LayoutNode, pos: &Position) -> bool {
     }
 }
 
+/// True when `child_range` owns more slots than the number of distinct text
+/// children — the surplus is non-text content (in practice, a trailing
+/// `hard_break`).
+fn line_has_trailing_non_text(line: &LayoutLine) -> bool {
+    let Some(range) = &line.child_range else {
+        return false;
+    };
+    if line.glyph_runs.is_empty() {
+        return false;
+    }
+    let mut text_child_count = 1usize;
+    let mut prev = line.glyph_runs[0].node_id;
+    for run in line.glyph_runs.iter().skip(1) {
+        if run.node_id != prev {
+            text_child_count += 1;
+            prev = run.node_id;
+        }
+    }
+    range.end.saturating_sub(range.start) > text_child_count
+}
+
 fn visit_node(
     node: &LayoutNode,
     from: &Position,
@@ -198,34 +219,65 @@ fn visit_line(
     let contains_from = from_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
     let contains_to = to_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
 
+    let hb_placeholder = node.rect.height * 0.15;
+    // Without an explicit extension, a trailing hard_break enveloped by the
+    // selection reads as zero width because `x_at_offset` pins to the last
+    // run's right edge.
+    let trailing_hb = line_has_trailing_non_text(line);
+    let at_line_trailing = |pos: &Position| -> bool {
+        line.child_range
+            .as_ref()
+            .is_some_and(|r| pos.node_id == line.node_id && pos.offset == r.end && r.end > r.start)
+    };
+
     let (x_start, x_end) = match (*phase, contains_from, contains_to) {
         (Phase::Before, true, true) => {
             let x0 = super::grapheme::x_at_offset(line, from);
-            let x1 = super::grapheme::x_at_offset(line, to);
+            let mut x1 = super::grapheme::x_at_offset(line, to);
+            if trailing_hb && at_line_trailing(to) {
+                x1 += hb_placeholder;
+            }
             *phase = Phase::After;
             (x0, x1)
         }
         (Phase::Before, true, false) => {
             let x0 = super::grapheme::x_at_offset(line, from);
-            let x1 = line_end_x(line);
+            let mut x1 = line_end_x(line);
+            if trailing_hb {
+                x1 += hb_placeholder;
+            }
             *phase = Phase::Inside;
             (x0, x1)
         }
-        (Phase::Inside, false, false) => (line_start_x(line), line_end_x(line)),
+        (Phase::Inside, false, false) => {
+            let x0 = line_start_x(line);
+            let mut x1 = line_end_x(line);
+            if trailing_hb {
+                x1 += hb_placeholder;
+            }
+            (x0, x1)
+        }
         (Phase::Inside, false, true) => {
             let x0 = line_start_x(line);
-            let x1 = super::grapheme::x_at_offset(line, to);
+            let mut x1 = super::grapheme::x_at_offset(line, to);
+            if trailing_hb && at_line_trailing(to) {
+                x1 += hb_placeholder;
+            }
             *phase = Phase::After;
             (x0, x1)
         }
         _ => return,
     };
 
+    // Both endpoints at paragraph-level offsets in the same line collapse
+    // onto the same x via `x_at_offset` — show a placeholder so the
+    // hard_break still reads as selected.
+    let spans_hard_break =
+        from.node_id == line.node_id && to.node_id == line.node_id && from.offset != to.offset;
     let width = if x_end > x_start {
         x_end - x_start
-    } else if line.glyph_runs.is_empty() {
-        // empty line — show a small placeholder like a virtual space
-        node.rect.height * 0.3
+    } else if line.glyph_runs.is_empty() || spans_hard_break {
+        hb_placeholder
     } else {
         return;
     };

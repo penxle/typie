@@ -88,6 +88,22 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
 
     match &line_node.content {
         LayoutContent::Line(line) => {
+            // An empty hard_break line owns paragraph offsets via child_range
+            // but has no glyph runs to step through; the new affinity keeps
+            // the result on this line so normalize doesn't bounce to the
+            // upper line.
+            if line.glyph_runs.is_empty()
+                && let Some(range) = &line.child_range
+                && pos.node_id == line.node_id
+                && pos.offset >= range.start
+                && pos.offset < range.end
+            {
+                return Some(Selection::collapsed(Position {
+                    node_id: line.node_id,
+                    offset: pos.offset + 1,
+                    affinity: Affinity::Upstream,
+                }));
+            }
             for (i, run) in line.glyph_runs.iter().enumerate() {
                 if run.node_id != pos.node_id {
                     continue;
@@ -129,6 +145,22 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     pos.offset + g.codepoints as usize,
                 )));
             }
+            // Landing at the empty line's start would re-stage the same
+            // caret; normalize then locks head Upstream and the next press
+            // loops on the upper line.
+            if let LayoutContent::Line(next_line) = &next.content
+                && next_line.glyph_runs.is_empty()
+                && let Some(range) = &next_line.child_range
+                && pos.node_id == next_line.node_id
+                && pos.offset == range.start
+                && range.start < range.end
+            {
+                return Some(Selection::collapsed(Position {
+                    node_id: next_line.node_id,
+                    offset: range.start + 1,
+                    affinity: Affinity::Upstream,
+                }));
+            }
             Some(landed(next, false, true))
         }
         _ => {
@@ -150,6 +182,19 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
 
     match &line_node.content {
         LayoutContent::Line(line) => {
+            // Symmetric to forward; Downstream keeps the result on this line.
+            if line.glyph_runs.is_empty()
+                && let Some(range) = &line.child_range
+                && pos.node_id == line.node_id
+                && pos.offset > range.start
+                && pos.offset <= range.end
+            {
+                return Some(Selection::collapsed(Position {
+                    node_id: line.node_id,
+                    offset: pos.offset - 1,
+                    affinity: Affinity::Downstream,
+                }));
+            }
             for (i, run) in line.glyph_runs.iter().enumerate() {
                 if run.node_id != pos.node_id {
                     continue;
@@ -196,6 +241,28 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                     pos.offset - g.codepoints as usize,
                 )));
             }
+            // Mirror of forward. `normalize_position` may have descended a
+            // paragraph-level pos into the adjacent text node's start, so
+            // accept both shapes.
+            if let LayoutContent::Line(prev_line) = &prev.content
+                && prev_line.glyph_runs.is_empty()
+                && let Some(prev_range) = &prev_line.child_range
+                && prev_range.start < prev_range.end
+            {
+                let at_para_boundary =
+                    pos.node_id == prev_line.node_id && pos.offset == prev_range.end;
+                let at_line_start = line
+                    .glyph_runs
+                    .first()
+                    .is_some_and(|r| r.node_id == pos.node_id && r.offset == pos.offset);
+                if at_para_boundary || at_line_start {
+                    return Some(Selection::collapsed(Position {
+                        node_id: prev_line.node_id,
+                        offset: prev_range.end - 1,
+                        affinity: Affinity::Downstream,
+                    }));
+                }
+            }
             Some(landed(prev, true, false))
         }
         _ => {
@@ -236,7 +303,13 @@ fn move_line_vertical_forward(
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.bottom();
     let target = search::find_navigable_below_at_x(&tree.root, y, x);
-    (target.map(|t| navigate_to(t, x)), Some(x))
+    let sel = if let Some(t) = target {
+        let s = escape_empty_line_trap(navigate_to(t, x), Some(t), pos, true);
+        Some(skip_over_when_stuck(tree, s, t, pos, x, true))
+    } else {
+        line_end_fallback(line_node, true)
+    };
+    (sel, Some(x))
 }
 
 fn move_line_vertical_backward(
@@ -250,7 +323,98 @@ fn move_line_vertical_backward(
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.y;
     let target = search::find_navigable_above_at_x(&tree.root, y, x);
-    (target.map(|t| navigate_to(t, x)), Some(x))
+    let sel = if let Some(t) = target {
+        let s = escape_empty_line_trap(navigate_to(t, x), Some(t), pos, false);
+        Some(skip_over_when_stuck(tree, s, t, pos, x, false))
+    } else {
+        line_end_fallback(line_node, false)
+    };
+    (sel, Some(x))
+}
+
+/// A trailing empty line owns no children (zero-width `child_range`), so
+/// `escape_empty_line_trap` can't push off it.
+fn skip_over_when_stuck(
+    tree: &LayoutTree,
+    sel: Selection,
+    target: &LayoutNode,
+    pos: &Position,
+    x: f32,
+    forward: bool,
+) -> Selection {
+    let LayoutContent::Line(line) = &target.content else {
+        return sel;
+    };
+    if !line.glyph_runs.is_empty() {
+        return sel;
+    }
+    let Some(range) = &line.child_range else {
+        return sel;
+    };
+    if range.start != range.end {
+        return sel;
+    }
+    if sel.head.node_id != pos.node_id || sel.head.offset != pos.offset {
+        return sel;
+    }
+    let next = if forward {
+        search::find_navigable_below_at_x(&tree.root, target.rect.bottom(), x)
+    } else {
+        search::find_navigable_above_at_x(&tree.root, target.rect.y, x)
+    };
+    next.map(|n| navigate_to(n, x)).unwrap_or(sel)
+}
+
+/// At the document edge return the current line's end instead of `None`, so
+/// the navigation handler doesn't silently swallow the keypress.
+fn line_end_fallback(line_node: &LayoutNode, forward: bool) -> Option<Selection> {
+    let LayoutContent::Line(line) = &line_node.content else {
+        return None;
+    };
+    let pos = if forward {
+        last_position_in_line(line)
+    } else {
+        first_position_in_line(line)
+    };
+    Some(Selection::collapsed(pos))
+}
+
+/// `position_at_x` on an empty line collapses to its `child_range.start`,
+/// which can equal the input position when crossing an empty hard_break line
+/// — making the press a visible no-op. Push to the far end of the range so
+/// the next press exits in the same direction.
+fn escape_empty_line_trap(
+    sel: Selection,
+    target: Option<&LayoutNode>,
+    pos: &Position,
+    forward: bool,
+) -> Selection {
+    let Some(t) = target else { return sel };
+    let LayoutContent::Line(line) = &t.content else {
+        return sel;
+    };
+    if !line.glyph_runs.is_empty() {
+        return sel;
+    }
+    if sel.head.node_id != pos.node_id || sel.head.offset != pos.offset {
+        return sel;
+    }
+    let Some(range) = &line.child_range else {
+        return sel;
+    };
+    if range.end == range.start {
+        return sel;
+    }
+    let (offset, affinity) = if forward {
+        (range.end, Affinity::Upstream)
+    } else {
+        (range.start, Affinity::Downstream)
+    };
+    Selection::collapsed(Position {
+        node_id: line.node_id,
+        offset,
+        affinity,
+    })
 }
 
 fn move_block_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
@@ -854,19 +1018,20 @@ mod tests {
     }
 
     #[test]
-    fn line_vertical_forward_at_last_returns_none() {
+    fn line_vertical_forward_at_last_extends_to_line_end() {
         let f = fixture();
-        assert!(
-            mov(
-                &f.tree,
-                Position::new(f.lines[4], 0),
-                Movement::Line {
-                    direction: Direction::Forward,
-                    axis: Axis::Vertical
-                },
-            )
-            .is_none()
-        );
+        let sel = mov(
+            &f.tree,
+            Position::new(f.lines[4], 0),
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        )
+        .expect("falls back to end of current line at document edge");
+        assert_eq!(sel.head, sel.anchor);
+        // Stays on the same line, head pushed to its end position.
+        assert_eq!(sel.head.node_id, f.lines[4]);
     }
 
     #[test]

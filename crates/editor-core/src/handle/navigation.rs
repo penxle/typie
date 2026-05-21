@@ -722,6 +722,133 @@ mod tests {
     }
 
     #[test]
+    fn shift_right_through_consecutive_hard_breaks_visits_each_offset() {
+        let (state, _p1, _t_a, _t_b) = state! {
+            doc {
+                root {
+                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                }
+            }
+            selection: (t_a, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let doc = editor.state.doc.clone();
+
+        let h0 = editor.state().selection.head;
+        shift_right(&mut editor);
+        let h1 = editor.state().selection.head;
+        shift_right(&mut editor);
+        let h2 = editor.state().selection.head;
+        shift_right(&mut editor);
+        let h3 = editor.state().selection.head;
+        shift_right(&mut editor);
+        let h4 = editor.state().selection.head;
+
+        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        assert!(r(h1) > r(h0), "1st Shift+Right selects 'a'");
+        assert!(r(h2) > r(h1), "2nd Shift+Right passes first hard_break");
+        assert!(
+            r(h3) > r(h2),
+            "3rd Shift+Right passes second hard_break (not stuck/skipped)"
+        );
+        assert!(r(h4) > r(h3), "4th Shift+Right enters text 'b'");
+    }
+
+    #[test]
+    fn shift_left_through_consecutive_hard_breaks_visits_each_offset() {
+        let (state, _p1, _t_a, _t_b) = state! {
+            doc {
+                root {
+                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                }
+            }
+            selection: (t_b, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let doc = editor.state.doc.clone();
+
+        let h0 = editor.state().selection.head;
+        shift_left(&mut editor);
+        let h1 = editor.state().selection.head;
+        shift_left(&mut editor);
+        let h2 = editor.state().selection.head;
+        shift_left(&mut editor);
+        let h3 = editor.state().selection.head;
+        shift_left(&mut editor);
+        let h4 = editor.state().selection.head;
+
+        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        assert!(r(h1) < r(h0), "1st Shift+Left selects 'b'");
+        assert!(r(h2) < r(h1), "2nd Shift+Left passes second hard_break");
+        assert!(r(h3) < r(h2), "3rd Shift+Left passes first hard_break");
+        assert!(r(h4) < r(h3), "4th Shift+Left enters text 'a'");
+    }
+
+    #[test]
+    fn shift_down_through_consecutive_hard_breaks_visits_each_line() {
+        let (state, _p1, _t_a, _t_b) = state! {
+            doc {
+                root {
+                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                }
+            }
+            selection: (t_a, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let doc = editor.state.doc.clone();
+
+        let h0 = editor.state().selection.head;
+        shift_down(&mut editor);
+        let h1 = editor.state().selection.head;
+        shift_down(&mut editor);
+        let h2 = editor.state().selection.head;
+
+        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        assert!(
+            r(h1) > r(h0),
+            "1st Shift+Down lands on the empty hard_break line"
+        );
+        assert!(
+            r(h2) > r(h1),
+            "2nd Shift+Down reaches the 'b' line (not stuck)"
+        );
+    }
+
+    #[test]
+    fn shift_up_through_consecutive_hard_breaks_visits_each_line() {
+        let (state, _p1, _t_a, _t_b) = state! {
+            doc {
+                root {
+                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                }
+            }
+            selection: (t_b, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let doc = editor.state.doc.clone();
+
+        let h0 = editor.state().selection.head;
+        shift_up(&mut editor);
+        let h1 = editor.state().selection.head;
+        shift_up(&mut editor);
+        let h2 = editor.state().selection.head;
+
+        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        assert!(
+            r(h1) < r(h0),
+            "1st Shift+Up lands on the empty hard_break line"
+        );
+        assert!(
+            r(h2) < r(h1),
+            "2nd Shift+Up reaches the 'a' line (not stuck)"
+        );
+    }
+
+    #[test]
     fn replace_over_extended_consecutive_atoms_removes_both() {
         let (state, _, i1, i2) = state! {
             doc {
