@@ -21,8 +21,8 @@ pub type SelectionRect = PageRect<SelectionRectKind>;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SelectionEndpoints {
-    pub from: PageRect,
-    pub to: PageRect,
+    pub from: PageRect<()>,
+    pub to: PageRect<()>,
 }
 
 pub fn selection_rects(

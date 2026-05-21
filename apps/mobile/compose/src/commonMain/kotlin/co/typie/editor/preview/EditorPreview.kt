@@ -78,31 +78,29 @@ internal fun EditorPreview(
   modifier: Modifier = Modifier,
   shape: RoundedCornerShape,
   contentTopPadding: Dp = 0.dp,
-  document: PlainDoc? = null,
+  graph: ByteArray? = null,
   modifiers: List<EditorModifier> = emptyList(),
   hintText: String = "미리보기 텍스트",
 ) {
   val colors = AppTheme.colors
   val scope = rememberCoroutineScope()
-  val doc =
-    remember(document, layoutMode) {
-      (document ?: defaultPreviewDoc(layoutMode)).withPreviewRootModifiers(modifiers)
-    }
+  val doc = remember(layoutMode) { defaultPreviewDoc(layoutMode).withPreviewRootModifiers() }
+  val sourceKey = remember(graph, doc) { graph?.let { it.size to it.contentHashCode() } ?: doc }
   val layoutSpec = remember(layoutMode) { layoutMode.toEditorDocumentLayoutSpec() }
   val background =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Continuous -> colors.surfaceDefault
       is EditorDocumentLayoutSpec.Paginated -> colors.surfaceInset
     }
-  val uiState = remember(doc) { EditorUiState() }
+  val uiState = remember(sourceKey) { EditorUiState() }
   val zoomController = remember { EditorZoomController(scope = scope) }
-  val bringIntoViewRequests = remember(doc) { EditorBringIntoViewRequests() }
+  val bringIntoViewRequests = remember(sourceKey) { EditorBringIntoViewRequests() }
   val hintHazeState = remember { HazeState() }
   val hintShape = AppShapes.rounded(AppShapes.sm)
   val hintEvents = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
   val hintAlpha = remember { Animatable(0f) }
 
-  DisposableEffect(runtime, doc) { onDispose { runtime.clear() } }
+  DisposableEffect(runtime, sourceKey) { onDispose { runtime.clear() } }
   LaunchedEffect(hintEvents) {
     hintEvents.collectLatest {
       hintAlpha.animateTo(1f, tween(PreviewHintFadeMillis))
@@ -151,7 +149,9 @@ internal fun EditorPreview(
             LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
           ) {
             EditorPreviewContent(
+              graph = graph,
               doc = doc,
+              sourceKey = sourceKey,
               modifiers = modifiers,
               editorScope = scope,
               runtime = runtime,
@@ -197,7 +197,9 @@ internal fun EditorPreview(
 
 @Composable
 private fun EditorPreviewContent(
+  graph: ByteArray?,
   doc: PlainDoc,
+  sourceKey: Any,
   modifiers: List<EditorModifier>,
   editorScope: CoroutineScope,
   runtime: EditorRuntime,
@@ -227,25 +229,43 @@ private fun EditorPreviewContent(
     }
   }
 
-  LaunchedEffect(doc, viewportWidth, viewportHeight, density.density, themeVariant) {
+  LaunchedEffect(
+    sourceKey,
+    viewportWidth,
+    viewportHeight,
+    density.density,
+    themeVariant,
+    modifiers,
+  ) {
     val viewport =
       Viewport(
         width = viewportWidth,
         height = viewportHeight,
         scaleFactor = density.density.toDouble(),
       )
-    if (editor == null) {
-      runtime.attach(
-        Editor.createFromDoc(
-          doc = doc,
-          viewport = viewport,
-          themeVariant = themeVariant,
-          scope = editorScope,
-          onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
-        )
-      )
+    val activeEditor = runtime.editor
+    if (activeEditor == null) {
+      val nextEditor =
+        if (graph != null) {
+          Editor.create(
+            graph = graph,
+            viewport = viewport,
+            themeVariant = themeVariant,
+            scope = editorScope,
+            onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
+          )
+        } else {
+          Editor.createFromDoc(
+            doc = doc.withPreviewRootModifiers(modifiers),
+            viewport = viewport,
+            themeVariant = themeVariant,
+            scope = editorScope,
+            onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
+          )
+        }
+      runtime.attach(nextEditor)
     } else {
-      editor.await {
+      activeEditor.await {
         enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
         enqueue(
           Message.System(
@@ -364,6 +384,22 @@ private fun defaultPreviewDoc(layoutMode: LayoutMode): PlainDoc {
     }
   }
   return PlainDoc(nodes = nodes)
+}
+
+private fun PlainDoc.withPreviewRootModifiers(): PlainDoc {
+  val rootEntry = nodes["0"] ?: return this
+  val rootModifiers = DefaultPreviewRootModifiers + rootEntry.modifiers
+  return PlainDoc(
+    nodes =
+      nodes +
+        ("0" to
+          PlainNodeEntry(
+            parent = rootEntry.parent,
+            children = rootEntry.children,
+            modifiers = rootModifiers,
+            node = rootEntry.node,
+          ))
+  )
 }
 
 private fun PlainDoc.withPreviewRootModifiers(modifiers: List<EditorModifier>): PlainDoc {

@@ -73,16 +73,43 @@ impl EditorHost {
         changesets: Vec<u8>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
-            editor_crdt::wire::decode(&changesets[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let graph = editor_crdt::OpGraph::from_changesets(css)?;
-        let doc = editor_model::Doc::from_op_graph(&graph)?;
+        let (doc, graph) = doc_from_graph_changesets(changesets)?;
         let selection = doc_start_selection(&doc)?;
         let state = editor_state::State::new(doc, graph, selection);
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))
+    }
+
+    pub fn extract_text_from_graph(&self, changesets: Vec<u8>) -> EditorResult<String> {
+        let (doc, _) = doc_from_graph_changesets(changesets)?;
+        Ok(doc.extract_text())
+    }
+
+    pub fn root_attrs_from_graph(
+        &self,
+        changesets: Vec<u8>,
+    ) -> EditorResult<Complex<editor_model::PlainRootNode>> {
+        let (doc, _) = doc_from_graph_changesets(changesets)?;
+        let entry = doc
+            .get_entry(editor_model::NodeId::ROOT)
+            .ok_or(FfiError::NoInitialCursorPosition)?;
+        match &entry.node.to_plain() {
+            editor_model::PlainNode::Root(r) => Ok(r.clone().into_ffi()?),
+            _ => unreachable!("root entry must be Root"),
+        }
+    }
+
+    pub fn root_modifiers_from_graph(
+        &self,
+        changesets: Vec<u8>,
+    ) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
+        let (doc, _) = doc_from_graph_changesets(changesets)?;
+        let modifiers = doc
+            .node(editor_model::NodeId::ROOT)
+            .map(|n| n.explicit_modifiers().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        Ok(modifiers.into_ffi()?)
     }
 
     pub fn set_fonts(
@@ -124,6 +151,17 @@ impl EditorHost {
         let mut resource = self.resource.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut resource)
     }
+}
+
+fn doc_from_graph_changesets(
+    changesets: Vec<u8>,
+) -> EditorResult<(editor_model::Doc, editor_crdt::OpGraph<editor_model::DocOp>)> {
+    let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        editor_crdt::wire::decode(&changesets[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+    let graph = editor_crdt::OpGraph::from_changesets(css)?;
+    let doc = editor_model::Doc::from_op_graph(&graph)?;
+    Ok((doc, graph))
 }
 
 fn doc_start_selection(doc: &editor_model::Doc) -> EditorResult<editor_state::Selection> {

@@ -1,0 +1,29 @@
+query DocumentBodySettingsScreen_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+
+    node {
+      __typename
+
+      ... on Document {
+        id
+        state {
+          graph
+        }
+        bodySettingsFontFamilies: fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
+          ...FontLoader_FontFamily
+          ...EditorSettingsFontFamily_family
+        }
+        ...FontLoader_Document
+      }
+    }
+  }
+}
+
+mutation DocumentBodySettingsScreen_PushDocumentChangesets_Mutation(
+  $input: PushDocumentChangesetsInput!
+) {
+  pushDocumentChangesets(input: $input) {
+    heads
+  }
+}

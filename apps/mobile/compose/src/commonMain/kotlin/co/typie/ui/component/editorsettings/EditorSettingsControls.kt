@@ -26,7 +26,6 @@ import co.typie.editor.ResolvedEditorTheme
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Modifier as EditorModifier
-import co.typie.editor.ffi.ModifierType
 import co.typie.editor.matchWeight
 import co.typie.ext.clickable
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
@@ -64,22 +63,21 @@ internal data class EditorStyleSettings(
   val blockGap: Int = 100,
 )
 
-internal fun Map<ModifierType, EditorModifier>?.toEditorStyleSettings(): EditorStyleSettings =
+internal fun List<EditorModifier>?.toEditorStyleSettings(): EditorStyleSettings =
   EditorStyleSettings(
-    fontFamily =
-      (this?.get(ModifierType.FontFamily) as? EditorModifier.FontFamily)?.value ?: "Pretendard",
-    fontSize = (this?.get(ModifierType.FontSize) as? EditorModifier.FontSize)?.value ?: 1200,
-    fontWeight = (this?.get(ModifierType.FontWeight) as? EditorModifier.FontWeight)?.value ?: 400,
-    textColor = (this?.get(ModifierType.TextColor) as? EditorModifier.TextColor)?.value ?: "black",
-    backgroundColor =
-      (this?.get(ModifierType.BackgroundColor) as? EditorModifier.BackgroundColor)?.value ?: "none",
-    letterSpacing =
-      (this?.get(ModifierType.LetterSpacing) as? EditorModifier.LetterSpacing)?.value ?: 0,
-    lineHeight = (this?.get(ModifierType.LineHeight) as? EditorModifier.LineHeight)?.value ?: 160,
-    paragraphIndent =
-      (this?.get(ModifierType.ParagraphIndent) as? EditorModifier.ParagraphIndent)?.value ?: 100,
-    blockGap = (this?.get(ModifierType.BlockGap) as? EditorModifier.BlockGap)?.value ?: 100,
+    fontFamily = firstModifier<EditorModifier.FontFamily>()?.value ?: "Pretendard",
+    fontSize = firstModifier<EditorModifier.FontSize>()?.value ?: 1200,
+    fontWeight = firstModifier<EditorModifier.FontWeight>()?.value ?: 400,
+    textColor = firstModifier<EditorModifier.TextColor>()?.value ?: "black",
+    backgroundColor = firstModifier<EditorModifier.BackgroundColor>()?.value ?: "none",
+    letterSpacing = firstModifier<EditorModifier.LetterSpacing>()?.value ?: 0,
+    lineHeight = firstModifier<EditorModifier.LineHeight>()?.value ?: 160,
+    paragraphIndent = firstModifier<EditorModifier.ParagraphIndent>()?.value ?: 100,
+    blockGap = firstModifier<EditorModifier.BlockGap>()?.value ?: 100,
   )
+
+private inline fun <reified T : EditorModifier> List<EditorModifier>?.firstModifier(): T? =
+  this?.firstOrNull { it is T } as? T
 
 internal fun EditorStyleSettings.toEditorModifiers(): List<EditorModifier> =
   listOf(

@@ -10,6 +10,7 @@ import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.PointerStyle
@@ -23,6 +24,7 @@ internal class FakeFfiEditor(
   var cursorProvider: () -> CursorMetrics? = { null },
   var selectionProvider: () -> Selection = { EmptySelection },
   var rootAttrsProvider: () -> PlainRootNode = { EmptyRootAttrs },
+  var rootModifiersProvider: () -> List<EditorModifier> = { emptyList() },
   var modifierStateProvider: () -> ModifierState = { EmptyModifierState },
   var blockStateProvider: () -> BlockState = {
     BlockState(ancestors = emptyList(), nodes = emptyList())
@@ -51,6 +53,8 @@ internal class FakeFfiEditor(
   override fun selection(): Selection = selectionProvider()
 
   override fun rootAttrs(): PlainRootNode = rootAttrsProvider()
+
+  override fun rootModifiers(): List<EditorModifier> = rootModifiersProvider()
 
   override fun modifierState(): ModifierState = modifierStateProvider()
 

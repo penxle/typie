@@ -14,6 +14,7 @@ import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
@@ -61,6 +62,7 @@ internal constructor(
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
   val externalElements: List<ExternalElement> by derivedStateOf { state.externalElements }
   val rootAttrs: PlainRootNode? by derivedStateOf { state.rootAttrs }
+  val rootModifiers: List<EditorModifier>? by derivedStateOf { state.rootModifiers }
   val modifierState: ModifierState? by derivedStateOf { state.modifierState }
   val blockState: BlockState? by derivedStateOf { state.blockState }
   val ime: Ime? by derivedStateOf { state.ime }
@@ -304,6 +306,54 @@ internal constructor(
 
   fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
 
+  internal suspend fun collectLocalChangesets(
+    baseHeads: ByteArray?,
+    block: EditorScope.() -> Unit,
+  ): EditorLocalChangesets {
+    val resolvedBaseHeads = baseHeads ?: currentHeads()
+    await(block = block)
+    val changesets = localChangesetsSince(resolvedBaseHeads)
+    val currentHeads = currentHeads()
+    return EditorLocalChangesets(
+      baseHeads = resolvedBaseHeads,
+      currentHeads = currentHeads,
+      changesets = changesets,
+    )
+  }
+
+  internal suspend fun receiveRemoteChangeset(payload: ByteArray) {
+    withSuspendFailureNotification {
+      val events =
+        withContext(NonCancellable + dispatcher) {
+          mutex.withLock {
+            if (disposed.load()) throw CancellationException("Editor disposed")
+            inner.receiveRemoteChangeset(payload)
+            val e = inner.tick()
+            val version = versionCounter.addAndFetch(1L)
+            commit(readSnapshot(version))
+            e
+          }
+        }
+      emit(events)
+    }
+  }
+
+  internal suspend fun currentHeads(): ByteArray =
+    withContext(dispatcher) {
+      mutex.withLock {
+        if (disposed.load()) throw CancellationException("Editor disposed")
+        inner.currentHeads()
+      }
+    }
+
+  private suspend fun localChangesetsSince(remoteHeads: ByteArray): ByteArray =
+    withContext(dispatcher) {
+      mutex.withLock {
+        if (disposed.load()) throw CancellationException("Editor disposed")
+        inner.localChangesetsSince(remoteHeads)
+      }
+    }
+
   fun dispose() {
     if (!disposed.compareAndSet(expectedValue = false, newValue = true)) return
     EditorRegistry.unregisterAsync(this)
@@ -320,6 +370,7 @@ internal constructor(
       pageSizes = inner.pageSizes(),
       externalElements = inner.externalElements(),
       rootAttrs = inner.rootAttrs(),
+      rootModifiers = inner.rootModifiers(),
       modifierState = inner.modifierState(),
       blockState = inner.blockState(),
       ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE),

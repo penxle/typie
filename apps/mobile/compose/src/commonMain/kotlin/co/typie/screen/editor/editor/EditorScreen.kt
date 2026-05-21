@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorBody
@@ -195,10 +196,11 @@ fun EditorScreen(entityId: String) {
             subtitle = model.headingSubtitle,
             loading = loading,
             onClick = {
+              val activeEditor = runtime.editor
               screenState.prepareToLeaveEditorScene(
                 runtime = runtime,
                 uiState = uiState,
-                flushDrafts = model::flushDrafts,
+                flushDrafts = { model.flush(activeEditor) },
               )
               nav.navigate(Route.Document(entityId))
             },
@@ -212,6 +214,18 @@ fun EditorScreen(entityId: String) {
   )
 
   val editor = runtime.editor
+  LaunchedEffect(entityId, editor) {
+    val activeEditor = editor ?: return@LaunchedEffect
+    model.markBodySynced(activeEditor)
+    EditorLocalChangesetBus.consume(entityId).forEach { activeEditor.receiveRemoteChangeset(it) }
+  }
+  LaunchedEffect(entityId, runtime) {
+    EditorLocalChangesetBus.notifications(entityId).collectLatest {
+      val activeEditor = runtime.editor ?: return@collectLatest
+      EditorLocalChangesetBus.consume(entityId).forEach { activeEditor.receiveRemoteChangeset(it) }
+    }
+  }
+
   val layoutSpec: EditorDocumentLayoutSpec =
     editor?.state?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
       ?: EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
@@ -559,7 +573,6 @@ private fun EditorTopBarMenu(model: EditorViewModel) {
     item(icon = Lucide.SpellCheck, label = "맞춤법 검사", onClick = noop)
     item(icon = Lucide.Lightbulb, label = "AI 피드백", onClick = noop)
     item(icon = Lucide.History, label = "타임라인", onClick = noop)
-    item(icon = Lucide.Settings, label = "본문 설정", onClick = noop)
     if (Preference.devMode) {
       item(icon = Lucide.Send, label = "입력 로그 보내기", onClick = noop)
       divider()

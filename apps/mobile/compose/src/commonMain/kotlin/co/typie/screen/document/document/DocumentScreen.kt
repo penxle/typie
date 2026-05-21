@@ -462,6 +462,11 @@ fun DocumentScreen(entityId: String) {
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)
 
       DocumentActionRow(
+        icon = Lucide.FileSliders,
+        label = "본문 설정",
+        onClick = { nav.navigate(Route.DocumentBodySettings(entityId)) },
+      )
+      DocumentActionRow(
         icon = Lucide.LockKeyhole,
         label = if (document.locked) "편집 잠금 해제" else "편집 잠금",
         onClick = { showPendingAction(if (document.locked) "편집 잠금 해제" else "편집 잠금") },

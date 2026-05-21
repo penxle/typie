@@ -65,6 +65,8 @@ sealed interface Route {
 
   data class Document(val entityId: String) : Route
 
+  data class DocumentBodySettings(val entityId: String) : Route
+
   data object Login : Route
 }
 
@@ -78,6 +80,9 @@ fun Route.transitionStyleTo(route: Route): RouteTransitionStyle =
   when {
     (this is Route.Home && route is Route.Search) ||
       (this is Route.Search && route is Route.Home) -> RouteTransitionStyle.Fade
+
+    (this is Route.Document && route is Route.DocumentBodySettings) ||
+      (this is Route.DocumentBodySettings && route is Route.Document) -> RouteTransitionStyle.Slide
 
     this is Route.Document ||
       route is Route.Document ||
