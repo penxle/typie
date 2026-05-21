@@ -374,6 +374,67 @@ mod tests {
     }
 
     #[test]
+    fn delete_selected_trailing_empty_paragraph_after_textblock_creates_new_trailing_paragraph() {
+        let (initial, ..) = state! {
+            doc { r1: root {
+                paragraph { text("ㅁ") }
+                p2: paragraph {}
+            } }
+            selection: (r1, 1, >) -> (r1, 2, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("ㅁ") }
+                p2: paragraph {}
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_selected_trailing_empty_paragraph_after_image_uses_fulfilled_trailing_paragraph() {
+        let (initial, ..) = state! {
+            doc { r1: root {
+                image
+                paragraph {}
+            } }
+            selection: (r1, 1, >) -> (r1, 2, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { r1: root {
+                image
+                p2: paragraph {}
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_selected_middle_empty_paragraph_moves_to_next_text_start() {
+        let (initial, ..) = state! {
+            doc { r1: root {
+                paragraph { text("ㅁㄴㅇㄴㅁㅇ") }
+                paragraph {}
+                paragraph { t3: text("ㅁㄴㅇ") }
+            } }
+            selection: (r1, 1, >) -> (r1, 2, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("ㅁㄴㅇㄴㅁㅇ") }
+                paragraph { t3: text("ㅁㄴㅇ") }
+            } }
+            selection: (t3, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn delete_spanning_empty_paragraphs() {
         let (initial, ..) = state! {
             doc { root {

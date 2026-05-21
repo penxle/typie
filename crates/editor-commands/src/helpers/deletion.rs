@@ -1,4 +1,4 @@
-use editor_model::{Doc, Node, NodeId};
+use editor_model::{Doc, Node, NodeId, PlainNode, PlainParagraphNode, Subtree};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact, fulfill, prune};
 
@@ -84,7 +84,7 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
                 }
                 Ok(())
             })?;
-            let sel = resolve_selection_at(&tr.doc(), from.node_id, from.offset);
+            let sel = ensure_selection_after_child_range_delete(tr, from.node_id, from.offset)?;
             tr.set_selection(sel)?;
         } else {
             let cursor = delete_within_node(tr, from.node_id, from.offset, to.offset)?;
@@ -164,6 +164,38 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
     }
 
     Ok(true)
+}
+
+fn ensure_selection_after_child_range_delete(
+    tr: &mut Transaction,
+    container_id: NodeId,
+    offset: usize,
+) -> Result<Selection, CommandError> {
+    let doc = tr.doc();
+    let Some(container) = doc.node(container_id) else {
+        return Ok(resolve_selection_at(&doc, container_id, offset));
+    };
+
+    let children = &container.entry().children;
+    let next_child_id = children.iter().nth(offset).copied();
+
+    if let Some(child_id) = next_child_id {
+        return Ok(selection_at_child(&doc, container_id, offset, child_id)
+            .unwrap_or_else(|| resolve_selection_at(&doc, container_id, offset)));
+    }
+
+    debug_assert_eq!(offset, children.len());
+
+    let paragraph_id = NodeId::new();
+    tr.insert_subtree(
+        container_id,
+        offset,
+        Subtree::leaf(
+            paragraph_id,
+            PlainNode::Paragraph(PlainParagraphNode::default()),
+        ),
+    )?;
+    Ok(Selection::collapsed(Position::new(paragraph_id, 0)))
 }
 
 fn delete_within_node(
