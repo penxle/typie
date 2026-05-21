@@ -1,5 +1,5 @@
 use editor_common::Rect;
-use editor_state::Position;
+use editor_state::{Affinity, Position};
 
 use crate::page::{LayoutPage, PageRect};
 use crate::paginate::*;
@@ -29,14 +29,15 @@ pub fn selection_rects(
     // Resolve which Line/Atom each endpoint belongs to up front so soft-wrap
     // boundary positions are disambiguated by affinity (via `find_line_at`)
     // rather than by the permissive per-line `line_contains_position`.
-    // A monolithic box is now resolvable by `find_line_at` (navigation needs
-    // that). For rect purposes a monolithic-bracket endpoint is a container
-    // boundary, not an interior Line/Atom owner — drop the nav-box so the
-    // box-level phase machine and the `fully && monolithic` branch still fire.
-    let not_nav_box =
-        |n: &&LayoutNode| !matches!(&n.content, LayoutContent::Box(b) if b.nav.is_some());
-    let from_owner = super::search::find_line_at(tree, &from).filter(not_nav_box);
-    let to_owner = super::search::find_line_at(tree, &to).filter(not_nav_box);
+    //
+    // `find_line_at` is permissive on purpose for navigation: a monolithic box
+    // owns both of its bracket positions, and an atom owns both of its edges.
+    // For rect attribution those permissive matches are wrong when the endpoint
+    // is semantically a container boundary — the box-level phase machine (and
+    // the `fully && monolithic` branch) must fire. Strip an owner whose
+    // attachment to the endpoint is not the affinity-selected one.
+    let from_owner = super::search::find_line_at(tree, &from).filter(|n| attached(n, &from));
+    let to_owner = super::search::find_line_at(tree, &to).filter(|n| attached(n, &to));
     let mut phase = Phase::Before;
     let mut rects = Vec::new();
 
@@ -45,6 +46,29 @@ pub fn selection_rects(
     );
 
     rects
+}
+
+// Whether `node` (as returned by `find_line_at`) should be treated as the
+// owner of `pos` for selection-rect attribution. The two carve-outs encode the
+// same idea — the endpoint sits on a structural container boundary, not in
+// the interior of a Line/Atom — but at different node kinds:
+//
+// - A monolithic-bracket Box position is a container boundary that the
+//   `fully && monolithic` branch (and any ancestor box machine) must claim.
+// - An atom edge owns the position only when affinity attaches the position to
+//   the atom: leading edge with Downstream, or trailing edge with Upstream.
+//   The other two cases are container boundaries — the box machine claims them
+//   via its own phase transitions.
+fn attached(node: &LayoutNode, pos: &Position) -> bool {
+    match &node.content {
+        LayoutContent::Box(b) => b.nav.is_none(),
+        LayoutContent::Atom(a) => {
+            let leading = pos.offset == a.index && pos.affinity == Affinity::Downstream;
+            let trailing = pos.offset == a.index + 1 && pos.affinity == Affinity::Upstream;
+            leading || trailing
+        }
+        _ => true,
+    }
 }
 
 fn visit_node(
@@ -697,6 +721,55 @@ mod tests {
             "fully-enveloped monolithic Table must emit a Block rect, got {:?}",
             rects
         );
+    }
+
+    #[test]
+    fn empty_paragraph_after_atom_node_selected_emits_placeholder_rect() {
+        // Node-selecting the empty paragraph that follows an image atom.
+        // (r1, 1, >) means Downstream-attached-to-child[1] (the paragraph),
+        // (r1, 2, <) means Upstream-attached-to-child[1] (the paragraph);
+        // both endpoints bracket the empty paragraph from the root level.
+        // The empty-line placeholder rect inside that paragraph must render.
+        let (state, ..) = state! {
+            doc {
+                r1: root {
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (r1, 1, >) -> (r1, 2, <)
+        };
+        let view = layout(&state.doc);
+        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(rects.len(), 1, "got {:?}", rects);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
+        assert!(rects[0].rect.width > 0.0);
+        assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
+    fn paragraph_after_atom_node_selected_emits_text_rect() {
+        // Non-empty counterpart of the previous test. The same affinity-bracket
+        // pattern around child[1] must also paint the line for a populated
+        // paragraph — proving the fix is not limited to the empty-line branch.
+        let (state, ..) = state! {
+            doc {
+                r1: root {
+                    image
+                    paragraph { text("hello") }
+                }
+            }
+            selection: (r1, 1, >) -> (r1, 2, <)
+        };
+        let view = layout(&state.doc);
+        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(rects.len(), 1, "got {:?}", rects);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
+        assert!(rects[0].rect.width > 0.0);
     }
 
     #[test]
