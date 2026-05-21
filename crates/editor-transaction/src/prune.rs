@@ -6,7 +6,7 @@ use crate::Step;
 /// parent containers that would become empty as a result. Returns empty vec if
 /// the node is non-empty or if empty is valid for this node.
 pub fn prune(node: &NodeRef) -> Vec<Step> {
-    if node.entry().children.len() > 0 {
+    if !node.entry().children.is_empty() {
         return vec![];
     }
 

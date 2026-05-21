@@ -13,14 +13,14 @@ pub fn edit_modifier(
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
-    if let Some(m) = &modifier {
-        if m.as_type() != modifier_type {
-            return Err(CommandError::InvalidArgument(format!(
-                "modifier type mismatch: op type {:?}, modifier {:?}",
-                modifier_type,
-                m.as_type()
-            )));
-        }
+    if let Some(m) = &modifier
+        && m.as_type() != modifier_type
+    {
+        return Err(CommandError::InvalidArgument(format!(
+            "modifier type mismatch: op type {:?}, modifier {:?}",
+            modifier_type,
+            m.as_type()
+        )));
     }
     if !is_text_applicable(modifier_type) {
         return Err(CommandError::InvalidArgument(format!(

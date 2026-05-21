@@ -239,7 +239,7 @@ mod tests {
             actor_table: vec![],
             baselines: vec![],
         };
-        let bad = vec![99u8];
+        let bad = [99u8];
         let mut slice = &bad[..];
         let err = <NodeType as Wire>::decode(&dc, &mut slice).unwrap_err();
         assert!(matches!(

@@ -161,9 +161,13 @@ fn build_plain_node_expr(node: &NodeDef) -> TokenStream {
             })
             .collect();
         quote! {
-            PlainNode::#variant(#plain_struct {
-                #(#field_assigns,)*
-                ..Default::default()
+            PlainNode::#variant({
+                #[allow(clippy::needless_update)]
+                let __plain = #plain_struct {
+                    #(#field_assigns,)*
+                    ..Default::default()
+                };
+                __plain
             })
         }
     }

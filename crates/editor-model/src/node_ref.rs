@@ -51,7 +51,7 @@ impl<'a> NodeRef<'a> {
     }
 
     pub fn parent(&self) -> Option<NodeRef<'a>> {
-        let parent_id = self.entry().parent.get().clone()?;
+        let parent_id = (*self.entry().parent.get())?;
         self.doc.node(parent_id)
     }
 
@@ -123,7 +123,7 @@ impl<'a> NodeRef<'a> {
             if let Some(idx) = node_ref.index() {
                 path.push(idx);
             }
-            match node_ref.entry().parent.get().clone() {
+            match *node_ref.entry().parent.get() {
                 Some(parent_id) => current = parent_id,
                 None => break,
             }
@@ -134,13 +134,10 @@ impl<'a> NodeRef<'a> {
 
     pub fn depth(&self) -> usize {
         let mut d = 0;
-        let mut current = self.entry().parent.get().clone();
+        let mut current = *self.entry().parent.get();
         while let Some(parent_id) = current {
             d += 1;
-            current = self
-                .doc
-                .get_entry(parent_id)
-                .and_then(|e| e.parent.get().clone());
+            current = self.doc.get_entry(parent_id).and_then(|e| *e.parent.get());
         }
         d
     }
@@ -181,7 +178,7 @@ impl<'a> Iterator for AncestorIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let id = self.current?;
         let entry = self.doc.get_entry(id)?;
-        self.current = entry.parent.get().clone();
+        self.current = *entry.parent.get();
         Some(NodeRef::new(self.doc, id))
     }
 }

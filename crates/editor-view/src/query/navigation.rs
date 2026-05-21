@@ -104,15 +104,14 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     }
                     cp_acc += cp;
                 }
-                if local == cp_acc {
-                    if let Some(next) = line.glyph_runs.get(i + 1) {
-                        if let Some(g) = next.graphemes.first() {
-                            return Some(Selection::collapsed(Position::new(
-                                next.node_id,
-                                next.offset + g.codepoints as usize,
-                            )));
-                        }
-                    }
+                if local == cp_acc
+                    && let Some(next) = line.glyph_runs.get(i + 1)
+                    && let Some(g) = next.graphemes.first()
+                {
+                    return Some(Selection::collapsed(Position::new(
+                        next.node_id,
+                        next.offset + g.codepoints as usize,
+                    )));
                 }
             }
             let next = search::find_navigable_after(&tree.root, line_node)?;

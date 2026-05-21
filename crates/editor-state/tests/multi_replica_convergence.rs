@@ -288,7 +288,7 @@ fn scenario_strategy() -> impl Strategy<Value = (u8, Vec<Action>)> {
 /// Partial syncs interleaved with new emits can leave a replica behind in a
 /// single pass, so the post-action cross-sync is iterated to a fixed point.
 fn run_actions_and_converge(
-    replicas: &mut Vec<State>,
+    replicas: &mut [State],
     actions: Vec<Action>,
 ) -> Result<(), TestCaseError> {
     let count = replicas.len();
@@ -394,7 +394,7 @@ fn run_actions_and_converge(
 /// `receive_remote_changeset` — exercises the full wire codec under the same
 /// random action stream.
 fn run_actions_and_converge_via_wire(
-    replicas: &mut Vec<State>,
+    replicas: &mut [State],
     actions: Vec<Action>,
 ) -> Result<(), TestCaseError> {
     let count = replicas.len();

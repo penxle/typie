@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn intersects_subtree_descendant_inside_band_across_rows_returns_true() {
-        let (state, tr1, c1, p1, tr2, ..) = state! {
+        let (state, _, c1, p1, ..) = state! {
             doc {
                 root {
                     table {

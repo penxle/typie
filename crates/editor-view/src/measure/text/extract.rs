@@ -112,6 +112,139 @@ fn segment_graphemes(
     spans
 }
 
+pub fn extract_lines(
+    doc: &Doc,
+    text: &str,
+    layout: &Layout<TextBrush>,
+    style_runs: &[StyleRun],
+    text_runs: &[TextRun],
+    strut: &StrutMetrics,
+    height_config: LineHeightConfig,
+    grapheme_segmenter: &GraphemeClusterSegmenter,
+) -> Vec<ExtractedLine> {
+    let LineHeightConfig {
+        line_height_ratio,
+        base_font_size,
+    } = height_config;
+    let mut lines = Vec::new();
+
+    for line in layout.lines() {
+        let metrics = line.metrics();
+
+        let ascent = metrics.ascent.max(strut.ascent);
+        let descent = metrics.descent.max(strut.descent);
+        let content_height = ascent + descent;
+
+        let max_run_font_size = line
+            .items()
+            .filter_map(|item| match item {
+                parley::PositionedLayoutItem::GlyphRun(gr) => Some(gr.run().font_size()),
+                _ => None,
+            })
+            .fold(base_font_size, f32::max);
+        let line_box_height = (max_run_font_size * line_height_ratio).max(content_height);
+        let leading = (line_box_height - content_height).max(0.0);
+        let baseline = leading / 2.0 + ascent;
+
+        let mut glyph_runs = Vec::new();
+        let mut x = metrics.offset;
+
+        for item in line.items() {
+            if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                let run = glyph_run.run();
+                let font_size = run.font_size();
+
+                let run_x = glyph_run.offset();
+                let mut glyph_x_advance = 0.0;
+                let glyphs: Vec<Glyph> = glyph_run
+                    .glyphs()
+                    .map(|g| {
+                        let gx = glyph_x_advance + g.x;
+                        glyph_x_advance += g.advance;
+                        Glyph {
+                            id: g.id,
+                            x: run_x + gx,
+                            y: baseline + g.y,
+                        }
+                    })
+                    .collect();
+
+                let target_style_index = glyph_run.glyphs().next().map(|g| g.style_index());
+
+                let mut run_text = String::new();
+                let mut graphemes = Vec::new();
+                let mut first_byte_start = None;
+
+                for cluster in run.visual_clusters() {
+                    let cluster_style_index = cluster.glyphs().next().map(|g| g.style_index());
+                    if cluster_style_index != target_style_index {
+                        continue;
+                    }
+
+                    let cluster_range = cluster.text_range();
+                    let cluster_text = &text[cluster_range.clone()];
+                    let advance = cluster.advance();
+
+                    if first_byte_start.is_none() {
+                        first_byte_start = Some(cluster_range.start);
+                    }
+
+                    run_text.push_str(cluster_text);
+                    graphemes.extend(segment_graphemes(cluster_text, advance, grapheme_segmenter));
+                }
+
+                let byte_start = first_byte_start.unwrap_or(0);
+                let node_id = glyph_run.style().brush.node_id;
+                let node_byte_start = text_runs
+                    .iter()
+                    .find(|tr| tr.node_id == node_id)
+                    .map(|tr| tr.byte_range.start)
+                    .unwrap_or(0);
+                let char_offset = text[node_byte_start..byte_start].char_count();
+                let synthesis = resolve_synthesis(doc, node_id);
+                let decoration = resolve_decoration(doc, node_id);
+                let (color, background_color) = resolve_text_colors(doc, node_id);
+
+                let (family_id, weight) = style_runs
+                    .iter()
+                    .find(|sr| sr.byte_range.contains(&byte_start))
+                    .map(|sr| (sr.family, sr.weight))
+                    .unwrap_or((0, 400));
+
+                let run_advance = glyph_run.advance();
+
+                glyph_runs.push(GlyphRun {
+                    family_id,
+                    weight,
+                    font_size,
+                    synthesis,
+                    color,
+                    background_color,
+                    glyphs,
+                    decoration,
+                    node_id,
+                    offset: char_offset,
+                    text: run_text,
+                    x,
+                    width: run_advance,
+                    graphemes,
+                });
+
+                x += run_advance;
+            }
+        }
+
+        lines.push(ExtractedLine {
+            height: line_box_height,
+            baseline,
+            ascent,
+            descent,
+            glyph_runs,
+        });
+    }
+
+    lines
+}
 #[cfg(test)]
 mod tests {
     use editor_macros::doc;
@@ -342,138 +475,4 @@ mod tests {
         assert!(spans.iter().all(|s| s.codepoints > 0));
         assert_eq!(spans.len(), 5);
     }
-}
-
-pub fn extract_lines(
-    doc: &Doc,
-    text: &str,
-    layout: &Layout<TextBrush>,
-    style_runs: &[StyleRun],
-    text_runs: &[TextRun],
-    strut: &StrutMetrics,
-    height_config: LineHeightConfig,
-    grapheme_segmenter: &GraphemeClusterSegmenter,
-) -> Vec<ExtractedLine> {
-    let LineHeightConfig {
-        line_height_ratio,
-        base_font_size,
-    } = height_config;
-    let mut lines = Vec::new();
-
-    for line in layout.lines() {
-        let metrics = line.metrics();
-
-        let ascent = metrics.ascent.max(strut.ascent);
-        let descent = metrics.descent.max(strut.descent);
-        let content_height = ascent + descent;
-
-        let max_run_font_size = line
-            .items()
-            .filter_map(|item| match item {
-                parley::PositionedLayoutItem::GlyphRun(gr) => Some(gr.run().font_size()),
-                _ => None,
-            })
-            .fold(base_font_size, f32::max);
-        let line_box_height = (max_run_font_size * line_height_ratio).max(content_height);
-        let leading = (line_box_height - content_height).max(0.0);
-        let baseline = leading / 2.0 + ascent;
-
-        let mut glyph_runs = Vec::new();
-        let mut x = metrics.offset;
-
-        for item in line.items() {
-            if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
-                let run = glyph_run.run();
-                let font_size = run.font_size();
-
-                let run_x = glyph_run.offset();
-                let mut glyph_x_advance = 0.0;
-                let glyphs: Vec<Glyph> = glyph_run
-                    .glyphs()
-                    .map(|g| {
-                        let gx = glyph_x_advance + g.x;
-                        glyph_x_advance += g.advance;
-                        Glyph {
-                            id: g.id,
-                            x: run_x + gx,
-                            y: baseline + g.y,
-                        }
-                    })
-                    .collect();
-
-                let target_style_index = glyph_run.glyphs().next().map(|g| g.style_index());
-
-                let mut run_text = String::new();
-                let mut graphemes = Vec::new();
-                let mut first_byte_start = None;
-
-                for cluster in run.visual_clusters() {
-                    let cluster_style_index = cluster.glyphs().next().map(|g| g.style_index());
-                    if cluster_style_index != target_style_index {
-                        continue;
-                    }
-
-                    let cluster_range = cluster.text_range();
-                    let cluster_text = &text[cluster_range.clone()];
-                    let advance = cluster.advance();
-
-                    if first_byte_start.is_none() {
-                        first_byte_start = Some(cluster_range.start);
-                    }
-
-                    run_text.push_str(cluster_text);
-                    graphemes.extend(segment_graphemes(cluster_text, advance, grapheme_segmenter));
-                }
-
-                let byte_start = first_byte_start.unwrap_or(0);
-                let node_id = glyph_run.style().brush.node_id;
-                let node_byte_start = text_runs
-                    .iter()
-                    .find(|tr| tr.node_id == node_id)
-                    .map(|tr| tr.byte_range.start)
-                    .unwrap_or(0);
-                let char_offset = text[node_byte_start..byte_start].char_count();
-                let synthesis = resolve_synthesis(doc, node_id);
-                let decoration = resolve_decoration(doc, node_id);
-                let (color, background_color) = resolve_text_colors(doc, node_id);
-
-                let (family_id, weight) = style_runs
-                    .iter()
-                    .find(|sr| sr.byte_range.contains(&byte_start))
-                    .map(|sr| (sr.family, sr.weight))
-                    .unwrap_or((0, 400));
-
-                let run_advance = glyph_run.advance();
-
-                glyph_runs.push(GlyphRun {
-                    family_id,
-                    weight,
-                    font_size,
-                    synthesis,
-                    color,
-                    background_color,
-                    glyphs,
-                    decoration,
-                    node_id,
-                    offset: char_offset,
-                    text: run_text,
-                    x,
-                    width: run_advance,
-                    graphemes,
-                });
-
-                x += run_advance;
-            }
-        }
-
-        lines.push(ExtractedLine {
-            height: line_box_height,
-            baseline,
-            ascent,
-            descent,
-            glyph_runs,
-        });
-    }
-
-    lines
 }

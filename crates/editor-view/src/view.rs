@@ -874,10 +874,10 @@ mod tests {
         view.layout(&doc_old);
 
         let mut new_plain = doc_old.to_plain();
-        if let Some(entry) = new_plain.nodes.get_mut(&t) {
-            if let editor_model::PlainNode::Text(tn) = &mut entry.node {
-                tn.text = "hello".into();
-            }
+        if let Some(entry) = new_plain.nodes.get_mut(&t)
+            && let editor_model::PlainNode::Text(tn) = &mut entry.node
+        {
+            tn.text = "hello".into();
         }
         let (doc_new, _) = Doc::from_plain(new_plain);
 

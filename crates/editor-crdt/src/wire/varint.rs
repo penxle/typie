@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn malformed_continuation_chain_errors() {
-        let bad = vec![0x80u8; 11];
+        let bad = [0x80u8; 11];
         let mut slice = &bad[..];
         let err = read_varint(&mut slice).unwrap_err();
         assert!(matches!(err, WireError::Varint { .. }));
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn truncated_continuation_errors() {
-        let bad = vec![0x80u8];
+        let bad = [0x80u8];
         let mut slice = &bad[..];
         let err = read_varint(&mut slice).unwrap_err();
         assert!(matches!(err, WireError::Varint { .. }));

@@ -8,7 +8,7 @@ fn extract_text(state: &editor_state::State, node_id: NodeId) -> String {
         return String::new();
     };
     let mut result = String::new();
-    for desc in std::iter::once(node_ref.clone()).chain(node_ref.descendants()) {
+    for desc in std::iter::once(node_ref).chain(node_ref.descendants()) {
         if let editor_model::Node::Text(t) = desc.node() {
             result.push_str(&t.text.to_string());
         }

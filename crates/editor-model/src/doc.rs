@@ -135,7 +135,7 @@ impl Doc {
                 }
                 queue.push_back(child_id);
             }
-            if let Some(parent_id) = entry.parent.get().clone() {
+            if let Some(parent_id) = *entry.parent.get() {
                 let parent_entry =
                     self.get_entry(parent_id)
                         .ok_or(ModelError::ParentChildDesync {

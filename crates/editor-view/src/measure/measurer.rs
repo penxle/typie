@@ -124,12 +124,11 @@ fn affected_node_ids_for_doc_op(op: &DocOp, old_doc: &Doc) -> Vec<NodeId> {
         }
         DocOp::Presence { node_id, op } => {
             let mut ids = vec![*node_id];
-            if let OrMapOp::Unset { .. } = op {
-                if let Some(entry) = old_doc.get_entry(*node_id)
-                    && let Some(parent) = *entry.parent.get()
-                {
-                    ids.push(parent);
-                }
+            if let OrMapOp::Unset { .. } = op
+                && let Some(entry) = old_doc.get_entry(*node_id)
+                && let Some(parent) = *entry.parent.get()
+            {
+                ids.push(parent);
             }
             ids
         }

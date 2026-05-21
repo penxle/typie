@@ -760,7 +760,7 @@ mod tests {
 
     #[test]
     fn resolve_span_returns_none_outside_any_link() {
-        let (state, t1, ..) = state! {
+        let (state, ..) = state! {
             doc { root { paragraph { t1: text("plain") } } }
             selection: (t1, 2)
         };
@@ -770,7 +770,7 @@ mod tests {
 
     #[test]
     fn resolve_span_does_not_cross_paragraph_boundary() {
-        let (state, t1, _t2, ..) = state! {
+        let (state, t1, ..) = state! {
             doc { root {
                 paragraph { t1: text("a") [link(href: "https://a.com".to_string())] }
                 paragraph { t2: text("b") [link(href: "https://a.com".to_string())] }

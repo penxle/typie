@@ -109,7 +109,7 @@ fn decode_bitmap_mask(mask: &MaskData<'_>, width: u32, height: u32) -> Option<Ve
         _ => return None,
     };
 
-    let max_sample = ((1u16 << bpp) - 1) as u16;
+    let max_sample = (1u16 << bpp) - 1;
     let row_bits = width as usize * bpp;
     let stride_bits = if mask.is_packed {
         row_bits

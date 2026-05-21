@@ -1291,7 +1291,7 @@ mod tests {
             FlatImeOp::SetSelection { start: 0, end: 3 },
             FlatImeOp::ReplaceSelection { text: "".into() },
             FlatImeOp::ReplaceSelection {
-                text: format!("{o}").into(),
+                text: format!("{o}"),
             },
             FlatImeOp::ReplaceSelection { text: "아".into() },
         ]);

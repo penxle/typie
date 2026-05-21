@@ -108,7 +108,7 @@ mod tests {
 
     fn registry_with_families(families: &[(&str, &[u16])]) -> FontRegistry {
         let mut reg = FontRegistry::new();
-        reg.register_placeholder(&vec![0u8; 16]);
+        reg.register_placeholder(&[0u8; 16]);
         let families: Vec<FontFamily> = families
             .iter()
             .map(|(n, w)| family(n, FontFamilySource::Default, w))
@@ -191,7 +191,7 @@ mod tests {
 
         // Build a registry where Arial only covers 0x0000..=0x00FF and there is no fallback.
         let mut registry = FontRegistry::new();
-        registry.register_placeholder(&vec![0u8; 16]);
+        registry.register_placeholder(&[0u8; 16]);
         registry.set_fonts(vec![FontFamily {
             name: "Arial".into(),
             source: FontFamilySource::Default,

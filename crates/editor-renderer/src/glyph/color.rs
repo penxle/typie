@@ -218,14 +218,12 @@ fn blit_mask_onto_canvas(
     let dest_pitch = dest_w * 4;
     let color_a = color[3] as u32;
 
-    let mut dy = dest_y;
-    for sy in source_y..source_end_y {
+    for (dy, sy) in (dest_y..).zip(source_y..source_end_y) {
         let src_row = &mask[sy * source_w..];
         let dst_row = &mut canvas[dy * dest_pitch..];
-        dy += 1;
         let mut dx = dest_x * 4;
-        for sx in source_x..source_end_x {
-            let a = (src_row[sx] as u32 * color_a) >> 8;
+        for &src_byte in &src_row[source_x..source_end_x] {
+            let a = (src_byte as u32 * color_a) >> 8;
             if a >= 255 {
                 dst_row[dx] = color[0];
                 dst_row[dx + 1] = color[1];

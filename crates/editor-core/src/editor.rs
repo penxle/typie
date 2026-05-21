@@ -317,22 +317,22 @@ impl Editor {
             });
         }
 
-        if let Some(composition) = self.state.composition {
-            if let (Some(from), Some(to)) = (
+        if let Some(composition) = self.state.composition
+            && let (Some(from), Some(to)) = (
                 ResolvedPosition::from_flat(&self.state.doc, composition.start),
                 ResolvedPosition::from_flat(&self.state.doc, composition.end),
-            ) {
-                let rects = self
-                    .view
-                    .composition_rects(&Position::from(&from), &Position::from(&to))
-                    .iter()
-                    .map(|r| r.without_meta())
-                    .collect();
-                marks.push(Mark {
-                    data: MarkData::Composition,
-                    rects,
-                });
-            }
+            )
+        {
+            let rects = self
+                .view
+                .composition_rects(&Position::from(&from), &Position::from(&to))
+                .iter()
+                .map(|r| r.without_meta())
+                .collect();
+            marks.push(Mark {
+                data: MarkData::Composition,
+                rects,
+            });
         }
 
         self.renderer.render_page(
@@ -711,10 +711,9 @@ mod tests {
     #[test]
     fn normalize_non_empty_paragraph_returns_none() {
         let (doc, p1) = doc! { root { p1: paragraph { text("hi") } } };
-        let mut pending = PendingModifiers::new();
-        pending.push(PendingModifier::Set {
+        let pending: PendingModifiers = vec![PendingModifier::Set {
             modifier: Modifier::Bold,
-        });
+        }];
         let s = build_state(doc, Position::new(p1, 0), pending);
         assert!(normalize_pending_style(&s).is_none());
     }
@@ -722,10 +721,9 @@ mod tests {
     #[test]
     fn normalize_empty_paragraph_returns_some_with_container_id() {
         let (doc, p1) = doc! { root { p1: paragraph } };
-        let mut pending = PendingModifiers::new();
-        pending.push(PendingModifier::Set {
+        let pending: PendingModifiers = vec![PendingModifier::Set {
             modifier: Modifier::FontSize { value: 9600 },
-        });
+        }];
         let s = build_state(doc, Position::new(p1, 0), pending.clone());
         let ps = normalize_pending_style(&s).expect("Some");
         assert_eq!(ps.node_id, p1);
@@ -735,10 +733,9 @@ mod tests {
     #[test]
     fn normalize_head_on_text_child_ascends_to_textblock() {
         let (doc, _p1, t1) = doc! { root { _p1: paragraph { t1: text("hi") } } };
-        let mut pending = PendingModifiers::new();
-        pending.push(PendingModifier::Set {
+        let pending: PendingModifiers = vec![PendingModifier::Set {
             modifier: Modifier::Bold,
-        });
+        }];
         let s = build_state(doc, Position::new(t1, 0), pending);
         assert!(normalize_pending_style(&s).is_none());
     }

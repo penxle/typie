@@ -6,27 +6,24 @@ use crate::message::*;
 
 pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), EditorError> {
     editor.transact(|tr| {
-        match op {
-            ClipboardOp::Paste { text, html } => {
-                if let Some(_) = html {
-                    // not yet implemented
-                } else {
-                    commands::chain!(
+        if let ClipboardOp::Paste { text, html } = op {
+            if html.is_some() {
+                // not yet implemented
+            } else {
+                commands::chain!(
+                    tr,
+                    |tr| commands::first!(
                         tr,
-                        |tr| commands::first!(
+                        commands::materialize_gap_paragraph(),
+                        |tr| commands::chain!(
                             tr,
-                            commands::materialize_gap_paragraph(),
-                            |tr| commands::chain!(
-                                tr,
-                                commands::optional!(commands::ensure_paragraph()),
-                                commands::optional!(commands::delete_selection()),
-                            ),
+                            commands::optional!(commands::ensure_paragraph()),
+                            commands::optional!(commands::delete_selection()),
                         ),
-                        commands::insert_text(&text),
-                    )?;
-                }
+                    ),
+                    commands::insert_text(&text),
+                )?;
             }
-            _ => {}
         }
         Ok(())
     })

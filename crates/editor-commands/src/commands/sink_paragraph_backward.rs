@@ -170,7 +170,7 @@ fn build_ancestor_path(doc: &Doc, node_id: NodeId) -> Vec<NodeType> {
     let mut current = node_id;
     while let Some(node) = doc.node(current) {
         path.push(node.as_type());
-        match node.entry().parent.get().clone() {
+        match *node.entry().parent.get() {
             Some(parent_id) => current = parent_id,
             None => break,
         }

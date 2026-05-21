@@ -59,13 +59,13 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
             node_id,
             op: presence_op,
         } => {
-            if let OrMapOp::Set { key, .. } = presence_op {
-                if *node_id != *key {
-                    return Err(ModelError::PresenceKeyMismatch {
-                        node_id: *node_id,
-                        key: *key,
-                    });
-                }
+            if let OrMapOp::Set { key, .. } = presence_op
+                && *node_id != *key
+            {
+                return Err(ModelError::PresenceKeyMismatch {
+                    node_id: *node_id,
+                    key: *key,
+                });
             }
 
             // Same-kind re-apply is idempotent.
@@ -73,16 +73,15 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 key,
                 value: incoming,
             } = presence_op
+                && let Some(existing_entry) = doc.entries.get(key)
             {
-                if let Some(existing_entry) = doc.entries.get(key) {
-                    let existing_kind = existing_entry.node.as_type();
-                    if existing_kind != *incoming {
-                        return Err(ModelError::PresenceKindConflict {
-                            node_id: *key,
-                            existing: existing_kind,
-                            incoming: *incoming,
-                        });
-                    }
+                let existing_kind = existing_entry.node.as_type();
+                if existing_kind != *incoming {
+                    return Err(ModelError::PresenceKindConflict {
+                        node_id: *key,
+                        existing: existing_kind,
+                        incoming: *incoming,
+                    });
                 }
             }
 
@@ -91,10 +90,10 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 .apply(op.id, presence_op.clone())
                 .expect("local apply");
 
-            if let OrMapOp::Set { key, value } = presence_op {
-                if !doc.entries.contains_key(key) {
-                    doc.entries.insert(*key, NodeEntry::new(value.into_node()));
-                }
+            if let OrMapOp::Set { key, value } = presence_op
+                && !doc.entries.contains_key(key)
+            {
+                doc.entries.insert(*key, NodeEntry::new(value.into_node()));
             }
         }
         DocOp::Parent {
@@ -122,14 +121,13 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 after: Some(anchor),
                 ..
             } = rga_op
+                && !entry.children.contains_dot(*anchor)
             {
-                if !entry.children.contains_dot(*anchor) {
-                    return Err(ModelError::OrphanAnchor {
-                        node_id: *node_id,
-                        anchor: *anchor,
-                        kind: AnchorKind::Children,
-                    });
-                }
+                return Err(ModelError::OrphanAnchor {
+                    node_id: *node_id,
+                    anchor: *anchor,
+                    kind: AnchorKind::Children,
+                });
             }
             entry.children = entry
                 .children
@@ -1238,7 +1236,7 @@ fn decode_text_run_entry(
     }
     let mut ops = Vec::with_capacity(run_len as usize);
     let mut prev_id_inner: Option<Dot> = None;
-    for i in 0..run_len as usize {
+    for (i, ch) in chars.iter().enumerate() {
         let i_u64 = i as u64;
         let clock = first_id
             .clock
@@ -1267,10 +1265,7 @@ fn decode_text_run_entry(
             parents,
             payload: DocOp::Text {
                 node_id,
-                op: editor_crdt::TextOp::InsertChar {
-                    after,
-                    ch: chars[i],
-                },
+                op: editor_crdt::TextOp::InsertChar { after, ch: *ch },
             },
         });
         prev_id_inner = Some(id);

@@ -94,7 +94,7 @@ pub fn find_last_navigable(node: &LayoutNode) -> Option<&LayoutNode> {
     }
 }
 
-pub fn find_box_by_node_id<'a>(node: &'a LayoutNode, target: NodeId) -> Option<&'a LayoutNode> {
+pub fn find_box_by_node_id(node: &LayoutNode, target: NodeId) -> Option<&LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => {
             if b.node_id == target {

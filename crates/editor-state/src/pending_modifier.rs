@@ -79,13 +79,14 @@ mod tests {
 
     #[test]
     fn pending_modifiers_serde_roundtrip() {
-        let mut pms = PendingModifiers::new();
-        pms.push(PendingModifier::Set {
-            modifier: Modifier::Bold,
-        });
-        pms.push(PendingModifier::Unset {
-            ty: ModifierType::Italic,
-        });
+        let pms: PendingModifiers = vec![
+            PendingModifier::Set {
+                modifier: Modifier::Bold,
+            },
+            PendingModifier::Unset {
+                ty: ModifierType::Italic,
+            },
+        ];
         let json = serde_json::to_string(&pms).unwrap();
         let back: PendingModifiers = serde_json::from_str(&json).unwrap();
         assert_eq!(pms, back);

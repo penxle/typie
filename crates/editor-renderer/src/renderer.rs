@@ -238,7 +238,7 @@ fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Pat
 }
 
 fn circle_path(cx: f32, cy: f32, r: f32) -> Path {
-    const K: f32 = 0.5522847498;
+    const K: f32 = 0.552_284_8;
     let kx = r * K;
     let ky = r * K;
     Path {

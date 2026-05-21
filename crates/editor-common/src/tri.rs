@@ -2,18 +2,15 @@ use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 #[ffi]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Tri<T> {
+    #[default]
     Absent,
-    Uniform { value: T },
+    Uniform {
+        value: T,
+    },
     Mixed,
-}
-
-impl<T> Default for Tri<T> {
-    fn default() -> Self {
-        Tri::Absent
-    }
 }
 
 #[cfg(test)]

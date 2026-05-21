@@ -199,15 +199,14 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 // must not be intercepted by an intermediate gap. Ancestors
                 // are innermost-first, so one keypress crosses exactly one
                 // boundary.
-                if can_stop_at_gap {
-                    if let Some(sel) = gap_cursor_from_inner_edge(editor, selection.head, backward)
-                    {
-                        editor.transact(|tr| {
-                            tr.set_selection(sel)?;
-                            Ok(())
-                        })?;
-                        return Ok(());
-                    }
+                if can_stop_at_gap
+                    && let Some(sel) = gap_cursor_from_inner_edge(editor, selection.head, backward)
+                {
+                    editor.transact(|tr| {
+                        tr.set_selection(sel)?;
+                        Ok(())
+                    })?;
+                    return Ok(());
                 }
             }
 

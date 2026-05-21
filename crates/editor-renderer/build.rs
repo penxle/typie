@@ -254,11 +254,11 @@ fn parse_svg_path_d(d: &str) -> Vec<SvgCommand> {
         while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) {
             chars.next();
         }
-        if let Some(&c) = chars.peek() {
-            if c.is_ascii_alphabetic() {
-                cmd = c;
-                chars.next();
-            }
+        if let Some(&c) = chars.peek()
+            && c.is_ascii_alphabetic()
+        {
+            cmd = c;
+            chars.next();
         }
         while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) {
             chars.next();

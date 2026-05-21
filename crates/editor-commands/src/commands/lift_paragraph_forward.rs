@@ -149,11 +149,11 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
 
     if cursor_on_empty_paragraph {
         let doc = tr.doc();
-        if let Some(p) = doc.node(paragraph_id) {
-            if let Some(pos) = p.first_cursor_position() {
-                tr.set_selection(Selection::collapsed(pos))?;
-                return Ok(true);
-            }
+        if let Some(p) = doc.node(paragraph_id)
+            && let Some(pos) = p.first_cursor_position()
+        {
+            tr.set_selection(Selection::collapsed(pos))?;
+            return Ok(true);
         }
     }
     tr.set_selection(cursor_selection)?;

@@ -416,11 +416,11 @@ impl Paginator {
                     size: Size::new(self.page_width(), self.margins.top + self.margins.bottom),
                 });
             }
-        } else if !self.paginated {
-            if let Some(page) = self.pages.last_mut() {
-                page.y_end += self.margins.bottom;
-                page.size.height += self.margins.bottom;
-            }
+        } else if !self.paginated
+            && let Some(page) = self.pages.last_mut()
+        {
+            page.y_end += self.margins.bottom;
+            page.size.height += self.margins.bottom;
         }
         self.pages
     }

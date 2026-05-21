@@ -63,11 +63,7 @@ impl FontRegistry {
         let surviving: HashSet<(u16, u16)> = self
             .font_hashes
             .iter()
-            .filter(|(key, old_hash)| {
-                new_hashes
-                    .get(*key)
-                    .map_or(false, |new_hash| new_hash == *old_hash)
-            })
+            .filter(|(key, old_hash)| new_hashes.get(*key) == Some(*old_hash))
             .map(|(&key, _)| key)
             .chain(
                 self.font_entries
@@ -559,7 +555,7 @@ mod tests {
     #[test]
     fn set_fonts_preserves_placeholder_entry() {
         let mut reg = FontRegistry::new();
-        reg.register_placeholder(&vec![0u8; 8]);
+        reg.register_placeholder(&[0u8; 8]);
         let placeholder_id = reg.placeholder_family_id().unwrap();
 
         reg.set_fonts(vec![FontFamily {
@@ -579,7 +575,7 @@ mod tests {
     #[test]
     fn set_fonts_rejects_reserved_name() {
         let mut reg = FontRegistry::new();
-        reg.register_placeholder(&vec![0u8; 8]);
+        reg.register_placeholder(&[0u8; 8]);
 
         reg.set_fonts(vec![FontFamily {
             name: PLACEHOLDER_FAMILY_NAME.into(),

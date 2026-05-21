@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn invalid_bool_errors() {
         let (_, dc) = empty_ctx();
-        let buf = vec![2u8];
+        let buf = [2u8];
         let mut slice = &buf[..];
         let err = bool::decode(&dc, &mut slice).unwrap_err();
         assert!(matches!(err, WireError::InvalidBool { tag: 2 }));
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn char_decode_invalid_lead_byte_errors() {
         let (_, dc) = empty_ctx();
-        let bad = vec![0xC0u8];
+        let bad = [0xC0u8];
         let mut slice = &bad[..];
         let err = char::decode(&dc, &mut slice).unwrap_err();
         assert!(matches!(err, WireError::RunUtf8(_)));

@@ -12,7 +12,7 @@ fn node_path(doc: &Doc, node_id: NodeId) -> Vec<usize> {
     let mut path = Vec::new();
     let mut current = node_id;
     while let Some(entry) = doc.get_entry(current) {
-        if let Some(parent_id) = entry.parent.get().clone() {
+        if let Some(parent_id) = *entry.parent.get() {
             if let Some(parent_entry) = doc.get_entry(parent_id)
                 && let Some(idx) = parent_entry
                     .children

@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(b.style.border, EdgeInsets::ZERO);
     }
 
-    fn first_line_glyph_run<'a>(result: &'a MeasuredNode) -> &'a GlyphRun {
+    fn first_line_glyph_run(result: &MeasuredNode) -> &GlyphRun {
         let MeasuredContent::Box(b) = &result.content else {
             panic!("expected box")
         };

@@ -94,7 +94,7 @@ fn unknown_variant_tag_errors() {
         actor_table: vec![],
         baselines: vec![],
     };
-    let bad = vec![99u8];
+    let bad = [99u8];
     let mut slice = &bad[..];
     let err = Color::decode(&dc, &mut slice).unwrap_err();
     assert!(matches!(err, crate::wire::WireError::UnknownVariant { .. }));
@@ -112,21 +112,12 @@ struct Point {
 #[wire(transparent)]
 struct UserId(u64);
 
-#[derive(Debug, PartialEq, Eq, Wire)]
+#[derive(Debug, Default, PartialEq, Eq, Wire)]
 struct WithSkip {
     #[wire(n(0))]
     kept: u32,
     #[wire(skip)]
     _cached: u64,
-}
-
-impl Default for WithSkip {
-    fn default() -> Self {
-        Self {
-            kept: 0,
-            _cached: 0,
-        }
-    }
 }
 
 #[test]
