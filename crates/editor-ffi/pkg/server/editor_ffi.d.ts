@@ -648,6 +648,9 @@ declare class EditorHost {
     static create(icu_data: Uint8Array): EditorHost;
     create_editor_from_doc(doc: PlainDoc, viewport: Viewport): Editor;
     create_editor_from_graph(changesets: Uint8Array, viewport: Viewport): Editor;
+    extract_text_from_graph(changesets: Uint8Array): string;
+    root_attrs_from_graph(changesets: Uint8Array): PlainRootNode;
+    root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
     set_fonts(families: FontFamily[]): void;
 }
 
