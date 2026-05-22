@@ -125,7 +125,7 @@ class EditorViewportStateTest {
   }
 
   @Test
-  fun `transform session blocks user pan until pinch ends`() {
+  fun `transform session consumes user pan without scrolling until pinch ends`() {
     val state = EditorViewportState()
     state.updateMeasuredBounds(
       viewportSize = Size(width = 100f, height = 100f),
@@ -140,7 +140,7 @@ class EditorViewportStateTest {
         density = 2f,
       )
 
-    assertEquals(Offset.Zero, blocked)
+    assertEquals(Offset(x = -100f, y = -100f), blocked)
     assertEquals(Offset.Zero, state.scrollOffset)
     assertEquals(0, state.lastScrollRevision)
 

@@ -2,24 +2,21 @@ package co.typie.screen.editor.editor.viewport
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import co.typie.editor.EditorZoomController
-import co.typie.editor.body.EditorDocumentLayoutSpec
-import co.typie.editor.clampDocumentZoom
-import co.typie.editor.computePaginatedZoomBounds
-import co.typie.editor.ffi.Size as PageSize
-import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.normalizeEditorViewportWheelZoomDelta
-import co.typie.editor.viewport.syncViewportToZoomAnchor
 import co.typie.screen.editor.editor.state.EditorScreenState
 import kotlin.math.abs
-import kotlin.math.exp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-private const val WheelZoomDivisor = 240f
 private const val WheelBurstGapMs = 56L
 private const val WheelTailDeltaPx = 0.8f
 private const val WheelTailStreakToReset = 3
@@ -28,124 +25,134 @@ private const val WheelModeSwitchMinDeltaPx = 1.5f
 @Composable
 internal fun rememberEditorDebugWheelZoomModifier(
   state: EditorScreenState,
-  layoutSpec: EditorDocumentLayoutSpec.Paginated,
-  zoomController: EditorZoomController,
-  uiState: EditorUiState,
-  pageSizes: List<PageSize>,
-  density: Float,
+  onZoomSessionStart: () -> Boolean,
+  onZoom: (focalPosition: Offset, normalizedDelta: Float) -> Boolean,
+  onZoomSessionEnd: () -> Unit,
 ): Modifier {
-  return Modifier.pointerInput(state, layoutSpec, zoomController, uiState, pageSizes, density) {
-    var wheelLastEventTs: Long? = null
-    var wheelLowDeltaStreak = 0
-    var wheelRawZoom: Float? = null
-    var wheelZoomSessionActive = false
+  return Modifier.pointerInput(state) {
+    coroutineScope {
+      var wheelLastEventTs: Long? = null
+      var wheelLowDeltaStreak = 0
+      val wheelZoomSession =
+        EditorDebugWheelZoomSession(
+          scope = this,
+          timeoutMillis = WheelBurstGapMs,
+          onSessionEnd = {
+            wheelLowDeltaStreak = 0
+            onZoomSessionEnd()
+          },
+        )
 
-    fun finishWheelZoomSession() {
-      if (wheelZoomSessionActive) {
-        zoomController.commitRenderZoom()
-      }
-      wheelRawZoom = null
-      wheelLowDeltaStreak = 0
-      wheelZoomSessionActive = false
-    }
-
-    while (true) {
-      val event = awaitPointerEventScope { awaitPointerEvent(PointerEventPass.Initial) }
-      if (event.type != PointerEventType.Scroll) {
-        continue
+      fun finishWheelZoomSession() {
+        wheelLowDeltaStreak = 0
+        wheelZoomSession.finish()
       }
 
-      val hasZoomModifier =
-        event.keyboardModifiers.isMetaPressed || event.keyboardModifiers.isCtrlPressed
-      val change = event.changes.firstOrNull() ?: continue
-      val dominantDelta =
-        if (abs(change.scrollDelta.y) >= abs(change.scrollDelta.x)) {
-          change.scrollDelta.y
-        } else {
-          change.scrollDelta.x
+      try {
+        while (true) {
+          val event =
+            this@pointerInput.awaitPointerEventScope { awaitPointerEvent(PointerEventPass.Initial) }
+          if (event.type != PointerEventType.Scroll) {
+            finishWheelZoomSession()
+            continue
+          }
+
+          val hasZoomModifier =
+            event.keyboardModifiers.isMetaPressed || event.keyboardModifiers.isCtrlPressed
+          val change = event.changes.firstOrNull() ?: continue
+          val dominantDelta =
+            if (abs(change.scrollDelta.y) >= abs(change.scrollDelta.x)) {
+              change.scrollDelta.y
+            } else {
+              change.scrollDelta.x
+            }
+          if (!hasZoomModifier) {
+            finishWheelZoomSession()
+            continue
+          }
+          if (!dominantDelta.isFinite() || dominantDelta == 0f || state.viewport.width <= 0f) {
+            continue
+          }
+
+          val normalizedDelta = normalizeEditorViewportWheelZoomDelta(dominantDelta)
+          val deltaMagnitude = abs(normalizedDelta)
+          val elapsedSinceLastEvent =
+            wheelLastEventTs?.let { change.uptimeMillis - it } ?: Long.MAX_VALUE
+          wheelLastEventTs = change.uptimeMillis
+
+          if (elapsedSinceLastEvent > WheelBurstGapMs) {
+            finishWheelZoomSession()
+          }
+
+          if (deltaMagnitude <= WheelTailDeltaPx) {
+            wheelLowDeltaStreak += 1
+            if (wheelLowDeltaStreak >= WheelTailStreakToReset) {
+              finishWheelZoomSession()
+              continue
+            }
+          } else {
+            wheelLowDeltaStreak = 0
+          }
+
+          if (!wheelZoomSession.active) {
+            if (deltaMagnitude < WheelModeSwitchMinDeltaPx) {
+              continue
+            }
+            if (!onZoomSessionStart()) {
+              continue
+            }
+            wheelZoomSession.beginOrKeepAlive()
+          }
+
+          if (!onZoom(change.position, normalizedDelta)) {
+            finishWheelZoomSession()
+            continue
+          }
+          wheelZoomSession.beginOrKeepAlive()
+          event.changes.forEach { it.consume() }
         }
-      if (
-        !hasZoomModifier ||
-          !dominantDelta.isFinite() ||
-          dominantDelta == 0f ||
-          state.viewport.width <= 0f
-      ) {
-        continue
-      }
-
-      val normalizedDelta = normalizeEditorViewportWheelZoomDelta(dominantDelta)
-      val deltaMagnitude = abs(normalizedDelta)
-      val elapsedSinceLastEvent =
-        wheelLastEventTs?.let { change.uptimeMillis - it } ?: Long.MAX_VALUE
-      wheelLastEventTs = change.uptimeMillis
-
-      if (elapsedSinceLastEvent > WheelBurstGapMs) {
+      } finally {
         finishWheelZoomSession()
       }
+    }
+  }
+}
 
-      if (deltaMagnitude <= WheelTailDeltaPx) {
-        wheelLowDeltaStreak += 1
-        if (wheelLowDeltaStreak >= WheelTailStreakToReset) {
-          finishWheelZoomSession()
-          continue
-        }
-      } else {
-        wheelLowDeltaStreak = 0
-      }
+internal class EditorDebugWheelZoomSession(
+  private val scope: CoroutineScope,
+  private val timeoutMillis: Long,
+  private val onSessionEnd: () -> Unit,
+) {
+  private var timeoutJob: Job? = null
 
-      if (!wheelZoomSessionActive) {
-        if (deltaMagnitude < WheelModeSwitchMinDeltaPx) {
-          continue
-        }
-        wheelZoomSessionActive = true
-      }
+  var active: Boolean = false
+    private set
 
-      event.changes.forEach { it.consume() }
+  fun beginOrKeepAlive() {
+    active = true
+    timeoutJob?.cancel()
+    timeoutJob = scope.launch {
+      delay(timeoutMillis)
+      finishFromTimeout()
+    }
+  }
 
-      val wheelBaseZoom = wheelRawZoom ?: zoomController.displayZoom
-      val nextRawZoom =
-        clampDocumentZoom(
-          zoom = wheelBaseZoom * exp((-normalizedDelta / WheelZoomDivisor).toDouble()).toFloat(),
-          bounds = computePaginatedZoomBounds(layoutSpec.pageWidth),
-        )
-      wheelRawZoom = nextRawZoom
+  fun finish() {
+    val wasActive = active
+    active = false
+    timeoutJob?.cancel()
+    timeoutJob = null
+    if (wasActive) {
+      onSessionEnd()
+    }
+  }
 
-      val displayZoomBeforeChange = zoomController.displayZoom
-      val changed =
-        zoomController.setDisplayZoom(
-          zoom = nextRawZoom,
-          layoutSpec = layoutSpec,
-          viewportWidth = state.viewport.width,
-        )
-      if (!changed) {
-        continue
-      }
-
-      val focalInEditor =
-        uiState.containerToEditorLocal(
-          x = change.position.x / density,
-          y = change.position.y / density,
-        )
-      if (focalInEditor == null) {
-        continue
-      }
-
-      val anchor =
-        uiState
-          .resolveViewportTransform(pageSizes = pageSizes)
-          .copy(displayZoom = displayZoomBeforeChange)
-          .resolveAnchor(focalX = focalInEditor.x, focalY = focalInEditor.y) ?: continue
-
-      syncViewportToZoomAnchor(
-        viewportState = state.viewportState,
-        layoutSpec = layoutSpec,
-        pageSizes = pageSizes,
-        anchor = anchor,
-        focalX = focalInEditor.x,
-        focalY = focalInEditor.y,
-        displayZoom = zoomController.displayZoom,
-        density = density,
-      )
+  private fun finishFromTimeout() {
+    val wasActive = active
+    active = false
+    timeoutJob = null
+    if (wasActive) {
+      onSessionEnd()
     }
   }
 }

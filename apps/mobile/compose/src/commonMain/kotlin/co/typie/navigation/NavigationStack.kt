@@ -500,6 +500,7 @@ fun NavigationStack(
                 var claimed = false
                 while (!claimed) {
                   val event = awaitPointerEvent(PointerEventPass.Main)
+                  if (event.changes.count { it.pressed } != 1) return@awaitEachGesture
                   val change =
                     event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
                   if (!change.pressed) return@awaitEachGesture
@@ -514,6 +515,7 @@ fun NavigationStack(
                         ?: return@awaitEachGesture
                     if (!confirmChange.pressed) return@awaitEachGesture
                     if (confirmChange.isConsumed) return@awaitEachGesture
+                    if (confirmEvent.changes.count { it.pressed } != 1) return@awaitEachGesture
                     confirmChange.consume()
                     overSlopX = confirmChange.position.x - down.position.x
                     claimed = true
@@ -526,6 +528,10 @@ fun NavigationStack(
                 var dragging = true
                 while (dragging) {
                   val event = awaitPointerEvent(PointerEventPass.Main)
+                  if (event.changes.count { it.pressed } > 1) {
+                    cancelPopDrag()
+                    return@awaitEachGesture
+                  }
                   val change = event.changes.fastFirstOrNull { it.id == down.id }
                   if (change == null) {
                     dragging = false
@@ -609,6 +615,7 @@ fun NavigationStack(
               var claimed = false
               while (!claimed) {
                 val event = awaitPointerEvent(PointerEventPass.Main)
+                if (event.changes.count { it.pressed } != 1) return@awaitEachGesture
                 val change =
                   event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
                 if (!change.pressed) return@awaitEachGesture
@@ -625,6 +632,10 @@ fun NavigationStack(
               var dragging = true
               while (dragging) {
                 val event = awaitPointerEvent(PointerEventPass.Main)
+                if (event.changes.count { it.pressed } > 1) {
+                  cancelPopDrag()
+                  return@awaitEachGesture
+                }
                 val change = event.changes.fastFirstOrNull { it.id == down.id }
                 if (change == null) {
                   dragging = false

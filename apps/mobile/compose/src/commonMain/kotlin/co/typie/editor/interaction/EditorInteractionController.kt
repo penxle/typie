@@ -2,16 +2,14 @@ package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
-import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
-import co.typie.editor.ffi.CursorMetrics
-import co.typie.editor.ffi.Selection
-import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapGesture
-import co.typie.editor.interaction.semantics.dispatchPrimaryClick
-import co.typie.editor.interaction.semantics.dispatchSelectionExtension
-import co.typie.editor.interaction.semantics.hasRangeSelection
-import co.typie.editor.interaction.semantics.isSelectionHit
+import co.typie.editor.interaction.gestures.cancel
+import co.typie.editor.interaction.gestures.handlePointerDown
+import co.typie.editor.interaction.gestures.handlePointerMove
+import co.typie.editor.interaction.gestures.handlePointerUp
+import co.typie.editor.interaction.gestures.handleTapTimer
+import co.typie.editor.interaction.gestures.trackPointerMove
 
 internal interface EditorInteractionControllerHost {
   fun resolvePoint(positionInNode: Offset): PagePoint?
@@ -38,8 +36,41 @@ internal class EditorInteractionController(
   private val semantics: EditorInteractionSemantics = EditorInteractionSemantics(),
 ) {
   private var mode = EditorInteractionMode.Idle
-  private var pendingSelectionExtensionPosition: Offset? = null
+  private val gestureContext =
+    object : EditorGestureContext {
+      override val editor: Editor
+        get() = editorProvider()
 
+      override val semantics: EditorInteractionSemantics
+        get() = this@EditorInteractionController.semantics
+
+      override fun can(command: EditorInteractionCommand): Boolean = decide(command)
+
+      override fun transition(event: EditorInteractionEvent) {
+        this@EditorInteractionController.transition(event)
+      }
+
+      override fun resolvePoint(positionInNode: Offset): PagePoint? =
+        host.resolvePoint(positionInNode = positionInNode)
+
+      override fun cancelTapDispatch() {
+        host.cancelTapDispatch()
+      }
+
+      override fun scheduleTapDispatch(dispatchAtMillis: Long) {
+        host.scheduleTapDispatch(dispatchAtMillis = dispatchAtMillis)
+      }
+
+      override fun launchInteraction(block: suspend () -> Unit) {
+        host.launchInteraction(block)
+      }
+
+      override fun requestFocus(editor: Editor): Boolean = host.requestFocus(editor)
+
+      override fun requestCurrentCursorLine(version: Long) {
+        host.requestCurrentCursorLine(version = version)
+      }
+    }
   val interactionMode: EditorInteractionMode
     get() = mode
 
@@ -53,92 +84,110 @@ internal class EditorInteractionController(
     gestures.updateTapSlop(tapSlopPx)
   }
 
-  fun onPointerDown(pointerId: Long, position: Offset, nowMillis: Long): Boolean {
+  fun can(command: EditorInteractionCommand): Boolean = decide(command)
+
+  fun onPointerDown(
+    pointerId: Long,
+    position: Offset,
+    nowMillis: Long,
+    tapEnabled: Boolean = true,
+  ): Boolean {
     val tap = gestures.tap
     tap.addPressedPointer(pointerId)
-    if (!decide(EditorInteractionCommand.TapDown) || tap.isIgnoringUntilAllPointersUp) {
-      return false
+    if (gestures.pinch.isPinching && !gestures.pinch.hasPointer(pointerId)) {
+      applyEvent(EditorInteractionEvent.PointerCancel)
+      return true
+    }
+
+    val wasPinching = gestures.pinch.isPinching
+    if (
+      gestures.pinch.handlePointerDown(
+        pointerId = pointerId,
+        position = position,
+        context = gestureContext,
+      )
+    ) {
+      if (!wasPinching) {
+        applyEvent(EditorInteractionEvent.ViewportZoomStart)
+      }
+      return true
     }
 
     if (tap.hasActivePointer) {
       tap.cancelActivePointerAndIgnoreUntilAllPointersUp()
       transition(EditorInteractionEvent.PointerCancel)
+      gestures.pinch.reset()
       resetPointerOwnedState()
       host.cancelTapDispatch()
       host.enqueuePointerCancel()
       return false
     }
 
-    tap.startActivePointer(pointerId = pointerId, position = position)
-    if (tap.nextTapCount(position = position, nowMillis = nowMillis) == 2) {
-      tap.markTapDispatched()
-      host.cancelTapDispatch()
-      dispatchTap(position = position, nowMillis = nowMillis, clickCount = 2) {
-        if (prepareDoubleTapDrag(position)) {
-          semantics.selectionExpansion.awaitWordSelectionCommit()
-        }
-      }
-      return true
-    }
-
-    tap.markTapPending()
-    host.scheduleTapDispatch(dispatchAtMillis = nowMillis + EditorTapDispatchDelayMillis)
-    return false
+    return tap.handlePointerDown(
+      pointerId = pointerId,
+      position = position,
+      nowMillis = nowMillis,
+      tapEnabled = tapEnabled,
+      doubleTapDrag = gestures.doubleTapDrag,
+      context = gestureContext,
+    )
   }
 
   fun onPointerMove(pointerId: Long, position: Offset, nowMillis: Long): Boolean {
-    if (gestures.tap.onPointerMove(pointerId = pointerId, position = position)) {
-      host.cancelTapDispatch()
+    if (
+      gestures.pinch.handlePointerMove(
+        pointerId = pointerId,
+        position = position,
+        context = gestureContext,
+      )
+    ) {
+      return true
     }
-    return handleSelectionPointerMove(position = position)
+
+    gestures.tap.trackPointerMove(
+      pointerId = pointerId,
+      position = position,
+      context = gestureContext,
+    )
+    return gestures.doubleTapDrag.handlePointerMove(
+      position = position,
+      tap = gestures.tap,
+      context = gestureContext,
+    )
   }
 
   fun onPointerUp(pointerId: Long, position: Offset, nowMillis: Long): Boolean {
-    val canFinishTap = decide(EditorInteractionCommand.TapUp)
+    if (gestures.pinch.isPinching) {
+      if (
+        gestures.pinch.handlePointerUp(pointerId = pointerId, context = gestureContext) &&
+          !gestures.pinch.isPinching
+      ) {
+        // TODO(editor-parity): legacy seeds pan-resume with the remaining pinch pointer so the
+        // viewport can continue scrolling after pinch ends. KMP pan-resume is not ported yet.
+        applyEvent(EditorInteractionEvent.ViewportZoomEnd)
+      }
+      return true
+    }
+    gestures.pinch.handlePointerUp(pointerId = pointerId, context = gestureContext)
+
     val shouldConsumeTap =
-      gestures.tap.shouldConsumePointerUp(pointerId = pointerId, canFinish = canFinishTap)
-    val clickCount =
-      gestures.tap.onPointerUp(
+      gestures.tap.handlePointerUp(
         pointerId = pointerId,
         position = position,
         nowMillis = nowMillis,
-        canFinish = canFinishTap,
+        doubleTapDrag = gestures.doubleTapDrag,
+        context = gestureContext,
       )
-    if (!canFinishTap) {
-      host.cancelTapDispatch()
-    }
-    clickCount?.let {
-      dispatchTap(position = position, nowMillis = nowMillis, clickCount = it, beforeLaunch = {})
-    }
-
-    val selectionConsumed = endDoubleTapDrag()
-    if (!gestures.tap.hasActivePointer) {
-      if (!hasDeferredSelectionExtension()) {
-        resetSelectionExtensionState()
-      }
-    }
+    val selectionConsumed = gestures.doubleTapDrag.endDrag(context = gestureContext)
+    gestures.doubleTapDrag.cleanupAfterPointerUp(tap = gestures.tap, context = gestureContext)
     return shouldConsumeTap || selectionConsumed
   }
 
   fun onTapTimer(nowMillis: Long) {
-    val position = gestures.tap.activePosition ?: return
-    if (!gestures.tap.canDispatchTapTimer) {
-      return
-    }
-    val clickCount = gestures.tap.nextTapCount(position = position, nowMillis = nowMillis)
-    if (clickCount == 1 && isSelectionHit(position)) {
-      gestures.tap.markTapDispatched()
-      return
-    }
-    if (clickCount == 1 && semantics.cursorMove.hasRangeSelection(editorProvider())) {
-      return
-    }
-    gestures.tap.markTapDispatched()
-    dispatchTap(
-      position = position,
+    gestures.tap.handleTapTimer(
       nowMillis = nowMillis,
-      clickCount = clickCount,
-      beforeLaunch = {},
+      doubleTapDrag = gestures.doubleTapDrag,
+      context = gestureContext,
     )
   }
 
@@ -147,6 +196,7 @@ internal class EditorInteractionController(
     transition(event)
     cleanupForModeTransition(previousMode = previousMode, currentMode = mode)
     if (event == EditorInteractionEvent.PointerCancel) {
+      gestures.pinch.cancel(context = gestureContext)
       resetPointerOwnedState()
     }
     if (event == EditorInteractionEvent.PointerCancel || mode != EditorInteractionMode.Idle) {
@@ -156,187 +206,19 @@ internal class EditorInteractionController(
 
   fun cancel() {
     transition(EditorInteractionEvent.PointerCancel)
+    gestures.pinch.cancel(context = gestureContext)
     resetPointerOwnedState()
     cancelActivePointerStream()
   }
 
   fun reset() {
     mode = EditorInteractionMode.Idle
-    pendingSelectionExtensionPosition = null
     gestures.reset()
     semantics.reset()
   }
 
-  private fun dispatchTap(
-    position: Offset,
-    nowMillis: Long,
-    clickCount: Int,
-    beforeLaunch: () -> Unit,
-  ): Boolean {
-    val point = host.resolvePoint(positionInNode = position) ?: return false
-    if (!decide(EditorInteractionCommand.TapDispatch(page = point.page))) {
-      return false
-    }
-    gestures.tap.recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
-    val editor = editorProvider()
-    if (clickCount == 1 && semantics.cursorMove.isSelectionHit(editor, point)) {
-      return false
-    }
-    val previousCursor = editor.cursor
-    host.requestFocus(editor)
-    beforeLaunch()
-    host.launchInteraction {
-      val dispatched =
-        semantics.cursorMove.dispatchPrimaryClick(
-          editor = editor,
-          point = point,
-          clickCount = clickCount,
-          beforeCommit = { snapshot ->
-            if (clickCount == 1 && shouldRequestSingleTapBringIntoView(previousCursor, snapshot)) {
-              host.requestCurrentCursorLine(version = snapshot.version)
-            }
-          },
-        )
-      if (dispatched && clickCount == 2) {
-        semantics.selectionExpansion.markWordSelectionCommitted()
-        flushPendingSelectionExtension()
-        if (!gestures.tap.hasActivePointer && !gestures.doubleTapDrag.active) {
-          resetSelectionExtensionState()
-        }
-      }
-    }
-    return true
-  }
-
-  private fun prepareDoubleTapDrag(position: Offset): Boolean {
-    if (!decide(EditorInteractionCommand.DoubleTapPrepareDrag)) {
-      return false
-    }
-    host.cancelTapDispatch()
-    gestures.tap.markTapDispatched()
-    semantics.selectionExpansion.reset()
-    gestures.doubleTapDrag.prepare(startPosition = position)
-    return true
-  }
-
-  private fun handleSelectionPointerMove(position: Offset): Boolean {
-    val doubleTapDrag = gestures.doubleTapDrag
-    if (doubleTapDrag.pending) {
-      val startPosition = doubleTapDrag.startPosition
-      if (startPosition != null && doubleTapDrag.canStart(position)) {
-        if (startDoubleTapDrag()) {
-          updateDoubleTapDragSelection(position)
-        }
-      }
-      return true
-    }
-
-    if (doubleTapDrag.dragging) {
-      updateDoubleTapDragSelection(position)
-      return true
-    }
-
-    return false
-  }
-
-  private fun startDoubleTapDrag(): Boolean {
-    if (!decide(EditorInteractionCommand.DoubleTapStartDrag)) {
-      return false
-    }
-    host.cancelTapDispatch()
-    gestures.tap.markTapDispatched()
-    if (!gestures.doubleTapDrag.begin()) {
-      return false
-    }
-    if (!decide(EditorInteractionCommand.DoubleTapBeginSelecting)) {
-      gestures.doubleTapDrag.stop()
-      return false
-    }
-    transition(EditorInteractionEvent.DoubleTapDragStart)
-    return true
-  }
-
-  private fun updateDoubleTapDragSelection(position: Offset): Boolean {
-    if (
-      !decide(
-        EditorInteractionCommand.DoubleTapUpdateSelection(
-          localPosition = position,
-          dragStartPosition = gestures.doubleTapDrag.startPosition,
-        )
-      )
-    ) {
-      return false
-    }
-
-    return extendDoubleTapDragSelection(position)
-  }
-
-  private fun extendDoubleTapDragSelection(position: Offset): Boolean {
-    val point = host.resolvePoint(positionInNode = position) ?: return false
-    val editor = editorProvider()
-    val context = semantics.selectionExpansion.context(editor)
-    if (context == null) {
-      if (semantics.selectionExpansion.isAwaitingWordSelectionCommit) {
-        pendingSelectionExtensionPosition = position
-      }
-      return false
-    }
-    if (
-      !decide(
-        EditorInteractionCommand.DoubleTapExtendSelection(
-          page = point.page,
-          hasSelectionContext = true,
-        )
-      )
-    ) {
-      return false
-    }
-    if (editor.dispatchSelectionExtension(point = point, context = context)) {
-      pendingSelectionExtensionPosition = null
-      return true
-    }
-    return false
-  }
-
-  private fun endDoubleTapDrag(): Boolean {
-    val wasActive = gestures.doubleTapDrag.active
-    val wasDragging = gestures.doubleTapDrag.dragging
-    val wasPending = gestures.doubleTapDrag.pending
-    if (!gestures.doubleTapDrag.stop()) {
-      return false
-    }
-    if (wasDragging) {
-      transition(EditorInteractionEvent.DoubleTapDragEnd)
-    } else if (wasPending) {
-      // TODO(editor-parity): legacy shows the selection context menu when a double tap selects a
-      // range but never crosses the drag threshold. KMP does not host that menu state yet.
-    }
-    return wasActive
-  }
-
-  private fun isSelectionHit(position: Offset): Boolean {
-    val point = host.resolvePoint(positionInNode = position) ?: return true
-    return point.page < 0 || semantics.cursorMove.isSelectionHit(editorProvider(), point)
-  }
-
-  private fun flushPendingSelectionExtension() {
-    val position = pendingSelectionExtensionPosition ?: return
-    pendingSelectionExtensionPosition = null
-    extendDoubleTapDragSelection(position = position)
-  }
-
-  private fun hasDeferredSelectionExtension(): Boolean =
-    pendingSelectionExtensionPosition != null &&
-      semantics.selectionExpansion.isAwaitingWordSelectionCommit
-
-  private fun resetSelectionExtensionState() {
-    pendingSelectionExtensionPosition = null
-    semantics.selectionExpansion.reset()
-  }
-
   private fun resetPointerOwnedState() {
-    resetSelectionExtensionState()
-    gestures.doubleTapDrag.reset()
+    gestures.doubleTapDrag.resetPointerOwnedState(context = gestureContext)
   }
 
   private fun cleanupForModeTransition(
@@ -346,7 +228,7 @@ internal class EditorInteractionController(
     if (previousMode == currentMode) {
       return
     }
-    if (currentMode == EditorInteractionMode.Pinching) {
+    if (currentMode == EditorInteractionMode.ViewportZooming) {
       resetPointerOwnedState()
     }
   }
@@ -367,27 +249,3 @@ internal class EditorInteractionController(
     mode = core.reduce(previous = mode, event = event)
   }
 }
-
-private fun shouldRequestSingleTapBringIntoView(
-  previousCursor: CursorMetrics?,
-  nextState: EditorState,
-): Boolean {
-  val nextCursor = nextState.cursor ?: return false
-  if (
-    nextState.selection.isCollapsed() &&
-      previousCursor != null &&
-      nextCursor.isSamePosition(previousCursor)
-  ) {
-    // TODO(editor-parity): same-cursor single tap should open the context menu slot.
-    return false
-  }
-  return true
-}
-
-private fun Selection?.isCollapsed(): Boolean = this == null || anchor == head
-
-private fun CursorMetrics.isSamePosition(other: CursorMetrics): Boolean =
-  pageIdx == other.pageIdx &&
-    caret.x == other.caret.x &&
-    caret.y == other.caret.y &&
-    line.y == other.line.y

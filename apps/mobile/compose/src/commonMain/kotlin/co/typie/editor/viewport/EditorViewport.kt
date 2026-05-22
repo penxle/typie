@@ -260,6 +260,9 @@ internal fun consumeEditorViewportTouchPan(
   if (density <= 0f) {
     return Offset.Zero
   }
+  if (viewportState.isTransforming) {
+    return deltaPx
+  }
   if (canNavigateBack && deltaPx.isDominantRightPan() && viewportState.scrollOffset.x <= 0f) {
     return Offset.Zero
   }

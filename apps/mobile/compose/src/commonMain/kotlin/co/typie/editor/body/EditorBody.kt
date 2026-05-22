@@ -48,7 +48,6 @@ internal fun EditorBody(
 ) {
   val density = LocalDensity.current
   val uiState = LocalEditorUiState.current
-  val extensionForwardingEnabled = layoutSpec is EditorDocumentLayoutSpec.Continuous
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
   val extensionAreaFillSpacerHeight =
     remember(geometry.minimumBodyHeight, bodyContentHeight) {
@@ -66,10 +65,7 @@ internal fun EditorBody(
     }
 
   Box(modifier = modifier.fillMaxWidth()) {
-    EditorExtensionArea(
-      forwardingEnabled = extensionForwardingEnabled,
-      modifier = containerModifier,
-    ) {
+    EditorExtensionArea(layoutSpec = layoutSpec, modifier = containerModifier) {
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Column(
           modifier =

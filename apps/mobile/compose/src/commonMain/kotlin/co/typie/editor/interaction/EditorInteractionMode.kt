@@ -3,7 +3,7 @@ package co.typie.editor.interaction
 internal enum class EditorInteractionMode {
   Idle,
   Panning,
-  Pinching,
+  ViewportZooming,
   AuxiliaryGesture,
   SelectionHandleDragging,
   TableCellHandleDragging,
@@ -17,8 +17,8 @@ internal enum class EditorInteractionMode {
 internal val EditorInteractionMode.isDndActive: Boolean
   get() = this == EditorInteractionMode.DndLocal || this == EditorInteractionMode.DndExternal
 
-internal val EditorInteractionMode.isPinching: Boolean
-  get() = this == EditorInteractionMode.Pinching
+internal val EditorInteractionMode.isViewportZooming: Boolean
+  get() = this == EditorInteractionMode.ViewportZooming
 
 internal val EditorInteractionMode.isAuxiliaryGesture: Boolean
   get() = this == EditorInteractionMode.AuxiliaryGesture
@@ -53,9 +53,9 @@ internal sealed interface EditorInteractionEvent {
 
   data object LongPressWordEnd : EditorInteractionEvent
 
-  data object PinchStart : EditorInteractionEvent
+  data object ViewportZoomStart : EditorInteractionEvent
 
-  data object PinchEnd : EditorInteractionEvent
+  data object ViewportZoomEnd : EditorInteractionEvent
 
   data object SelectionHandleDragStart : EditorInteractionEvent
 

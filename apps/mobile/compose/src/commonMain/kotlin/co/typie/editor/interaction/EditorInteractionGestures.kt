@@ -27,7 +27,7 @@ internal class EditorInteractionGestures(
     EditorInteractionRuntimeRead(
       mode = mode,
       pinchIsPinching = pinch.isPinching,
-      pinchPointerCount = tap.pressedPointerCount,
+      pinchPointerCount = pinch.pointerCount,
       doubleTapActive = doubleTapDrag.active,
       doubleTapDragging = doubleTapDrag.dragging,
       tableCellHandleDragging = tableHandle.dragging,

@@ -9,6 +9,8 @@ internal sealed interface EditorInteractionCommand {
 
   data object TapCancel : EditorInteractionCommand
 
+  data object ViewportZoomStart : EditorInteractionCommand
+
   data object DoubleTapPrepareDrag : EditorInteractionCommand
 
   data object DoubleTapStartDrag : EditorInteractionCommand
@@ -88,7 +90,7 @@ internal sealed interface EditorInteractionCommand {
 }
 
 internal enum class EditorInteractionBlockReason {
-  Pinching,
+  ViewportZooming,
   DndLocked,
   DoubleTapSelecting,
   SelectionHandlePending,
@@ -124,8 +126,8 @@ internal data class EditorInteractionRuntimeRead(
   val hasAnyHandleDrag: Boolean = false,
   val panDragActive: Boolean = false,
 ) {
-  val isPinching: Boolean
-    get() = pinchIsPinching || mode.isPinching
+  val isViewportZooming: Boolean
+    get() = pinchIsPinching || mode.isViewportZooming
 }
 
 internal class EditorInteractionCore {
@@ -137,19 +139,26 @@ internal class EditorInteractionCore {
     runtime: EditorInteractionRuntimeRead,
   ): EditorInteractionBlockReason? =
     when (command) {
+      EditorInteractionCommand.ViewportZoomStart -> {
+        when {
+          runtime.mode.isDndActive -> EditorInteractionBlockReason.DndLocked
+          runtime.isViewportZooming -> EditorInteractionBlockReason.SessionAlreadyActive
+          else -> null
+        }
+      }
       EditorInteractionCommand.TapDown -> {
-        if (runtime.isPinching) EditorInteractionBlockReason.Pinching else null
+        if (runtime.isViewportZooming) EditorInteractionBlockReason.ViewportZooming else null
       }
       EditorInteractionCommand.TapUp -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.doubleTapDragging -> EditorInteractionBlockReason.DoubleTapDragging
           else -> null
         }
       }
       EditorInteractionCommand.TapCancel -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.doubleTapActive -> EditorInteractionBlockReason.DoubleTapActive
           else -> null
         }
@@ -162,7 +171,7 @@ internal class EditorInteractionCore {
             is EditorInteractionCommand.DoubleTapDispatchSelection -> command.page
           }
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           page < 0 -> EditorInteractionBlockReason.PageOutOfRange
           else -> null
         }
@@ -170,11 +179,11 @@ internal class EditorInteractionCore {
       EditorInteractionCommand.DoubleTapPrepareDrag,
       EditorInteractionCommand.DoubleTapStartDrag,
       EditorInteractionCommand.DoubleTapBeginSelecting -> {
-        if (runtime.isPinching) EditorInteractionBlockReason.Pinching else null
+        if (runtime.isViewportZooming) EditorInteractionBlockReason.ViewportZooming else null
       }
       is EditorInteractionCommand.DoubleTapUpdateSelection -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           !runtime.doubleTapDragging -> EditorInteractionBlockReason.NotDragging
           command.dragStartPosition != null &&
             (command.localPosition - command.dragStartPosition).getDistance() < 4f ->
@@ -191,7 +200,7 @@ internal class EditorInteractionCore {
       }
       is EditorInteractionCommand.LongPressStart -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.tableCellHandleDragging -> EditorInteractionBlockReason.TableCellHandleDragging
           runtime.doubleTapActive -> EditorInteractionBlockReason.DoubleTapSelecting
           command.viewportPosition == null -> EditorInteractionBlockReason.ViewportUnavailable
@@ -204,7 +213,7 @@ internal class EditorInteractionCore {
       EditorInteractionCommand.LongPressUpdate,
       EditorInteractionCommand.LongPressEnd -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           !runtime.mode.isLongPressing -> EditorInteractionBlockReason.NotActive
           runtime.doubleTapActive -> EditorInteractionBlockReason.DoubleTapSelecting
           else -> null
@@ -212,7 +221,7 @@ internal class EditorInteractionCore {
       }
       EditorInteractionCommand.PanStart -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.mode.isDndActive -> EditorInteractionBlockReason.DndLocked
           runtime.doubleTapActive -> EditorInteractionBlockReason.DoubleTapSelecting
           runtime.hasPendingSelectionHandleDrag ->
@@ -222,7 +231,7 @@ internal class EditorInteractionCore {
       }
       EditorInteractionCommand.PanUpdate -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.mode.isDndActive -> EditorInteractionBlockReason.DndLocked
           else -> null
         }
@@ -230,7 +239,7 @@ internal class EditorInteractionCore {
       EditorInteractionCommand.PanEnd,
       EditorInteractionCommand.PanCancel -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.mode.isDndActive -> EditorInteractionBlockReason.DndLocked
           runtime.doubleTapActive -> EditorInteractionBlockReason.DoubleTapSelecting
           else -> null
@@ -264,18 +273,18 @@ internal class EditorInteractionCore {
       }
       EditorInteractionCommand.SelectionHandleStart -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.mode.isDndActive -> EditorInteractionBlockReason.DndLocked
           runtime.tableCellHandleDragging -> EditorInteractionBlockReason.TableCellHandleDragging
           else -> null
         }
       }
       EditorInteractionCommand.SelectionHandleBeginDragging -> {
-        if (runtime.isPinching) EditorInteractionBlockReason.Pinching else null
+        if (runtime.isViewportZooming) EditorInteractionBlockReason.ViewportZooming else null
       }
       EditorInteractionCommand.SelectionHandleUpdate -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.mode != EditorInteractionMode.SelectionHandleDragging ->
             EditorInteractionBlockReason.NotActive
           else -> null
@@ -283,7 +292,7 @@ internal class EditorInteractionCore {
       }
       is EditorInteractionCommand.SelectionHandleEnd -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.tableCellHandleDragging -> EditorInteractionBlockReason.TableCellHandleDragging
           !command.hasActiveDrag -> EditorInteractionBlockReason.NoActiveDrag
           else -> null
@@ -291,7 +300,7 @@ internal class EditorInteractionCore {
       }
       EditorInteractionCommand.TableCellHandleBeginDown -> {
         when {
-          runtime.isPinching -> EditorInteractionBlockReason.Pinching
+          runtime.isViewportZooming -> EditorInteractionBlockReason.ViewportZooming
           runtime.mode.isDndActive -> EditorInteractionBlockReason.DndLocked
           else -> null
         }
@@ -310,7 +319,7 @@ internal class EditorInteractionCore {
       EditorInteractionCommand.DndHandleDropOver,
       EditorInteractionCommand.DndHandleDropEnter,
       EditorInteractionCommand.DndPerformDrop -> {
-        if (runtime.isPinching) EditorInteractionBlockReason.Pinching else null
+        if (runtime.isViewportZooming) EditorInteractionBlockReason.ViewportZooming else null
       }
       is EditorInteractionCommand.DndHandleDropOverItem -> {
         if (!command.hasItem) EditorInteractionBlockReason.MissingDropItem else null
@@ -342,9 +351,9 @@ internal class EditorInteractionCore {
     mode = reduceDnd(mode = mode, event = event)
 
     if (!mode.isDndActive) {
-      mode = reducePinch(mode = mode, event = event)
+      mode = reduceViewportZoom(mode = mode, event = event)
 
-      if (!mode.isPinching) {
+      if (!mode.isViewportZooming) {
         mode = reduceAuxiliary(mode = mode, event = event)
         mode = reduceTable(mode = mode, event = event)
         mode = reduceSelection(mode = mode, event = event)
@@ -367,16 +376,16 @@ internal class EditorInteractionCore {
       else -> mode
     }
 
-  private fun reducePinch(
+  private fun reduceViewportZoom(
     mode: EditorInteractionMode,
     event: EditorInteractionEvent,
   ): EditorInteractionMode =
     when {
-      event == EditorInteractionEvent.PinchStart &&
+      event == EditorInteractionEvent.ViewportZoomStart &&
         mode != EditorInteractionMode.DndLocal &&
-        mode != EditorInteractionMode.DndExternal -> EditorInteractionMode.Pinching
-      event == EditorInteractionEvent.PinchEnd && mode == EditorInteractionMode.Pinching ->
-        EditorInteractionMode.Idle
+        mode != EditorInteractionMode.DndExternal -> EditorInteractionMode.ViewportZooming
+      event == EditorInteractionEvent.ViewportZoomEnd &&
+        mode == EditorInteractionMode.ViewportZooming -> EditorInteractionMode.Idle
       else -> mode
     }
 

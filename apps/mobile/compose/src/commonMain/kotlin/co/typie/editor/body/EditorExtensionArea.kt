@@ -8,15 +8,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import co.typie.editor.interaction.EditorPointerCoordinateResolver
+import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 
 @Composable
 internal fun EditorExtensionArea(
-  forwardingEnabled: Boolean,
+  layoutSpec: EditorDocumentLayoutSpec,
   modifier: Modifier = Modifier,
   content: @Composable BoxScope.() -> Unit,
 ) {
@@ -24,18 +24,17 @@ internal fun EditorExtensionArea(
   val runtime = LocalEditorRuntime.current
   val editor = runtime.editor
   val uiState = LocalEditorUiState.current
-  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val interactionScope = LocalEditorInteractionScope.current
   val editorBounds = uiState.editorBoundsInContainer
   val densityValue = density.density
   val extensionAreaModifier =
-    if (forwardingEnabled && editor != null) {
+    if (editor != null) {
       Modifier.editorInteractions(
-        editor = editor,
-        bringIntoViewRequests = bringIntoViewRequests,
-        uiState = uiState,
         density = densityValue,
+        interactionController = interactionScope.controller,
         coordinateResolver =
           EditorExtensionAreaPointerCoordinateResolver(
+            layoutSpec = layoutSpec,
             bounds = editorBounds,
             density = densityValue,
           ),
@@ -48,11 +47,19 @@ internal fun EditorExtensionArea(
 }
 
 internal data class EditorExtensionAreaPointerCoordinateResolver(
+  private val layoutSpec: EditorDocumentLayoutSpec,
   private val bounds: EditorBoundsInContainer,
   private val density: Float,
 ) : EditorPointerCoordinateResolver {
-  override fun positionForStart(position: Offset): Offset? {
-    if (!canForwardStart(position)) {
+  override fun positionForPointerStart(position: Offset): Offset? {
+    if (!isOutsideEditorBounds(position)) {
+      return null
+    }
+    return positionForActivePointer(position)
+  }
+
+  override fun positionForTapStart(position: Offset): Offset? {
+    if (layoutSpec !is EditorDocumentLayoutSpec.Continuous || !isOutsideEditorBounds(position)) {
       return null
     }
     return positionForActivePointer(position)
@@ -68,7 +75,7 @@ internal data class EditorExtensionAreaPointerCoordinateResolver(
     return Offset(x = (x - bounds.x) * density, y = (y - bounds.y) * density)
   }
 
-  private fun canForwardStart(position: Offset): Boolean {
+  private fun isOutsideEditorBounds(position: Offset): Boolean {
     if (!bounds.isValid || density <= 0f) {
       return false
     }

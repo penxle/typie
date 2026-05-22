@@ -14,7 +14,14 @@ class EditorInteractionCoreTest {
     assertEquals(EditorInteractionMode.DndLocal, dnd)
     assertEquals(
       EditorInteractionMode.DndLocal,
-      core.reduce(dnd, EditorInteractionEvent.PinchStart),
+      core.reduce(dnd, EditorInteractionEvent.ViewportZoomStart),
+    )
+    assertEquals(
+      EditorInteractionBlockReason.DndLocked,
+      core.blockReason(
+        command = EditorInteractionCommand.ViewportZoomStart,
+        runtime = EditorInteractionRuntimeRead(mode = dnd),
+      ),
     )
   }
 
@@ -30,7 +37,7 @@ class EditorInteractionCoreTest {
       ),
     )
     assertEquals(
-      EditorInteractionBlockReason.Pinching,
+      EditorInteractionBlockReason.ViewportZooming,
       core.blockReason(
         command = EditorInteractionCommand.TapDispatch(page = 0),
         runtime = EditorInteractionRuntimeRead(pinchIsPinching = true),

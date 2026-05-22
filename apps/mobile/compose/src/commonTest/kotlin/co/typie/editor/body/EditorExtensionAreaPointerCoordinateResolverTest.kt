@@ -11,16 +11,27 @@ class EditorExtensionAreaPointerCoordinateResolverTest {
   fun `start inside editor bounds is not forwarded by extension area`() {
     val resolver = resolver()
 
-    assertNull(resolver.positionForStart(Offset(60f, 100f)))
+    assertNull(resolver.positionForTapStart(Offset(60f, 100f)))
+    assertNull(resolver.positionForPointerStart(Offset(60f, 100f)))
     assertEquals(Offset(20f, 20f), resolver.positionForActivePointer(Offset(60f, 100f)))
   }
 
   @Test
-  fun `start outside editor bounds is clamped to nearest editor edge`() {
+  fun `continuous start outside editor bounds is clamped as a tap start`() {
     val resolver = resolver()
 
-    assertEquals(Offset.Zero, resolver.positionForStart(Offset.Zero))
-    assertEquals(Offset(320f, 480f), resolver.positionForStart(Offset(500f, 700f)))
+    assertEquals(Offset.Zero, resolver.positionForTapStart(Offset.Zero))
+    assertEquals(Offset.Zero, resolver.positionForPointerStart(Offset.Zero))
+    assertEquals(Offset(320f, 480f), resolver.positionForTapStart(Offset(500f, 700f)))
+    assertEquals(Offset(320f, 480f), resolver.positionForPointerStart(Offset(500f, 700f)))
+  }
+
+  @Test
+  fun `paginated start outside editor bounds is tracked but not accepted as a tap start`() {
+    val resolver = resolver(layoutSpec = paginatedLayoutSpec)
+
+    assertEquals(Offset.Zero, resolver.positionForPointerStart(Offset.Zero))
+    assertNull(resolver.positionForTapStart(Offset.Zero))
   }
 
   @Test
@@ -28,16 +39,33 @@ class EditorExtensionAreaPointerCoordinateResolverTest {
     val invalidBounds = resolver(bounds = EditorBoundsInContainer())
     val invalidDensity = resolver(density = 0f)
 
-    assertNull(invalidBounds.positionForStart(Offset.Zero))
+    assertNull(invalidBounds.positionForPointerStart(Offset.Zero))
+    assertNull(invalidBounds.positionForTapStart(Offset.Zero))
     assertNull(invalidBounds.positionForActivePointer(Offset.Zero))
-    assertNull(invalidDensity.positionForStart(Offset.Zero))
+    assertNull(invalidDensity.positionForPointerStart(Offset.Zero))
+    assertNull(invalidDensity.positionForTapStart(Offset.Zero))
     assertNull(invalidDensity.positionForActivePointer(Offset.Zero))
   }
 
   private fun resolver(
+    layoutSpec: EditorDocumentLayoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 160f),
     bounds: EditorBoundsInContainer =
       EditorBoundsInContainer(x = 20f, y = 40f, width = 160f, height = 240f),
     density: Float = 2f,
   ): EditorExtensionAreaPointerCoordinateResolver =
-    EditorExtensionAreaPointerCoordinateResolver(bounds = bounds, density = density)
+    EditorExtensionAreaPointerCoordinateResolver(
+      layoutSpec = layoutSpec,
+      bounds = bounds,
+      density = density,
+    )
+
+  private val paginatedLayoutSpec =
+    EditorDocumentLayoutSpec.Paginated(
+      pageWidth = 320f,
+      pageHeight = 480f,
+      pageMarginTop = 48f,
+      pageMarginBottom = 48f,
+      pageMarginLeft = 40f,
+      pageMarginRight = 40f,
+    )
 }

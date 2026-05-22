@@ -26,7 +26,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -46,6 +48,9 @@ import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.interaction.EditorInteractionScope
+import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.rememberEditorZoomController
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
@@ -86,7 +91,6 @@ import co.typie.screen.editor.editor.toolbar.suppressSoftwareKeyboard
 import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPanel
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
 import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
-import co.typie.screen.editor.editor.viewport.rememberEditorTouchPinchZoomModifier
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
@@ -108,6 +112,7 @@ fun EditorScreen(entityId: String) {
   val model = viewModel { EditorViewModel(entityId) }
   val scope = rememberCoroutineScope()
   val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
+  val interactionScope = remember(entityId) { EditorInteractionScope(coroutineScope = scope) }
   val uiState = remember(entityId) { EditorUiState() }
   val externalElementState = remember(entityId) { EditorExternalElementState() }
   val zoomController = rememberEditorZoomController(key = entityId)
@@ -117,6 +122,7 @@ fun EditorScreen(entityId: String) {
   val document = entity.node.onDocument
   DisposableEffect(model) {
     onDispose {
+      interactionScope.reset()
       // TODO(editor-parity): 에디터 스크린 생명주기가 composition dispose 밖까지 연결되면,
       // app background/inactive 전환에서도 header draft를 flush해야 한다.
       model.flushDraftsAsync()
@@ -240,6 +246,7 @@ fun EditorScreen(entityId: String) {
     val editorState = editor?.state ?: EditorState.Initial
     val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
+    val haptic = LocalHapticFeedback.current
     val layoutDirection = LocalLayoutDirection.current
     val topInset = contentPadding.calculateTopPadding()
     val startInset = contentPadding.calculateStartPadding(layoutDirection)
@@ -400,6 +407,28 @@ fun EditorScreen(entityId: String) {
         editorBounds = uiState.editorBoundsInContainer,
       )
     val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+    SideEffect {
+      val viewportZoomConfig =
+        (layoutSpec as? EditorDocumentLayoutSpec.Paginated)?.let { paginatedLayoutSpec ->
+          EditorViewportZoomSemanticConfig(
+            layoutSpec = paginatedLayoutSpec,
+            zoomController = zoomController,
+            viewportState = screenState.viewportState,
+            uiState = uiState,
+            pageSizes = pageSizes,
+            viewportWidth = visibleArea.visibleBodySize.width,
+            density = density,
+            onZoomSnap = { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick) },
+          )
+        }
+      interactionScope.update(
+        editor = runtime.editor,
+        bringIntoViewRequests = bringIntoViewRequests,
+        uiState = uiState,
+        density = density,
+        viewportZoomConfig = viewportZoomConfig,
+      )
+    }
     val toolbarSuppressesSoftwareKeyboard = toolbarPanel?.let(::suppressSoftwareKeyboard) ?: false
     val toolbarTextInputSessionEnabled =
       toolbarPanel?.let {
@@ -410,19 +439,6 @@ fun EditorScreen(entityId: String) {
         )
       } ?: true
     val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
-    val touchPinchZoomModifier =
-      if (paginatedLayout != null && density > 0f) {
-        rememberEditorTouchPinchZoomModifier(
-          state = screenState,
-          layoutSpec = paginatedLayout,
-          zoomController = zoomController,
-          uiState = uiState,
-          pageSizes = pageSizes,
-          density = density,
-        )
-      } else {
-        Modifier
-      }
     val debugWheelZoomModifier =
       if (
         PlatformModule.platform == co.typie.platform.Platform.Desktop &&
@@ -431,11 +447,9 @@ fun EditorScreen(entityId: String) {
       ) {
         rememberEditorDebugWheelZoomModifier(
           state = screenState,
-          layoutSpec = paginatedLayout,
-          zoomController = zoomController,
-          uiState = uiState,
-          pageSizes = pageSizes,
-          density = density,
+          onZoomSessionStart = interactionScope::beginPointerSignalZoom,
+          onZoom = interactionScope::updatePointerSignalZoom,
+          onZoomSessionEnd = interactionScope::endPointerSignalZoom,
         )
       } else {
         Modifier
@@ -465,6 +479,7 @@ fun EditorScreen(entityId: String) {
       LocalEditorExternalElementState provides externalElementState,
       LocalEditorZoomController provides zoomController,
       LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
+      LocalEditorInteractionScope provides interactionScope,
       LocalHazeState provides toolbarBackdropHazeState,
     ) {
       EditorScreenLayout(
@@ -536,7 +551,7 @@ fun EditorScreen(entityId: String) {
               geometry = bodyGeometry,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,
-              modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
+              modifier = Modifier.then(debugWheelZoomModifier),
               textInputSessionEnabled = toolbarTextInputSessionEnabled,
               suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
