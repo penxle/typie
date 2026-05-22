@@ -114,8 +114,22 @@ pub enum ModifierOp {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionOp {
     All,
-    Set { selection: Selection },
-    SetFlat { start: usize, end: usize },
+    Set {
+        selection: Selection,
+    },
+    SetFlat {
+        start: usize,
+        end: usize,
+    },
+    ExtendTo {
+        anchor_page: usize,
+        anchor_x: f32,
+        anchor_y: f32,
+        head_page: usize,
+        head_x: f32,
+        head_y: f32,
+        initial_selection: Option<Selection>,
+    },
 }
 
 #[ffi]

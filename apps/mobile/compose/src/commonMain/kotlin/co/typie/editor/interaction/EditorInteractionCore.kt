@@ -1,4 +1,4 @@
-package co.typie.editor.gesture
+package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
 

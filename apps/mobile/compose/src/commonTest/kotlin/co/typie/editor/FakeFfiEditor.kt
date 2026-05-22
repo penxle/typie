@@ -34,6 +34,7 @@ internal class FakeFfiEditor(
   var externalElementsProvider: () -> List<ExternalElement> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
+  var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
 ) : co.typie.editor.ffi.Editor {
   val enqueued = mutableListOf<Message>()
   var tickCount: Int = 0
@@ -64,7 +65,7 @@ internal class FakeFfiEditor(
 
   override fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? = null
 
-  override fun selectionEndpoints(): SelectionEndpoints? = null
+  override fun selectionEndpoints(): SelectionEndpoints? = selectionEndpointsProvider()
 
   override fun selectionHitTest(page: Int, x: Float, y: Float): Boolean =
     selectionHitProvider(page, x, y)

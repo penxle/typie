@@ -1,4 +1,4 @@
-package co.typie.editor.gesture
+package co.typie.editor.interaction
 
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -12,8 +12,10 @@ import co.typie.editor.Editor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
+import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -32,7 +34,7 @@ private data object DirectEditorPointerCoordinateResolver : EditorPointerCoordin
   override fun positionForActivePointer(position: Offset): Offset = position
 }
 
-internal fun Modifier.editorGestures(
+internal fun Modifier.editorInteractions(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   uiState: EditorUiState,
@@ -40,7 +42,7 @@ internal fun Modifier.editorGestures(
   coordinateResolver: EditorPointerCoordinateResolver = DirectEditorPointerCoordinateResolver,
 ): Modifier =
   this then
-    EditorGesturesElement(
+    EditorInteractionsElement(
       editor = editor,
       bringIntoViewRequests = bringIntoViewRequests,
       uiState = uiState,
@@ -48,15 +50,15 @@ internal fun Modifier.editorGestures(
       coordinateResolver = coordinateResolver,
     )
 
-private data class EditorGesturesElement(
+private data class EditorInteractionsElement(
   private val editor: Editor,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val uiState: EditorUiState,
   private val density: Float,
   private val coordinateResolver: EditorPointerCoordinateResolver,
-) : ModifierNodeElement<EditorGesturesNode>() {
-  override fun create(): EditorGesturesNode =
-    EditorGesturesNode(
+) : ModifierNodeElement<EditorInteractionsNode>() {
+  override fun create(): EditorInteractionsNode =
+    EditorInteractionsNode(
       editor = editor,
       bringIntoViewRequests = bringIntoViewRequests,
       uiState = uiState,
@@ -64,7 +66,7 @@ private data class EditorGesturesElement(
       coordinateResolver = coordinateResolver,
     )
 
-  override fun update(node: EditorGesturesNode) {
+  override fun update(node: EditorInteractionsNode) {
     node.editor = editor
     node.bringIntoViewRequests = bringIntoViewRequests
     node.uiState = uiState
@@ -73,14 +75,15 @@ private data class EditorGesturesElement(
   }
 }
 
-private class EditorGesturesNode(
+private class EditorInteractionsNode(
   var editor: Editor,
   var bringIntoViewRequests: EditorBringIntoViewRequests,
   var uiState: EditorUiState,
   var density: Float,
   var coordinateResolver: EditorPointerCoordinateResolver,
-) : Modifier.Node(), PointerInputModifierNode {
-  private val interactionSession = EditorInteractionSession(tapSlopPx = 0f)
+) : Modifier.Node(), PointerInputModifierNode, EditorInteractionControllerHost {
+  private val interactionController =
+    EditorInteractionController(editorProvider = { editor }, host = this)
   private var tapDispatchJob: Job? = null
 
   override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
@@ -89,29 +92,24 @@ private class EditorGesturesNode(
     }
 
     if (density <= 0f) {
-      cancelInteraction(editor)
+      cancelInteraction()
       return
     }
 
-    val tapSlopPx = EditorTapSlopDp * density
-    interactionSession.updateTapSlop(tapSlopPx)
+    interactionController.updateTapSlop(tapSlopPx = EditorTapSlopDp * density)
 
     pointerEvent.changes
       .filter { it.pressed && !it.previousPressed }
       .forEach { change ->
         val position = coordinateResolver.positionForStart(change.position) ?: return@forEach
-
-        val result =
-          interactionSession.onPointerDown(
+        if (
+          interactionController.onPointerDown(
             pointerId = change.id.value,
             position = position,
             nowMillis = change.uptimeMillis,
           )
-        applyPointerResult(editor = editor, result = result)
-        if (!interactionSession.isIgnoringUntilAllPointersUp) {
-          scheduleTapDispatchJob(
-            dispatchAtMillis = change.uptimeMillis + EditorTapDispatchDelayMillis
-          )
+        ) {
+          change.consume()
         }
       }
 
@@ -119,92 +117,38 @@ private class EditorGesturesNode(
       .filter { it.pressed && it.previousPressed }
       .forEach { change ->
         val position = activePositionOrCancel(change.position) ?: return@forEach
-        val result =
-          interactionSession.onPointerMove(
+        if (
+          interactionController.onPointerMove(
             pointerId = change.id.value,
             position = position,
             nowMillis = change.uptimeMillis,
           )
-        applyPointerResult(editor = editor, result = result)
+        ) {
+          change.consume()
+        }
       }
 
     pointerEvent.changes
       .filter { it.changedToUp() }
       .forEach { change ->
         val position = activePositionOrCancel(change.position) ?: return@forEach
-        val result =
-          interactionSession.onPointerUp(
+        if (
+          interactionController.onPointerUp(
             pointerId = change.id.value,
             position = position,
             nowMillis = change.uptimeMillis,
           )
-        applyPointerResult(editor = editor, result = result)
-        if (result.consume) {
+        ) {
           change.consume()
         }
       }
   }
 
   override fun onCancelPointerInput() {
-    cancelInteraction(editor)
+    cancelInteraction()
   }
 
-  private fun scheduleTapDispatchJob(dispatchAtMillis: Long) {
-    tapDispatchJob?.cancel()
-    tapDispatchJob = coroutineScope.launch {
-      try {
-        delay(EditorTapDispatchDelayMillis)
-        interactionSession
-          .onTapTimer(
-            nowMillis = dispatchAtMillis,
-            isSelectionHit = ::isSelectionHit,
-            hasRangeSelection = { editor.hasRangeSelection() },
-          )
-          ?.let { tap -> dispatchTap(editor = editor, tap = tap) }
-      } finally {
-        tapDispatchJob = null
-      }
-    }
-  }
-
-  private fun isSelectionHit(position: Offset): Boolean {
-    val point = resolvePoint(positionInNode = position) ?: return true
-    return point.page < 0 || editor.isSelectionHit(point)
-  }
-
-  private fun applyPointerResult(editor: Editor, result: EditorInteractionPointerResult) {
-    if (result.cancelTapDispatch) {
-      tapDispatchJob?.cancel()
-      tapDispatchJob = null
-    }
-    if (result.cancelPointerStream) {
-      editor.enqueue(Message.Pointer(EditorPointerEvent.Cancel))
-    }
-    result.tapDispatch?.let {
-      tapDispatchJob?.cancel()
-      tapDispatchJob = null
-      dispatchTap(editor = editor, tap = it)
-    }
-  }
-
-  private fun dispatchTap(editor: Editor, tap: EditorInteractionTapDispatch) {
-    val point = resolvePoint(positionInNode = tap.position) ?: return
-    if (!interactionSession.canDispatchTap(page = point.page)) {
-      return
-    }
-    val previousCursor = editor.cursor
-    editor.focus()
-    coroutineScope.launch {
-      editor.dispatchPrimaryTap(
-        bringIntoViewRequests = bringIntoViewRequests,
-        point = point,
-        clickCount = tap.clickCount,
-        previousCursor = previousCursor,
-      )
-    }
-  }
-
-  private fun resolvePoint(positionInNode: Offset): PagePoint? {
+  override fun resolvePoint(positionInNode: Offset): PagePoint? {
     val xDp = positionInNode.x / density
     val yDp = positionInNode.y / density
     return uiState
@@ -212,21 +156,55 @@ private class EditorGesturesNode(
       .globalToLocal(x = xDp, y = yDp)
   }
 
-  private fun cancelInteraction(editor: Editor) {
-    applyPointerResult(editor = editor, result = interactionSession.cancel())
+  override fun scheduleTapDispatch(dispatchAtMillis: Long) {
+    tapDispatchJob?.cancel()
+    tapDispatchJob = coroutineScope.launch {
+      try {
+        delay(EditorTapDispatchDelayMillis)
+        interactionController.onTapTimer(nowMillis = dispatchAtMillis)
+      } finally {
+        tapDispatchJob = null
+      }
+    }
+  }
+
+  override fun cancelTapDispatch() {
+    tapDispatchJob?.cancel()
+    tapDispatchJob = null
+  }
+
+  override fun launchInteraction(block: suspend () -> Unit) {
+    coroutineScope.launch { block() }
+  }
+
+  override fun requestFocus(editor: Editor): Boolean = editor.focus()
+
+  override fun enqueuePointerCancel() {
+    editor.enqueue(Message.Pointer(EditorPointerEvent.Cancel))
+  }
+
+  override fun requestCurrentCursorLine(version: Long) {
+    bringIntoViewRequests.requestForVersion(
+      target = EditorBringIntoViewTarget.CurrentCursorLine,
+      version = version,
+    )
+  }
+
+  private fun cancelInteraction() {
+    interactionController.cancel()
   }
 
   private fun activePositionOrCancel(position: Offset): Offset? {
     val mapped = coordinateResolver.positionForActivePointer(position)
-    if (mapped == null && interactionSession.hasActivePointer) {
-      cancelInteraction(editor)
+    if (mapped == null && interactionController.hasActivePointer) {
+      cancelInteraction()
     }
     return mapped
   }
 
   override fun onDetach() {
-    cancelInteraction(editor)
-    interactionSession.reset()
+    cancelInteraction()
+    interactionController.reset()
     super.onDetach()
   }
 }

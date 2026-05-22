@@ -23,8 +23,8 @@ import co.typie.editor.external.EditorExternalElementOverlay
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
-import co.typie.editor.gesture.editorGestures
 import co.typie.editor.input.editorInput
+import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.overlay.EditorCursorOverlay
 import co.typie.editor.overlay.EditorLineHighlightOverlay
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -119,7 +119,7 @@ internal fun EditorView(
           suppressSoftwareKeyboard = suppressSoftwareKeyboard,
         )
         .focusable()
-        .editorGestures(
+        .editorInteractions(
           editor = editor,
           bringIntoViewRequests = bringIntoViewRequests,
           uiState = uiState,

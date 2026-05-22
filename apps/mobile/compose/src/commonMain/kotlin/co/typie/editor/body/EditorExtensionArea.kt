@@ -7,8 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
-import co.typie.editor.gesture.EditorPointerCoordinateResolver
-import co.typie.editor.gesture.editorGestures
+import co.typie.editor.interaction.EditorPointerCoordinateResolver
+import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
@@ -29,7 +29,7 @@ internal fun EditorExtensionArea(
   val densityValue = density.density
   val extensionAreaModifier =
     if (forwardingEnabled && editor != null) {
-      Modifier.editorGestures(
+      Modifier.editorInteractions(
         editor = editor,
         bringIntoViewRequests = bringIntoViewRequests,
         uiState = uiState,

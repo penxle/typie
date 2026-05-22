@@ -19,6 +19,7 @@ import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.ThemeVariant
@@ -307,6 +308,8 @@ internal constructor(
   fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
 
   fun selectionHitTest(page: Int, x: Float, y: Float): Boolean = inner.selectionHitTest(page, x, y)
+
+  fun selectionEndpoints(): SelectionEndpoints? = inner.selectionEndpoints()
 
   internal suspend fun collectLocalChangesets(
     baseHeads: ByteArray?,
