@@ -67,6 +67,7 @@ export const processImageUpload = async ({
   uploadImageFile: UploadImageFile;
 }): Promise<'uploaded' | 'failed'> => {
   const objectUrl = createObjectUrl(file);
+  setInflightImage(nodeId, { url: objectUrl, width: 0, height: 0 });
 
   try {
     const { width, height } = await readImageDimensions(objectUrl);

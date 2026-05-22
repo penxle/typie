@@ -33,7 +33,7 @@
   let pickerOpened = $state(false);
   let proportion = $state(100);
   let isResizing = $state(false);
-  let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean } | null = null;
+  let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean; boundsWidth: number } | null = null;
   let enlarged = $state(false);
   let containerEl = $state<HTMLDivElement>();
 
@@ -41,11 +41,11 @@
   const asset = $derived(imageData?.id ? ctx.editor?.imageAssets.get(imageData.id) : undefined);
   const inflight = $derived(ctx.editor?.inflightImages.get(element.node_id));
   const imageSrc = $derived(asset?.url ?? inflight?.url);
-  const hasImage = $derived(!!imageSrc);
-  const isUploading = $derived(!!inflight && !asset);
-  const isResolvingAsset = $derived(!!imageData?.id && !asset && !inflight);
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
+  const hasImage = $derived(!!imageSrc && originalWidth > 0);
+  const isUploading = $derived(!!inflight && !asset);
+  const isResolvingAsset = $derived(!!imageData?.id && !asset && !inflight);
   const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
   const liveHeight = $derived(calculateImageHeight(liveWidth, originalWidth, originalHeight));
   const canEdit = $derived(!ctx.editor?.readOnly);
@@ -63,7 +63,7 @@
   });
 
   $effect(() => {
-    pickerOpened = element.is_selected && !hasImage && !isResolvingAsset;
+    pickerOpened = element.is_selected && !hasImage && !isResolvingAsset && !isUploading;
   });
 
   $effect(() => {
@@ -74,8 +74,9 @@
 
   $effect(() => {
     if (asset && inflight) {
+      const url = inflight.url;
       deleteInflightImage(element.node_id);
-      revokeObjectUrl(inflight.url);
+      revokeObjectUrl(url);
     }
   });
 
@@ -188,6 +189,7 @@
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
     event.preventDefault();
+    event.stopPropagation();
 
     isResizing = true;
     initialResizeData = {
@@ -195,6 +197,7 @@
       width: liveWidth,
       proportion,
       reverse,
+      boundsWidth: element.bounds.width,
     };
   };
 
@@ -202,7 +205,7 @@
     const target = event.currentTarget as HTMLElement;
     if (!target.hasPointerCapture(event.pointerId) || !initialResizeData) return;
 
-    const boundsWidth = element.bounds.width;
+    const { boundsWidth } = initialResizeData;
     if (boundsWidth <= 0) return;
 
     const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
@@ -216,17 +219,11 @@
       target.releasePointerCapture(event.pointerId);
     }
 
-    // do NOT set isResizing = false here
+    isResizing = false;
+    initialResizeData = null;
     enqueueImageAttrs(imageData?.id, proportion);
     ctx.editor?.focus();
   };
-
-  // Clear guard once editor state reflects the resize
-  $effect(() => {
-    if (isResizing && imageData && imageData.proportion === Math.round(proportion)) {
-      isResizing = false;
-    }
-  });
 </script>
 
 <ExternalElementWrapper {element} minHeight={hasImage ? undefined : '48px'}>
@@ -258,10 +255,6 @@
           }
         }}
         onpointerdown={(event) => {
-          if (canEdit) {
-            return;
-          }
-
           event.stopPropagation();
         }}
         placeholder={asset?.placeholder}
@@ -342,10 +335,7 @@
               _groupHover: { opacity: '100' },
             })}
             aria-label="이미지 크기 조절"
-            onpointerdown={(event) => {
-              event.preventDefault();
-              handleResizeStart(event, true);
-            }}
+            onpointerdown={(event) => handleResizeStart(event, true)}
             onpointermove={handleResize}
             onpointerup={handleResizeEnd}
             type="button"
@@ -370,10 +360,7 @@
               _groupHover: { opacity: '100' },
             })}
             aria-label="이미지 크기 조절"
-            onpointerdown={(event) => {
-              event.stopPropagation();
-              handleResizeStart(event, false);
-            }}
+            onpointerdown={(event) => handleResizeStart(event, false)}
             onpointermove={handleResize}
             onpointerup={handleResizeEnd}
             type="button"
@@ -394,10 +381,10 @@
       >
         <div class={flex({ align: 'center', gap: '12px', paddingX: '14px', paddingY: '12px', fontSize: '14px', color: 'text.disabled' })}>
           <Icon icon={ImageIcon} size={20} />
-          {isResolvingAsset ? '이미지를 불러오는 중...' : '이미지'}
+          {isUploading ? '이미지를 업로드하는 중...' : isResolvingAsset ? '이미지를 불러오는 중...' : '이미지'}
         </div>
 
-        {#if isResolvingAsset}
+        {#if isResolvingAsset || isUploading}
           <div class={css({ marginRight: '14px' })}>
             <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
           </div>
