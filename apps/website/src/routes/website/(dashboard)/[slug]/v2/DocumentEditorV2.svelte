@@ -29,6 +29,18 @@
           graph
           updatedAt
         }
+        assets {
+          __typename
+
+          ... on Image {
+            id
+            url
+            originalUrl
+            width
+            height
+            placeholder
+          }
+        }
         ...Editor_document
         ...BottomToolbar_document
         ...SettingsPanel_document
@@ -183,6 +195,23 @@
       ps.stop();
       pusher = null;
     };
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
+
+    for (const asset of document.data.assets) {
+      if (asset.__typename !== 'Image') continue;
+      editor.imageAssets.set(asset.id, {
+        id: asset.id,
+        url: asset.url,
+        originalUrl: asset.originalUrl,
+        width: asset.width,
+        height: asset.height,
+        placeholder: asset.placeholder,
+      });
+    }
   });
 
   onDestroy(() => {

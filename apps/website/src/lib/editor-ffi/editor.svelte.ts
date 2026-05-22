@@ -1,4 +1,5 @@
 import { createContext, tick, untrack } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
@@ -20,7 +21,7 @@ import type {
   ThemeVariant,
   Viewport,
 } from '@typie/editor-ffi/browser';
-import type { EditorEventListener } from './types';
+import type { EditorEventListener, ImageAsset } from './types';
 
 let wasmInitPromise: Promise<void> | null = null;
 
@@ -71,6 +72,9 @@ export class Editor {
   #pointerStyle = $state<PointerStyle>('default');
   #lastPointerClient: { x: number; y: number } | null = null;
   #pointerStyleDomRefreshQueued = false;
+
+  imageAssets = $state(new SvelteMap<string, ImageAsset>());
+  inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
 
   private constructor() {
     // no-op
