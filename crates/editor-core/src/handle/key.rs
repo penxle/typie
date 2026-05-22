@@ -46,6 +46,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 commands::first!(
                     tr,
                     commands::delete_selection(),
+                    commands::select_unit_across_gap_backward(),
                     commands::delete_text_backward(&resource),
                     commands::delete_node_backward(),
                     commands::select_node_backward(),
@@ -63,6 +64,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 commands::first!(
                     tr,
                     commands::delete_selection(),
+                    commands::select_unit_across_gap_forward(),
                     commands::delete_text_forward(&resource),
                     commands::delete_node_forward(),
                     commands::select_node_forward(),
@@ -88,6 +90,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::assert_doc_eq;
     use editor_state::assert_state_eq;
 
     use super::*;
@@ -845,5 +848,159 @@ mod tests {
             selection: (t1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_at_between_monolithic_gap_selects_prev_monolithic() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn second_backspace_at_between_monolithic_gap_deletes_prev_monolithic() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 0, <)
+        };
+        assert_doc_eq!(editor.state().doc, expected.doc);
+    }
+
+    #[test]
+    fn delete_at_between_monolithic_gap_selects_next_monolithic() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn second_delete_at_between_monolithic_gap_deletes_next_monolithic() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        assert_doc_eq!(editor.state().doc, expected.doc);
+    }
+
+    #[test]
+    fn backspace_at_leading_gap_selects_leading_unit() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_at_leading_gap_selects_leading_unit() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn second_backspace_at_leading_gap_deletes_leading_unit() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("b") } } }
+            selection: (t, 0)
+        };
+        assert_doc_eq!(editor.state().doc, expected.doc);
+    }
+
+    #[test]
+    fn second_delete_at_leading_gap_deletes_leading_unit() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("b") } } }
+            selection: (t, 0)
+        };
+        assert_doc_eq!(editor.state().doc, expected.doc);
     }
 }
