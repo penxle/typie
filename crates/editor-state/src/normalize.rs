@@ -185,6 +185,20 @@ fn collapsed_or_unit(doc: &Doc, pos: Position) -> Selection {
     Selection::collapsed(pos)
 }
 
+/// Same fallback shape as [`collapsed_or_unit`] but **without** the gap
+/// classification — used when a non-collapsed input range has been
+/// structurally forced to collapse (e.g. a drag whose range crossed a
+/// unit's outer boundary): the user committed to a range, not a phantom
+/// caret, so surfacing a between-monolithic position as a gap cursor
+/// would be a spurious artifact. Unit expansion still applies when the
+/// boundary borders a selectable unit; otherwise plain collapse.
+fn unit_or_collapsed(doc: &Doc, pos: Position) -> Selection {
+    if let Some(node_sel) = expand_unit_at(doc, pos) {
+        return node_sel;
+    }
+    Selection::collapsed(pos)
+}
+
 impl<'a> ResolvedSelection<'a> {
     /// Caller must supply endpoints that already pass `validate_position`.
     /// `Selection::normalize` enforces that gate; direct callers do not.
@@ -222,7 +236,7 @@ impl<'a> ResolvedSelection<'a> {
         let h_resolved = h.resolve(doc).expect("normalized head resolves");
         if subtree_violation(a_resolved.path(), h_resolved.path()) {
             // Preserve the caller's original head affinity in the fallback.
-            return collapsed_or_unit(doc, normalize_position(doc, h_in));
+            return unit_or_collapsed(doc, normalize_position(doc, h_in));
         }
 
         Selection { anchor: a, head: h }
@@ -1677,6 +1691,34 @@ mod tests {
                 affinity: Affinity::Upstream
             }
         );
+    }
+
+    #[test]
+    fn subtree_violation_fallback_does_not_surface_as_gap_cursor() {
+        let (d, t1) = doc! {
+            root {
+                callout { paragraph { t1: text("1234") } }
+                callout { paragraph { text("asdf") } }
+                paragraph {}
+            }
+        };
+        let root_id = NodeId::ROOT;
+        for aff in [Affinity::Downstream, Affinity::Upstream] {
+            let raw = Selection::new(
+                Position::new(t1, 2),
+                Position {
+                    node_id: root_id,
+                    offset: 1,
+                    affinity: aff,
+                },
+            );
+            let s = raw.normalize(&d).expect("normalizes");
+            let rs = s.resolve(&d).expect("resolves");
+            assert!(
+                rs.as_gap_cursor().is_none(),
+                "subtree_violation fallback must not produce a gap cursor at affinity {aff:?}, got {s:?}"
+            );
+        }
     }
 
     #[test]

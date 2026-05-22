@@ -95,7 +95,9 @@ impl View {
         self.view_state.gap_phantom = new_gap_phantom;
         if dirty {
             self.compute(new_doc);
-            self.view_state.preferred_x = None;
+            if nodes_invalidated || attrs_changed || pending_changed {
+                self.view_state.preferred_x = None;
+            }
         }
         dirty
     }
@@ -286,6 +288,22 @@ impl View {
             return false;
         };
         query::navigation::is_at_edge_line_of(&result.tree, node_id, head, at_end)
+    }
+
+    pub fn ensure_preferred_x_at(&mut self, pos: &Position) {
+        if self.view_state.preferred_x.is_some() {
+            return;
+        }
+        let Some(result) = self.layout.as_ref() else {
+            return;
+        };
+        self.view_state.preferred_x = query::navigation::compute_preferred_x_at(&result.tree, pos);
+    }
+
+    pub fn position_at_preferred_x_in(&self, node_id: NodeId, at_end: bool) -> Option<Position> {
+        let result = self.layout.as_ref()?;
+        let x = self.view_state.preferred_x?;
+        query::navigation::position_at_preferred_x_in(&result.tree, node_id, at_end, x)
     }
 
     pub fn cursor_metrics(&self, doc: &Doc, pos: &Position) -> Option<CursorMetrics> {

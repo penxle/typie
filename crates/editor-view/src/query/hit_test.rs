@@ -86,6 +86,13 @@ pub fn closest_hit_test_extending(
 /// monolithic container (e.g. fold) stalls at the container's innermost text
 /// position, making it impossible to select the container as a unit.
 ///
+/// The returned affinity points at the box the user is interacting with:
+/// `above` returns Downstream (the slot points forward at the box being
+/// approached); `below` returns Upstream (the slot points back at the
+/// box just crossed). When the surrounding normalize/unit logic resolves
+/// the slot to an adjacent child via affinity, this consistently picks
+/// the box involved in the gesture instead of the unrelated next sibling.
+///
 /// Only a true escape into the gutter promotes when escaping *above* the box.
 /// The inter-block gap directly above the box (between it and its previous
 /// sibling) belongs to the *approach* toward the box, not an escape past it:
@@ -122,8 +129,16 @@ fn promote_outside_y(root: &LayoutNode, leaf: &LayoutNode, click_y: f32) -> Opti
                 continue;
             }
             if let LayoutContent::Box(parent_box) = &parent_box_node.content {
-                let slot = if below { idx + 1 } else { idx };
-                return Some(Position::new(parent_box.node_id, slot));
+                let (slot, affinity) = if below {
+                    (idx + 1, Affinity::Upstream)
+                } else {
+                    (idx, Affinity::Downstream)
+                };
+                return Some(Position {
+                    node_id: parent_box.node_id,
+                    offset: slot,
+                    affinity,
+                });
             }
         }
     }

@@ -542,6 +542,43 @@ pub(crate) fn editable_position_inside(
     })
 }
 
+/// `pos`'s containing-Line x-coordinate, used as the preferred_x seed
+/// when vertical gap entry bypasses `resolve_movement` (which is the
+/// usual recorder). Returning `None` is safe: a missing seed just falls
+/// back to recomputation on the next vertical move.
+pub(crate) fn compute_preferred_x_at(tree: &LayoutTree, pos: &Position) -> Option<f32> {
+    let line_node = search::find_line_at(tree, pos)?;
+    Some(compute_preferred_x(line_node, pos))
+}
+
+/// A caret Position at `x` on the first (`at_end=false`) or last
+/// (`at_end=true`) navigable Line inside `node_id`. `None` when the
+/// edge navigable is an Atom (no column concept) — callers must fall
+/// back to their default exit (node-select or first/last position).
+pub(crate) fn position_at_preferred_x_in(
+    tree: &LayoutTree,
+    node_id: NodeId,
+    at_end: bool,
+    x: f32,
+) -> Option<Position> {
+    let boxed = search::find_box_by_node_id(&tree.root, node_id)?;
+    let LayoutContent::Box(b) = &boxed.content else {
+        return None;
+    };
+    let nav = if at_end {
+        b.children
+            .iter()
+            .rev()
+            .find_map(search::find_last_navigable)
+    } else {
+        b.children.iter().find_map(search::find_first_navigable)
+    }?;
+    match &nav.content {
+        LayoutContent::Line(line) => Some(position_in_line(line, &nav.rect, x)),
+        _ => None,
+    }
+}
+
 /// True when `head`'s containing Line is itself the first (`at_end=false`)
 /// or last (`at_end=true`) navigable Line inside `node_id`'s subtree.
 /// Used for vertical (Line) gap entry, where a caret on the edge Line

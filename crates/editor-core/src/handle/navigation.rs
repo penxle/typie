@@ -56,6 +56,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                                     NodeId::ROOT,
                                     0,
                                     false,
+                                    &movement,
                                 ))
                             }
                         }
@@ -73,6 +74,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                                     p,
                                     index - 1,
                                     true,
+                                    &movement,
                                 ))
                             } else {
                                 Some(exit_into_or_node_select(
@@ -81,6 +83,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                                     p,
                                     index,
                                     false,
+                                    &movement,
                                 ))
                             }
                         }
@@ -155,6 +158,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     {
                         // Vertical/word/block movement can stop at an adjacent
                         // gap before asking the view for geometric movement.
+                        if matches!(movement, Movement::Line { .. }) {
+                            editor.view.ensure_preferred_x_at(&base_position);
+                        }
                         sel
                     } else {
                         let view_target = {
@@ -207,6 +213,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     && let Some(sel) =
                         gap_cursor_from_inner_edge(editor, selection.head, backward, &movement)
                 {
+                    if matches!(movement, Movement::Line { .. }) {
+                        editor.view.ensure_preferred_x_at(&selection.head);
+                    }
                     editor.transact(|tr| {
                         tr.set_selection(sel)?;
                         Ok(())
@@ -451,13 +460,25 @@ fn find_prev_cursor_position_backward(editor: &Editor, node_id: NodeId) -> Optio
 /// front→back, backward = back→front), because set_selection's
 /// normalization preserves anchor/head direction and an inverted bracket
 /// would carry the wrong shift-extend anchor intent.
+///
+/// For vertical (Line) exit the landing column is the recorded
+/// preferred_x (seeded at gap entry, preserved across the gap by
+/// `reconcile_with_ops`). When the edge navigable is an Atom — no
+/// column concept — the call returns `None` and the default
+/// first/last-position landing applies.
 fn exit_into_or_node_select(
     editor: &Editor,
     node_id: NodeId,
     parent: NodeId,
     idx: usize,
     at_end: bool,
+    movement: &Movement,
 ) -> Selection {
+    if matches!(movement, Movement::Line { .. })
+        && let Some(pos) = editor.view.position_at_preferred_x_in(node_id, at_end)
+    {
+        return Selection::collapsed(pos);
+    }
     if let Some(pos) = editor.view.editable_position_inside(node_id, at_end) {
         return Selection::collapsed(pos);
     }
@@ -1466,6 +1487,98 @@ mod tests {
         );
         let s = editor.state().selection;
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_down_through_between_gap_preserves_column() {
+        let (state, _, t2) = state! {
+            doc {
+                root {
+                    callout { paragraph { t1: text("cdcdcdcdcd") } }
+                    callout { paragraph { t2: text("efefefefef") } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_up(&mut editor);
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        assert!(
+            editor
+                .state()
+                .selection
+                .resolve(&editor.state().doc)
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_some(),
+        );
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, t2);
+        assert_eq!(s.head.offset, 3);
+    }
+
+    #[test]
+    fn arrow_up_through_between_gap_preserves_column() {
+        let (state, t1, _) = state! {
+            doc {
+                root {
+                    callout { paragraph { t1: text("cdcdcdcdcd") } }
+                    callout { paragraph { t2: text("efefefefef") } }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_down(&mut editor);
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        assert!(
+            editor
+                .state()
+                .selection
+                .resolve(&editor.state().doc)
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_some(),
+        );
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection;
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, t1);
+        assert_eq!(s.head.offset, 3);
     }
 
     #[test]
