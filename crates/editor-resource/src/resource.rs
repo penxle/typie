@@ -5,6 +5,7 @@ use crate::brush::TextBrush;
 use crate::error::ResourceError;
 use crate::font::{FontFamily, FontRegistry, PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT};
 use crate::segmentation::TextSegmenters;
+use crate::text_replacement::{RawTextReplacementRule, TextReplacementRule, compile_rules};
 
 const PLACEHOLDER_TTF: &[u8] = include_bytes!("../assets/placeholder.ttf");
 
@@ -13,6 +14,7 @@ pub struct Resource {
     pub font_context: FontContext,
     pub layout_context: LayoutContext<TextBrush>,
     pub segmenters: Arc<TextSegmenters>,
+    pub text_replacement_rules: Vec<TextReplacementRule>,
 }
 
 impl Resource {
@@ -22,9 +24,18 @@ impl Resource {
             font_context: FontContext::new(),
             layout_context: LayoutContext::new(),
             segmenters,
+            text_replacement_rules: Vec::new(),
         };
         resource.register_placeholder();
         resource
+    }
+
+    pub fn set_text_replacement_rules(&mut self, raw_rules: Vec<RawTextReplacementRule>) {
+        self.text_replacement_rules = compile_rules(raw_rules);
+    }
+
+    pub fn clear_text_replacement_rules(&mut self) {
+        self.text_replacement_rules.clear();
     }
 
     fn register_placeholder(&mut self) {

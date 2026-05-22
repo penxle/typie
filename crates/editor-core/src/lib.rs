@@ -11,6 +11,9 @@ mod ime;
 mod message;
 mod state_field;
 
+#[cfg(test)]
+mod text_replacement_tests;
+
 pub use block_state::*;
 pub use editor::*;
 pub use error::*;

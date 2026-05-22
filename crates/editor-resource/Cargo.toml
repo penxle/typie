@@ -17,6 +17,7 @@ wasm = [
 editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
+fancy-regex.workspace = true
 fontique.workspace = true
 hashbrown.workspace = true
 icu_provider.workspace = true

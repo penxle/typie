@@ -6,7 +6,7 @@ use crate::message::*;
 
 pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), EditorError> {
     editor.transact(|tr| {
-        match op {
+        match &op {
             InsertionOp::Text { text } => {
                 commands::chain!(
                     tr,
@@ -20,7 +20,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                             commands::optional!(commands::delete_selection()),
                         ),
                     ),
-                    commands::insert_text(&text),
+                    commands::insert_text(text),
                 )?;
             }
             InsertionOp::Break {
@@ -93,7 +93,17 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
             }
         }
         Ok(())
-    })
+    })?;
+
+    if matches!(op, InsertionOp::Text { .. }) {
+        let resource = std::sync::Arc::clone(&editor.resource);
+        let resource = resource.lock().unwrap();
+        editor.transact(|tr| {
+            commands::optional!(commands::try_text_replacement(&resource))(tr)?;
+            Ok(())
+        })?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -42,6 +42,7 @@ mod split_list_item;
 mod split_paragraph;
 mod toggle_bold;
 mod toggle_modifier;
+mod try_text_replacement;
 
 pub use clear_all_modifiers::clear_all_modifiers;
 pub use delete_empty_paragraph_backward::delete_empty_paragraph_backward;
@@ -87,3 +88,4 @@ pub use split_list_item::split_list_item;
 pub use split_paragraph::split_paragraph;
 pub use toggle_bold::toggle_bold;
 pub use toggle_modifier::toggle_modifier;
+pub use try_text_replacement::try_text_replacement;

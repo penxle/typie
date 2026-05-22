@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use editor_commands::{self as commands};
+use editor_transaction::{HistoryMeta, HistoryTag};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -9,6 +10,20 @@ use crate::message::*;
 pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), EditorError> {
     let resource = Arc::clone(&editor.resource);
     let resource = resource.lock().unwrap();
+
+    if matches!(event.key, Key::Backspace)
+        && matches!(editor.history.last_tag(), Some(HistoryTag::AutoReplacement))
+    {
+        if let Some(steps) = editor.history.undo() {
+            editor.transact(|tr| {
+                tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                tr.apply_steps(steps)?;
+                Ok(())
+            })?;
+        }
+        return Ok(());
+    }
+
     editor.transact(|tr| {
         match (event.key, event.modifiers) {
             (Key::Enter, m) if m.shift => {

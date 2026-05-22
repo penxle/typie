@@ -141,6 +141,16 @@ impl EditorHost {
             Ok(())
         })
     }
+
+    pub fn set_text_replacement_rules(
+        &self,
+        rules: Vec<Complex<editor_resource::RawTextReplacementRule>>,
+    ) -> EditorResult<()> {
+        self.with_resource(|resource| {
+            resource.set_text_replacement_rules(rules.from_ffi()?);
+            Ok(())
+        })
+    }
 }
 
 impl EditorHost {

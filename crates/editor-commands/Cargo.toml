@@ -30,6 +30,7 @@ editor-resource = { path = "../editor-resource" }
 editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 enum-map.workspace = true
+fancy-regex.workspace = true
 log.workspace = true
 thiserror.workspace = true
 unicode-segmentation.workspace = true

@@ -16,6 +16,7 @@ cfg-if = "1"
 console_error_panic_hook = { version = "0.1" }
 console_log = "1"
 enum-map = "2"
+fancy-regex = "0.17"
 env_filter = "0.1"
 env_logger = "0.11"
 fontique = { version = "0.9", default-features = false }

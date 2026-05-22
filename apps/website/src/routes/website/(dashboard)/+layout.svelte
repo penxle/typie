@@ -23,6 +23,7 @@
   import { preloadEditorWasm } from '$lib/editor/editor.svelte';
   import { hydrateQuery } from '$lib/graphql';
   import { initWasm } from '$lib/wasm.svelte';
+  import { initWasm as initWasmFfi } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
@@ -196,6 +197,9 @@
     const rules = textReplacementRulesJson;
     initWasm().then((wasm) => {
       wasm.setTextReplacementRules(JSON.parse(rules));
+    });
+    initWasmFfi().then((host) => {
+      host.set_text_replacement_rules(JSON.parse(rules));
     });
   });
 

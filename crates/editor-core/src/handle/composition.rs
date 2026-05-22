@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_common::StrExt;
 use editor_model::{Doc, Modifier};
@@ -20,10 +22,18 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
             tr.set_composition(new_comp)?;
             Ok(())
         }),
-        CompositionOp::CommitAsIs => editor.transact(|tr| {
-            tr.set_composition(None)?;
-            Ok(())
-        }),
+        CompositionOp::CommitAsIs => {
+            editor.transact(|tr| {
+                tr.set_composition(None)?;
+                Ok(())
+            })?;
+            let resource = Arc::clone(&editor.resource);
+            let resource = resource.lock().unwrap();
+            editor.transact(|tr| {
+                commands::optional!(commands::try_text_replacement(&resource))(tr)?;
+                Ok(())
+            })
+        }
         CompositionOp::Cancel => editor.transact(|tr| {
             let is_gap = tr
                 .selection()
@@ -64,24 +74,32 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
             }))?;
             Ok(())
         }),
-        CompositionOp::Commit { text } => editor.transact(|tr| {
-            let is_gap = tr
-                .selection()
-                .resolve(&tr.doc())
-                .and_then(|rs| rs.as_gap_cursor())
-                .is_some();
-            if is_gap {
-                if text.is_empty() {
-                    return Ok(());
+        CompositionOp::Commit { text } => {
+            editor.transact(|tr| {
+                let is_gap = tr
+                    .selection()
+                    .resolve(&tr.doc())
+                    .and_then(|rs| rs.as_gap_cursor())
+                    .is_some();
+                if is_gap {
+                    if text.is_empty() {
+                        return Ok(());
+                    }
+                    tr.set_composition(None)?;
+                    commands::materialize_gap_paragraph(tr)?;
                 }
+                let (target_start, target_end) = resolve_target(tr, None)?;
+                replace_text_range(tr, target_start, target_end, &text)?;
                 tr.set_composition(None)?;
-                commands::materialize_gap_paragraph(tr)?;
-            }
-            let (target_start, target_end) = resolve_target(tr, None)?;
-            replace_text_range(tr, target_start, target_end, &text)?;
-            tr.set_composition(None)?;
-            Ok(())
-        }),
+                Ok(())
+            })?;
+            let resource = Arc::clone(&editor.resource);
+            let resource = resource.lock().unwrap();
+            editor.transact(|tr| {
+                commands::optional!(commands::try_text_replacement(&resource))(tr)?;
+                Ok(())
+            })
+        }
     }
 }
 
