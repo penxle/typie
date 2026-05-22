@@ -14,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -1240,11 +1241,13 @@ class EditorToolbarPagesDesktopTest {
     pagerState: ToolbarPagerState = rememberToolbarPagerState(),
   ) {
     val pages = rememberToolbarTestPages(textScrollState = textScrollState, pageKeys = pageKeys)
+    val commandScope = rememberCoroutineScope()
     ToolbarTestTheme {
       Box(Modifier.width(360.dp).height(ToolbarStackHeight).testTag(ToolbarTag)) {
         if (visible) {
           EditorToolbarPages(
             pages = pages,
+            commandScope = commandScope,
             pagerState = pagerState,
             autoTargetPageKey = autoTargetPageKey,
             autoTargetRevision = autoTargetRevision,

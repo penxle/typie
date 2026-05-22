@@ -109,6 +109,7 @@ class EditorViewportScrollReconcileTest {
           pageSizes = listOf(PageSize(width = 300f, height = 900f)),
           externalElements = emptyList(),
           rootAttrs = null,
+          rootModifiers = null,
           ime = null,
         ),
       layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 300f),

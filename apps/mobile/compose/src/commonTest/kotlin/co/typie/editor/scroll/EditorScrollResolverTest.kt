@@ -175,6 +175,7 @@ class EditorScrollResolverTest {
       pageSizes = pageSizes,
       externalElements = emptyList(),
       rootAttrs = null,
+      rootModifiers = null,
       ime = null,
     )
 

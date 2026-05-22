@@ -163,6 +163,7 @@ class ToolbarContextTest {
       pageSizes = emptyList(),
       externalElements = emptyList(),
       rootAttrs = null,
+      rootModifiers = null,
       modifierState = modifierState,
       blockState = blockState,
       ime = null,
