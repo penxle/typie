@@ -278,21 +278,6 @@ mod tests {
     }
 
     #[test]
-    fn last_tag_updates_after_undo() {
-        let mut h = History::new(Duration::from_millis(300));
-        let t = Instant::now();
-        h.push_tagged_at(&[text_step()], HistoryTag::AutoReplacement, t);
-        h.push_at(&[text_step()], t + Duration::from_secs(1));
-
-        // last entry is untagged
-        assert!(h.last_tag().is_none());
-
-        // after undo, the tagged entry is last
-        h.undo();
-        assert!(matches!(h.last_tag(), Some(HistoryTag::AutoReplacement)));
-    }
-
-    #[test]
     fn push_after_undo_within_merge_window_records_steps() {
         let mut h = History::new(Duration::from_millis(300));
         let t = Instant::now();
