@@ -1,6 +1,7 @@
 use editor_model::Doc;
 use serde::{Deserialize, Serialize};
 
+use crate::normalize::enclosing_unit_at_subtree_overlap;
 use crate::selection::Selection;
 use crate::stable_position::{StablePosition, freeze_position, thaw_position};
 
@@ -32,6 +33,8 @@ impl StableSelection {
         let candidate = Selection { anchor: a, head: h };
         if invariants_ok(&candidate, doc) {
             candidate
+        } else if let Some(sel) = enclosing_unit_at_subtree_overlap(doc, candidate.anchor, h) {
+            sel
         } else {
             Selection::collapsed(h)
         }

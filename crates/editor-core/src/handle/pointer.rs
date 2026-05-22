@@ -1330,6 +1330,70 @@ mod tests {
     }
 
     #[test]
+    fn drag_up_between_callouts_selects_crossed_callout() {
+        use editor_state::{Affinity, Position};
+
+        let (state, c1, c2, _) = state! {
+            doc {
+                root {
+                    c1: callout { paragraph { text("1234") } }
+                    c2: callout { paragraph { t2: text("asdf") } }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        let c2_rect = editor.view.node_box_rects(&[c2])[0].rect;
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: c2_rect.x + 20.0,
+                y: c2_rect.y + c2_rect.height / 2.0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let c1_rect = editor.view.node_box_rects(&[c1])[0].rect;
+        let between_y = (c1_rect.y + c1_rect.height + c2_rect.y) / 2.0;
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: 0,
+                x: c2_rect.x + 20.0,
+                y: between_y,
+            },
+        });
+
+        let sel = editor.state().selection;
+        assert!(
+            sel.resolve(&editor.state().doc)
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_none(),
+            "drag-up between two callouts must not collapse into a gap cursor, got {sel:?}"
+        );
+        let root_id = editor_model::NodeId::ROOT;
+        assert_eq!(
+            sel,
+            Selection::new(
+                Position {
+                    node_id: root_id,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node_id: root_id,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+            ),
+            "drag-up past callout 2's top must node-select callout 2 (the crossed unit), got {sel:?}"
+        );
+    }
+
+    #[test]
     fn drag_down_into_leading_gap_of_fold_keeps_text_selection() {
         // Caret in the empty paragraph above a fold; drag straight down so the
         // pointer lands in the inter-block gap directly above the fold, with x

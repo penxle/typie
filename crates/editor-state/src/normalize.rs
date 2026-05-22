@@ -199,6 +199,39 @@ fn unit_or_collapsed(doc: &Doc, pos: Position) -> Selection {
     Selection::collapsed(pos)
 }
 
+pub(crate) fn enclosing_unit_at_subtree_overlap(
+    doc: &Doc,
+    a_in: Position,
+    h_in: Position,
+) -> Option<Selection> {
+    let a = a_in.resolve(doc)?;
+    let h = h_in.resolve(doc)?;
+    let a_path = a.path();
+    let h_path = h.path();
+    let a_node = &a_path[..a_path.len() - 1];
+    let h_node = &h_path[..h_path.len() - 1];
+    let (parent_id, child_idx) = if a_node.starts_with(h_node) && a_node != h_node {
+        (h_in.node_id, a_node[h_node.len()])
+    } else if h_node.starts_with(a_node) && h_node != a_node {
+        (a_in.node_id, h_node[a_node.len()])
+    } else {
+        return None;
+    };
+    let parent = doc.node(parent_id)?;
+    let child = parent.children().nth(child_idx)?;
+    if !is_unit_node(&child) {
+        return None;
+    }
+    expand_unit_at(
+        doc,
+        Position {
+            node_id: parent_id,
+            offset: child_idx + 1,
+            affinity: Affinity::Upstream,
+        },
+    )
+}
+
 impl<'a> ResolvedSelection<'a> {
     /// Caller must supply endpoints that already pass `validate_position`.
     /// `Selection::normalize` enforces that gate; direct callers do not.
@@ -235,7 +268,9 @@ impl<'a> ResolvedSelection<'a> {
         let a_resolved = a.resolve(doc).expect("normalized anchor resolves");
         let h_resolved = h.resolve(doc).expect("normalized head resolves");
         if subtree_violation(a_resolved.path(), h_resolved.path()) {
-            // Preserve the caller's original head affinity in the fallback.
+            if let Some(sel) = enclosing_unit_at_subtree_overlap(doc, a_in, h_in) {
+                return sel;
+            }
             return unit_or_collapsed(doc, normalize_position(doc, h_in));
         }
 
