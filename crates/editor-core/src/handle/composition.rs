@@ -25,7 +25,13 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
             Ok(())
         }),
         CompositionOp::Cancel => editor.transact(|tr| {
-            if let Some(comp) = tr.composition().copied()
+            let is_gap = tr
+                .selection()
+                .resolve(&tr.doc())
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_some();
+            if !is_gap
+                && let Some(comp) = tr.composition().copied()
                 && composition_range_valid(&tr.doc(), comp.start, comp.end)
             {
                 replace_text_range(tr, comp.start, comp.end, "")?;
@@ -37,6 +43,18 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
             text,
             replace_length,
         } => editor.transact(|tr| {
+            let is_gap = tr
+                .selection()
+                .resolve(&tr.doc())
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_some();
+            if is_gap {
+                if text.is_empty() {
+                    return Ok(());
+                }
+                tr.set_composition(None)?;
+                commands::materialize_gap_paragraph(tr)?;
+            }
             let (target_start, target_end) = resolve_target(tr, replace_length)?;
             replace_text_range(tr, target_start, target_end, &text)?;
             let new_end = target_start + text.char_count();
@@ -47,6 +65,18 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
             Ok(())
         }),
         CompositionOp::Commit { text } => editor.transact(|tr| {
+            let is_gap = tr
+                .selection()
+                .resolve(&tr.doc())
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_some();
+            if is_gap {
+                if text.is_empty() {
+                    return Ok(());
+                }
+                tr.set_composition(None)?;
+                commands::materialize_gap_paragraph(tr)?;
+            }
             let (target_start, target_end) = resolve_target(tr, None)?;
             replace_text_range(tr, target_start, target_end, &text)?;
             tr.set_composition(None)?;
@@ -412,6 +442,29 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
     };
 
     let result = initial.clone().reduce(&ops);
+
+    let (initial, result) = if initial.text != result.text
+        && editor
+            .state
+            .selection
+            .resolve(&editor.state.doc)
+            .and_then(|rs| rs.as_gap_cursor())
+            .is_some()
+    {
+        editor.transact(|tr| {
+            tr.set_composition(None)?;
+            commands::materialize_gap_paragraph(tr)?;
+            Ok(())
+        })?;
+        let initial = match FlatImeState::from_editor(editor) {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+        let result = initial.clone().reduce(&ops);
+        (initial, result)
+    } else {
+        (initial, result)
+    };
 
     let prefix = common_prefix_len(&initial.text, &result.text);
     let suffix = common_suffix_len(&initial.text[prefix..], &result.text[prefix..]);
@@ -1679,6 +1732,435 @@ mod tests {
                 blockquote { paragraph { t1: text("hld") } }
                 paragraph {}
             } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn update_at_leading_gap_materializes_and_inserts() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "ㅎ".into(),
+                replace_length: None,
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅎ") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn update_at_between_monolithic_gap_materializes_and_inserts() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "ㅎ".into(),
+                replace_length: None,
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                paragraph { t1: text("ㅎ") }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn update_with_empty_text_at_leading_gap_preserves_gap() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "".into(),
+                replace_length: None,
+            },
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn update_with_stale_composition_at_leading_gap_materializes_and_inserts() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 0, end: 0 },
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 0, end: 0 }),
+            "precondition: SetRegion at gap leaves stale empty composition"
+        );
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "ㅎ".into(),
+                replace_length: None,
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅎ") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn commit_at_leading_gap_materializes_and_inserts_clears_composition() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "안".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("안") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn commit_at_between_monolithic_gap_materializes_and_inserts() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "X".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                paragraph { t1: text("X") }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn commit_with_empty_text_at_leading_gap_preserves_gap() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "".into() },
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn commit_with_stale_composition_at_leading_gap_materializes_and_inserts() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 0, end: 0 },
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 0, end: 0 }),
+            "precondition: SetRegion at gap leaves stale empty composition"
+        );
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "안".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("안") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_compose_at_leading_gap_materializes_and_composes() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅎ") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_compose_at_between_monolithic_gap_materializes_and_composes() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                paragraph { t1: text("ㅎ") }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_no_text_delta_at_leading_gap_preserves_gap() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::SetSelection { start: 0, end: 0 }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_set_composition_only_at_leading_gap_preserves_gap() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::SetComposition { start: 0, end: 0 }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        // SetComposition reduces snapshot.comp to Some((0,0)); handle_flat_ime
+        // applies that via a separate transact at the end since
+        // result.comp != initial.comp. Pin this explicitly so a refactor
+        // can't silently regress the "state-only Flat op survives the gap
+        // gate" property.
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 0, end: 0 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_compose_with_stale_composition_at_leading_gap_materializes_and_composes() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 0, end: 0 },
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 0, end: 0 }),
+            "precondition: SetRegion at gap leaves stale empty composition"
+        );
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅎ") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn cancel_with_stale_composition_at_leading_gap_preserves_unit() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 0, end: 0 },
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 0, end: 0 }),
+            "precondition: SetRegion at gap leaves stale empty composition"
+        );
+        editor.apply(Message::Composition {
+            op: CompositionOp::Cancel,
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn set_region_at_leading_gap_does_not_materialize() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 0, end: 0 },
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 0, end: 0 })
+        );
+    }
+
+    #[test]
+    fn cancel_at_leading_gap_is_noop() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Cancel,
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn commit_as_is_at_leading_gap_is_noop() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::CommitAsIs,
+        });
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn update_at_leading_gap_preserves_pending_modifiers() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+            pending_modifiers: [bold]
+        };
+        let mut editor = editor_with_resource(state);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "X".into(),
+                replace_length: None,
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("X") [bold] } image paragraph { text("b") } } }
             selection: (t1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
