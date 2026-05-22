@@ -542,6 +542,37 @@ pub(crate) fn editable_position_inside(
     })
 }
 
+/// True when `head`'s containing Line is itself the first (`at_end=false`)
+/// or last (`at_end=true`) navigable Line inside `node_id`'s subtree.
+/// Used for vertical (Line) gap entry, where a caret on the edge Line
+/// must leave the monolithic regardless of column offset — the
+/// position-equality variant misses any column past offset 0/end.
+pub(crate) fn is_at_edge_line_of(
+    tree: &LayoutTree,
+    node_id: NodeId,
+    head: &Position,
+    at_end: bool,
+) -> bool {
+    let Some(cursor_line) = search::find_line_at(tree, head) else {
+        return false;
+    };
+    let Some(boxed) = search::find_box_by_node_id(&tree.root, node_id) else {
+        return false;
+    };
+    let LayoutContent::Box(b) = &boxed.content else {
+        return false;
+    };
+    let edge = if at_end {
+        b.children
+            .iter()
+            .rev()
+            .find_map(search::find_last_navigable)
+    } else {
+        b.children.iter().find_map(search::find_first_navigable)
+    };
+    edge.is_some_and(|n| std::ptr::eq(n, cursor_line))
+}
+
 /// A navigable unit's `(parent, index)` bracket. An atom carries it directly;
 /// a monolithic box carries it via `nav` (only set at the block's own bracket,
 /// per `collect_lines`). Anything else has no bracket. This is the single read

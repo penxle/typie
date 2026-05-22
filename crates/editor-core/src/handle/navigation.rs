@@ -151,7 +151,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     } else if !left_or_right
                         && can_stop_at_gap
                         && let Some(sel) =
-                            gap_cursor_from_inner_edge(editor, base_position, backward)
+                            gap_cursor_from_inner_edge(editor, base_position, backward, &movement)
                     {
                         // Vertical/word/block movement can stop at an adjacent
                         // gap before asking the view for geometric movement.
@@ -189,18 +189,23 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     return Ok(());
                 }
 
-                // Inner-edge entry: a collapsed caret at the first
-                // (backward) / last (forward) inner navigable of a
-                // monolithic that borders a valid gap becomes that gap
-                // cursor — the exact inverse of gap exit, so the gap is a
-                // stable stop in both directions. Only movements that can stop
-                // at a gap (Grapheme/Word/Sentence/Block/Line) trigger this;
-                // Page and Document are excluded because paged/absolute jumps
-                // must not be intercepted by an intermediate gap. Ancestors
-                // are innermost-first, so one keypress crosses exactly one
-                // boundary.
+                // Inner-edge entry: when the caret borders the gap, the
+                // keystroke crosses into it. Horizontal/word/sentence/block
+                // moves use the exact start/end position (so a left-arrow
+                // from mid-text walks within the text first); vertical
+                // (Line) moves use the cursor's containing Line (so an
+                // arrow-up/down from any column on the first/last line of
+                // the monolithic — including a non-edge offset of a
+                // multi-position line — leaves it into the gap). Only
+                // movements that can stop at a gap
+                // (Grapheme/Word/Sentence/Block/Line) trigger this; Page
+                // and Document are excluded because paged/absolute jumps
+                // must not be intercepted by an intermediate gap.
+                // Ancestors are innermost-first, so one keypress crosses
+                // exactly one boundary.
                 if can_stop_at_gap
-                    && let Some(sel) = gap_cursor_from_inner_edge(editor, selection.head, backward)
+                    && let Some(sel) =
+                        gap_cursor_from_inner_edge(editor, selection.head, backward, &movement)
                 {
                     editor.transact(|tr| {
                         tr.set_selection(sel)?;
@@ -248,9 +253,11 @@ fn gap_cursor_from_inner_edge(
     editor: &Editor,
     head: Position,
     backward: bool,
+    movement: &Movement,
 ) -> Option<Selection> {
     let doc = &editor.state.doc;
     let start = doc.node(head.node_id)?;
+    let vertical = matches!(movement, Movement::Line { .. });
     for monolithic in start.ancestors() {
         if !Schema::node_spec(monolithic.as_type()).monolithic {
             continue;
@@ -258,13 +265,20 @@ fn gap_cursor_from_inner_edge(
         let (Some(parent), Some(index)) = (monolithic.parent(), monolithic.index()) else {
             continue;
         };
-        let Some(edge) = editor
-            .view
-            .editable_position_inside(monolithic.id(), !backward)
-        else {
-            continue;
+        let at_edge = if vertical {
+            editor
+                .view
+                .is_at_edge_line_of(monolithic.id(), &head, !backward)
+        } else {
+            let Some(edge) = editor
+                .view
+                .editable_position_inside(monolithic.id(), !backward)
+            else {
+                continue;
+            };
+            edge.node_id == head.node_id && edge.offset == head.offset
         };
-        if edge.node_id != head.node_id || edge.offset != head.offset {
+        if !at_edge {
             continue;
         }
         let parent_id = parent.id();
@@ -1452,6 +1466,149 @@ mod tests {
         );
         let s = editor.state().selection;
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_down_from_text_start_in_first_callout_enters_between_gap() {
+        let (state, r, ..) = state! {
+            doc {
+                r: root {
+                    callout { paragraph { t1: text("1234") } }
+                    callout { paragraph {} }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+            .expect("between-callouts gap is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection;
+        assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_up_from_text_end_in_leading_callout_enters_leading_gap() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    callout { paragraph { t1: text("1234") } }
+                    callout { paragraph {} }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 4)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let expected =
+            gap_cursor_selection_leading(&editor.state.doc).expect("leading-callout gap is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection;
+        assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_up_from_text_mid_in_second_callout_enters_between_gap() {
+        let (state, r, ..) = state! {
+            doc {
+                r: root {
+                    callout { paragraph {} }
+                    callout { paragraph { t2: text("abcd") } }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+            .expect("between-callouts gap is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection;
+        assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_down_from_text_in_second_callout_with_paragraph_neighbor_no_gap() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    callout { paragraph {} }
+                    callout { paragraph { t2: text("abcd") } }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection;
+        assert!(
+            s.resolve(&editor.state().doc)
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_none(),
+            "no between-gap when the next sibling is a paragraph; normal exit"
+        );
+    }
+
+    #[test]
+    fn arrow_left_from_text_mid_in_callout_does_not_enter_gap() {
+        let (state, t2) = state! {
+            doc {
+                root {
+                    callout { paragraph {} }
+                    callout { paragraph { t2: text("abcd") } }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        );
+        let s = editor.state().selection;
+        assert!(
+            s.resolve(&editor.state().doc)
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_none(),
+            "grapheme-left from mid-text must not jump straight into the gap"
+        );
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node_id, t2);
+        assert_eq!(s.head.offset, 1);
     }
 
     #[test]

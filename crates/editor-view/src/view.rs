@@ -281,6 +281,13 @@ impl View {
         query::navigation::editable_position_inside(&result.tree, node_id, at_end)
     }
 
+    pub fn is_at_edge_line_of(&self, node_id: NodeId, head: &Position, at_end: bool) -> bool {
+        let Some(result) = self.layout.as_ref() else {
+            return false;
+        };
+        query::navigation::is_at_edge_line_of(&result.tree, node_id, head, at_end)
+    }
+
     pub fn cursor_metrics(&self, doc: &Doc, pos: &Position) -> Option<CursorMetrics> {
         let result = self.layout.as_ref()?;
         let metrics_override = self.cursor_metrics_at(doc, pos);
