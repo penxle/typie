@@ -32,7 +32,7 @@ internal data class Preset(
   @EncodeDefault val backgroundColor: String = "none",
   @EncodeDefault val letterSpacing: Int = 0,
   @EncodeDefault val lineHeight: Int = 160,
-  @EncodeDefault val layout: PresetPageLayout = PresetPageLayout.Paginated(),
+  @EncodeDefault val layout: PresetPageLayout = PresetPageLayout.Continuous(),
   @EncodeDefault val paragraphIndent: Int = 100,
   @EncodeDefault val blockGap: Int = 100,
 )
