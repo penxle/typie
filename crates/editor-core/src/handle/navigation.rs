@@ -3,6 +3,7 @@ use editor_state::{
     Affinity, GapCursor, Position, ResolvedPosition, Selection, farther_endpoint,
     gap_cursor_selection_between, gap_cursor_selection_leading,
 };
+use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -90,6 +91,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     };
                     if let Some(sel) = exit {
                         editor.transact(|tr| {
+                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
                             tr.set_selection(sel)?;
                             Ok(())
                         })?;
@@ -117,6 +119,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     };
                     if let Some(sel) = entry {
                         editor.transact(|tr| {
+                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
                             tr.set_selection(sel)?;
                             Ok(())
                         })?;
@@ -189,6 +192,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     };
 
                     editor.transact(|tr| {
+                        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
                         tr.set_selection(target)?;
                         Ok(())
                     })?;
@@ -217,6 +221,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         editor.view.ensure_preferred_x_at(&selection.head);
                     }
                     editor.transact(|tr| {
+                        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
                         tr.set_selection(sel)?;
                         Ok(())
                     })?;
@@ -249,6 +254,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 };
 
                 editor.transact(|tr| {
+                    tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
                     tr.set_selection(final_selection)?;
                     Ok(())
                 })?;
