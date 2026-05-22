@@ -446,6 +446,13 @@ export interface PlainTextNode {
     text: string;
 }
 
+export interface RawTextReplacementRule {
+    id: string;
+    matchPattern: string;
+    substitute: string;
+    regex: boolean;
+}
+
 export interface Rect {
     x: number;
     y: number;
@@ -652,6 +659,7 @@ declare class EditorHost {
     root_attrs_from_graph(changesets: Uint8Array): PlainRootNode;
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
     set_fonts(families: FontFamily[]): void;
+    set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
 }
 
 declare class EditorServer {
