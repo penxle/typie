@@ -14,6 +14,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             (Key::Enter, m) if m.shift => {
                 commands::first!(
                     tr,
+                    commands::materialize_gap_paragraph(),
                     commands::insert_paragraph_before_unit_selection(),
                     |tr| commands::chain!(
                         tr,
@@ -26,6 +27,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             (Key::Enter, _) => {
                 commands::first!(
                     tr,
+                    commands::materialize_gap_paragraph(),
                     commands::insert_paragraph_after_unit_selection(),
                     |tr| commands::chain!(
                         tr,
