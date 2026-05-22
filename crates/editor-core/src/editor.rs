@@ -377,7 +377,7 @@ impl Editor {
             match meta.history {
                 HistoryMeta::Record => self.history.push(&steps),
                 HistoryMeta::Tagged { tag } => self.history.push_tagged(&steps, tag),
-                HistoryMeta::Skip => {}
+                HistoryMeta::Skip => self.history.clear_last_tag(),
             }
         }
 

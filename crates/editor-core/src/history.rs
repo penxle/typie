@@ -3,12 +3,12 @@ use editor_transaction::{HistoryTag, Step};
 
 pub struct HistoryEntry {
     pub steps: Vec<Step>,
-    pub tag: Option<HistoryTag>,
 }
 
 pub struct History {
     undos: Vec<HistoryEntry>,
     redos: Vec<HistoryEntry>,
+    last_tag: Option<HistoryTag>,
     last_push_time: Option<Instant>,
     merge_interval: Duration,
 }
@@ -18,6 +18,7 @@ impl History {
         Self {
             undos: Vec::new(),
             redos: Vec::new(),
+            last_tag: None,
             last_push_time: None,
             merge_interval,
         }
@@ -37,24 +38,21 @@ impl History {
 
         if should_merge {
             if let Some(last) = self.undos.last_mut() {
-                if last.tag.is_none() {
+                if self.last_tag.is_none() {
                     last.steps.extend_from_slice(steps);
                 } else {
                     self.undos.push(HistoryEntry {
                         steps: steps.to_vec(),
-                        tag: None,
                     });
                 }
             } else {
                 self.undos.push(HistoryEntry {
                     steps: steps.to_vec(),
-                    tag: None,
                 });
             }
         } else {
             self.undos.push(HistoryEntry {
                 steps: steps.to_vec(),
-                tag: None,
             });
         }
 
@@ -70,10 +68,10 @@ impl History {
 
         self.undos.push(HistoryEntry {
             steps: steps.to_vec(),
-            tag: Some(tag),
         });
 
         self.last_push_time = Some(now);
+        self.last_tag = Some(tag)
     }
 
     pub fn undo(&mut self) -> Option<Vec<Step>> {
@@ -99,7 +97,11 @@ impl History {
     }
 
     pub fn last_tag(&self) -> Option<&HistoryTag> {
-        self.undos.last()?.tag.as_ref()
+        self.last_tag.as_ref()
+    }
+
+    pub fn clear_last_tag(&mut self) {
+        self.last_tag = None
     }
 }
 
