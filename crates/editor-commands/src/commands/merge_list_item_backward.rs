@@ -2,7 +2,7 @@ use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact, fulfill};
 
-use crate::helpers::find_enclosing_list_item_id;
+use crate::helpers::{find_enclosing_list_item_id, merge_element_cross_parent};
 use crate::{CommandError, CommandResult};
 
 pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
@@ -119,7 +119,7 @@ pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
             tr.merge_node(moved, target)?;
         }
 
-        tr.merge_node(paragraph_id, prev_paragraph_id)?;
+        merge_element_cross_parent(tr, paragraph_id, prev_paragraph_id)?;
         tr.remove_subtree(list_item_id)?;
 
         // Adjacent text runs with matching modifiers were brought together by

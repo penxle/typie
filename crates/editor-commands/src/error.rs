@@ -13,6 +13,8 @@ pub enum CommandError {
     NoParent(NodeId),
     #[error("corrupted document: {0}")]
     Corrupted(String),
+    #[error("expected element node, got {0:?}")]
+    ExpectedElementNode(NodeId),
 }
 
 impl CommandError {

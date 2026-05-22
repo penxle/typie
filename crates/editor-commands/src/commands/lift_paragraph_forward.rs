@@ -2,6 +2,7 @@ use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
 use editor_state::{NodeRefCursorExt, Position, Selection};
 use editor_transaction::{Transaction, compact, dissolve, prune};
 
+use crate::helpers::merge_element_cross_parent;
 use crate::{CommandError, CommandResult};
 
 pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
@@ -122,7 +123,7 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
             tr.remove_subtree(last_id)?;
         }
 
-        tr.merge_node(source_paragraph_id, paragraph_id)?;
+        merge_element_cross_parent(tr, source_paragraph_id, paragraph_id)?;
 
         let doc = tr.doc();
         if let Some(p) = doc.node(paragraph_id) {

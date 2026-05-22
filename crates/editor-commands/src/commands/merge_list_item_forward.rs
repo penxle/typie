@@ -2,7 +2,7 @@ use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact, fulfill};
 
-use crate::helpers::find_enclosing_list_item_id;
+use crate::helpers::{find_enclosing_list_item_id, merge_element_cross_parent};
 use crate::{CommandError, CommandResult};
 
 pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
@@ -106,7 +106,7 @@ pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
             if let (Some(target), Some(moved)) = (target_sublist_id, moved_sublist_id) {
                 tr.merge_node(moved, target)?;
             }
-            tr.merge_node(next_paragraph_id, paragraph_id)?;
+            merge_element_cross_parent(tr, next_paragraph_id, paragraph_id)?;
             tr.remove_subtree(next_id)?;
             // Adjacent text runs with matching modifiers were brought together
             // by the merge; compact stitches them into a single node.
@@ -153,7 +153,7 @@ pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
         if let Some(pb_id) = trailing_page_break_id {
             tr.remove_subtree(pb_id)?;
         }
-        tr.merge_node(next_block_id, paragraph_id)?;
+        merge_element_cross_parent(tr, next_block_id, paragraph_id)?;
         let doc = tr.doc();
         if let Some(p) = doc.node(paragraph_id) {
             tr.apply_steps(compact(&p))?;

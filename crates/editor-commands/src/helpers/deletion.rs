@@ -3,7 +3,8 @@ use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact, fulfill, prune};
 
 use super::{
-    find_ancestor_textblock, find_lowest_common_ancestor, is_block_container, path_from_ancestor,
+    find_ancestor_textblock, find_lowest_common_ancestor, is_block_container,
+    merge_element_cross_parent, path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
 
@@ -640,7 +641,7 @@ fn merge_after_delete(
         tr.remove_subtree(last_id)?;
     }
 
-    tr.merge_node(to_tb, from_tb)?;
+    merge_element_cross_parent(tr, to_tb, from_tb)?;
 
     let doc = tr.doc();
     if let Some(p) = doc.node(from_tb) {

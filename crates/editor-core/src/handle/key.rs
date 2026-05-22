@@ -241,6 +241,115 @@ mod tests {
     }
 
     #[test]
+    fn backspace_across_callout_boundary_round_trips_through_undo() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    callout { paragraph { t1: text("1") } }
+                    callout { paragraph { t2: text("2") } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 1, <)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn backspace_across_blockquote_boundary_round_trips_through_undo() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    blockquote { paragraph { t1: text("a") } }
+                    blockquote { paragraph { t2: text("b") } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 1, <)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn backspace_at_list_item_start_round_trips_through_undo() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("a") } }
+                        list_item { paragraph { t2: text("b") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 0)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn delete_at_list_item_end_round_trips_through_undo() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("a") } }
+                        list_item { paragraph { text("b") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn delete_lifts_callout_paragraph_round_trips_through_undo() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("a") }
+                    callout { paragraph { text("b") } }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
     fn backspace_deletes_text_backward() {
         let (state, ..) = state! {
             doc { root { paragraph { t1: text("hello") } } }

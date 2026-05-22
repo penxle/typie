@@ -39,6 +39,15 @@ pub enum StepError {
     #[error("pending modifier {modifier_type:?} is not applicable to Text and cannot be staged")]
     InvalidPendingModifier { modifier_type: ModifierType },
 
+    #[error(
+        "MergeNode requires {source_id} to be the immediately-following sibling of {target_id}; \
+         use a compose-and-remove path (e.g. helpers::merge_element_cross_parent) instead"
+    )]
+    MergeNotAdjacentSiblings {
+        source_id: NodeId,
+        target_id: NodeId,
+    },
+
     #[error(transparent)]
     State(#[from] StateError),
 }

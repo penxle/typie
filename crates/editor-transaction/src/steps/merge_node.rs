@@ -46,6 +46,29 @@ pub(crate) fn apply_to(
             .doc
             .get_entry(target_id)
             .ok_or(StepError::NodeNotFound(target_id))?;
+        let target_parent =
+            (*target_entry.parent.get()).ok_or(StepError::NodeNotFound(target_id))?;
+        if target_parent != parent_id {
+            return Err(StepError::MergeNotAdjacentSiblings {
+                source_id: node_id,
+                target_id,
+            });
+        }
+        let children: Vec<NodeId> = parent_entry.children.iter().copied().collect();
+        let target_idx = children
+            .iter()
+            .position(|&id| id == target_id)
+            .ok_or(StepError::NodeNotFound(target_id))?;
+        let source_idx = children
+            .iter()
+            .position(|&id| id == node_id)
+            .ok_or(StepError::NodeNotFound(node_id))?;
+        if source_idx != target_idx + 1 {
+            return Err(StepError::MergeNotAdjacentSiblings {
+                source_id: node_id,
+                target_id,
+            });
+        }
 
         let target_end_dot: Option<Dot> = match &target_entry.node {
             Node::Text(t) => t.text.iter_with_dot().last().map(|(d, _)| d),
