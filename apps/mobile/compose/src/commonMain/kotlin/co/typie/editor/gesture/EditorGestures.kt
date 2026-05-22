@@ -154,13 +154,22 @@ private class EditorGesturesNode(
     tapDispatchJob = coroutineScope.launch {
       try {
         delay(EditorTapDispatchDelayMillis)
-        interactionSession.onTapTimer(nowMillis = dispatchAtMillis)?.let { tap ->
-          dispatchTap(editor = editor, tap = tap)
-        }
+        interactionSession
+          .onTapTimer(
+            nowMillis = dispatchAtMillis,
+            isSelectionHit = ::isSelectionHit,
+            hasRangeSelection = { editor.hasRangeSelection() },
+          )
+          ?.let { tap -> dispatchTap(editor = editor, tap = tap) }
       } finally {
         tapDispatchJob = null
       }
     }
+  }
+
+  private fun isSelectionHit(position: Offset): Boolean {
+    val point = resolvePoint(positionInNode = position) ?: return true
+    return point.page < 0 || editor.isSelectionHit(point)
   }
 
   private fun applyPointerResult(editor: Editor, result: EditorInteractionPointerResult) {

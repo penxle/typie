@@ -78,6 +78,58 @@ class EditorPrimaryTapDispatchTest {
     }
 
   @Test
+  fun `single primary tap on selection hit skips pointer dispatch`() =
+    runTest(StandardTestDispatcher()) {
+      val requests = EditorBringIntoViewRequests()
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 20f) },
+          selectionHitProvider = { page, x, y -> page == 0 && x == 10f && y == 20f },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+
+      assertFalse(
+        editor.dispatchPrimaryTap(
+          bringIntoViewRequests = requests,
+          point = PagePoint(page = 0, x = 10f, y = 20f),
+          clickCount = 1,
+          previousCursor = cursorAt(x = 10f),
+        )
+      )
+
+      assertEquals(emptyList(), fake.enqueued)
+      assertNull(requests.activateForVersion(version = 1L))
+    }
+
+  @Test
+  fun `double tap is not suppressed by selection hit guard`() =
+    runTest(StandardTestDispatcher()) {
+      val requests = EditorBringIntoViewRequests()
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 20f) },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+
+      assertTrue(
+        editor.dispatchPrimaryTap(
+          bringIntoViewRequests = requests,
+          point = PagePoint(page = 0, x = 10f, y = 20f),
+          clickCount = 2,
+          previousCursor = cursorAt(x = 10f),
+        )
+      )
+
+      val expectedMessages: List<Message> =
+        listOf(
+          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 2)),
+          Message.Pointer(EditorPointerEvent.Up),
+        )
+      assertEquals(expectedMessages, fake.enqueued)
+    }
+
+  @Test
   fun `primary tap dispatch is skipped when interaction core blocks page`() =
     runTest(StandardTestDispatcher()) {
       val requests = EditorBringIntoViewRequests()

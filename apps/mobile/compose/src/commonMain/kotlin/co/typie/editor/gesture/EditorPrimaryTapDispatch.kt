@@ -23,6 +23,9 @@ internal suspend fun Editor.dispatchPrimaryTap(
   ) {
     return false
   }
+  if (clickCount == 1 && isSelectionHit(point)) {
+    return false
+  }
 
   await(
     beforeCommit = { snapshot ->
@@ -43,6 +46,17 @@ internal suspend fun Editor.dispatchPrimaryTap(
   }
   return true
 }
+
+internal fun Editor.isSelectionHit(point: PagePoint): Boolean {
+  val hit = selectionHitTest(page = point.page, x = point.x, y = point.y)
+  if (hit) {
+    // TODO(editor-parity): open the selection context menu here once that state is hosted in the
+    // interaction runtime.
+  }
+  return hit
+}
+
+internal fun Editor.hasRangeSelection(): Boolean = !state.selection.isCollapsed()
 
 internal fun shouldRequestSingleTapBringIntoView(
   previousCursor: CursorMetrics?,

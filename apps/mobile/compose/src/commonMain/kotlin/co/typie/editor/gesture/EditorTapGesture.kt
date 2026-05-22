@@ -2,7 +2,10 @@ package co.typie.editor.gesture
 
 import androidx.compose.ui.geometry.Offset
 
-internal const val EditorTapDispatchDelayMillis = 150L
+private const val EditorTapDownDelayMillis = 100L
+private const val EditorTapTimerDelayMillis = 150L
+internal const val EditorTapDispatchDelayMillis =
+  EditorTapDownDelayMillis + EditorTapTimerDelayMillis
 
 private const val ConsecutiveTapMaxIntervalMillis = 300L
 private const val ConsecutiveTapMaxDistancePx = 20f
@@ -81,14 +84,26 @@ internal class EditorTapGesture(
     return EditorInteractionPointerResult()
   }
 
-  fun onTapTimer(nowMillis: Long): EditorInteractionTapDispatch? {
+  fun onTapTimer(
+    nowMillis: Long,
+    isSelectionHit: (Offset) -> Boolean = { false },
+    hasRangeSelection: () -> Boolean = { false },
+  ): EditorInteractionTapDispatch? {
     if (
       activePointerId == null || movedPastTapSlop || tapDispatched || ignoringUntilAllPointersUp
     ) {
       return null
     }
+    val clickCount = nextTapCount(position = downPosition, nowMillis = nowMillis)
+    if (clickCount == 1 && isSelectionHit(downPosition)) {
+      tapDispatched = true
+      return null
+    }
+    if (clickCount == 1 && hasRangeSelection()) {
+      return null
+    }
     tapDispatched = true
-    return buildTapDispatch(nowMillis)
+    return buildTapDispatch(nowMillis = nowMillis, position = downPosition, clickCount = clickCount)
   }
 
   fun onPointerUp(
@@ -155,17 +170,33 @@ internal class EditorTapGesture(
     nowMillis: Long,
     position: Offset = downPosition,
   ): EditorInteractionTapDispatch {
-    val clickCount =
-      if (isConsecutiveTap(position = position, nowMillis = nowMillis)) {
-        if (lastTapCount >= 3) 1 else lastTapCount + 1
-      } else {
-        1
-      }
-    lastTapTimeMillis = nowMillis
-    lastTapPosition = position
-    lastTapCount = clickCount
+    val clickCount = nextTapCount(position = position, nowMillis = nowMillis)
+    return buildTapDispatch(nowMillis = nowMillis, position = position, clickCount = clickCount)
+  }
+
+  private fun buildTapDispatch(
+    nowMillis: Long,
+    position: Offset,
+    clickCount: Int,
+  ): EditorInteractionTapDispatch {
+    if (clickCount == 2) {
+      lastTapTimeMillis = null
+      lastTapPosition = null
+      lastTapCount = 0
+    } else {
+      lastTapTimeMillis = nowMillis
+      lastTapPosition = position
+      lastTapCount = clickCount
+    }
     return EditorInteractionTapDispatch(position = position, clickCount = clickCount)
   }
+
+  private fun nextTapCount(position: Offset, nowMillis: Long): Int =
+    if (isConsecutiveTap(position = position, nowMillis = nowMillis)) {
+      2
+    } else {
+      1
+    }
 
   private fun isConsecutiveTap(position: Offset, nowMillis: Long): Boolean {
     val previousTime = lastTapTimeMillis ?: return false

@@ -306,6 +306,8 @@ internal constructor(
 
   fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
 
+  fun selectionHitTest(page: Int, x: Float, y: Float): Boolean = inner.selectionHitTest(page, x, y)
+
   internal suspend fun collectLocalChangesets(
     baseHeads: ByteArray?,
     block: EditorScope.() -> Unit,

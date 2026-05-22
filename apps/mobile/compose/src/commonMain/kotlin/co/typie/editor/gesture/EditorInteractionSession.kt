@@ -56,8 +56,16 @@ internal class EditorInteractionSession(
   ): EditorInteractionPointerResult =
     gestures.tap.onPointerMove(pointerId = pointerId, position = position)
 
-  fun onTapTimer(nowMillis: Long): EditorInteractionTapDispatch? =
-    gestures.tap.onTapTimer(nowMillis)
+  fun onTapTimer(
+    nowMillis: Long,
+    isSelectionHit: (Offset) -> Boolean = { false },
+    hasRangeSelection: () -> Boolean = { false },
+  ): EditorInteractionTapDispatch? =
+    gestures.tap.onTapTimer(
+      nowMillis = nowMillis,
+      isSelectionHit = isSelectionHit,
+      hasRangeSelection = hasRangeSelection,
+    )
 
   fun onPointerUp(
     pointerId: Long,

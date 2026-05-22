@@ -9,6 +9,11 @@ import kotlin.test.assertTrue
 
 class EditorTapGestureTest {
   @Test
+  fun `tap dispatch delay includes legacy tap down deadline before tap timer`() {
+    assertEquals(250L, EditorTapDispatchDelayMillis)
+  }
+
+  @Test
   fun `tap timer dispatches a primary click once`() {
     val gesture = EditorTapGesture(tapSlopPx = 8f)
 
@@ -26,6 +31,48 @@ class EditorTapGestureTest {
         nowMillis = 160L,
         canFinish = { true },
       ),
+    )
+  }
+
+  @Test
+  fun `tap timer selection hit consumes pending tap without advancing click count`() {
+    val gesture = EditorTapGesture(tapSlopPx = 8f)
+
+    gesture.onPointerDown(pointerId = 1L, position = Offset.Zero, canStart = { true })
+
+    assertNull(gesture.onTapTimer(nowMillis = 150L, isSelectionHit = { true }))
+    assertEquals(
+      EditorInteractionPointerResult(consume = true),
+      gesture.onPointerUp(
+        pointerId = 1L,
+        position = Offset.Zero,
+        nowMillis = 160L,
+        canFinish = { true },
+      ),
+    )
+
+    gesture.onPointerDown(pointerId = 2L, position = Offset.Zero, canStart = { true })
+
+    assertEquals(
+      EditorInteractionTapDispatch(position = Offset.Zero, clickCount = 1),
+      gesture
+        .onPointerUp(pointerId = 2L, position = Offset.Zero, nowMillis = 240L, canFinish = { true })
+        .tapDispatch,
+    )
+  }
+
+  @Test
+  fun `tap timer range selection keeps tap available for pointer up dispatch`() {
+    val gesture = EditorTapGesture(tapSlopPx = 8f)
+
+    gesture.onPointerDown(pointerId = 1L, position = Offset.Zero, canStart = { true })
+
+    assertNull(gesture.onTapTimer(nowMillis = 150L, hasRangeSelection = { true }))
+    assertEquals(
+      EditorInteractionTapDispatch(position = Offset.Zero, clickCount = 1),
+      gesture
+        .onPointerUp(pointerId = 1L, position = Offset.Zero, nowMillis = 160L, canFinish = { true })
+        .tapDispatch,
     )
   }
 
@@ -62,7 +109,7 @@ class EditorTapGestureTest {
   }
 
   @Test
-  fun `third consecutive tap dispatches count three`() {
+  fun `double tap clears tap history so third tap dispatches count one`() {
     val gesture = EditorTapGesture(tapSlopPx = 8f)
 
     gesture.onPointerDown(pointerId = 1L, position = Offset(10f, 20f), canStart = { true })
@@ -84,7 +131,7 @@ class EditorTapGestureTest {
     gesture.onPointerDown(pointerId = 3L, position = Offset(20f, 28f), canStart = { true })
 
     assertEquals(
-      EditorInteractionTapDispatch(position = Offset(20f, 28f), clickCount = 3),
+      EditorInteractionTapDispatch(position = Offset(20f, 28f), clickCount = 1),
       gesture
         .onPointerUp(
           pointerId = 3L,
@@ -97,7 +144,7 @@ class EditorTapGestureTest {
   }
 
   @Test
-  fun `fourth consecutive tap resets click count to one`() {
+  fun `consecutive taps after double tap can form a new double tap`() {
     val gesture = EditorTapGesture(tapSlopPx = 8f)
 
     gesture.onPointerDown(pointerId = 1L, position = Offset(10f, 20f), canStart = { true })
@@ -127,7 +174,7 @@ class EditorTapGestureTest {
     gesture.onPointerDown(pointerId = 4L, position = Offset(22f, 30f), canStart = { true })
 
     assertEquals(
-      EditorInteractionTapDispatch(position = Offset(22f, 30f), clickCount = 1),
+      EditorInteractionTapDispatch(position = Offset(22f, 30f), clickCount = 2),
       gesture
         .onPointerUp(
           pointerId = 4L,
@@ -167,7 +214,30 @@ class EditorTapGestureTest {
   }
 
   @Test
-  fun `moving beyond tap slop cancels pending tap dispatch`() {
+  fun `moving inside tap slop keeps pending tap dispatch`() {
+    val gesture = EditorTapGesture(tapSlopPx = 8f)
+
+    gesture.onPointerDown(pointerId = 1L, position = Offset.Zero, canStart = { true })
+
+    assertEquals(
+      EditorInteractionPointerResult(),
+      gesture.onPointerMove(pointerId = 1L, position = Offset(4f, 0f)),
+    )
+    assertEquals(
+      EditorInteractionTapDispatch(position = Offset(4f, 0f), clickCount = 1),
+      gesture
+        .onPointerUp(
+          pointerId = 1L,
+          position = Offset(4f, 0f),
+          nowMillis = 160L,
+          canFinish = { true },
+        )
+        .tapDispatch,
+    )
+  }
+
+  @Test
+  fun `moving beyond tap slop cancels pending tap without starting selection drag`() {
     val gesture = EditorTapGesture(tapSlopPx = 8f)
 
     gesture.onPointerDown(pointerId = 1L, position = Offset.Zero, canStart = { true })
@@ -185,6 +255,40 @@ class EditorTapGestureTest {
         nowMillis = 160L,
         canFinish = { true },
       ),
+    )
+  }
+
+  @Test
+  fun `plain drag does not advance consecutive tap count`() {
+    val gesture = EditorTapGesture(tapSlopPx = 8f)
+
+    gesture.onPointerDown(pointerId = 1L, position = Offset.Zero, canStart = { true })
+    gesture.onPointerUp(
+      pointerId = 1L,
+      position = Offset.Zero,
+      nowMillis = 100L,
+      canFinish = { true },
+    )
+    gesture.onPointerDown(pointerId = 2L, position = Offset.Zero, canStart = { true })
+
+    assertEquals(
+      EditorInteractionPointerResult(cancelTapDispatch = true),
+      gesture.onPointerMove(pointerId = 2L, position = Offset(9f, 0f)),
+    )
+
+    gesture.onPointerUp(
+      pointerId = 2L,
+      position = Offset(9f, 0f),
+      nowMillis = 520L,
+      canFinish = { true },
+    )
+    gesture.onPointerDown(pointerId = 3L, position = Offset.Zero, canStart = { true })
+
+    assertEquals(
+      EditorInteractionTapDispatch(position = Offset.Zero, clickCount = 1),
+      gesture
+        .onPointerUp(pointerId = 3L, position = Offset.Zero, nowMillis = 700L, canFinish = { true })
+        .tapDispatch,
     )
   }
 

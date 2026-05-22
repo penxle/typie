@@ -58,7 +58,7 @@ internal class EditorPanGesture {
   val dragActive: Boolean = false
 
   fun reset() {
-    // TODO(editor-parity): port raw viewport pan admission and resume state.
+    // TODO(editor-parity): port raw viewport pan start and resume state.
   }
 }
 
