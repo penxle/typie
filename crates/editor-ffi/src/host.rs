@@ -151,6 +151,13 @@ impl EditorHost {
             Ok(())
         })
     }
+
+    pub fn set_auto_surround_enabled(&self, enabled: bool) -> EditorResult<()> {
+        self.with_resource(|resource| {
+            resource.set_auto_surround_enabled(enabled);
+            Ok(())
+        })
+    }
 }
 
 impl EditorHost {

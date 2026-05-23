@@ -15,6 +15,7 @@ pub struct Resource {
     pub layout_context: LayoutContext<TextBrush>,
     pub segmenters: Arc<TextSegmenters>,
     pub text_replacement_rules: Vec<TextReplacementRule>,
+    pub auto_surround_enabled: bool,
 }
 
 impl Resource {
@@ -25,6 +26,7 @@ impl Resource {
             layout_context: LayoutContext::new(),
             segmenters,
             text_replacement_rules: Vec::new(),
+            auto_surround_enabled: true,
         };
         resource.register_placeholder();
         resource
@@ -32,6 +34,10 @@ impl Resource {
 
     pub fn set_text_replacement_rules(&mut self, raw_rules: Vec<RawTextReplacementRule>) {
         self.text_replacement_rules = compile_rules(raw_rules);
+    }
+
+    pub fn set_auto_surround_enabled(&mut self, enabled: bool) {
+        self.auto_surround_enabled = enabled;
     }
 
     pub fn clear_text_replacement_rules(&mut self) {

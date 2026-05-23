@@ -600,6 +600,7 @@ declare class Editor {
     block_state(): BlockState;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
+    cursor_hit_test(page: number, x: number, y: number): boolean;
     detach_surface(page: number): void;
     enqueue(message: Message): void;
     external_elements(): ExternalElement[];
@@ -634,6 +635,7 @@ declare class EditorHost {
     extract_text_from_graph(changesets: Uint8Array): string;
     root_attrs_from_graph(changesets: Uint8Array): PlainRootNode;
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
+    set_auto_surround_enabled(enabled: boolean): void;
     set_fonts(families: FontFamily[]): void;
     set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
 }

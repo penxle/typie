@@ -660,6 +660,7 @@ declare class EditorHost {
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
     set_fonts(families: FontFamily[]): void;
     set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
+    set_auto_surround_enabled(enabled: boolean): void;
 }
 
 declare class EditorServer {

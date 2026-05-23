@@ -1,3 +1,4 @@
+mod auto_surround;
 mod clear_all_modifiers;
 mod delete_empty_paragraph_backward;
 mod delete_empty_paragraph_forward;
@@ -47,10 +48,12 @@ mod sink_list_item;
 mod sink_paragraph_backward;
 mod split_list_item;
 mod split_paragraph;
+mod surround_selection;
 mod toggle_bold;
 mod toggle_modifier;
 mod try_text_replacement;
 
+pub use auto_surround::auto_surround;
 pub use clear_all_modifiers::clear_all_modifiers;
 pub use delete_empty_paragraph_backward::delete_empty_paragraph_backward;
 pub use delete_empty_paragraph_forward::delete_empty_paragraph_forward;
@@ -100,6 +103,7 @@ pub use sink_list_item::sink_list_item;
 pub use sink_paragraph_backward::sink_paragraph_backward;
 pub use split_list_item::split_list_item;
 pub use split_paragraph::split_paragraph;
+pub use surround_selection::surround_selection;
 pub use toggle_bold::toggle_bold;
 pub use toggle_modifier::toggle_modifier;
 pub use try_text_replacement::try_text_replacement;

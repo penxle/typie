@@ -5,6 +5,23 @@ use crate::error::EditorError;
 use crate::message::*;
 
 pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), EditorError> {
+    // Auto surround: when the user types a bracket/quote over a non-collapsed selection
+    // and IME is not active, wrap the selection instead of replacing it.
+    if let InsertionOp::Text { text } = &op {
+        let enabled = editor.resource.lock().unwrap().auto_surround_enabled;
+        if enabled && editor.state.composition.is_none() {
+            let text = text.clone();
+            let mut surround_applied = false;
+            editor.transact(|tr| {
+                surround_applied = commands::auto_surround(tr, &text)?;
+                Ok(())
+            })?;
+            if surround_applied {
+                return Ok(());
+            }
+        }
+    }
+
     editor.transact(|tr| {
         match &op {
             InsertionOp::Text { text } => {
@@ -456,6 +473,63 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("hello w") } } }
             selection: (t1, 7)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn auto_surround_wraps_selection_with_parens() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello world") } } }
+            selection: (t1, 6) -> (t1, 11)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "(".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("hello (world)") } } }
+            selection: (t1, 6) -> (t1, 13)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert!(editor.history.can_undo());
+    }
+
+    #[test]
+    fn auto_surround_disabled_replaces_selection_normally() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello world") } } }
+            selection: (t1, 6) -> (t1, 11)
+        };
+        let mut editor = Editor::new_test(state);
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .set_auto_surround_enabled(false);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "(".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("hello (") } } }
+            selection: (t1, 7)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn auto_surround_collapsed_selection_inserts_normally() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "(".into() },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("hello(") } } }
+            selection: (t1, 6)
         };
         assert_state_eq!(editor.state(), &expected);
     }
