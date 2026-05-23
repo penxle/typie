@@ -52,6 +52,7 @@ class EditorScreenLayoutDesktopTest {
         EditorScreenLayout(
           state = remember { EditorScreenState(EditorViewportState()) },
           scrollFrame = scrollFrame,
+          visibleArea = visibleArea,
           viewportScrollableState = rememberScrollable2DState { Offset.Zero },
           viewportContentWidth = 320f,
           viewportScrollReconcileEnabled = false,

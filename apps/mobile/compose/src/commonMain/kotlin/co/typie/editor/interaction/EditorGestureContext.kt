@@ -1,26 +1,19 @@
 package co.typie.editor.interaction
 
-import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
-import co.typie.editor.PagePoint
+import co.typie.platform.Platform
 
 internal interface EditorGestureContext {
   val editor: Editor
   val semantics: EditorInteractionSemantics
+  val effects: EditorInteractionEffects
+  val mode: EditorInteractionMode
 
-  fun can(command: EditorInteractionCommand): Boolean
+  val platform: Platform
 
-  fun transition(event: EditorInteractionEvent)
+  /** Reduces mode and runs shared cleanup for externally applied mode events. */
+  fun applyModeEvent(event: EditorInteractionEvent)
 
-  fun resolvePoint(positionInNode: Offset): PagePoint?
-
-  fun cancelTapDispatch()
-
-  fun scheduleTapDispatch(dispatchAtMillis: Long)
-
-  fun launchInteraction(block: suspend () -> Unit)
-
-  fun requestFocus(editor: Editor): Boolean
-
-  fun requestCurrentCursorLine(version: Long)
+  /** Reduces mode only; the gesture that calls this owns any required cleanup. */
+  fun reduceMode(event: EditorInteractionEvent)
 }

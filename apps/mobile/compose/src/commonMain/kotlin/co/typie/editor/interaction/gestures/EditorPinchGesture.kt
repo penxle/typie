@@ -2,7 +2,8 @@ package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.interaction.EditorGestureContext
-import co.typie.editor.interaction.EditorInteractionCommand
+import co.typie.editor.interaction.EditorInteractionEvent
+import co.typie.editor.interaction.canApply
 
 internal class EditorPinchGesture {
   private val activePointers = mutableMapOf<Long, Offset>()
@@ -115,7 +116,7 @@ internal fun EditorPinchGesture.cancel(context: EditorGestureContext) {
 private fun EditorPinchGesture.beginIfNeeded(context: EditorGestureContext): Boolean {
   val focal = currentFocal() ?: return false
   val distance = currentDistance() ?: return false
-  if (!context.can(EditorInteractionCommand.ViewportZoomStart)) {
+  if (!context.mode.canApply(EditorInteractionEvent.ViewportZoomStart)) {
     return false
   }
   if (!context.semantics.viewportZoom.beginPinch(focalPx = focal, distancePx = distance)) {

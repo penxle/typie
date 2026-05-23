@@ -15,22 +15,28 @@ internal data class EditorSelectionExtensionContext(
 internal class EditorSelectionExpansionSemantic {
   private var context: EditorSelectionExtensionContext? = null
   private var awaitingWordSelectionCommit = false
+  private var wordSelectionBaseline: Selection? = null
+  private var wordSelectionCommitMarked = false
 
   fun reset() {
     context = null
     awaitingWordSelectionCommit = false
+    wordSelectionBaseline = null
+    wordSelectionCommitMarked = false
   }
 
   val isAwaitingWordSelectionCommit: Boolean
     get() = awaitingWordSelectionCommit
 
-  fun awaitWordSelectionCommit() {
+  fun awaitWordSelectionCommit(baselineSelection: Selection? = null) {
     context = null
     awaitingWordSelectionCommit = true
+    wordSelectionBaseline = baselineSelection
+    wordSelectionCommitMarked = false
   }
 
   fun markWordSelectionCommitted() {
-    awaitingWordSelectionCommit = false
+    wordSelectionCommitMarked = true
   }
 
   fun context(editor: Editor): EditorSelectionExtensionContext? {
@@ -39,10 +45,30 @@ internal class EditorSelectionExpansionSemantic {
       return current
     }
     if (awaitingWordSelectionCommit) {
-      return null
+      if (!wordSelectionCommitMarked) {
+        return null
+      }
+      return adoptWordSelection(editor)
     }
     val resolved = editor.resolveSelectionExtensionContext() ?: return null
     context = resolved
+    return resolved
+  }
+
+  private fun adoptWordSelection(editor: Editor): EditorSelectionExtensionContext? {
+    val selection = editor.state.selection ?: return null
+    if (selection.isCollapsed()) {
+      return null
+    }
+    if (wordSelectionBaseline != null && selection == wordSelectionBaseline) {
+      return null
+    }
+
+    val resolved = editor.resolveSelectionExtensionContext() ?: return null
+    context = resolved
+    awaitingWordSelectionCommit = false
+    wordSelectionBaseline = null
+    wordSelectionCommitMarked = false
     return resolved
   }
 }

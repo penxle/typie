@@ -1,18 +1,21 @@
-package co.typie.editor.interaction.gestures
+package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.interaction.EditorGestureContext
-import co.typie.editor.interaction.EditorInteractionCommand
 import co.typie.editor.interaction.EditorInteractionEvent
+import co.typie.editor.interaction.EditorInteractionMode
+import co.typie.editor.interaction.canApply
+import co.typie.editor.interaction.gestures.EditorTapGesture
+import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.semantics.dispatchSelectionExtension
+import co.typie.editor.interaction.semantics.hasRangeSelection
 
 private const val EditorDoubleTapDragStartThresholdPx = 4f
 
-internal class EditorDoubleTapDragGesture {
+internal class EditorDoubleTapDragSession {
   private var phase = EditorDoubleTapDragPhase.Idle
   private var pendingSelectionExtensionPosition: Offset? = null
-  var startPosition: Offset? = null
-    private set
+  private var startPosition: Offset? = null
 
   val active: Boolean
     get() = phase != EditorDoubleTapDragPhase.Idle
@@ -23,50 +26,22 @@ internal class EditorDoubleTapDragGesture {
   val dragging: Boolean
     get() = phase == EditorDoubleTapDragPhase.Dragging
 
-  fun prepare(startPosition: Offset) {
-    this.startPosition = startPosition
-    phase = EditorDoubleTapDragPhase.Pending
-  }
-
-  fun canStart(position: Offset): Boolean {
-    val startPosition = startPosition ?: return false
-    return pending &&
-      (position - startPosition).getDistance() >= EditorDoubleTapDragStartThresholdPx
-  }
-
-  fun begin(): Boolean {
-    if (!pending) {
-      return false
-    }
-    phase = EditorDoubleTapDragPhase.Dragging
-    return true
-  }
-
-  fun stop(): Boolean {
-    val wasActive = active
-    startPosition = null
-    phase = EditorDoubleTapDragPhase.Idle
-    return wasActive
-  }
-
-  fun reset() {
-    pendingSelectionExtensionPosition = null
-    stop()
-  }
-
   fun prepareForDrag(
     position: Offset,
     tap: EditorTapGesture,
     context: EditorGestureContext,
   ): Boolean {
-    if (!context.can(EditorInteractionCommand.DoubleTapPrepareDrag)) {
+    if (context.mode.isViewportZooming) {
       return false
     }
-    context.cancelTapDispatch()
+    context.effects.cancelTapDispatch()
     tap.markTapDispatched()
     context.semantics.selectionExpansion.reset()
     context.semantics.selectionExpansion.awaitWordSelectionCommit()
-    prepare(startPosition = position)
+    context.semantics.contextMenu.hide()
+    context.effects.setScrollGestureLocked(true)
+    startPosition = position
+    phase = EditorDoubleTapDragPhase.Pending
     return true
   }
 
@@ -97,12 +72,20 @@ internal class EditorDoubleTapDragGesture {
     if (!stop()) {
       return false
     }
+    context.effects.setScrollGestureLocked(false)
     if (wasDragging) {
-      context.transition(EditorInteractionEvent.DoubleTapDragEnd)
+      if (context.mode.canApply(EditorInteractionEvent.DoubleTapDragEnd)) {
+        context.reduceMode(EditorInteractionEvent.DoubleTapDragEnd)
+      }
+      if (context.semantics.cursorMove.hasRangeSelection(context.editor)) {
+        context.semantics.contextMenu.show(context.editor.state)
+      }
     } else if (wasPending) {
-      // TODO(editor-parity): legacy shows the selection context menu when a double tap selects a
-      // range but never crosses the drag threshold. KMP does not host that menu state yet.
+      if (context.semantics.cursorMove.hasRangeSelection(context.editor)) {
+        context.semantics.contextMenu.show(context.editor.state)
+      }
     }
+    context.semantics.magnifier.hide()
     return wasActive
   }
 
@@ -110,6 +93,9 @@ internal class EditorDoubleTapDragGesture {
     context.semantics.selectionExpansion.markWordSelectionCommitted()
     flushPendingSelectionExtension(context = context)
     if (!tap.hasActivePointer && !active) {
+      if (context.semantics.cursorMove.hasRangeSelection(context.editor)) {
+        context.semantics.contextMenu.show(context.editor.state)
+      }
       resetSelectionExtensionState(context = context)
     }
   }
@@ -121,35 +107,61 @@ internal class EditorDoubleTapDragGesture {
   }
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
+    context.effects.setScrollGestureLocked(false)
     resetSelectionExtensionState(context = context)
     reset()
   }
 
+  fun reset() {
+    pendingSelectionExtensionPosition = null
+    stop()
+  }
+
+  private fun canStart(position: Offset): Boolean {
+    val startPosition = startPosition ?: return false
+    return pending &&
+      (position - startPosition).getDistance() >= EditorDoubleTapDragStartThresholdPx
+  }
+
   private fun start(tap: EditorTapGesture, context: EditorGestureContext): Boolean {
-    if (!context.can(EditorInteractionCommand.DoubleTapStartDrag)) {
+    if (!context.mode.canApply(EditorInteractionEvent.DoubleTapDragStart)) {
       return false
     }
-    context.cancelTapDispatch()
+    context.effects.cancelTapDispatch()
     tap.markTapDispatched()
     if (!begin()) {
       return false
     }
-    if (!context.can(EditorInteractionCommand.DoubleTapBeginSelecting)) {
+    context.reduceMode(EditorInteractionEvent.DoubleTapDragStart)
+    if (context.mode != EditorInteractionMode.DoubleTapSelecting) {
       stop()
+      context.effects.setScrollGestureLocked(false)
       return false
     }
-    context.transition(EditorInteractionEvent.DoubleTapDragStart)
     return true
+  }
+
+  private fun begin(): Boolean {
+    if (!pending) {
+      return false
+    }
+    phase = EditorDoubleTapDragPhase.Dragging
+    return true
+  }
+
+  private fun stop(): Boolean {
+    val wasActive = active
+    startPosition = null
+    phase = EditorDoubleTapDragPhase.Idle
+    return wasActive
   }
 
   private fun updateSelection(position: Offset, context: EditorGestureContext): Boolean {
     if (
-      !context.can(
-        EditorInteractionCommand.DoubleTapUpdateSelection(
-          localPosition = position,
-          dragStartPosition = startPosition,
-        )
-      )
+      context.mode.isViewportZooming ||
+        !dragging ||
+        (startPosition != null &&
+          (position - startPosition!!).getDistance() < EditorDoubleTapDragStartThresholdPx)
     ) {
       return false
     }
@@ -158,7 +170,7 @@ internal class EditorDoubleTapDragGesture {
   }
 
   private fun extendSelection(position: Offset, context: EditorGestureContext): Boolean {
-    val point = context.resolvePoint(positionInNode = position) ?: return false
+    val point = context.effects.resolvePoint(positionInNode = position) ?: return false
     val editor = context.editor
     val selectionContext = context.semantics.selectionExpansion.context(editor)
     if (selectionContext == null) {
@@ -167,18 +179,12 @@ internal class EditorDoubleTapDragGesture {
       }
       return false
     }
-    if (
-      !context.can(
-        EditorInteractionCommand.DoubleTapExtendSelection(
-          page = point.page,
-          hasSelectionContext = true,
-        )
-      )
-    ) {
+    if (point.page < 0) {
       return false
     }
     if (editor.dispatchSelectionExtension(point = point, context = selectionContext)) {
       pendingSelectionExtensionPosition = null
+      context.semantics.magnifier.show(position)
       return true
     }
     return false

@@ -20,9 +20,11 @@ import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
+import co.typie.platform.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -39,17 +41,18 @@ class EditorInteractionControllerTest {
       val fake = FakeFfiEditor()
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
 
       controller.onPointerDown(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 0L)
 
-      controller.applyEvent(EditorInteractionEvent.ViewportZoomStart)
+      controller.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
 
       assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
       assertFalse(controller.hasActivePointer)
       assertEquals(1, host.cancelTapDispatchCount)
       assertEquals(1, host.pointerCancelCount)
+      assertNull(controller.magnifierPosition)
     }
 
   @Test
@@ -57,7 +60,7 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -76,7 +79,7 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
 
       assertFalse(controller.onPointerDown(pointerId = 1L, position = Offset.Zero, nowMillis = 0L))
@@ -96,7 +99,7 @@ class EditorInteractionControllerTest {
       val fake = FakeFfiEditor(selectionHitProvider = { _, _, _ -> true })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -110,6 +113,137 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `single tap on range selection hit toggles context menu without moving cursor`() =
+    runTest(StandardTestDispatcher()) {
+      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { rangeSelection },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+      assertTrue(host.focused)
+      assertEquals(emptyList(), fake.enqueued)
+
+      host.focused = false
+      controller.onEditorFocusChanged(focused = false)
+
+      controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 1200L)
+      controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 1240L)
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+      assertTrue(host.focused)
+      assertEquals(emptyList(), fake.enqueued)
+
+      controller.onPointerDown(pointerId = 4L, position = start, nowMillis = 1700L)
+      controller.onPointerUp(pointerId = 4L, position = start, nowMillis = 1740L)
+      advanceUntilIdle()
+
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+      assertEquals(emptyList(), fake.enqueued)
+    }
+
+  @Test
+  fun `context menu hides when observed editor selection changes`() =
+    runTest(StandardTestDispatcher()) {
+      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val collapsedSelection = Selection(anchor = Position("text", 5), head = Position("text", 5))
+      var currentSelection = rangeSelection
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+
+      currentSelection = collapsedSelection
+      editor.sync {}
+
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+
+      controller.onEditorStateChanged(editor.state)
+
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `context menu hides when viewport scroll starts`() =
+    runTest(StandardTestDispatcher()) {
+      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { rangeSelection },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+
+      controller.onViewportScrollStarted()
+
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `context menu hides when editor focus is lost`() =
+    runTest(StandardTestDispatcher()) {
+      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { rangeSelection },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+
+      controller.onEditorFocusChanged(focused = false)
+
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
   fun `single tap timer requests bring into view for the committed cursor version`() =
     runTest(StandardTestDispatcher()) {
       var cursor = cursorAt(x = 1f)
@@ -118,7 +252,7 @@ class EditorInteractionControllerTest {
       editor.sync {}
       cursor = cursorAt(x = 5f)
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -149,7 +283,7 @@ class EditorInteractionControllerTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -158,8 +292,8 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
 
-      controller.applyEvent(EditorInteractionEvent.ViewportZoomStart)
-      controller.applyEvent(EditorInteractionEvent.ViewportZoomEnd)
+      controller.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
+      controller.applyModeEvent(EditorInteractionEvent.ViewportZoomEnd)
 
       assertFalse(
         controller.onPointerMove(
@@ -188,8 +322,8 @@ class EditorInteractionControllerTest {
       val controller =
         EditorInteractionController(
           editorProvider = { editor },
-          host = host,
-          semantics = viewportZoomEnabledSemantics(),
+          effects = host,
+          semantics = viewportZoomEnabledSemantics(effects = host),
         )
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
@@ -236,8 +370,8 @@ class EditorInteractionControllerTest {
       val controller =
         EditorInteractionController(
           editorProvider = { editor },
-          host = host,
-          semantics = viewportZoomEnabledSemantics(),
+          effects = host,
+          semantics = viewportZoomEnabledSemantics(effects = host),
         )
       controller.updateTapSlop(8f)
 
@@ -283,7 +417,7 @@ class EditorInteractionControllerTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -320,6 +454,41 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `pending double tap drag locks scroll gesture until pointer up`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      advanceUntilIdle()
+
+      assertTrue(host.scrollGestureLockActive)
+
+      controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
+
+      assertTrue(host.scrollGestureLockActive)
+
+      controller.onPointerUp(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 160L)
+      advanceUntilIdle()
+
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
   fun `double tap drag keeps pending extension when pointer up beats word selection commit`() =
     runTest(StandardTestDispatcher()) {
       val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
@@ -333,7 +502,7 @@ class EditorInteractionControllerTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -371,7 +540,7 @@ class EditorInteractionControllerTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -394,11 +563,329 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `android long press starts word selection and extends after fresh selection materializes`() =
+    runTest(StandardTestDispatcher()) {
+      val wordSelection = Selection(anchor = Position("word", 0), head = Position("word", 5))
+      var currentSelection = Selection(anchor = Position("old", 0), head = Position("old", 0))
+      val endpoints = selectionEndpoints()
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          selectionEndpointsProvider = { endpoints },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      assertFalse(controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L))
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      advanceUntilIdle()
+
+      assertEquals(EditorInteractionMode.LongPressWordSelecting, controller.interactionMode)
+      assertEquals(start, controller.magnifierPosition)
+      assertEquals(
+        listOf<Message>(
+          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 2)),
+          Message.Pointer(EditorPointerEvent.Up),
+        ),
+        fake.enqueued,
+      )
+
+      fake.enqueued.clear()
+      currentSelection = wordSelection
+      editor.sync {}
+
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 1L,
+          position = start + Offset(12f, -6f),
+          nowMillis = 620L,
+        )
+      )
+
+      val extend = (fake.enqueued.last() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(wordSelection, extend.initialSelection)
+      assertEquals(22f, extend.headX)
+      assertEquals(start + Offset(12f, -6f), controller.magnifierPosition)
+
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 700L))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertNull(controller.magnifierPosition)
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `android long press ending before word selection commit opens context menu after selection settles`() =
+    runTest(StandardTestDispatcher()) {
+      val wordSelection = Selection(anchor = Position("word", 0), head = Position("word", 5))
+      var currentSelection = Selection(anchor = Position("old", 0), head = Position("old", 0))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 520L))
+
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertNull(controller.magnifierPosition)
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+
+      currentSelection = wordSelection
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `pointer up before long press timer cancels pending long press`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+
+      assertFalse(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertNull(controller.magnifierPosition)
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+      assertEquals(emptyList(), fake.enqueued)
+    }
+
+  @Test
+  fun `android long press uses engine cursor hit result for cursor mode admission`() =
+    runTest(StandardTestDispatcher()) {
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 10f) },
+          cursorHitProvider = { _, _, _ -> false },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      advanceUntilIdle()
+
+      assertEquals(EditorInteractionMode.LongPressWordSelecting, controller.interactionMode)
+      assertEquals(
+        listOf<Message>(
+          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 2)),
+          Message.Pointer(EditorPointerEvent.Up),
+        ),
+        fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `ios long press keeps cursor move mode instead of word selection`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.iOS },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      advanceUntilIdle()
+
+      assertEquals(EditorInteractionMode.LongPressSelecting, controller.interactionMode)
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 1L,
+          position = start + Offset(12f, -6f),
+          nowMillis = 620L,
+        )
+      )
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(
+          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 22f, y = 14f, count = 1)),
+          Message.Pointer(EditorPointerEvent.Up),
+        ),
+        fake.enqueued,
+      )
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+    }
+
+  @Test
+  fun `cursor long press move does not queue suspend interactions per frame`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.iOS },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      repeat(3) { index ->
+        assertTrue(
+          controller.onPointerMove(
+            pointerId = 1L,
+            position = start + Offset(x = index.toFloat(), y = 0f),
+            nowMillis = 520L + index,
+          )
+        )
+      }
+
+      assertEquals(6, fake.enqueued.size)
+    }
+
+  @Test
+  fun `android long press on range selection hit is rejected`() =
+    runTest(StandardTestDispatcher()) {
+      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 10f) },
+          selectionProvider = { rangeSelection },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+
+      assertFalse(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertNull(controller.magnifierPosition)
+      assertEquals(emptyList(), fake.enqueued)
+    }
+
+  @Test
+  fun `same cursor single tap toggles context menu state`() =
+    runTest(StandardTestDispatcher()) {
+      var cursor = cursorAt(x = 10f)
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursor },
+          selectionProvider = {
+            Selection(anchor = Position("text", 0), head = Position("text", 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onTapTimer(nowMillis = 250L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 700L)
+      controller.onTapTimer(nowMillis = 950L)
+      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 1000L)
+      advanceUntilIdle()
+
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `context menu stays when observed editor cursor changes without selection change`() =
+    runTest(StandardTestDispatcher()) {
+      var cursor = cursorAt(x = 10f)
+      val collapsedSelection = Selection(anchor = Position("text", 0), head = Position("text", 0))
+      val fake =
+        FakeFfiEditor(cursorProvider = { cursor }, selectionProvider = { collapsedSelection })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onTapTimer(nowMillis = 250L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
+      advanceUntilIdle()
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+
+      cursor = cursorAt(x = 20f)
+      editor.sync {}
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+
+      controller.onEditorStateChanged(editor.state)
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
   fun `second pointer cancels pending double tap drag before it can extend selection`() =
     runTest(StandardTestDispatcher()) {
       val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -441,7 +928,7 @@ class EditorInteractionControllerTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
-      val controller = EditorInteractionController(editorProvider = { editor }, host = host)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
@@ -459,11 +946,13 @@ class EditorInteractionControllerTest {
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
     }
 
-  private class TestHost(private val scope: TestScope) : EditorInteractionControllerHost {
+  private class TestHost(private val scope: TestScope) : EditorInteractionEffects {
     var scheduledTapDispatchAtMillis: Long? = null
+    var scheduledLongPressDispatchAtMillis: Long? = null
     var cancelTapDispatchCount = 0
     var pointerCancelCount = 0
     var focused = false
+    var scrollGestureLockActive = false
     var point: PagePoint? = PagePoint(page = 0, x = 10f, y = 20f)
     val requestedBringIntoViewVersions = mutableListOf<Long>()
 
@@ -479,6 +968,18 @@ class EditorInteractionControllerTest {
       scheduledTapDispatchAtMillis = null
     }
 
+    override fun scheduleLongPressDispatch(
+      pointerId: Long,
+      position: Offset,
+      dispatchAtMillis: Long,
+    ) {
+      scheduledLongPressDispatchAtMillis = dispatchAtMillis
+    }
+
+    override fun cancelLongPressDispatch() {
+      scheduledLongPressDispatchAtMillis = null
+    }
+
     override fun launchInteraction(block: suspend () -> Unit) {
       scope.launch { block() }
     }
@@ -492,13 +993,19 @@ class EditorInteractionControllerTest {
       pointerCancelCount += 1
     }
 
+    override fun setScrollGestureLocked(locked: Boolean) {
+      scrollGestureLockActive = locked
+    }
+
     override fun requestCurrentCursorLine(version: Long) {
       requestedBringIntoViewVersions += version
     }
   }
 
   private companion object {
-    fun viewportZoomEnabledSemantics(): EditorInteractionSemantics {
+    fun viewportZoomEnabledSemantics(
+      effects: EditorInteractionEffects
+    ): EditorInteractionSemantics {
       val layoutSpec =
         EditorDocumentLayoutSpec.Paginated(
           pageWidth = 720f,
@@ -524,7 +1031,7 @@ class EditorInteractionControllerTest {
         }
       zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = 720f)
 
-      return EditorInteractionSemantics().apply {
+      return EditorInteractionSemantics(effects = effects).apply {
         viewportZoom.configure(
           EditorViewportZoomSemanticConfig(
             layoutSpec = layoutSpec,
@@ -545,6 +1052,12 @@ class EditorInteractionControllerTest {
         pageIdx = 0,
         caret = Rect(x = x, y = 0f, width = 1f, height = 12f),
         line = Rect(x = 0f, y = 0f, width = 100f, height = 12f),
+      )
+
+    fun selectionEndpoints(): SelectionEndpoints =
+      SelectionEndpoints(
+        from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
+        to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
       )
   }
 }

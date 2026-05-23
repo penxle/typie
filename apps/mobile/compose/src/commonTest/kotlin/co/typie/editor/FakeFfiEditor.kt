@@ -34,6 +34,7 @@ internal class FakeFfiEditor(
   var externalElementsProvider: () -> List<ExternalElement> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
+  var cursorHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
 ) : co.typie.editor.ffi.Editor {
   val enqueued = mutableListOf<Message>()
@@ -69,6 +70,8 @@ internal class FakeFfiEditor(
 
   override fun selectionHitTest(page: Int, x: Float, y: Float): Boolean =
     selectionHitProvider(page, x, y)
+
+  override fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = cursorHitProvider(page, x, y)
 
   override fun pointerStyle(page: Int, x: Float, y: Float, readOnly: Boolean): PointerStyle =
     PointerStyle.Default

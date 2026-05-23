@@ -8,7 +8,8 @@ import co.typie.editor.interaction.semantics.EditorSelectionExpansionSemantic
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemantic
 
 internal class EditorInteractionSemantics(
-  val cursorMove: EditorCursorMoveSemantic = EditorCursorMoveSemantic(),
+  effects: EditorInteractionEffects,
+  val cursorMove: EditorCursorMoveSemantic = EditorCursorMoveSemantic(effects = effects),
   val selectionExpansion: EditorSelectionExpansionSemantic = EditorSelectionExpansionSemantic(),
   val viewportZoom: EditorViewportZoomSemantic = EditorViewportZoomSemantic(),
   val contextMenu: EditorContextMenuSemantic = EditorContextMenuSemantic(),

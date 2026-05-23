@@ -89,3 +89,159 @@ internal sealed interface EditorInteractionEvent {
     fun dndStart(local: Boolean): EditorInteractionEvent = DndStart(local)
   }
 }
+
+internal fun EditorInteractionMode.canApply(event: EditorInteractionEvent): Boolean =
+  when (event) {
+    EditorInteractionEvent.PointerCancel -> true
+    EditorInteractionEvent.PanStart -> this == EditorInteractionMode.Idle
+    EditorInteractionEvent.PanEnd,
+    EditorInteractionEvent.PanCancel -> this == EditorInteractionMode.Panning
+    EditorInteractionEvent.LongPressStart -> this == EditorInteractionMode.Idle
+    EditorInteractionEvent.LongPressEnd -> this == EditorInteractionMode.LongPressSelecting
+    EditorInteractionEvent.LongPressWordStart -> this == EditorInteractionMode.Idle
+    EditorInteractionEvent.LongPressWordEnd -> this == EditorInteractionMode.LongPressWordSelecting
+    EditorInteractionEvent.ViewportZoomStart -> !isDndActive && !isViewportZooming
+    EditorInteractionEvent.ViewportZoomEnd -> this == EditorInteractionMode.ViewportZooming
+    EditorInteractionEvent.SelectionHandleDragStart -> !isViewportZooming && !isDndActive
+    EditorInteractionEvent.SelectionHandleDragEnd ->
+      this == EditorInteractionMode.SelectionHandleDragging
+    EditorInteractionEvent.DoubleTapDragStart -> this == EditorInteractionMode.Idle
+    EditorInteractionEvent.DoubleTapDragEnd -> this == EditorInteractionMode.DoubleTapSelecting
+    EditorInteractionEvent.TableHandleDragStart -> !isViewportZooming && !isDndActive
+    EditorInteractionEvent.TableHandleDragEnd ->
+      this == EditorInteractionMode.TableCellHandleDragging
+    EditorInteractionEvent.DndEnter -> this != EditorInteractionMode.DndLocal
+    EditorInteractionEvent.DndLeave -> this == EditorInteractionMode.DndExternal
+    EditorInteractionEvent.DndDrop,
+    EditorInteractionEvent.DndSessionEnd -> isDndActive
+    is EditorInteractionEvent.DndStart -> !isSelecting
+    EditorInteractionEvent.AuxiliaryGestureStart -> this == EditorInteractionMode.Idle
+    EditorInteractionEvent.AuxiliaryGestureUpdate -> isAuxiliaryGesture
+    EditorInteractionEvent.AuxiliaryGestureEnd -> isAuxiliaryGesture
+  }
+
+internal fun EditorInteractionMode.reduce(event: EditorInteractionEvent): EditorInteractionMode {
+  if (!canApply(event)) {
+    return this
+  }
+
+  var mode =
+    if (event == EditorInteractionEvent.PointerCancel) {
+      EditorInteractionMode.Idle
+    } else {
+      this
+    }
+
+  mode = reduceDnd(mode = mode, event = event)
+
+  if (!mode.isDndActive) {
+    mode = reduceViewportZoom(mode = mode, event = event)
+
+    if (!mode.isViewportZooming) {
+      mode = reduceAuxiliary(mode = mode, event = event)
+      mode = reduceTable(mode = mode, event = event)
+      mode = reduceSelection(mode = mode, event = event)
+      mode = reducePan(mode = mode, event = event)
+    }
+  }
+
+  return mode
+}
+
+private fun reducePan(
+  mode: EditorInteractionMode,
+  event: EditorInteractionEvent,
+): EditorInteractionMode =
+  when {
+    event == EditorInteractionEvent.PanStart && mode == EditorInteractionMode.Idle ->
+      EditorInteractionMode.Panning
+    (event == EditorInteractionEvent.PanEnd || event == EditorInteractionEvent.PanCancel) &&
+      mode == EditorInteractionMode.Panning -> EditorInteractionMode.Idle
+    else -> mode
+  }
+
+private fun reduceViewportZoom(
+  mode: EditorInteractionMode,
+  event: EditorInteractionEvent,
+): EditorInteractionMode =
+  when {
+    event == EditorInteractionEvent.ViewportZoomStart &&
+      mode != EditorInteractionMode.DndLocal &&
+      mode != EditorInteractionMode.DndExternal -> EditorInteractionMode.ViewportZooming
+    event == EditorInteractionEvent.ViewportZoomEnd &&
+      mode == EditorInteractionMode.ViewportZooming -> EditorInteractionMode.Idle
+    else -> mode
+  }
+
+private fun reduceSelection(
+  mode: EditorInteractionMode,
+  event: EditorInteractionEvent,
+): EditorInteractionMode =
+  when {
+    event == EditorInteractionEvent.SelectionHandleDragStart ->
+      EditorInteractionMode.SelectionHandleDragging
+    event == EditorInteractionEvent.SelectionHandleDragEnd &&
+      mode == EditorInteractionMode.SelectionHandleDragging -> EditorInteractionMode.Idle
+    event == EditorInteractionEvent.LongPressStart -> EditorInteractionMode.LongPressSelecting
+    event == EditorInteractionEvent.LongPressEnd &&
+      mode == EditorInteractionMode.LongPressSelecting -> EditorInteractionMode.Idle
+    event == EditorInteractionEvent.LongPressWordStart ->
+      EditorInteractionMode.LongPressWordSelecting
+    event == EditorInteractionEvent.LongPressWordEnd &&
+      mode == EditorInteractionMode.LongPressWordSelecting -> EditorInteractionMode.Idle
+    event == EditorInteractionEvent.DoubleTapDragStart -> EditorInteractionMode.DoubleTapSelecting
+    event == EditorInteractionEvent.DoubleTapDragEnd &&
+      mode == EditorInteractionMode.DoubleTapSelecting -> EditorInteractionMode.Idle
+    else -> mode
+  }
+
+private fun reduceTable(
+  mode: EditorInteractionMode,
+  event: EditorInteractionEvent,
+): EditorInteractionMode =
+  when {
+    event == EditorInteractionEvent.TableHandleDragStart ->
+      EditorInteractionMode.TableCellHandleDragging
+    event == EditorInteractionEvent.TableHandleDragEnd &&
+      mode == EditorInteractionMode.TableCellHandleDragging -> EditorInteractionMode.Idle
+    else -> mode
+  }
+
+private fun reduceAuxiliary(
+  mode: EditorInteractionMode,
+  event: EditorInteractionEvent,
+): EditorInteractionMode =
+  when (event) {
+    EditorInteractionEvent.AuxiliaryGestureStart -> EditorInteractionMode.AuxiliaryGesture
+    EditorInteractionEvent.AuxiliaryGestureUpdate -> mode
+    EditorInteractionEvent.AuxiliaryGestureEnd ->
+      if (mode == EditorInteractionMode.AuxiliaryGesture) {
+        EditorInteractionMode.Idle
+      } else {
+        mode
+      }
+    else -> mode
+  }
+
+private fun reduceDnd(
+  mode: EditorInteractionMode,
+  event: EditorInteractionEvent,
+): EditorInteractionMode =
+  when (event) {
+    is EditorInteractionEvent.DndStart -> {
+      if (mode.isSelecting) {
+        mode
+      } else if (event.local) {
+        EditorInteractionMode.DndLocal
+      } else {
+        EditorInteractionMode.DndExternal
+      }
+    }
+    EditorInteractionEvent.DndEnter ->
+      if (mode == EditorInteractionMode.DndLocal) mode else EditorInteractionMode.DndExternal
+    EditorInteractionEvent.DndLeave ->
+      if (mode == EditorInteractionMode.DndExternal) EditorInteractionMode.Idle else mode
+    EditorInteractionEvent.DndDrop,
+    EditorInteractionEvent.DndSessionEnd -> EditorInteractionMode.Idle
+    else -> mode
+  }

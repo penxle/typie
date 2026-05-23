@@ -1,6 +1,7 @@
 package co.typie.ext
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.awt.ComposeWindow
@@ -27,14 +28,22 @@ private const val FLING_SMOOTHING = 0.35
 @Composable
 fun DesktopScrollTranslation(window: ComposeWindow, content: @Composable () -> Unit) {
   val awtScale = remember(window) { window.graphicsConfiguration?.defaultTransform?.scaleX ?: 1.0 }
+  val scrollGestureLockState = remember { ScrollGestureLockState() }
 
-  DisposableEffect(window) {
-    val handler = DragToScrollHandler(window, awtScale)
+  DisposableEffect(window, scrollGestureLockState) {
+    val handler =
+      DragToScrollHandler(
+        window = window,
+        awtScale = awtScale,
+        isScrollGestureLocked = { scrollGestureLockState.isLocked },
+      )
     handler.install()
     onDispose { handler.uninstall() }
   }
 
-  content()
+  CompositionLocalProvider(LocalScrollGestureLockState provides scrollGestureLockState) {
+    content()
+  }
 }
 
 private enum class Axis {
@@ -42,7 +51,11 @@ private enum class Axis {
   HORIZONTAL,
 }
 
-private class DragToScrollHandler(private val window: ComposeWindow, private val awtScale: Double) {
+private class DragToScrollHandler(
+  private val window: ComposeWindow,
+  private val awtScale: Double,
+  private val isScrollGestureLocked: () -> Boolean,
+) {
   private var startX = 0
   private var startY = 0
   private var lastX = 0
@@ -74,7 +87,7 @@ private class DragToScrollHandler(private val window: ComposeWindow, private val
       }
 
       override fun mouseReleased(e: MouseEvent) {
-        if (scrolling && !inSystemChrome) {
+        if (scrolling && !inSystemChrome && !isScrollGestureLocked()) {
           startFling()
         }
         scrolling = false
@@ -84,7 +97,7 @@ private class DragToScrollHandler(private val window: ComposeWindow, private val
   private val motionListener =
     object : MouseMotionAdapter() {
       override fun mouseDragged(e: MouseEvent) {
-        if (inSystemChrome) return
+        if (inSystemChrome || isScrollGestureLocked()) return
 
         stopFling()
         val dx = e.x - lastX

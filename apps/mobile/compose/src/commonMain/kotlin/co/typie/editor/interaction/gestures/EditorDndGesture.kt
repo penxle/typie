@@ -1,7 +1,7 @@
 package co.typie.editor.interaction.gestures
 
-internal class EditorDndGesture {
-  fun reset() {
-    // TODO(editor-parity): port local/external DND drop-state dispatch.
-  }
+import co.typie.editor.interaction.sessions.EditorDndSession
+
+internal class EditorDndGesture(private val session: EditorDndSession = EditorDndSession()) {
+  fun reset() = session.reset()
 }

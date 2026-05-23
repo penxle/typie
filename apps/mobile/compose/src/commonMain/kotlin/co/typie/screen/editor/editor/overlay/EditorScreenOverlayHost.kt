@@ -6,12 +6,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollMode
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.scroll.EditorVisibleArea
@@ -28,7 +40,22 @@ internal fun EditorScreenOverlayHost(
   showDebugOverlay: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
-  Box(modifier = modifier.fillMaxSize()) {
+  val density = LocalDensity.current
+  val interactionController = LocalEditorInteractionScope.current.controller
+  val runtime = LocalEditorRuntime.current
+  val uiState = LocalEditorUiState.current
+  var overlayBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+  val overlayBounds = overlayBoundsInRoot
+  val editorRectInOverlay = overlayBounds?.let { bounds ->
+    uiState.editorRectInRoot()?.translate(translateX = -bounds.left, translateY = -bounds.top)
+  }
+
+  Box(
+    modifier =
+      modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+        overlayBoundsInRoot = coordinates.unclippedBoundsInRoot()
+      }
+  ) {
     EditorScrollbars(
       viewportState = viewportState,
       visibleArea = visibleArea,
@@ -57,8 +84,31 @@ internal fun EditorScreenOverlayHost(
       }
     }
 
-    // TODO(editor-parity): selection handle, magnifier, extension area 기준
-    // affordance 같은 screen/body 오버레이를 채워 넣어야 한다.
+    if (overlayBounds != null) {
+      val editor = runtime.editor
+      if (
+        editor != null &&
+          editorRectInOverlay != null &&
+          interactionController.isContextMenuVisibleFor(editor.state)
+      ) {
+        val anchor =
+          resolveContextMenuAnchor(
+            editor = editor,
+            uiState = uiState,
+            editorRectInOverlay = editorRectInOverlay,
+            density = density.density,
+          )
+        if (anchor != null) {
+          EditorSelectionContextMenuOverlay(
+            anchor = anchor,
+            overlaySize = overlayBounds.size,
+            visibleArea = visibleArea,
+          )
+        }
+      }
+    }
+
+    // TODO(editor-parity): selection handle과 drag auto-scroll affordance를 포팅해야 한다.
   }
 }
 
@@ -70,5 +120,15 @@ private fun DebugViewportLine(y: Float, color: Color) {
         .height(2.dp)
         .graphicsLayer { translationY = y.dp.toPx() }
         .background(color.copy(alpha = 0.9f))
+  )
+}
+
+private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect {
+  val position = positionInRoot()
+  return Rect(
+    left = position.x,
+    top = position.y,
+    right = position.x + size.width,
+    bottom = position.y + size.height,
   )
 }

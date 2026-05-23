@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -63,6 +64,7 @@ import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
+import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
@@ -247,6 +249,7 @@ fun EditorScreen(entityId: String) {
     val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
     val haptic = LocalHapticFeedback.current
+    val scrollGestureLockState = LocalScrollGestureLockState.current
     val layoutDirection = LocalLayoutDirection.current
     val topInset = contentPadding.calculateTopPadding()
     val startInset = contentPadding.calculateStartPadding(layoutDirection)
@@ -406,6 +409,12 @@ fun EditorScreen(entityId: String) {
         density = density,
         editorBounds = uiState.editorBoundsInContainer,
       )
+    val magnifierFocalPositionInRoot =
+      interactionScope.controller.magnifierPosition?.let { position ->
+        uiState.editorRectInRoot()?.let { editorRect ->
+          Offset(x = editorRect.left + position.x, y = editorRect.top + position.y)
+        }
+      }
     val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
     SideEffect {
       val viewportZoomConfig =
@@ -426,8 +435,10 @@ fun EditorScreen(entityId: String) {
         bringIntoViewRequests = bringIntoViewRequests,
         uiState = uiState,
         density = density,
+        scrollGestureLockState = scrollGestureLockState,
         viewportZoomConfig = viewportZoomConfig,
       )
+      interactionScope.controller.onEditorStateChanged(editorState)
     }
     val toolbarSuppressesSoftwareKeyboard = toolbarPanel?.let(::suppressSoftwareKeyboard) ?: false
     val toolbarTextInputSessionEnabled =
@@ -468,7 +479,10 @@ fun EditorScreen(entityId: String) {
         }
     }
     LaunchedEffect(uiState.focused, screenState.sceneInForeground, editor) {
-      if (!uiState.focused || !screenState.sceneInForeground || editor == null) {
+      val editorInteractionFocused =
+        uiState.focused && screenState.sceneInForeground && editor != null
+      interactionScope.controller.onEditorFocusChanged(focused = editorInteractionFocused)
+      if (!editorInteractionFocused) {
         bringIntoViewRequests.cancel()
       }
     }
@@ -485,10 +499,13 @@ fun EditorScreen(entityId: String) {
       EditorScreenLayout(
         state = screenState,
         scrollFrame = scrollFrame,
+        visibleArea = visibleArea,
+        magnifierFocalPositionInRoot = magnifierFocalPositionInRoot,
         viewportScrollableState = viewportScrollableState,
         viewportContentWidth = bodyTrackWidth,
         viewportScrollReconcileEnabled =
           uiState.focused && screenState.sceneInForeground && editor != null,
+        onViewportWheelScroll = interactionScope.controller::onViewportScrollStarted,
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {

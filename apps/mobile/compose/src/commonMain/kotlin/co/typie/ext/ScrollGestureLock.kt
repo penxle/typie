@@ -49,6 +49,13 @@ class ScrollGestureLockHandle internal constructor(private val state: ScrollGest
 
 @Composable
 internal fun ScrollGestureLockScope(content: @Composable () -> Unit) {
-  val lockState = remember { ScrollGestureLockState() }
+  val parentLockState = LocalScrollGestureLockState.current
+  val localLockState = remember { ScrollGestureLockState() }
+  val lockState =
+    if (parentLockState === DefaultScrollGestureLockState) {
+      localLockState
+    } else {
+      parentLockState
+    }
   CompositionLocalProvider(LocalScrollGestureLockState provides lockState) { content() }
 }

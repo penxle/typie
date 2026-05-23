@@ -5,10 +5,10 @@ import co.typie.editor.EditorState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorGestureContext
-import co.typie.editor.interaction.EditorInteractionCommand
-import co.typie.editor.interaction.semantics.dispatchPrimaryClick
+import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.semantics.hasRangeSelection
 import co.typie.editor.interaction.semantics.isSelectionHit
+import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
 
 private const val EditorTapDownDelayMillis = 100L
 private const val EditorTapTimerDelayMillis = 150L
@@ -31,6 +31,7 @@ internal class EditorTapGesture(
   private var ignoringUntilAllPointersUp = false
   private var lastTapTimeMillis: Long? = null
   private var lastTapPosition: Offset? = null
+  private var contextMenuVisibleAtPointerDown = false
 
   val pressedPointerCount: Int
     get() = pressedPointerIds.size
@@ -136,6 +137,7 @@ internal class EditorTapGesture(
     ignoringUntilAllPointersUp = false
     lastTapTimeMillis = null
     lastTapPosition = null
+    contextMenuVisibleAtPointerDown = false
   }
 
   private fun clearActivePointer() {
@@ -154,6 +156,17 @@ internal class EditorTapGesture(
       lastTapPosition = position
     }
   }
+
+  fun clearTapHistory() {
+    lastTapTimeMillis = null
+    lastTapPosition = null
+  }
+
+  fun captureContextMenuStateAtPointerDown(visible: Boolean) {
+    contextMenuVisibleAtPointerDown = visible
+  }
+
+  fun shouldOpenContextMenuForCurrentTap(): Boolean = !contextMenuVisibleAtPointerDown
 
   fun nextTapCount(position: Offset, nowMillis: Long): Int =
     if (isConsecutiveTap(position = position, nowMillis = nowMillis)) {
@@ -175,19 +188,19 @@ internal fun EditorTapGesture.handlePointerDown(
   position: Offset,
   nowMillis: Long,
   tapEnabled: Boolean,
-  doubleTapDrag: EditorDoubleTapDragGesture,
+  doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ): Boolean {
-  if (
-    !tapEnabled || !context.can(EditorInteractionCommand.TapDown) || isIgnoringUntilAllPointersUp
-  ) {
+  if (!tapEnabled || context.mode.isViewportZooming || isIgnoringUntilAllPointersUp) {
     return false
   }
 
   startActivePointer(pointerId = pointerId, position = position)
+  captureContextMenuStateAtPointerDown(context.semantics.contextMenu.visible)
+  context.semantics.contextMenu.hide()
   if (nextTapCount(position = position, nowMillis = nowMillis) == 2) {
     markTapDispatched()
-    context.cancelTapDispatch()
+    context.effects.cancelTapDispatch()
     dispatchTap(
       position = position,
       nowMillis = nowMillis,
@@ -201,7 +214,7 @@ internal fun EditorTapGesture.handlePointerDown(
   }
 
   markTapPending()
-  context.scheduleTapDispatch(dispatchAtMillis = nowMillis + EditorTapDispatchDelayMillis)
+  context.effects.scheduleTapDispatch(dispatchAtMillis = nowMillis + EditorTapDispatchDelayMillis)
   return false
 }
 
@@ -209,20 +222,22 @@ internal fun EditorTapGesture.trackPointerMove(
   pointerId: Long,
   position: Offset,
   context: EditorGestureContext,
-) {
+): Boolean {
   if (onPointerMove(pointerId = pointerId, position = position)) {
-    context.cancelTapDispatch()
+    context.effects.cancelTapDispatch()
+    return true
   }
+  return false
 }
 
 internal fun EditorTapGesture.handlePointerUp(
   pointerId: Long,
   position: Offset,
   nowMillis: Long,
-  doubleTapDrag: EditorDoubleTapDragGesture,
+  doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ): Boolean {
-  val canFinishTap = context.can(EditorInteractionCommand.TapUp)
+  val canFinishTap = !context.mode.isViewportZooming && !doubleTapDrag.dragging
   val shouldConsumeTap = shouldConsumePointerUp(pointerId = pointerId, canFinish = canFinishTap)
   val clickCount =
     onPointerUp(
@@ -232,7 +247,7 @@ internal fun EditorTapGesture.handlePointerUp(
       canFinish = canFinishTap,
     )
   if (!canFinishTap) {
-    context.cancelTapDispatch()
+    context.effects.cancelTapDispatch()
   }
   clickCount?.let {
     dispatchTap(
@@ -249,7 +264,7 @@ internal fun EditorTapGesture.handlePointerUp(
 
 internal fun EditorTapGesture.handleTapTimer(
   nowMillis: Long,
-  doubleTapDrag: EditorDoubleTapDragGesture,
+  doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ) {
   val position = activePosition ?: return
@@ -259,6 +274,9 @@ internal fun EditorTapGesture.handleTapTimer(
   val clickCount = nextTapCount(position = position, nowMillis = nowMillis)
   if (clickCount == 1 && isSelectionHit(position = position, context = context)) {
     markTapDispatched()
+    if (shouldOpenContextMenuForCurrentTap()) {
+      context.semantics.contextMenu.show(context.editor.state)
+    }
     return
   }
   if (clickCount == 1 && context.semantics.cursorMove.hasRangeSelection(context.editor)) {
@@ -279,39 +297,50 @@ private fun EditorTapGesture.dispatchTap(
   position: Offset,
   nowMillis: Long,
   clickCount: Int,
-  doubleTapDrag: EditorDoubleTapDragGesture,
+  doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
   beforeLaunch: () -> Unit,
 ): Boolean {
-  val point = context.resolvePoint(positionInNode = position) ?: return false
-  if (!context.can(EditorInteractionCommand.TapDispatch(page = point.page))) {
+  val point = context.effects.resolvePoint(positionInNode = position) ?: return false
+  if (context.mode.isViewportZooming || point.page < 0) {
     return false
   }
   recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
   val editor = context.editor
+  context.semantics.cursorMove.requestFocus(editor)
   if (clickCount == 1 && context.semantics.cursorMove.isSelectionHit(editor, point)) {
+    if (shouldOpenContextMenuForCurrentTap()) {
+      context.semantics.contextMenu.show(editor.state)
+    }
     return false
   }
   val previousCursor = editor.cursor
-  context.requestFocus(editor)
   beforeLaunch()
   val tap = this
-  context.launchInteraction {
-    val dispatched =
-      context.semantics.cursorMove.dispatchPrimaryClick(
-        editor = editor,
-        point = point,
-        clickCount = clickCount,
-        beforeCommit = { snapshot ->
-          if (clickCount == 1 && shouldRequestSingleTapBringIntoView(previousCursor, snapshot)) {
-            context.requestCurrentCursorLine(version = snapshot.version)
+  context.semantics.cursorMove.launchPrimaryClick(
+    editor = editor,
+    point = point,
+    clickCount = clickCount,
+    beforeCommit = { snapshot ->
+      if (clickCount == 1) {
+        if (isSameCursorTap(previousCursor, snapshot)) {
+          if (shouldOpenContextMenuForCurrentTap()) {
+            context.semantics.contextMenu.show(snapshot)
           }
-        },
-      )
-    if (dispatched && clickCount == 2) {
-      doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
-    }
-  }
+        } else {
+          context.semantics.contextMenu.hide()
+          if (snapshot.cursor != null) {
+            context.semantics.cursorMove.requestCurrentCursorLine(version = snapshot.version)
+          }
+        }
+      }
+    },
+    afterDispatch = { dispatched ->
+      if (dispatched && clickCount == 2) {
+        doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
+      }
+    },
+  )
   return true
 }
 
@@ -319,24 +348,20 @@ private fun EditorTapGesture.isSelectionHit(
   position: Offset,
   context: EditorGestureContext,
 ): Boolean {
-  val point = context.resolvePoint(positionInNode = position) ?: return true
+  val point = context.effects.resolvePoint(positionInNode = position) ?: return true
   return point.page < 0 || context.semantics.cursorMove.isSelectionHit(context.editor, point)
 }
 
-private fun shouldRequestSingleTapBringIntoView(
-  previousCursor: CursorMetrics?,
-  nextState: EditorState,
-): Boolean {
+private fun isSameCursorTap(previousCursor: CursorMetrics?, nextState: EditorState): Boolean {
   val nextCursor = nextState.cursor ?: return false
   if (
     nextState.selection.isCollapsed() &&
       previousCursor != null &&
       nextCursor.isSamePosition(previousCursor)
   ) {
-    // TODO(editor-parity): same-cursor single tap should open the context menu slot.
-    return false
+    return true
   }
-  return true
+  return false
 }
 
 private fun Selection?.isCollapsed(): Boolean = this == null || anchor == head

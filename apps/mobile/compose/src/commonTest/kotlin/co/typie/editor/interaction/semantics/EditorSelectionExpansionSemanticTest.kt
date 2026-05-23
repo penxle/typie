@@ -168,4 +168,35 @@ class EditorSelectionExpansionSemanticTest {
 
       assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.initialSelection)
     }
+
+  @Test
+  fun `word selection context waits until current selection differs from baseline`() =
+    runTest(StandardTestDispatcher()) {
+      val staleSelection = Selection(anchor = Position("old", 0), head = Position("old", 5))
+      val wordSelection = Selection(anchor = Position("word", 0), head = Position("word", 4))
+      var currentSelection = staleSelection
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          selectionEndpointsProvider = { endpoints },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val selectionExpansionSemantic = EditorSelectionExpansionSemantic()
+
+      editor.sync {}
+      selectionExpansionSemantic.awaitWordSelectionCommit(baselineSelection = staleSelection)
+      selectionExpansionSemantic.markWordSelectionCommitted()
+
+      assertNull(selectionExpansionSemantic.context(editor))
+
+      currentSelection = wordSelection
+      editor.sync {}
+
+      assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.initialSelection)
+    }
 }

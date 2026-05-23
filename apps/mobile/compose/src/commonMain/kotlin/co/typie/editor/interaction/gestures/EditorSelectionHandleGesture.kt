@@ -1,10 +1,15 @@
 package co.typie.editor.interaction.gestures
 
-internal class EditorSelectionHandleGesture {
-  val pendingDrag: Boolean = false
-  val activeDrag: Boolean = false
+import co.typie.editor.interaction.sessions.EditorSelectionHandleDragSession
 
-  fun reset() {
-    // TODO(editor-parity): port selection-handle drag state after handle geometry exists.
-  }
+internal class EditorSelectionHandleGesture(
+  private val session: EditorSelectionHandleDragSession = EditorSelectionHandleDragSession()
+) {
+  val pendingDrag: Boolean
+    get() = session.pendingDrag
+
+  val activeDrag: Boolean
+    get() = session.activeDrag
+
+  fun reset() = session.reset()
 }

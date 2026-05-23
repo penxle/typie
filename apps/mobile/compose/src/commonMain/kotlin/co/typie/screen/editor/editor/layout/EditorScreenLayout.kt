@@ -9,10 +9,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -21,7 +25,10 @@ import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -37,6 +44,8 @@ import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportWheelPan
 import co.typie.navigation.navigationPopNestedScroll
+import co.typie.screen.editor.editor.overlay.editorMagnifier
+import co.typie.screen.editor.editor.overlay.resolveEditorMagnifierPlacement
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
@@ -54,9 +63,12 @@ private enum class EditorScreenLayoutSlot {
 internal fun EditorScreenLayout(
   state: EditorScreenState,
   scrollFrame: EditorScrollFrame,
+  visibleArea: EditorVisibleArea,
+  magnifierFocalPositionInRoot: Offset? = null,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
   viewportScrollReconcileEnabled: Boolean,
+  onViewportWheelScroll: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
@@ -69,12 +81,29 @@ internal fun EditorScreenLayout(
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val toolbarBackdropHazeState = LocalHazeState.current
   val scrollReconcileState = remember { EditorViewportScrollReconcileState() }
+  var layoutBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+  val magnifierPlacement = layoutBoundsInRoot?.let { bounds ->
+    val focalPositionInRoot = magnifierFocalPositionInRoot ?: return@let null
+    resolveEditorMagnifierPlacement(
+      focalPosition =
+        Offset(x = focalPositionInRoot.x - bounds.left, y = focalPositionInRoot.y - bounds.top),
+      overlaySize = bounds.size,
+      visibleArea = visibleArea,
+      density = density.density,
+    )
+  }
   val resolveSize: (Int, Int) -> Size =
     remember(density) {
       { width, height -> Size(width = width / density.density, height = height / density.density) }
     }
 
-  SubcomposeLayout(modifier = modifier.fillMaxSize()) { constraints ->
+  SubcomposeLayout(
+    modifier =
+      modifier.fillMaxSize().editorMagnifier(magnifierPlacement).onGloballyPositioned { coordinates
+        ->
+        layoutBoundsInRoot = coordinates.unclippedBoundsInRoot()
+      }
+  ) { constraints ->
     val viewportWidth = constraints.maxWidth / density.density
     val resolvedContentWidth =
       resolveEditorViewportContentWidth(
@@ -102,7 +131,10 @@ internal fun EditorScreenLayout(
                 .hazeSource(toolbarBackdropHazeState)
                 .navigationPopNestedScroll()
                 .scrollable2D(state = viewportScrollableState)
-                .editorViewportWheelScroll(state.viewportState),
+                .editorViewportWheelScroll(
+                  viewportState = state.viewportState,
+                  onScrollConsumed = onViewportWheelScroll,
+                ),
             content = {
               Column {
                 Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
@@ -214,6 +246,16 @@ internal fun EditorScreenLayout(
   }
 }
 
+private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect {
+  val position = positionInRoot()
+  return Rect(
+    left = position.x,
+    top = position.y,
+    right = position.x + size.width,
+    bottom = position.y + size.height,
+  )
+}
+
 internal class EditorViewportScrollReconcileState {
   private var lastObservedFrame: EditorViewportScrollReconcileFrame? = null
 
@@ -308,8 +350,11 @@ internal fun resolveEditorViewportContentConstraints(
   )
 }
 
-private fun Modifier.editorViewportWheelScroll(viewportState: EditorViewportState): Modifier =
-  pointerInput(viewportState) {
+private fun Modifier.editorViewportWheelScroll(
+  viewportState: EditorViewportState,
+  onScrollConsumed: () -> Unit,
+): Modifier =
+  pointerInput(viewportState, onScrollConsumed) {
     awaitPointerEventScope {
       while (true) {
         val event = awaitPointerEvent(PointerEventPass.Main)
@@ -339,6 +384,7 @@ private fun Modifier.editorViewportWheelScroll(viewportState: EditorViewportStat
           consumeEditorViewportWheelPan(viewportState = viewportState, scrollDelta = scrollDelta)
         viewportState.updateScrollableInteractionInProgress(false)
         if (consumed != Offset.Zero) {
+          onScrollConsumed()
           event.changes.forEach { it.consume() }
         }
       }

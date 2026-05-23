@@ -309,6 +309,8 @@ internal constructor(
 
   fun selectionHitTest(page: Int, x: Float, y: Float): Boolean = inner.selectionHitTest(page, x, y)
 
+  fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = inner.cursorHitTest(page, x, y)
+
   fun selectionEndpoints(): SelectionEndpoints? = inner.selectionEndpoints()
 
   internal suspend fun collectLocalChangesets(

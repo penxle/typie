@@ -6,30 +6,38 @@ import co.typie.editor.Editor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
+import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.ext.ScrollGestureLockHandle
+import co.typie.ext.ScrollGestureLockState
+import co.typie.platform.PlatformModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal class EditorInteractionScope(private val coroutineScope: CoroutineScope) :
-  EditorInteractionControllerHost {
+  EditorInteractionEffects {
   private var editor: Editor? = null
   private var bringIntoViewRequests: EditorBringIntoViewRequests? = null
   private var uiState: EditorUiState? = null
   private var density: Float = 0f
   private var tapDispatchJob: Job? = null
-  private val semantics = EditorInteractionSemantics()
+  private var longPressDispatchJob: Job? = null
+  private var scrollGestureLockState: ScrollGestureLockState? = null
+  private var scrollGestureLockHandle: ScrollGestureLockHandle? = null
+  private val semantics = EditorInteractionSemantics(effects = this)
 
   val controller: EditorInteractionController =
     EditorInteractionController(
       editorProvider = { checkNotNull(editor) { "Editor interaction scope has no editor" } },
-      host = this,
+      effects = this,
       semantics = semantics,
+      platformProvider = { PlatformModule.platform },
     )
 
   fun update(
@@ -37,23 +45,25 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     bringIntoViewRequests: EditorBringIntoViewRequests,
     uiState: EditorUiState,
     density: Float,
+    scrollGestureLockState: ScrollGestureLockState,
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
   ) {
     this.editor = editor
     this.bringIntoViewRequests = bringIntoViewRequests
     this.uiState = uiState
     this.density = density
+    this.scrollGestureLockState = scrollGestureLockState
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
 
   fun beginPointerSignalZoom(): Boolean {
-    if (!controller.can(EditorInteractionCommand.ViewportZoomStart)) {
+    if (!controller.canApplyModeEvent(EditorInteractionEvent.ViewportZoomStart)) {
       return false
     }
     if (!semantics.viewportZoom.beginPointerSignal()) {
       return false
     }
-    controller.applyEvent(EditorInteractionEvent.ViewportZoomStart)
+    controller.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
     return true
   }
 
@@ -65,16 +75,19 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
 
   fun endPointerSignalZoom() {
     semantics.viewportZoom.end()
-    controller.applyEvent(EditorInteractionEvent.ViewportZoomEnd)
+    controller.applyModeEvent(EditorInteractionEvent.ViewportZoomEnd)
   }
 
   fun reset() {
     cancelTapDispatch()
+    cancelLongPressDispatch()
     controller.reset()
+    releaseScrollGestureLock()
     editor = null
     bringIntoViewRequests = null
     uiState = null
     density = 0f
+    scrollGestureLockState = null
   }
 
   override fun resolvePoint(positionInNode: Offset): PagePoint? {
@@ -108,6 +121,31 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     tapDispatchJob = null
   }
 
+  override fun scheduleLongPressDispatch(
+    pointerId: Long,
+    position: Offset,
+    dispatchAtMillis: Long,
+  ) {
+    longPressDispatchJob?.cancel()
+    longPressDispatchJob = coroutineScope.launch {
+      try {
+        delay(EditorLongPressDispatchDelayMillis)
+        controller.onLongPressTimer(
+          pointerId = pointerId,
+          position = position,
+          nowMillis = dispatchAtMillis,
+        )
+      } finally {
+        longPressDispatchJob = null
+      }
+    }
+  }
+
+  override fun cancelLongPressDispatch() {
+    longPressDispatchJob?.cancel()
+    longPressDispatchJob = null
+  }
+
   override fun launchInteraction(block: suspend () -> Unit) {
     coroutineScope.launch { block() }
   }
@@ -118,11 +156,26 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     editor?.enqueue(Message.Pointer(EditorPointerEvent.Cancel))
   }
 
+  override fun setScrollGestureLocked(locked: Boolean) {
+    if (locked) {
+      if (scrollGestureLockHandle == null) {
+        scrollGestureLockHandle = scrollGestureLockState?.acquire()
+      }
+    } else {
+      releaseScrollGestureLock()
+    }
+  }
+
   override fun requestCurrentCursorLine(version: Long) {
     bringIntoViewRequests?.requestForVersion(
       target = EditorBringIntoViewTarget.CurrentCursorLine,
       version = version,
     )
+  }
+
+  private fun releaseScrollGestureLock() {
+    scrollGestureLockHandle?.release()
+    scrollGestureLockHandle = null
   }
 }
 
