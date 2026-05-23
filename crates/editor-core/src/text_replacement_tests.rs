@@ -2,6 +2,7 @@ use editor_common::{Direction, Movement};
 use editor_macros::state;
 use editor_resource::RawTextReplacementRule;
 use editor_state::{Composition, DocFlatExt, assert_state_eq};
+use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::message::*;
@@ -264,9 +265,12 @@ fn cursor_movement_invalidates_restore() {
     // In tests, view-based movement (move_grapheme) is a no-op because the view
     // has no layout. Push a SetSelection step directly so history reflects that
     // the user moved the cursor, exactly as navigation would in production.
+    // Navigation uses HistoryMeta::Skip so that selection-only moves are not
+    // undoable and also clear the last_tag (preventing shortcut restore).
     let sel = editor.state().selection;
     editor
         .transact(|tr| {
+            tr.update_meta(|m| m.history = HistoryMeta::Skip);
             tr.set_selection(sel)?;
             Ok(())
         })

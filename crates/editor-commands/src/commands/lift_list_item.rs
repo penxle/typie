@@ -7,7 +7,9 @@ use crate::helpers::{
 use crate::{CommandError, CommandResult};
 
 pub fn lift_list_item(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     let doc = tr.doc();
 
     if selection.is_collapsed() {

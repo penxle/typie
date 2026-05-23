@@ -35,11 +35,13 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
             })
         }
         CompositionOp::Cancel => editor.transact(|tr| {
-            let is_gap = tr
-                .selection()
-                .resolve(&tr.doc())
-                .and_then(|rs| rs.as_gap_cursor())
-                .is_some();
+            let is_gap = {
+                let doc = tr.doc();
+                tr.selection()
+                    .and_then(|s| s.resolve(&doc))
+                    .and_then(|rs| rs.as_gap_cursor())
+                    .is_some()
+            };
             if !is_gap
                 && let Some(comp) = tr.composition().copied()
                 && composition_range_valid(&tr.doc(), comp.start, comp.end)
@@ -53,11 +55,13 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
             text,
             replace_length,
         } => editor.transact(|tr| {
-            let is_gap = tr
-                .selection()
-                .resolve(&tr.doc())
-                .and_then(|rs| rs.as_gap_cursor())
-                .is_some();
+            let is_gap = {
+                let doc = tr.doc();
+                tr.selection()
+                    .and_then(|s| s.resolve(&doc))
+                    .and_then(|rs| rs.as_gap_cursor())
+                    .is_some()
+            };
             if is_gap {
                 if text.is_empty() {
                     return Ok(());
@@ -76,11 +80,13 @@ pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(
         }),
         CompositionOp::Commit { text } => {
             editor.transact(|tr| {
-                let is_gap = tr
-                    .selection()
-                    .resolve(&tr.doc())
-                    .and_then(|rs| rs.as_gap_cursor())
-                    .is_some();
+                let is_gap = {
+                    let doc = tr.doc();
+                    tr.selection()
+                        .and_then(|s| s.resolve(&doc))
+                        .and_then(|rs| rs.as_gap_cursor())
+                        .is_some()
+                };
                 if is_gap {
                     if text.is_empty() {
                         return Ok(());
@@ -133,7 +139,10 @@ fn apply_replacement_modifiers(
         return Ok(true);
     };
 
-    let base_modifiers = resolve_effective_modifiers_at(tr.state(), &tr.selection().head);
+    let Some(selection) = tr.selection() else {
+        return Ok(true);
+    };
+    let base_modifiers = resolve_effective_modifiers_at(tr.state(), &selection.head);
     let pending = PendingModifier::diff(&base_modifiers, target_modifiers);
     tr.set_pending_modifiers(pending)?;
     Ok(true)
@@ -207,7 +216,9 @@ fn resolve_target(
         tr.set_composition(None)?;
     }
 
-    let sel = tr.selection();
+    let sel = tr
+        .selection()
+        .ok_or(CommandError::Corrupted("no selection".into()))?;
 
     if !sel.is_collapsed() {
         let anchor_flat = sel
@@ -268,8 +279,9 @@ impl FlatImeState {
         let flat_size = doc.flat_size();
         let text: Vec<char> = doc.flat_text(0..flat_size).chars().collect();
 
-        let anchor = state.selection.anchor.resolve(doc)?.to_flat();
-        let head = state.selection.head.resolve(doc)?.to_flat();
+        let selection = state.selection?;
+        let anchor = selection.anchor.resolve(doc)?.to_flat();
+        let head = selection.head.resolve(doc)?.to_flat();
 
         let comp = state.composition.map(|c| (c.start, c.end));
 
@@ -465,7 +477,8 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
         && editor
             .state
             .selection
-            .resolve(&editor.state.doc)
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
             .and_then(|rs| rs.as_gap_cursor())
             .is_some()
     {

@@ -132,8 +132,11 @@ fn set_node_and_selection_combined() {
     // Move selection
     let new_sel = Selection::collapsed(Position::new(t1, 5));
     let set_sel = Step::SetSelection {
-        old: StableSelection::freeze(&state2.selection, &state2.doc),
-        new: StableSelection::freeze(&new_sel, &state2.doc),
+        old: state2
+            .selection
+            .as_ref()
+            .map(|s| StableSelection::freeze(s, &state2.doc)),
+        new: Some(StableSelection::freeze(&new_sel, &state2.doc)),
     };
     let state3 = set_sel.apply(&state2).unwrap().state;
 

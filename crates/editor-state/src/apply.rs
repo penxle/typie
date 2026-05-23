@@ -23,9 +23,8 @@ impl<'a> BatchedState<'a> {
         Ok(op)
     }
 
-    pub fn set_selection(&mut self, selection: Selection) {
-        let normalized = selection.normalize(&self.inner.doc).unwrap_or(selection);
-        self.inner.selection = normalized;
+    pub fn set_selection(&mut self, selection: Option<Selection>) {
+        self.inner.selection = selection.map(|sel| sel.normalize(&self.inner.doc).unwrap_or(sel));
     }
 
     pub fn set_pending_modifiers(&mut self, pending: PendingModifiers) {
@@ -178,7 +177,7 @@ mod tests {
         let plain = PlainDoc { nodes };
         let (doc, op_graph) = Doc::from_plain(plain);
         let sel = Selection::collapsed(Position::new(root_id, 0));
-        State::new(doc, op_graph, sel)
+        State::new(doc, op_graph, Some(sel))
     }
 
     #[test]
@@ -647,14 +646,15 @@ mod tests {
             affinity: Affinity::Downstream,
         });
         let result: Result<State, StateError> = state.batch(|b| {
-            b.set_selection(input);
+            b.set_selection(Some(input));
             Ok(())
         });
         let next = result.unwrap();
-        assert_eq!(next.selection.anchor.node_id, tb);
-        assert_eq!(next.selection.anchor.offset, 0);
-        assert_eq!(next.selection.anchor.affinity, Affinity::Downstream);
-        assert!(next.selection.is_collapsed());
+        let sel = next.selection.as_ref().unwrap();
+        assert_eq!(sel.anchor.node_id, tb);
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.anchor.affinity, Affinity::Downstream);
+        assert!(sel.is_collapsed());
     }
 
     #[test]
@@ -668,10 +668,67 @@ mod tests {
 
         let bad = Selection::collapsed(Position::new(t, 99));
         let result: Result<State, StateError> = state.batch(|b| {
-            b.set_selection(bad);
+            b.set_selection(Some(bad));
             Ok(())
         });
         let next = result.unwrap();
-        assert_eq!(next.selection.anchor.offset, 99);
+        assert_eq!(next.selection.as_ref().unwrap().anchor.offset, 99);
+    }
+
+    #[test]
+    fn state_new_accepts_none_selection() {
+        let root_id = NodeId::new();
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            root_id,
+            PlainNodeEntry {
+                parent: None,
+                children: vec![],
+                modifiers: BTreeMap::new(),
+                node: PlainNode::Root(PlainRootNode::default()),
+            },
+        );
+        let plain = PlainDoc { nodes };
+        let (doc, op_graph) = Doc::from_plain(plain);
+        let state = State::new(doc, op_graph, None);
+        assert!(state.selection.is_none());
+    }
+
+    #[test]
+    fn batched_set_selection_none_clears_selection() {
+        let state = rooted_state();
+        let next: State = state
+            .batch(|b| {
+                b.set_selection(None);
+                Ok::<_, StateError>(())
+            })
+            .unwrap();
+        assert!(next.selection.is_none());
+    }
+
+    #[test]
+    fn batched_set_selection_none_does_not_touch_composition_or_pending() {
+        use crate::{Composition, PendingModifier, PendingModifiers};
+
+        let state = rooted_state();
+        let next: State = state
+            .batch(|b| {
+                b.set_composition(Some(Composition { start: 1, end: 3 }));
+                b.set_pending_modifiers(PendingModifiers::from([PendingModifier::Set {
+                    modifier: editor_model::Modifier::Bold,
+                }]));
+                b.set_selection(None);
+                Ok::<_, StateError>(())
+            })
+            .unwrap();
+        assert!(next.selection.is_none());
+        assert!(
+            next.composition.is_some(),
+            "set_selection(None) must not touch composition"
+        );
+        assert!(
+            !next.pending_modifiers.is_empty(),
+            "set_selection(None) must not touch pending_modifiers"
+        );
     }
 }

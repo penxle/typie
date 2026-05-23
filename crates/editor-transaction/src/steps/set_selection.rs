@@ -2,17 +2,17 @@ use editor_state::{BatchedState, StableSelection};
 
 use crate::{Step, StepError, Validation};
 
-pub(crate) fn inverse(old: StableSelection, new: StableSelection) -> Step {
+pub(crate) fn inverse(old: Option<StableSelection>, new: Option<StableSelection>) -> Step {
     Step::SetSelection { old: new, new: old }
 }
 
 pub(crate) fn apply_to(
     batched: &mut BatchedState,
     _validations: &mut Vec<Validation>,
-    _old: StableSelection,
-    new: StableSelection,
+    _old: Option<StableSelection>,
+    new: Option<StableSelection>,
 ) -> Result<(), StepError> {
-    let live = new.thaw(&batched.doc);
+    let live = new.map(|s| s.thaw(&batched.doc));
     batched.set_selection(live);
     Ok(())
 }
@@ -39,12 +39,15 @@ mod tests {
 
         let new_live = Selection::collapsed(Position::new(t1, 3));
         let step = Step::SetSelection {
-            old: StableSelection::freeze(&s.selection, &s.doc),
-            new: StableSelection::freeze(&new_live, &s.doc),
+            old: s
+                .selection
+                .as_ref()
+                .map(|sel| StableSelection::freeze(sel, &s.doc)),
+            new: Some(StableSelection::freeze(&new_live, &s.doc)),
         };
         let output = step.apply(&s).unwrap();
 
-        assert_eq!(output.state.selection, new_live);
+        assert_eq!(output.state.selection, Some(new_live));
     }
 
     #[test]
@@ -60,15 +63,15 @@ mod tests {
             selection: (t1, 0)
         };
 
-        let original_live = s.selection;
+        let original_live = s.selection.expect("fixture has selection");
         let new_live = Selection::collapsed(Position::new(t1, 3));
         let step = Step::SetSelection {
-            old: StableSelection::freeze(&original_live, &s.doc),
-            new: StableSelection::freeze(&new_live, &s.doc),
+            old: Some(StableSelection::freeze(&original_live, &s.doc)),
+            new: Some(StableSelection::freeze(&new_live, &s.doc)),
         };
         let s2 = step.apply(&s).unwrap().state;
         let s3 = step.inverse().apply(&s2).unwrap().state;
 
-        assert_eq!(s3.selection, original_live);
+        assert_eq!(s3.selection, Some(original_live));
     }
 }

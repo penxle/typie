@@ -5,7 +5,9 @@ use editor_transaction::Transaction;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -33,11 +35,11 @@ pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
             }
 
             tr.remove_subtree(next.id())?;
-            tr.set_selection(Selection::collapsed(Position {
+            tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: pos.node_id,
                 offset: pos.offset,
                 affinity: Affinity::Upstream,
-            }))?;
+            })))?;
         }
         _ => {
             let children_len = node.entry().children.len();
@@ -65,11 +67,11 @@ pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
             }
 
             tr.remove_subtree(child_id)?;
-            tr.set_selection(Selection::collapsed(Position {
+            tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: pos.node_id,
                 offset: pos.offset,
                 affinity: Affinity::Downstream,
-            }))?;
+            })))?;
         }
     }
 

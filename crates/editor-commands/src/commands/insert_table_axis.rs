@@ -45,7 +45,7 @@ pub fn insert_table_axis(
                 cell.first_cursor_position()
                     .ok_or_else(|| CommandError::Corrupted("cell has no cursor position".into()))?
             };
-            tr.set_selection(Selection::collapsed(pos))?;
+            tr.set_selection(Some(Selection::collapsed(pos)))?;
         }
         Axis::Vertical => {
             let row_ids: Vec<NodeId> = {
@@ -76,7 +76,7 @@ pub fn insert_table_axis(
                 cell.first_cursor_position()
                     .ok_or_else(|| CommandError::Corrupted("cell has no cursor position".into()))?
             };
-            tr.set_selection(Selection::collapsed(pos))?;
+            tr.set_selection(Some(Selection::collapsed(pos)))?;
         }
     }
     Ok(true)

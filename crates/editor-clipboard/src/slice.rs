@@ -19,7 +19,7 @@ pub struct Slice {
 
 impl Slice {
     pub fn extract(state: &State) -> Option<Slice> {
-        let rs = state.selection.resolve(&state.doc)?;
+        let rs = state.selection.as_ref()?.resolve(&state.doc)?;
         if rs.is_collapsed() {
             return None;
         }
@@ -150,6 +150,15 @@ mod tests {
         let (s, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
+        };
+        assert!(Slice::extract(&s).is_none());
+    }
+
+    #[test]
+    fn extract_no_selection_returns_none() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: none
         };
         assert!(Slice::extract(&s).is_none());
     }

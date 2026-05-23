@@ -13,7 +13,10 @@ pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> Comman
     if tr.composition().is_some() {
         return Ok(false);
     }
-    if !tr.selection().is_collapsed() {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+    if !selection.is_collapsed() {
         return Ok(false);
     }
 
@@ -202,7 +205,7 @@ fn offset_len_for_text(text: &str) -> usize {
 }
 
 fn get_text_before_cursor(tr: &Transaction) -> Option<(NodeId, String)> {
-    let selection = tr.selection();
+    let selection = tr.selection()?;
     if !selection.is_collapsed() {
         return None;
     }
@@ -247,7 +250,7 @@ fn get_text_before_cursor(tr: &Transaction) -> Option<(NodeId, String)> {
 }
 
 fn delete_one_backward(tr: &mut Transaction) -> CommandResult {
-    let sel = tr.selection();
+    let sel = tr.selection().expect("entry caller guaranteed selection");
     let head = sel.head;
     let doc = tr.doc();
     let node = doc
@@ -260,10 +263,10 @@ fn delete_one_backward(tr: &mut Transaction) -> CommandResult {
     if head.offset > 0 {
         let new_offset = head.offset - 1;
         tr.remove_text(head.node_id, new_offset, 1)?;
-        tr.set_selection(Selection::collapsed(Position::new(
+        tr.set_selection(Some(Selection::collapsed(Position::new(
             head.node_id,
             new_offset,
-        )))?;
+        ))))?;
         return Ok(true);
     }
 
@@ -287,10 +290,10 @@ fn delete_one_backward(tr: &mut Transaction) -> CommandResult {
         if current_is_empty {
             tr.remove_subtree(current_text_id)?;
         }
-        tr.set_selection(Selection::collapsed(Position::new(
+        tr.set_selection(Some(Selection::collapsed(Position::new(
             target_id,
             target_offset,
-        )))?;
+        ))))?;
     }
     Ok(true)
 }
@@ -299,7 +302,7 @@ fn insert_text_at_cursor(tr: &mut Transaction, text: &str) -> CommandResult {
     if text.is_empty() {
         return Ok(false);
     }
-    let sel = tr.selection();
+    let sel = tr.selection().expect("entry caller guaranteed selection");
     let head = sel.head;
     let doc = tr.doc();
     let node = doc
@@ -323,15 +326,15 @@ fn insert_text_at_cursor(tr: &mut Transaction, text: &str) -> CommandResult {
     let insert_len = text.chars().count();
     tr.insert_text(text_node_id, start_offset, text)?;
     let new_offset = start_offset + insert_len;
-    tr.set_selection(Selection::collapsed(Position::new(
+    tr.set_selection(Some(Selection::collapsed(Position::new(
         text_node_id,
         new_offset,
-    )))?;
+    ))))?;
     Ok(true)
 }
 
 fn insert_hard_break(tr: &mut Transaction) -> CommandResult {
-    let sel = tr.selection();
+    let sel = tr.selection().expect("entry caller guaranteed selection");
     let head = sel.head;
 
     let (node_id, text_node_exists, text_len) = {
@@ -367,7 +370,7 @@ fn insert_hard_break(tr: &mut Transaction) -> CommandResult {
         let hb_pos = head.offset;
         if hb_pos == 0 {
             tr.insert_subtree(parent_id, node_index, break_subtree)?;
-            tr.set_selection(Selection::collapsed(Position::new(node_id, 0)))?;
+            tr.set_selection(Some(Selection::collapsed(Position::new(node_id, 0))))?;
         } else if hb_pos == text_len {
             tr.insert_subtree(parent_id, node_index + 1, break_subtree)?;
             let doc = tr.doc();
@@ -376,34 +379,34 @@ fn insert_hard_break(tr: &mut Transaction) -> CommandResult {
                 .ok_or(CommandError::NodeNotFound(break_id))?;
             if let Some(next) = break_node.next_sibling() {
                 if matches!(next.node(), Node::Text(_)) {
-                    tr.set_selection(Selection::collapsed(Position::new(next.id(), 0)))?;
+                    tr.set_selection(Some(Selection::collapsed(Position::new(next.id(), 0))))?;
                 } else {
                     let idx = next
                         .index()
                         .ok_or(CommandError::orphan_child(next.id(), parent_id))?;
-                    tr.set_selection(Selection::collapsed(Position::new(parent_id, idx)))?;
+                    tr.set_selection(Some(Selection::collapsed(Position::new(parent_id, idx))))?;
                 }
             } else {
                 let break_idx = break_node
                     .index()
                     .ok_or(CommandError::orphan_child(break_id, parent_id))?;
-                tr.set_selection(Selection::collapsed(Position::new(
+                tr.set_selection(Some(Selection::collapsed(Position::new(
                     parent_id,
                     break_idx + 1,
-                )))?;
+                ))))?;
             }
         } else {
             let split_id = NodeId::new();
             tr.split_node(node_id, hb_pos, split_id)?;
             tr.insert_subtree(parent_id, node_index + 1, break_subtree)?;
-            tr.set_selection(Selection::collapsed(Position::new(split_id, 0)))?;
+            tr.set_selection(Some(Selection::collapsed(Position::new(split_id, 0))))?;
         }
     } else {
         tr.insert_subtree(node_id, head.offset, break_subtree)?;
-        tr.set_selection(Selection::collapsed(Position::new(
+        tr.set_selection(Some(Selection::collapsed(Position::new(
             node_id,
             head.offset + 1,
-        )))?;
+        ))))?;
     }
     Ok(true)
 }

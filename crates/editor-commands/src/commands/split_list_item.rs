@@ -6,7 +6,9 @@ use crate::helpers::find_enclosing_list_item_id;
 use crate::{CommandError, CommandResult};
 
 pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -127,7 +129,7 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
             affinity: Affinity::Downstream,
         },
     };
-    tr.set_selection(Selection::collapsed(cursor_pos))?;
+    tr.set_selection(Some(Selection::collapsed(cursor_pos)))?;
 
     Ok(true)
 }

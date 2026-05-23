@@ -31,14 +31,15 @@ pub fn generate(input: &StateInput) -> TokenStream {
 
 fn gen_selection(sel: &SelectionExpr) -> TokenStream {
     match sel {
+        SelectionExpr::None => quote! { None },
         SelectionExpr::Collapsed(pos) => {
             let pos_expr = gen_position(pos);
-            quote! { Selection::collapsed(#pos_expr) }
+            quote! { Some(Selection::collapsed(#pos_expr)) }
         }
         SelectionExpr::Range(anchor, head) => {
             let anchor_expr = gen_position(anchor);
             let head_expr = gen_position(head);
-            quote! { Selection::new(#anchor_expr, #head_expr) }
+            quote! { Some(Selection::new(#anchor_expr, #head_expr)) }
         }
     }
 }

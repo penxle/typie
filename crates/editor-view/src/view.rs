@@ -382,9 +382,16 @@ impl View {
         self.layout.as_ref().map_or(&[], |r| &r.pages)
     }
 
-    pub fn external_elements(&self, doc: &Doc, selection: &Selection) -> Vec<ExternalElement> {
+    pub fn external_elements(
+        &self,
+        doc: &Doc,
+        selection: Option<&Selection>,
+    ) -> Vec<ExternalElement> {
+        let Some(selection) = selection else {
+            return Vec::new();
+        };
         let Some(ref result) = self.layout else {
-            return vec![];
+            return Vec::new();
         };
         crate::external::external_elements(&result.tree, &result.pages, doc, selection)
     }

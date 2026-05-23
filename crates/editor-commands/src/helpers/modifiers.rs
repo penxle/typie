@@ -225,7 +225,10 @@ mod tests {
     use super::*;
 
     fn node_at(state: &editor_state::State) -> NodeRef<'_> {
-        state.doc.node(state.selection.head.node_id).unwrap()
+        state
+            .doc
+            .node(state.selection.as_ref().unwrap().head.node_id)
+            .unwrap()
     }
 
     #[test]
@@ -463,7 +466,12 @@ mod tests {
             } }
             selection: (t1, 2) -> (t2, 3)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let ids: Vec<_> =
             collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::LineHeight)
                 .into_iter()
@@ -481,7 +489,12 @@ mod tests {
             } }
             selection: (t1, 0) -> (t2, 5)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let ids: Vec<_> =
             collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::BlockGap)
                 .into_iter()
@@ -500,7 +513,12 @@ mod tests {
             } }
             selection: (t1, 0) -> (t2, 1)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let ids: Vec<_> =
             collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::Alignment)
                 .into_iter()
@@ -515,7 +533,12 @@ mod tests {
             doc { root { p1: paragraph { t1: text("Hello") } } }
             selection: (t1, 1) -> (t1, 4)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let ids: Vec<_> =
             collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::LineHeight)
                 .into_iter()

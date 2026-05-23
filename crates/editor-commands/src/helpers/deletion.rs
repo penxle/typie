@@ -64,7 +64,7 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
         let cursor = find_first_text_position(&tr.doc(), anchor_id).ok_or(
             CommandError::Corrupted("anchor cell has no text position".into()),
         )?;
-        tr.set_selection(Selection::collapsed(cursor))?;
+        tr.set_selection(Some(Selection::collapsed(cursor)))?;
         return Ok(true);
     }
 
@@ -86,10 +86,10 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
                 Ok(())
             })?;
             let sel = ensure_selection_after_child_range_delete(tr, from.node_id, from.offset)?;
-            tr.set_selection(sel)?;
+            tr.set_selection(Some(sel))?;
         } else {
             let cursor = delete_within_node(tr, from.node_id, from.offset, to.offset)?;
-            tr.set_selection(Selection::collapsed(cursor))?;
+            tr.set_selection(Some(Selection::collapsed(cursor)))?;
         }
     } else {
         let lca_id = find_lowest_common_ancestor(&doc, from.node_id, to.node_id)
@@ -157,11 +157,11 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
             }
         } else {
             let sel = resolve_selection_at(&tr.doc(), from.node_id, from.offset);
-            tr.set_selection(sel)?;
+            tr.set_selection(Some(sel))?;
             return Ok(true);
         };
 
-        tr.set_selection(Selection::collapsed(cursor))?;
+        tr.set_selection(Some(Selection::collapsed(cursor)))?;
     }
 
     Ok(true)

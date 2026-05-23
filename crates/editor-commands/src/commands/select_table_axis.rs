@@ -90,7 +90,7 @@ pub fn select_table_axis(
     let doc = tr.doc();
     let selection = cell_rect_selection(&doc, anchor_cell_id, head_cell_id)
         .ok_or_else(|| CommandError::Corrupted("cannot build cell rect selection".into()))?;
-    tr.set_selection(selection)?;
+    tr.set_selection(Some(selection))?;
     Ok(true)
 }
 
@@ -105,6 +105,8 @@ mod tests {
     fn as_cell_rect(state: &editor_state::State) -> CellRect<'_> {
         state
             .selection
+            .as_ref()
+            .unwrap()
             .resolve(&state.doc)
             .unwrap()
             .as_cell_rect()

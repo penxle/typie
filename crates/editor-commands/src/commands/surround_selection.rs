@@ -5,7 +5,9 @@ use editor_transaction::Transaction;
 use crate::{CommandError, CommandResult};
 
 pub fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if selection.is_collapsed() {
         return Ok(false);
     }
@@ -106,7 +108,7 @@ pub fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> Comm
         offset: new_to_offset,
         affinity: to_pos.affinity,
     };
-    tr.set_selection(Selection::new(new_from, new_to))?;
+    tr.set_selection(Some(Selection::new(new_from, new_to)))?;
 
     Ok(true)
 }

@@ -5,7 +5,9 @@ use editor_transaction::{Transaction, compact};
 use crate::{CommandError, CommandResult};
 
 pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -102,7 +104,7 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
             affinity: Affinity::Downstream,
         })
     };
-    tr.set_selection(new_selection)?;
+    tr.set_selection(Some(new_selection))?;
 
     Ok(true)
 }

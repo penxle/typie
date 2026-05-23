@@ -103,7 +103,7 @@ fn restore_selection_to_cell(
         cell.first_cursor_position()
             .ok_or_else(|| CommandError::Corrupted("cell has no cursor position".into()))?
     };
-    tr.set_selection(Selection::collapsed(pos))?;
+    tr.set_selection(Some(Selection::collapsed(pos)))?;
     Ok(())
 }
 
@@ -225,7 +225,7 @@ mod tests {
             Axis::Horizontal,
             1
         ));
-        let sel = actual.selection;
+        let sel = actual.selection.unwrap();
         let doc = actual.doc;
         let r0c0_node = doc.node(r0c0).unwrap();
         let expected_pos = r0c0_node.first_cursor_position().unwrap();

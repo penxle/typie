@@ -3,6 +3,7 @@ use editor_transaction::{HistoryTag, Step};
 
 pub struct HistoryEntry {
     pub steps: Vec<Step>,
+    pub tag: Option<HistoryTag>,
 }
 
 pub struct History {
@@ -43,16 +44,19 @@ impl History {
                 } else {
                     self.undos.push(HistoryEntry {
                         steps: steps.to_vec(),
+                        tag: None,
                     });
                 }
             } else {
                 self.undos.push(HistoryEntry {
                     steps: steps.to_vec(),
+                    tag: None,
                 });
             }
         } else {
             self.undos.push(HistoryEntry {
                 steps: steps.to_vec(),
+                tag: None,
             });
         }
 
@@ -68,6 +72,7 @@ impl History {
 
         self.undos.push(HistoryEntry {
             steps: steps.to_vec(),
+            tag: Some(tag.clone()),
         });
 
         self.last_push_time = Some(now);
@@ -86,6 +91,11 @@ impl History {
         let steps = entry.steps.clone();
         self.undos.push(entry);
         Some(steps)
+    }
+
+    /// Called after redo so that backspace shortcuts still fire correctly.
+    pub fn sync_last_tag_from_top(&mut self) {
+        self.last_tag = self.undos.last().and_then(|e| e.tag.clone());
     }
 
     pub fn can_undo(&self) -> bool {
@@ -124,8 +134,8 @@ mod tests {
         let from_sel = Selection::collapsed(Position::new(NodeId::ROOT, from));
         let to_sel = Selection::collapsed(Position::new(NodeId::ROOT, to));
         Step::SetSelection {
-            old: StableSelection::freeze(&from_sel, &s.doc),
-            new: StableSelection::freeze(&to_sel, &s.doc),
+            old: Some(StableSelection::freeze(&from_sel, &s.doc)),
+            new: Some(StableSelection::freeze(&to_sel, &s.doc)),
         }
     }
 
@@ -146,7 +156,8 @@ mod tests {
         let undone = h.undo().unwrap();
         assert_eq!(undone.len(), 2);
         assert!(matches!(&undone[0], Step::SetSelection { old, new }
-            if old.thaw(&s.doc).head.offset == 1 && new.thaw(&s.doc).head.offset == 0));
+            if old.as_ref().map(|ss| ss.thaw(&s.doc).head.offset) == Some(1)
+                && new.as_ref().map(|ss| ss.thaw(&s.doc).head.offset) == Some(0)));
         assert!(matches!(&undone[1], Step::RemoveText { .. }));
     }
 

@@ -85,7 +85,7 @@ pub(crate) fn lift(
             affinity: Affinity::Downstream,
         }),
     };
-    tr.set_selection(new_selection)?;
+    tr.set_selection(Some(new_selection))?;
 
     Ok(true)
 }

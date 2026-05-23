@@ -5,7 +5,9 @@ use crate::helpers::find_ancestor_textblock;
 use crate::{CommandError, CommandResult};
 
 pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }

@@ -4,7 +4,9 @@ use crate::CommandResult;
 use crate::helpers::delete_selection_range;
 
 pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     delete_selection_range(tr, selection)
 }
 
@@ -14,6 +16,17 @@ mod tests {
 
     use super::*;
     use crate::test_utils::*;
+
+    #[test]
+    fn delete_selection_returns_false_when_no_selection() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { text("Hello") } } }
+            selection: none
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        let result = delete_selection(&mut tr);
+        assert!(matches!(result, Ok(false)));
+    }
 
     #[test]
     fn collapsed_selection_returns_false() {
@@ -946,7 +959,7 @@ mod tests {
         };
         let sel = editor_state::cell_rect_selection(&state.doc, c00, c00).unwrap();
         let initial = editor_state::State {
-            selection: sel,
+            selection: Some(sel),
             ..state
         };
         let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
@@ -968,7 +981,7 @@ mod tests {
         };
         let sel = editor_state::cell_rect_selection(&state.doc, c00, c01).unwrap();
         let initial = editor_state::State {
-            selection: sel,
+            selection: Some(sel),
             ..state
         };
         let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
@@ -1125,7 +1138,7 @@ mod tests {
         };
         let sel = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
         let initial = editor_state::State {
-            selection: sel,
+            selection: Some(sel),
             ..state
         };
         let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));

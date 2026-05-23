@@ -572,7 +572,7 @@ export type PointerStyle = "default" | "text" | "pointer";
 
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
-export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined };
+export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined };
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "ime" | "modifiers" | "block";
 
@@ -602,7 +602,7 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
-    block_state(): BlockState;
+    block_state(): BlockState | undefined;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
@@ -615,7 +615,7 @@ declare class Editor {
     inspect_state_as_macro(): string;
     interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
-    modifier_state(): ModifierState;
+    modifier_state(): ModifierState | undefined;
     page_sizes(): Size[];
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
     receive_remote_changeset(payload: Uint8Array): void;
@@ -623,7 +623,7 @@ declare class Editor {
     resize_surface(page: number, width: number, height: number, scale_factor: number): void;
     root_attrs(): PlainRootNode;
     root_modifiers(): Modifier[];
-    selection(): Selection;
+    selection(): Selection | undefined;
     selection_endpoints(): SelectionEndpoints | undefined;
     selection_hit_test(page: number, x: number, y: number): boolean;
     tick(): EditorEvent[];

@@ -6,7 +6,9 @@ use crate::helpers::find_ancestor_textblock;
 use crate::{CommandError, CommandResult};
 
 pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -112,7 +114,7 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
         let idx = inserted
             .index()
             .ok_or(CommandError::orphan_child(subtree_id, parent.id()))?;
-        tr.set_selection(Selection::new(
+        tr.set_selection(Some(Selection::new(
             Position {
                 node_id: parent.id(),
                 offset: idx,
@@ -123,9 +125,9 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
                 offset: idx + 1,
                 affinity: Affinity::Upstream,
             },
-        ))?;
+        )))?;
     } else if let Some(pos) = inserted.first_cursor_position() {
-        tr.set_selection(Selection::collapsed(pos))?;
+        tr.set_selection(Some(Selection::collapsed(pos)))?;
     }
 
     Ok(true)
@@ -141,6 +143,17 @@ mod tests {
 
     fn hr_fragment() -> Fragment {
         Fragment::leaf(PlainNode::HorizontalRule(PlainHorizontalRuleNode::default()))
+    }
+
+    #[test]
+    fn insert_fragment_returns_false_when_no_selection() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { text("Hello") } } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        let result = insert_fragment(&mut tr, hr_fragment());
+        assert!(matches!(result, Ok(false)));
     }
 
     #[test]

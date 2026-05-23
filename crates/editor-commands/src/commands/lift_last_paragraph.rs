@@ -5,7 +5,9 @@ use crate::helpers::{LiftDirection, lift};
 use crate::{CommandError, CommandResult};
 
 pub fn lift_last_paragraph(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }

@@ -26,7 +26,12 @@ fn select_all_over_a_table_is_not_a_cell_rect() {
         selection: (t, 0)
     };
     let (actual, ..) = transact!(initial, |tr| select_all(&mut tr));
-    let rs = actual.selection.resolve(&actual.doc).unwrap();
+    let rs = actual
+        .selection
+        .as_ref()
+        .unwrap()
+        .resolve(&actual.doc)
+        .unwrap();
     assert!(
         rs.as_cell_rect().is_none(),
         "select_all must not produce the cell-rect discriminator shape"
@@ -45,7 +50,7 @@ fn select_node_forward_inside_a_cell_is_not_a_cell_rect() {
     let mut tr = editor_transaction::Transaction::new(&initial);
     let _ = select_node_forward(&mut tr);
     let (next, ..) = tr.commit();
-    let rs = next.selection.resolve(&next.doc).unwrap();
+    let rs = next.selection.as_ref().unwrap().resolve(&next.doc).unwrap();
     assert!(
         rs.as_cell_rect().is_none(),
         "select_node_forward must not produce the cell-rect discriminator shape"
@@ -64,7 +69,7 @@ fn select_node_backward_inside_a_cell_is_not_a_cell_rect() {
     let mut tr = editor_transaction::Transaction::new(&initial);
     let _ = select_node_backward(&mut tr);
     let (next, ..) = tr.commit();
-    let rs = next.selection.resolve(&next.doc).unwrap();
+    let rs = next.selection.as_ref().unwrap().resolve(&next.doc).unwrap();
     assert!(
         rs.as_cell_rect().is_none(),
         "select_node_backward must not produce the cell-rect discriminator shape"

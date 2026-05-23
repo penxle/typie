@@ -14,7 +14,7 @@ pub struct Transaction {
     // separately from `state.selection` because `SetSelection.old` must
     // freeze against the doc where that selection was canonical, not against
     // the post-edit doc where its node may already be dead.
-    selection_stable: StableSelection,
+    selection_stable: Option<StableSelection>,
     steps: Vec<Step>,
     ops: Vec<Op<DocOp>>,
     effects: Vec<Effect>,
@@ -25,7 +25,7 @@ pub struct Transaction {
 #[derive(Clone)]
 pub struct Savepoint {
     state: State,
-    selection_stable: StableSelection,
+    selection_stable: Option<StableSelection>,
     steps_len: usize,
     ops_len: usize,
     effects_len: usize,
@@ -34,7 +34,10 @@ pub struct Savepoint {
 
 impl Transaction {
     pub fn new(state: &State) -> Self {
-        let selection_stable = StableSelection::freeze(&state.selection, &state.doc);
+        let selection_stable = state
+            .selection
+            .as_ref()
+            .map(|s| StableSelection::freeze(s, &state.doc));
         Self {
             state: state.clone(),
             selection_stable,
@@ -54,7 +57,7 @@ impl Transaction {
         self.state.doc.clone()
     }
 
-    pub fn selection(&self) -> Selection {
+    pub fn selection(&self) -> Option<Selection> {
         self.state.selection
     }
 
@@ -297,9 +300,11 @@ impl Transaction {
         self.apply_step(Step::RemoveModifier { node_id, modifier })
     }
 
-    pub fn set_selection(&mut self, selection: Selection) -> Result<(), StepError> {
+    pub fn set_selection(&mut self, selection: Option<Selection>) -> Result<(), StepError> {
         let old = self.selection_stable.clone();
-        let new = StableSelection::freeze(&selection, &self.state.doc);
+        let new = selection
+            .as_ref()
+            .map(|s| StableSelection::freeze(s, &self.state.doc));
         self.apply_step(Step::SetSelection { old, new })
     }
 
@@ -524,7 +529,10 @@ mod tests {
 
         let tr = Transaction::new(&state);
 
-        assert_eq!(tr.selection(), Selection::collapsed(Position::new(t1, 0)));
+        assert_eq!(
+            tr.selection(),
+            Some(Selection::collapsed(Position::new(t1, 0)))
+        );
         assert!(tr.doc().get_entry(t1).is_some());
     }
 
@@ -772,18 +780,20 @@ mod tests {
 
         let mut tr = Transaction::new(&state);
         let new_sel = Selection::collapsed(Position::new(t1, 5));
-        tr.set_selection(new_sel).unwrap();
+        tr.set_selection(Some(new_sel)).unwrap();
 
-        assert_eq!(tr.selection(), new_sel);
+        assert_eq!(tr.selection(), Some(new_sel));
 
         let (_, steps, _, _, _) = tr.commit();
         match &steps[0] {
             Step::SetSelection { old, new } => {
+                let old_sel = old.as_ref().expect("old must be Some");
+                let new_sel_stable = new.as_ref().expect("new must be Some");
                 assert_eq!(
-                    old.thaw(&state.doc),
+                    old_sel.thaw(&state.doc),
                     Selection::collapsed(Position::new(t1, 0))
                 );
-                assert_eq!(new.thaw(&state.doc), new_sel);
+                assert_eq!(new_sel_stable.thaw(&state.doc), new_sel);
             }
             _ => panic!("expected SetSelection"),
         }
@@ -836,7 +846,7 @@ mod tests {
         let p2 = NodeId::new();
         tr.split_node(p1, 1, p2).unwrap();
 
-        tr.set_selection(Selection::collapsed(Position::new(t2, 0)))
+        tr.set_selection(Some(Selection::collapsed(Position::new(t2, 0))))
             .unwrap();
 
         assert_eq!(tr.doc().text(t1).text.to_string(), "Hello");
@@ -893,7 +903,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         tr.insert_text(t1, 5, " Beautiful").unwrap();
-        tr.set_selection(Selection::collapsed(Position::new(t1, 15)))
+        tr.set_selection(Some(Selection::collapsed(Position::new(t1, 15))))
             .unwrap();
 
         let (_, steps, _, _, _) = tr.commit();
@@ -1188,5 +1198,39 @@ mod tests {
             ops_after_two > ops_after_rollback,
             "rollback must truncate ops accumulated after savepoint"
         );
+    }
+
+    #[test]
+    fn transaction_set_selection_none_roundtrip() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&s);
+        tr.set_selection(None).unwrap();
+        assert!(tr.selection().is_none());
+        let (state_after, steps, _, _, _) = tr.commit();
+        assert!(state_after.selection.is_none());
+        assert_eq!(steps.len(), 1);
+        assert!(matches!(&steps[0], Step::SetSelection { new: None, .. }));
+    }
+
+    #[test]
+    fn transaction_none_to_some_to_none_via_undo() {
+        let (s, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&s);
+        let new_sel = Selection::collapsed(Position::new(t1, 0));
+        tr.set_selection(Some(new_sel)).unwrap();
+        let (state_after, steps, _, _, _) = tr.commit();
+        assert_eq!(state_after.selection, Some(new_sel));
+
+        let mut current = state_after;
+        for step in steps.iter().rev() {
+            current = step.inverse().apply(&current).unwrap().state;
+        }
+        assert!(current.selection.is_none());
     }
 }

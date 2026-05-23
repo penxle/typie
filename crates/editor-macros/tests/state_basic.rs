@@ -15,10 +15,11 @@ fn state_collapsed_selection() {
         selection: (t, 0)
     };
 
-    assert!(state.selection.is_collapsed());
-    assert_eq!(state.selection.anchor.node_id, t);
-    assert_eq!(state.selection.anchor.offset, 0);
-    assert_eq!(state.selection.anchor.affinity, Affinity::Downstream);
+    let sel = state.selection.as_ref().unwrap();
+    assert!(sel.is_collapsed());
+    assert_eq!(sel.anchor.node_id, t);
+    assert_eq!(sel.anchor.offset, 0);
+    assert_eq!(sel.anchor.affinity, Affinity::Downstream);
 
     let t_entry = state.doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
@@ -43,11 +44,12 @@ fn state_range_selection() {
         }
         selection: (t1, 2) -> (t2, 3)
     };
-    assert!(!state.selection.is_collapsed());
-    assert_eq!(state.selection.anchor.node_id, t1);
-    assert_eq!(state.selection.anchor.offset, 2);
-    assert_eq!(state.selection.head.node_id, t2);
-    assert_eq!(state.selection.head.offset, 3);
+    let sel = state.selection.as_ref().unwrap();
+    assert!(!sel.is_collapsed());
+    assert_eq!(sel.anchor.node_id, t1);
+    assert_eq!(sel.anchor.offset, 2);
+    assert_eq!(sel.head.node_id, t2);
+    assert_eq!(sel.head.offset, 3);
 }
 
 #[test]
@@ -62,10 +64,11 @@ fn state_affinity_upstream() {
         }
         selection: (t, 5, <)
     };
-    assert!(state.selection.is_collapsed());
-    assert_eq!(state.selection.anchor.node_id, t);
-    assert_eq!(state.selection.anchor.offset, 5);
-    assert_eq!(state.selection.anchor.affinity, Affinity::Upstream);
+    let sel = state.selection.as_ref().unwrap();
+    assert!(sel.is_collapsed());
+    assert_eq!(sel.anchor.node_id, t);
+    assert_eq!(sel.anchor.offset, 5);
+    assert_eq!(sel.anchor.affinity, Affinity::Upstream);
 }
 
 #[test]
@@ -80,10 +83,11 @@ fn state_affinity_downstream_explicit() {
         }
         selection: (t, 5, >)
     };
-    assert!(state.selection.is_collapsed());
-    assert_eq!(state.selection.anchor.node_id, t);
-    assert_eq!(state.selection.anchor.offset, 5);
-    assert_eq!(state.selection.anchor.affinity, Affinity::Downstream);
+    let sel = state.selection.as_ref().unwrap();
+    assert!(sel.is_collapsed());
+    assert_eq!(sel.anchor.node_id, t);
+    assert_eq!(sel.anchor.offset, 5);
+    assert_eq!(sel.anchor.affinity, Affinity::Downstream);
 }
 
 #[test]
@@ -101,11 +105,34 @@ fn state_range_with_affinity() {
         }
         selection: (t1, 0, <) -> (t2, 5, >)
     };
-    assert!(!state.selection.is_collapsed());
-    assert_eq!(state.selection.anchor.node_id, t1);
-    assert_eq!(state.selection.anchor.offset, 0);
-    assert_eq!(state.selection.anchor.affinity, Affinity::Upstream);
-    assert_eq!(state.selection.head.node_id, t2);
-    assert_eq!(state.selection.head.offset, 5);
-    assert_eq!(state.selection.head.affinity, Affinity::Downstream);
+    let sel = state.selection.as_ref().unwrap();
+    assert!(!sel.is_collapsed());
+    assert_eq!(sel.anchor.node_id, t1);
+    assert_eq!(sel.anchor.offset, 0);
+    assert_eq!(sel.anchor.affinity, Affinity::Upstream);
+    assert_eq!(sel.head.node_id, t2);
+    assert_eq!(sel.head.offset, 5);
+    assert_eq!(sel.head.affinity, Affinity::Downstream);
+}
+
+#[test]
+fn macro_selection_none_yields_none() {
+    let (state, ..) = state! {
+        doc { root { paragraph { t1: text("Hello") } } }
+        selection: none
+    };
+    assert!(state.selection.is_none());
+}
+
+#[test]
+fn macro_selection_collapsed_yields_some() {
+    let (state, ..) = state! {
+        doc { root { paragraph { t1: text("Hello") } } }
+        selection: (t1, 0)
+    };
+    let sel = state
+        .selection
+        .as_ref()
+        .expect("selection: (t1, 0) must yield Some");
+    assert!(sel.is_collapsed());
 }

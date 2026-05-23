@@ -5,7 +5,9 @@ use editor_transaction::Transaction;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_page_break_forward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -47,11 +49,11 @@ pub fn delete_page_break_forward(tr: &mut Transaction) -> CommandResult {
             } else if pos.offset == children_count {
                 let new_offset = pos.offset - 1;
                 tr.remove_subtree(last_id)?;
-                tr.set_selection(Selection::collapsed(Position {
+                tr.set_selection(Some(Selection::collapsed(Position {
                     node_id: pos.node_id,
                     offset: new_offset,
                     affinity: pos.affinity,
-                }))?;
+                })))?;
                 Ok(true)
             } else {
                 Ok(false)

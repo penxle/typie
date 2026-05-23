@@ -7,10 +7,19 @@ pub(crate) struct Labeler {
 }
 
 impl Labeler {
-    pub fn new(doc: &Doc, selection: &Selection) -> Self {
+    pub fn new(doc: &Doc, selection: Option<&Selection>) -> Self {
+        let sel = match selection {
+            None => {
+                return Self {
+                    labels: HashMap::new(),
+                };
+            }
+            Some(s) => s,
+        };
+
         let mut needed = HashSet::new();
-        needed.insert(selection.anchor.node_id);
-        needed.insert(selection.head.node_id);
+        needed.insert(sel.anchor.node_id);
+        needed.insert(sel.head.node_id);
 
         let mut labels = HashMap::new();
         let mut counters: HashMap<NodeType, usize> = HashMap::new();
@@ -78,7 +87,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };
-        let labeler = Labeler::new(&state.doc, &state.selection);
+        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
         assert_eq!(labeler.label(t1), Some("t1"));
     }
 
@@ -93,7 +102,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t2, 3)
         };
-        let labeler = Labeler::new(&state.doc, &state.selection);
+        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
         assert_eq!(labeler.label(t1), Some("t1"));
         assert_eq!(labeler.label(t2), Some("t2"));
     }
@@ -104,7 +113,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 1) -> (t1, 4)
         };
-        let labeler = Labeler::new(&state.doc, &state.selection);
+        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
         assert_eq!(labeler.label(t1), Some("t1"));
     }
 
@@ -114,7 +123,7 @@ mod tests {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
-        let labeler = Labeler::new(&state.doc, &state.selection);
+        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
         assert_eq!(labeler.label(p1), Some("p1"));
     }
 
@@ -130,7 +139,7 @@ mod tests {
             }
             selection: (t2, 0) -> (t1, 0)
         };
-        let labeler = Labeler::new(&state.doc, &state.selection);
+        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
         assert_eq!(labeler.label(t1), Some("t1"));
         assert_eq!(labeler.label(t2), Some("t2"));
     }
@@ -146,7 +155,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        let labeler = Labeler::new(&state.doc, &state.selection);
+        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
         assert_eq!(labeler.label(t2), None);
     }
 
@@ -156,7 +165,7 @@ mod tests {
             doc { r: root { paragraph { t1: text("A") } } }
             selection: (r, 0)
         };
-        let labeler = Labeler::new(&state.doc, &state.selection);
+        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
         assert_eq!(labeler.label(NodeId::ROOT), Some("r1"));
     }
 }

@@ -5,7 +5,9 @@ use editor_transaction::{Transaction, fulfill};
 use crate::{CommandError, CommandResult};
 
 pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -78,11 +80,11 @@ pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
             Ok(())
         })?;
 
-        tr.set_selection(Selection::collapsed(Position {
+        tr.set_selection(Some(Selection::collapsed(Position {
             node_id: cursor_pos.node_id,
             offset: cursor_pos.offset,
             affinity: Affinity::Downstream,
-        }))?;
+        })))?;
     } else {
         let doc = tr.doc();
         let target = doc
@@ -118,7 +120,7 @@ pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
                 affinity: Affinity::Downstream,
             }),
         };
-        tr.set_selection(new_selection)?;
+        tr.set_selection(Some(new_selection))?;
     }
 
     Ok(true)

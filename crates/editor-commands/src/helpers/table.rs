@@ -14,7 +14,7 @@ pub(crate) fn col_count_from_table(table: &NodeRef<'_>) -> Result<usize, Command
 
 pub(crate) fn cursor_pos_in_table(tr: &Transaction, table_id: NodeId) -> Option<(usize, usize)> {
     let doc = tr.doc();
-    let cell_id = enclosing_table_cell(&doc, tr.selection().head.node_id)?;
+    let cell_id = enclosing_table_cell(&doc, tr.selection()?.head.node_id)?;
     let table = doc.node(table_id)?;
     for (row_idx, row) in table.children().enumerate() {
         for (col_idx, cell) in row.children().enumerate() {

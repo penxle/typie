@@ -5,7 +5,9 @@ use editor_transaction::{Transaction, fulfill, prune};
 use crate::{CommandError, CommandResult};
 
 pub fn select_node_forward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -92,7 +94,7 @@ pub fn select_node_forward(tr: &mut Transaction) -> CommandResult {
         .index()
         .ok_or_else(|| CommandError::orphan_child(next_id, parent_id))?;
 
-    tr.set_selection(Selection::new(
+    tr.set_selection(Some(Selection::new(
         Position {
             node_id: parent_id,
             offset: next_idx + 1,
@@ -103,7 +105,7 @@ pub fn select_node_forward(tr: &mut Transaction) -> CommandResult {
             offset: next_idx,
             affinity: Affinity::Downstream,
         },
-    ))?;
+    )))?;
 
     Ok(true)
 }

@@ -76,7 +76,7 @@ fn bootstrap_replicas(plain: PlainDoc, replica_count: usize) -> Vec<State> {
     assert!(replica_count >= 1);
     let (doc, graph) = Doc::from_plain(plain);
     let sel = Selection::collapsed(Position::new(doc.root().expect("seed has a root").id(), 0));
-    let seed = State::new(doc, graph, sel);
+    let seed = State::new(doc, graph, Some(sel));
 
     // `Doc::from_plain` returns a committed graph, so the seed ops are already
     // sealed into changesets that can be replayed verbatim.
@@ -84,8 +84,8 @@ fn bootstrap_replicas(plain: PlainDoc, replica_count: usize) -> Vec<State> {
     let mut replicas = Vec::with_capacity(replica_count);
     replicas.push(seed);
     for _ in 1..replica_count {
-        let s =
-            State::from_changesets(seed_css.clone(), sel).expect("from_changesets on bootstrap");
+        let s = State::from_changesets(seed_css.clone(), Some(sel))
+            .expect("from_changesets on bootstrap");
         replicas.push(s);
     }
     replicas
@@ -796,6 +796,5 @@ fn causal_permute_changesets(css: &[Changeset<DocOp>], seed: u64) -> Vec<Changes
 /// Builds a fresh replica by replaying the given changesets in order via
 /// `State::from_changesets`. Selection is irrelevant for graph/doc equality.
 fn replay_into_fresh(css: &[Changeset<DocOp>]) -> Result<State, editor_state::StateError> {
-    let dummy_sel = Selection::collapsed(Position::new(NodeId::new(), 0));
-    State::from_changesets(css.to_vec(), dummy_sel)
+    State::from_changesets(css.to_vec(), None)
 }

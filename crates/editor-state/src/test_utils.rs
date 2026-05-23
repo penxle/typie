@@ -41,21 +41,28 @@ fn position_to_path_position(doc: &Doc, pos: &Position) -> PathPosition {
 pub fn assert_state_eq_impl(actual: &State, expected: &State) {
     editor_model::assert_doc_eq_impl(&actual.doc, &expected.doc);
 
-    let anchor1 = position_to_path_position(&actual.doc, &actual.selection.anchor);
-    let anchor2 = position_to_path_position(&expected.doc, &expected.selection.anchor);
-    assert_eq!(
-        anchor1, anchor2,
-        "Selection anchors differ: {:?} vs {:?}",
-        anchor1, anchor2,
-    );
+    match (&actual.selection, &expected.selection) {
+        (None, None) => {}
+        (Some(_), None) => panic!("Selection mismatch: actual has Some, expected has None"),
+        (None, Some(_)) => panic!("Selection mismatch: actual has None, expected has Some"),
+        (Some(sel1), Some(sel2)) => {
+            let anchor1 = position_to_path_position(&actual.doc, &sel1.anchor);
+            let anchor2 = position_to_path_position(&expected.doc, &sel2.anchor);
+            assert_eq!(
+                anchor1, anchor2,
+                "Selection anchors differ: {:?} vs {:?}",
+                anchor1, anchor2,
+            );
 
-    let head1 = position_to_path_position(&actual.doc, &actual.selection.head);
-    let head2 = position_to_path_position(&expected.doc, &expected.selection.head);
-    assert_eq!(
-        head1, head2,
-        "Selection heads differ: {:?} vs {:?}",
-        head1, head2,
-    );
+            let head1 = position_to_path_position(&actual.doc, &sel1.head);
+            let head2 = position_to_path_position(&expected.doc, &sel2.head);
+            assert_eq!(
+                head1, head2,
+                "Selection heads differ: {:?} vs {:?}",
+                head1, head2,
+            );
+        }
+    }
 
     assert_eq!(
         actual.pending_modifiers, expected.pending_modifiers,

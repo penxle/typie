@@ -17,6 +17,7 @@ pub enum PendingModifierDef {
 }
 
 pub enum SelectionExpr {
+    None,
     Collapsed(PositionExpr),
     Range(PositionExpr, PositionExpr),
 }
@@ -74,8 +75,15 @@ impl Parse for StateInput {
 }
 
 fn parse_selection(input: ParseStream) -> Result<SelectionExpr> {
-    let anchor = parse_position(input)?;
+    let fork = input.fork();
+    if let Ok(ident) = fork.parse::<Ident>() {
+        if ident == "none" {
+            input.parse::<Ident>()?;
+            return Ok(SelectionExpr::None);
+        }
+    }
 
+    let anchor = parse_position(input)?;
     if input.peek(Token![->]) {
         input.parse::<Token![->]>()?;
         let head = parse_position(input)?;

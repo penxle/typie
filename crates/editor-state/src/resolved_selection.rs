@@ -366,7 +366,12 @@ mod tests {
             } } }
             selection: (t1, 0) -> (t2, 5)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let ancestor = rs.common_ancestor();
         assert_eq!(ancestor.id(), p1);
     }
@@ -380,7 +385,12 @@ mod tests {
             } }
             selection: (t1, 0) -> (t2, 1)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         assert_eq!(rs.common_ancestor().id(), NodeId::ROOT);
     }
 
@@ -390,7 +400,12 @@ mod tests {
             doc { root { p1: paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 5)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let p1_ref = state.doc.node(p1).unwrap();
         assert!(rs.intersects_subtree(&p1_ref));
     }
@@ -420,7 +435,12 @@ mod tests {
             }
             selection: (tr1, 0, >) -> (tr2, 2, <)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let c1_ref = state.doc.node(c1).unwrap();
         let p1_ref = state.doc.node(p1).unwrap();
         assert!(rs.intersects_subtree(&c1_ref));
@@ -436,7 +456,12 @@ mod tests {
             } }
             selection: (t1, 0) -> (t1, 1)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let p2_ref = state.doc.node(p2).unwrap();
         assert!(!rs.intersects_subtree(&p2_ref));
     }
@@ -448,7 +473,12 @@ mod tests {
             doc { root { p1: paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 5)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let p1_ref = state.doc.node(p1).unwrap();
         assert!(!rs.contains_subtree(&p1_ref));
     }
@@ -462,7 +492,12 @@ mod tests {
             } }
             selection: (t1, 2) -> (t2, 3)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let p1_ref = state.doc.node(p1).unwrap();
         assert!(!rs.contains_subtree(&p1_ref));
     }
@@ -473,7 +508,12 @@ mod tests {
             doc { root: root { paragraph { text("Hello") } } }
             selection: (root, 0) -> (root, 1)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let root_ref = state.doc.node(root).unwrap();
         assert!(rs.contains_subtree(&root_ref));
     }
@@ -488,7 +528,12 @@ mod tests {
             } }
             selection: (t1, 0) -> (t3, 4)
         };
-        let rs = state.selection.resolve(&state.doc).unwrap();
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let p2_ref = state.doc.node(p2).unwrap();
         assert!(rs.contains_subtree(&p2_ref));
     }

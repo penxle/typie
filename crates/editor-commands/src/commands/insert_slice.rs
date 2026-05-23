@@ -17,7 +17,10 @@ pub fn insert_slice(tr: &mut Transaction, slice: Slice) -> CommandResult {
     // Mirror `insert_text` / `insert_hard_break`: callers compose
     // `delete_selection` ahead of this command when they want a non-collapsed
     // selection replaced.
-    if !tr.selection().is_collapsed() {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+    if !selection.is_collapsed() {
         return Ok(false);
     }
 
@@ -93,7 +96,10 @@ fn coerce_slice_for_caret(tr: &Transaction, slice: Slice) -> Slice {
 
 fn container_type_for_caret(tr: &Transaction) -> Option<NodeType> {
     let state = tr.state();
-    let rs = state.selection.resolve(&state.doc)?;
+    let rs = state
+        .selection
+        .as_ref()
+        .and_then(|s| s.resolve(&state.doc))?;
     let head = rs.head();
     let node = state.doc.node(head.node_id())?;
     // Coerce only against the textblock the caret sits inside — at block
@@ -180,7 +186,7 @@ fn is_inline_only(slice: &Slice) -> bool {
 
 fn caret_in_textblock(tr: &Transaction) -> bool {
     let state = tr.state();
-    let Some(sel) = state.selection.resolve(&state.doc) else {
+    let Some(sel) = state.selection.as_ref().and_then(|s| s.resolve(&state.doc)) else {
         return false;
     };
     sel.head().is_inline_position()
@@ -237,7 +243,10 @@ fn insert_modifier_text(
     text: &str,
     modifiers: Vec<Modifier>,
 ) -> CommandResult {
-    let pos = tr.selection().head;
+    let pos = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let (parent_id, child_index) = textblock_insert_point(tr, pos)?;
     let id = NodeId::new();
     let subtree =
@@ -245,11 +254,11 @@ fn insert_modifier_text(
     tr.insert_subtree(parent_id, child_index, subtree)?;
     tr.insert_text(id, 0, text)?;
     let len = text.chars().count();
-    tr.set_selection(Selection::collapsed(Position {
+    tr.set_selection(Some(Selection::collapsed(Position {
         node_id: id,
         offset: len,
         affinity: Affinity::Upstream,
-    }))?;
+    })))?;
     Ok(true)
 }
 
@@ -286,7 +295,10 @@ fn textblock_insert_point(
 }
 
 fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandResult {
-    let head = tr.selection().head;
+    let head = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
 
     // Resolve textblock id + split index, splitting any straddling text node first.
     let (textblock_id, split_index_in_textblock) = {
@@ -368,7 +380,11 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
         let inline = first.children.to_vec();
         position_caret_at_textblock_end(tr, textblock_id)?;
         insert_inline_fragments(tr, inline)?;
-        last_caret = Some(tr.selection().head);
+        last_caret = Some(
+            tr.selection()
+                .expect("selection preserved through mutations")
+                .head,
+        );
     }
 
     for (insert_at, block) in
@@ -387,7 +403,11 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
         insert_inline_fragments(tr, inline)?;
         // After inserting at the start of p2, the caret naturally lands between
         // the merged-in inline and p2's original inline content.
-        last_caret = Some(tr.selection().head);
+        last_caret = Some(
+            tr.selection()
+                .expect("selection preserved through mutations")
+                .head,
+        );
     }
 
     let textblock_empty_after = tr
@@ -415,7 +435,7 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
             affinity: Affinity::Upstream,
         },
     };
-    tr.set_selection(Selection::collapsed(final_pos))?;
+    tr.set_selection(Some(Selection::collapsed(final_pos)))?;
 
     Ok(true)
 }
@@ -451,7 +471,7 @@ fn position_caret_at_textblock_end(
         },
     };
     drop(doc);
-    tr.set_selection(Selection::collapsed(pos))?;
+    tr.set_selection(Some(Selection::collapsed(pos)))?;
     Ok(())
 }
 
@@ -483,7 +503,7 @@ fn position_caret_at_textblock_start(
         },
     };
     drop(doc);
-    tr.set_selection(Selection::collapsed(pos))?;
+    tr.set_selection(Some(Selection::collapsed(pos)))?;
     Ok(())
 }
 
@@ -515,7 +535,10 @@ fn position_at_end_of_block(tr: &Transaction, block_id: NodeId) -> Position {
 }
 
 fn insert_inline_at_block_boundary(tr: &mut Transaction, slice: &Slice) -> CommandResult {
-    let head = tr.selection().head;
+    let head = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let container_id = head.node_id;
     let index = head.offset;
 
@@ -540,7 +563,10 @@ fn insert_inline_at_block_boundary(tr: &mut Transaction, slice: &Slice) -> Comma
 }
 
 fn insert_blocks_at_block_boundary(tr: &mut Transaction, slice: &Slice) -> CommandResult {
-    let head = tr.selection().head;
+    let head = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let container_id = head.node_id;
     let base_index = head.offset;
 
@@ -562,7 +588,7 @@ fn insert_blocks_at_block_boundary(tr: &mut Transaction, slice: &Slice) -> Comma
 
     if let Some(id) = last_inserted {
         let final_pos = position_at_end_of_block(tr, id);
-        tr.set_selection(Selection::collapsed(final_pos))?;
+        tr.set_selection(Some(Selection::collapsed(final_pos)))?;
     }
 
     Ok(true)

@@ -13,18 +13,16 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
         ViewOp::ToggleFold { id } => {
             let was_expanded = editor.view.fold_expanded(id);
             if was_expanded
-                && let Some(remapped) = remap_selection_out_of_fold_content(
-                    &editor.state.doc,
-                    id,
-                    editor.state.selection,
-                )
+                && let Some(sel) = editor.state.selection
+                && let Some(remapped) =
+                    remap_selection_out_of_fold_content(&editor.state.doc, id, sel)
             {
                 // fold toggle is non-undoable view state; the coupled remap must
                 // skip history too, else undo strands the caret in still-collapsed
                 // content (cf. handle/selection.rs).
                 editor.transact(|tr| {
                     tr.update_meta(|m| m.history = HistoryMeta::Skip);
-                    tr.set_selection(remapped)?;
+                    tr.set_selection(Some(remapped))?;
                     Ok(())
                 })?;
             }
@@ -144,7 +142,12 @@ mod tests {
         });
 
         assert_ne!(
-            editor.state().selection.head.node_id,
+            editor
+                .state()
+                .selection
+                .expect("selection exists in test")
+                .head
+                .node_id,
             t2,
             "selection inside fold-content must be remapped out on collapse"
         );
@@ -174,7 +177,12 @@ mod tests {
         });
 
         assert_ne!(
-            editor.state().selection.head.node_id,
+            editor
+                .state()
+                .selection
+                .expect("selection exists in test")
+                .head
+                .node_id,
             t2,
             "undo must not restore a selection inside collapsed fold-content"
         );
@@ -202,7 +210,12 @@ mod tests {
         });
 
         assert_eq!(
-            editor.state().selection.head.node_id,
+            editor
+                .state()
+                .selection
+                .expect("selection exists in test")
+                .head
+                .node_id,
             t1,
             "selection outside the fold is untouched"
         );

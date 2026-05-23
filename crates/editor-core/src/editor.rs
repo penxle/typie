@@ -24,9 +24,10 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
     if state.pending_modifiers.is_empty() {
         return None;
     }
+    let selection = state.selection.as_ref()?;
     let textblock = state
         .doc
-        .node(state.selection.head.node_id)?
+        .node(selection.head.node_id)?
         .ancestors()
         .find(|n| n.spec().is_textblock())?;
     let is_empty = textblock
@@ -43,7 +44,7 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
 
 fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
     use editor_state::GapCursor;
-    let rs = state.selection.resolve(&state.doc)?;
+    let rs = state.selection.as_ref()?.resolve(&state.doc)?;
     match rs.as_gap_cursor()? {
         GapCursor::LeadingUnit { .. } => Some(GapPhantom {
             parent: NodeId::ROOT,
@@ -112,11 +113,11 @@ impl Editor {
         &self.view
     }
 
-    pub fn modifier_state(&self) -> ModifierState {
+    pub fn modifier_state(&self) -> Option<ModifierState> {
         editor_state::resolve_modifier_state(&self.state)
     }
 
-    pub fn block_state(&self) -> BlockState {
+    pub fn block_state(&self) -> Option<BlockState> {
         crate::block_state::resolve_block_state(&self.state)
     }
 
@@ -131,19 +132,26 @@ impl Editor {
     }
 
     pub fn selection_endpoints(&self) -> Option<editor_view::SelectionEndpoints> {
-        let resolved = self.state.selection.resolve(&self.state.doc)?;
+        let resolved = self.state.selection.as_ref()?.resolve(&self.state.doc)?;
         self.view.selection_endpoints(&resolved)
     }
 
     pub fn selection_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
-        let Some(resolved) = self.state.selection.resolve(&self.state.doc) else {
+        let Some(resolved) = self
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&self.state.doc))
+        else {
             return false;
         };
         self.view.selection_hit_test(&resolved, page_idx, x, y)
     }
 
     pub fn cursor_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
-        let selection = self.state.selection;
+        let Some(selection) = self.state.selection else {
+            return false;
+        };
         if !selection.is_collapsed() {
             return false;
         }
@@ -184,7 +192,9 @@ impl Editor {
         let doc = &state.doc;
         let doc_size = doc.flat_size();
 
-        let sel = state.selection;
+        let sel = state.selection.ok_or_else(|| EditorError::General {
+            msg: "IME requires an active selection".into(),
+        })?;
         let anchor_flat = sel
             .anchor
             .resolve(doc)
@@ -309,7 +319,7 @@ impl Editor {
     }
 
     fn selection_mark_rects(&self) -> Option<Vec<PageRect>> {
-        let resolved = self.state.selection.resolve(&self.state.doc)?;
+        let resolved = self.state.selection.as_ref()?.resolve(&self.state.doc)?;
         if resolved.is_collapsed() {
             return None;
         }
@@ -595,11 +605,11 @@ mod tests {
     fn bootstrap_two_replicas(plain: PlainDoc) -> (State, State) {
         let (doc, graph) = Doc::from_plain(plain);
         let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
-        let seed = State::new(doc, graph, sel);
+        let seed = State::new(doc, graph, Some(sel));
 
         let seed_css = seed.graph.changesets_as_vec();
         let replica_b =
-            State::from_changesets(seed_css, sel).expect("from_changesets on bootstrap");
+            State::from_changesets(seed_css, Some(sel)).expect("from_changesets on bootstrap");
         (seed, replica_b)
     }
 
@@ -718,7 +728,11 @@ mod tests {
     }
 
     fn build_state(doc: editor_model::Doc, head: Position, pending: PendingModifiers) -> State {
-        let mut s = State::new(doc, OpGraph::<DocOp>::new(), Selection::collapsed(head));
+        let mut s = State::new(
+            doc,
+            OpGraph::<DocOp>::new(),
+            Some(Selection::collapsed(head)),
+        );
         s.pending_modifiers = pending;
         s
     }
@@ -779,7 +793,7 @@ mod tests {
             op: SelectionOp::Set { selection: target },
         });
 
-        assert_eq!(editor.state().selection, target);
+        assert_eq!(editor.state().selection, Some(target));
     }
 
     #[test]
@@ -888,7 +902,7 @@ mod tests {
         editor.tick().unwrap();
 
         assert_eq!(editor.view().viewport().width, 1024.0);
-        assert_eq!(editor.state().selection, selection);
+        assert_eq!(editor.state().selection, Some(selection));
     }
 
     #[test]
@@ -1184,7 +1198,7 @@ mod tests {
             selection: (t1, 1)
         };
         let editor = Editor::new_test(state);
-        let s = editor.modifier_state();
+        let s = editor.modifier_state().unwrap();
         assert_eq!(s.bold, editor_common::Tri::Uniform { value: () });
     }
 
@@ -1195,7 +1209,7 @@ mod tests {
             selection: (t1, 1)
         };
         let editor = Editor::new_test(state);
-        let bs = editor.block_state();
+        let bs = editor.block_state().unwrap();
         assert_eq!(bs.ancestors.len(), 2);
         assert!(bs.nodes.is_empty());
     }
@@ -1576,7 +1590,12 @@ mod tests {
             event: crate::message::SystemEvent::Initialize,
         });
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .expect("selection exists in test")
+            .resolve(&editor.state.doc)
+            .unwrap();
         let rect = editor.view().selection_rects(&resolved)[0].rect;
         let probe_x = rect.x + rect.width * 0.5;
         let probe_y = rect.y + rect.height * 0.5;
@@ -1607,9 +1626,10 @@ mod tests {
             event: crate::message::SystemEvent::Initialize,
         });
 
+        let sel = editor.state.selection.expect("selection exists in test");
         let cursor = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &editor.state.selection.head)
+            .cursor_metrics(&editor.state.doc, &sel.head)
             .expect("collapsed cursor has metrics");
         let probe_x = cursor.caret.x;
         let probe_y = cursor.line.y + cursor.line.height * 0.5;
@@ -1628,9 +1648,10 @@ mod tests {
             event: crate::message::SystemEvent::Initialize,
         });
 
+        let sel = editor.state.selection.expect("selection exists in test");
         let cursor = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &editor.state.selection.head)
+            .cursor_metrics(&editor.state.doc, &sel.head)
             .expect("collapsed cursor has metrics");
         let probe_x = cursor.caret.x + 100.0;
         let probe_y = cursor.line.y + cursor.line.height * 0.5;
@@ -1705,7 +1726,10 @@ mod tests {
         assert!(
             editor
                 .view()
-                .cursor_metrics(&st.doc, &st.selection.head)
+                .cursor_metrics(
+                    &st.doc,
+                    &st.selection.expect("selection exists in test").head
+                )
                 .is_some(),
             "gap cursor must produce a caret via the phantom line"
         );
@@ -1720,9 +1744,60 @@ mod tests {
         assert!(
             editor
                 .view()
-                .cursor_metrics(&st2.doc, &st2.selection.head)
+                .cursor_metrics(
+                    &st2.doc,
+                    &st2.selection.expect("selection exists in test").head
+                )
                 .is_some(),
             "normal caret still valid after leaving the gap (phantom space recovered)"
+        );
+    }
+
+    #[test]
+    fn no_op_messages_when_selection_is_none() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("Hello") } } }
+            selection: none
+        };
+        let mut editor = Editor::new_test(initial);
+
+        let pre_doc = editor.state().doc.clone();
+        let pre_selection = editor.state().selection;
+        let pre_can_undo = editor.history.can_undo();
+
+        editor.enqueue(Message::Key {
+            event: KeyEvent {
+                key: Key::Backspace,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+        editor.enqueue(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                extend: false,
+            },
+        });
+        editor.tick().unwrap();
+
+        assert_eq!(
+            editor.state().doc,
+            pre_doc,
+            "doc must not change when selection is None"
+        );
+        assert_eq!(
+            editor.state().selection,
+            pre_selection,
+            "selection must stay None"
+        );
+        assert_eq!(
+            editor.history.can_undo(),
+            pre_can_undo,
+            "no history entries pushed"
         );
     }
 
@@ -1745,9 +1820,14 @@ mod tests {
         editor.view.layout(&editor.state.doc);
 
         let sel = editor_state::cell_rect_selection(&editor.state.doc, c00, c11).unwrap();
-        editor.state.selection = sel;
+        editor.state.selection = Some(sel);
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .expect("selection set above")
+            .resolve(&editor.state.doc)
+            .unwrap();
         assert!(
             resolved.as_cell_rect().is_some(),
             "precondition: selection is a cell-rect"

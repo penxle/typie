@@ -777,7 +777,7 @@ mod tests {
             selection: (t1, 1, <) -> (bl1, 0, >)
         };
         let view = layout(&state.doc);
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(
@@ -883,7 +883,7 @@ mod tests {
             selection: (r1, 1, >) -> (r1, 2, <)
         };
         let view = layout(&state.doc);
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 1, "got {:?}", rects);
@@ -907,7 +907,7 @@ mod tests {
             selection: (r1, 1, >) -> (r1, 2, <)
         };
         let view = layout(&state.doc);
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 1, "got {:?}", rects);

@@ -4,7 +4,9 @@ use editor_transaction::Transaction;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_page_break_backward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }

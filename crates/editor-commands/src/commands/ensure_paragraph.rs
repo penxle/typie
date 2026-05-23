@@ -6,7 +6,9 @@ use crate::helpers::is_block_container;
 use crate::{CommandError, CommandResult};
 
 pub fn ensure_paragraph(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if selection.is_collapsed() {
         return Ok(false);
     }
@@ -64,11 +66,11 @@ pub fn ensure_paragraph(tr: &mut Transaction) -> CommandResult {
         Ok(())
     })?;
 
-    tr.set_selection(Selection::collapsed(Position {
+    tr.set_selection(Some(Selection::collapsed(Position {
         node_id: new_para_id,
         offset: 0,
         affinity: Affinity::Downstream,
-    }))?;
+    })))?;
 
     Ok(true)
 }

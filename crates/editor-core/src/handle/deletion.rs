@@ -56,7 +56,10 @@ pub fn handle_deletion_op(editor: &mut Editor, op: DeletionOp) -> Result<(), Edi
             })?;
         }
         DeletionOp::Move { movement } => {
-            let head = editor.state().selection.head;
+            let Some(selection) = editor.state().selection else {
+                return Ok(());
+            };
+            let head = selection.head;
             let resource_guard = editor.resource.lock().unwrap();
             let target = editor
                 .view
@@ -93,8 +96,10 @@ fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str
 
 fn delete_surrounding(tr: &mut Transaction, before: usize, after: usize) -> CommandResult {
     let doc = tr.doc();
-    let cursor_flat = tr
+    let selection = tr
         .selection()
+        .ok_or(CommandError::Corrupted("no selection".into()))?;
+    let cursor_flat = selection
         .head
         .resolve(&doc)
         .ok_or(CommandError::Corrupted("cursor unresolvable".into()))?
@@ -139,8 +144,10 @@ fn utf16_to_char_counts(
     after_u16: usize,
 ) -> Result<(usize, usize), CommandError> {
     let doc = tr.doc();
-    let cursor_flat = tr
+    let selection = tr
         .selection()
+        .ok_or(CommandError::Corrupted("no selection".into()))?;
+    let cursor_flat = selection
         .head
         .resolve(&doc)
         .ok_or(CommandError::Corrupted("cursor unresolvable".into()))?

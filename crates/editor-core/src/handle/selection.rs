@@ -1,6 +1,7 @@
 use editor_commands::{self as commands};
 use editor_state::{
-    Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, farther_endpoint,
+    PendingModifiers, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+    farther_endpoint,
 };
 use editor_transaction::HistoryMeta;
 
@@ -9,6 +10,16 @@ use crate::error::EditorError;
 use crate::message::*;
 
 pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), EditorError> {
+    if matches!(op, SelectionOp::Unset) {
+        editor.view.clear_preferred_x();
+        return editor.transact(|tr| {
+            tr.set_composition(None)?;
+            tr.set_pending_modifiers(PendingModifiers::new())?;
+            tr.set_selection(None)?;
+            Ok(())
+        });
+    }
+
     let extend_to_selection = resolve_extend_to_selection(editor, &op);
 
     editor.view.clear_preferred_x();
@@ -38,11 +49,12 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             }
             SelectionOp::ExtendTo { .. } => {
                 if let Some(selection) = extend_to_selection
-                    && tr.selection() != selection
+                    && tr.selection() != Some(selection)
                 {
                     commands::set_selection(tr, selection)?;
                 }
             }
+            SelectionOp::Unset => unreachable!("handled above"),
         }
         Ok(())
     })
@@ -97,7 +109,8 @@ fn resolve_extend_to_selection(editor: &Editor, op: &SelectionOp) -> Option<Sele
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::{Position, Selection};
+    use editor_model::Modifier;
+    use editor_state::{Composition, PendingModifier, Position, Selection};
 
     use super::*;
 
@@ -112,7 +125,7 @@ mod tests {
         editor.apply(Message::Selection {
             op: SelectionOp::Set { selection: target },
         });
-        assert_eq!(editor.state().selection, target);
+        assert_eq!(editor.state().selection, Some(target));
         assert!(!editor.history.can_undo());
     }
 
@@ -125,7 +138,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state.doc);
 
-        let initial = editor.state().selection;
+        let initial = editor.state().selection.expect("selection exists in test");
         assert_ne!(initial.anchor, initial.head);
 
         editor.apply(Message::Selection {
@@ -140,7 +153,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(sel.anchor, initial.anchor);
         assert_eq!(sel.head.node_id, initial.head.node_id);
         assert!(
@@ -174,7 +187,100 @@ mod tests {
         });
 
         assert_eq!(editor.state().selection, before);
-        assert!(!editor.state().selection.is_collapsed());
+        assert!(!before.expect("selection exists in test").is_collapsed());
         assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn selection_op_unset_cascades_composition_pending_selection() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 3)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        editor
+            .transact(|tr| {
+                tr.set_composition(Some(Composition { start: 1, end: 3 }))?;
+                tr.set_pending_modifiers(vec![PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                }])?;
+                Ok(())
+            })
+            .unwrap();
+
+        assert!(editor.state().composition.is_some());
+        assert!(!editor.state().pending_modifiers.is_empty());
+        assert!(editor.state().selection.is_some());
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Unset,
+        });
+
+        assert!(editor.state().selection.is_none(), "selection cleared");
+        assert!(editor.state().composition.is_none(), "composition cleared");
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending cleared"
+        );
+    }
+
+    #[test]
+    fn selection_op_unset_undo_restores_all_three() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 3)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        editor
+            .transact(|tr| {
+                tr.set_composition(Some(Composition { start: 1, end: 3 }))?;
+                tr.set_pending_modifiers(vec![PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                }])?;
+                Ok(())
+            })
+            .unwrap();
+
+        // Clear history so the setup transact doesn't interfere with undo.
+        editor.history =
+            crate::history::History::new(editor_common::time::Duration::from_millis(300));
+
+        let pre_unset_selection = editor.state().selection;
+        let pre_unset_composition = editor.state().composition;
+        let pre_unset_pending = editor.state().pending_modifiers.clone();
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Unset,
+        });
+
+        assert!(editor.state().selection.is_none(), "selection cleared");
+        assert!(editor.state().composition.is_none(), "composition cleared");
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending cleared"
+        );
+
+        assert!(editor.history.can_undo(), "Unset must be undoable");
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            pre_unset_selection,
+            "selection restored"
+        );
+        assert_eq!(
+            editor.state().composition,
+            pre_unset_composition,
+            "composition restored"
+        );
+        assert_eq!(
+            editor.state().pending_modifiers,
+            pre_unset_pending,
+            "pending restored"
+        );
     }
 }

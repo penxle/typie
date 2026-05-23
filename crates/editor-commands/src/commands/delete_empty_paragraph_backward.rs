@@ -5,7 +5,9 @@ use editor_transaction::{Transaction, fulfill};
 use crate::{CommandError, CommandResult};
 
 pub fn delete_empty_paragraph_backward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -55,7 +57,7 @@ pub fn delete_empty_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         "no cursor position in prev sibling".into(),
     ))?;
 
-    tr.set_selection(Selection::collapsed(cursor))?;
+    tr.set_selection(Some(Selection::collapsed(cursor)))?;
 
     Ok(true)
 }

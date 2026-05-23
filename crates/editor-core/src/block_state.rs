@@ -1,6 +1,6 @@
 use editor_macros::ffi;
 use editor_model::{Doc, NodeId, NodeRef, PlainNode};
-use editor_state::{ResolvedSelection, State};
+use editor_state::{ResolvedSelection, Selection, State};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -17,19 +17,20 @@ pub struct BlockState {
     pub nodes: Vec<Block>,
 }
 
-pub fn resolve_block_state(state: &State) -> BlockState {
-    let ancestors = resolve_ancestors(state);
-    let nodes = resolve_nodes(state);
-    BlockState { ancestors, nodes }
+pub fn resolve_block_state(state: &State) -> Option<BlockState> {
+    let selection = state.selection.as_ref()?;
+    let ancestors = resolve_ancestors(state, selection);
+    let nodes = resolve_nodes(state, selection);
+    Some(BlockState { ancestors, nodes })
 }
 
-fn resolve_ancestors(state: &State) -> Vec<Block> {
+fn resolve_ancestors(state: &State, selection: &Selection) -> Vec<Block> {
     let doc = &state.doc;
-    let head_chain = ancestor_chain_from(doc, state.selection.head.node_id);
-    if state.selection.is_collapsed() {
+    let head_chain = ancestor_chain_from(doc, selection.head.node_id);
+    if selection.is_collapsed() {
         return head_chain;
     }
-    let anchor_chain = ancestor_chain_from(doc, state.selection.anchor.node_id);
+    let anchor_chain = ancestor_chain_from(doc, selection.anchor.node_id);
     common_suffix(&head_chain, &anchor_chain)
 }
 
@@ -71,12 +72,11 @@ fn common_suffix(a: &[Block], b: &[Block]) -> Vec<Block> {
     shared_from_root
 }
 
-fn resolve_nodes(state: &State) -> Vec<Block> {
-    let sel = state.selection;
-    if sel.is_collapsed() {
+fn resolve_nodes(state: &State, selection: &Selection) -> Vec<Block> {
+    if selection.is_collapsed() {
         return Vec::new();
     }
-    let Some(rs) = sel.resolve(&state.doc) else {
+    let Some(rs) = selection.resolve(&state.doc) else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -115,7 +115,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hi") } } }
             selection: (t1, 1)
         };
-        let bs = resolve_block_state(&state);
+        let bs = resolve_block_state(&state).unwrap();
         assert_eq!(bs.ancestors.len(), 2);
         assert!(matches!(bs.ancestors[0].node, PlainNode::Paragraph(_)));
         assert!(matches!(bs.ancestors[1].node, PlainNode::Root(_)));
@@ -130,7 +130,7 @@ mod tests {
             } }
             selection: (t1, 0) -> (t2, 2)
         };
-        let bs = resolve_block_state(&state);
+        let bs = resolve_block_state(&state).unwrap();
         assert_eq!(bs.ancestors.len(), 1);
         assert!(matches!(bs.ancestors[0].node, PlainNode::Root(_)));
     }
@@ -141,7 +141,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hi") } } }
             selection: (t1, 1)
         };
-        let bs = resolve_block_state(&state);
+        let bs = resolve_block_state(&state).unwrap();
         assert!(bs.nodes.is_empty());
     }
 
@@ -155,7 +155,7 @@ mod tests {
             } }
             selection: (t1, 0) -> (t2, 2)
         };
-        let bs = resolve_block_state(&state);
+        let bs = resolve_block_state(&state).unwrap();
         assert!(
             bs.nodes
                 .iter()
@@ -179,7 +179,7 @@ mod tests {
             } }
             selection: (r, 0) -> (t_after, 5)
         };
-        let bs = resolve_block_state(&state);
+        let bs = resolve_block_state(&state).unwrap();
         let has_blockquote = bs
             .nodes
             .iter()

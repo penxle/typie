@@ -7,13 +7,19 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 
 pub fn handle_remote(editor: &mut Editor, changeset: Changeset<DocOp>) -> Result<(), EditorError> {
-    let frozen = StableSelection::freeze(&editor.state.selection, &editor.state.doc);
+    let frozen = editor
+        .state
+        .selection
+        .as_ref()
+        .map(|s| StableSelection::freeze(s, &editor.state.doc));
     let (mut next, applied_ops) = editor
         .state
         .receive_remote_changeset(changeset)
         .map_err(|e| EditorError::Step(StepError::State(e)))?;
-    let thawed = frozen.thaw(&next.doc);
-    next.selection = thawed.normalize(&next.doc).unwrap_or(thawed);
+    next.selection = frozen.map(|f| {
+        let thawed = f.thaw(&next.doc);
+        thawed.normalize(&next.doc).unwrap_or(thawed)
+    });
     editor.state = next;
     editor.pending_ops.extend(applied_ops);
     Ok(())
@@ -24,7 +30,7 @@ mod tests {
     use editor_crdt::TextOp;
     use editor_macros::state;
     use editor_model::{DocOp, NodeId};
-    use editor_state::State;
+    use editor_state::{DocFlatExt, State};
     use hashbrown::HashSet;
 
     use crate::editor::Editor;
@@ -61,8 +67,9 @@ mod tests {
         editor.receive_remote_changeset(cs);
         let _ = editor.tick().unwrap();
 
-        assert_eq!(editor.state().selection.head.node_id, t1);
-        assert_eq!(editor.state().selection.head.offset, 2);
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(sel.head.offset, 2);
     }
 
     #[test]
@@ -122,8 +129,55 @@ mod tests {
         editor.receive_remote_changeset(cs);
         let _ = editor.tick().unwrap();
 
-        assert_eq!(editor.state().selection.head.node_id, NodeId::ROOT);
-        assert_eq!(editor.state().selection.head.offset, 1);
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(sel.head.offset, 1);
+    }
+
+    #[test]
+    fn remote_changeset_applies_when_selection_is_none() {
+        let (replica_a, t1) = state! {
+            doc { root { paragraph { t1: text("ab") } } }
+            selection: (t1, 1)
+        };
+        let css_a = replica_a.graph.changesets_as_vec();
+        let replica_b = State::from_changesets(css_a, None).unwrap();
+
+        let baseline: HashSet<_> = replica_a.graph.current_heads().copied().collect();
+        let (replica_a, _op) = replica_a
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'X',
+                },
+            })
+            .unwrap();
+        let replica_a = State {
+            graph: replica_a.graph.commit(),
+            ..replica_a
+        };
+        let cs = replica_a
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0);
+
+        let mut editor = Editor::new_test(replica_b);
+        editor.receive_remote_changeset(cs);
+        let _ = editor.tick().unwrap();
+
+        let full_text = editor
+            .state()
+            .doc
+            .flat_text(0..editor.state().doc.flat_size());
+        assert!(
+            full_text.contains('X'),
+            "remote changeset must be applied even when selection is None; doc text: {full_text:?}"
+        );
+        assert!(
+            editor.state().selection.is_none(),
+            "selection must remain None when it was None before the remote changeset"
+        );
     }
 
     #[test]
@@ -144,7 +198,7 @@ mod tests {
             offset: 0,
             affinity: editor_state::Affinity::Downstream,
         });
-        let replica_b = State::from_changesets(css_a, raw_on_atom).unwrap();
+        let replica_b = State::from_changesets(css_a, Some(raw_on_atom)).unwrap();
 
         // Generate a trivial remote op from replica_a (text insert) to trigger handle_remote.
         let baseline: HashSet<_> = replica_a.graph.current_heads().copied().collect();
@@ -171,7 +225,7 @@ mod tests {
         let _ = editor.tick().unwrap();
 
         // handle_remote must normalize after thaw, expanding to the image (child[0]) node selection.
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert!(
             !sel.is_collapsed(),
             "remote thaw must normalize collapsed-on-atom, got {:?}",

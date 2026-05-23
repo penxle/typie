@@ -60,13 +60,13 @@ export class Editor {
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
 
   #cursor = $state<CursorMetrics>();
-  #selection = $state<Selection>();
+  #selection = $state<Selection | undefined>();
   #pageSizes = $state<Size[]>([]);
   #externalElements = $state<ExternalElement[]>([]);
   #rootAttrs = $state<PlainRootNode>();
-  #modifierState = $state<ModifierState>();
+  #modifierState = $state<ModifierState | undefined>();
   #rootModifiers = $state<Modifier[]>();
-  #blockState = $state<BlockState>();
+  #blockState = $state<BlockState | undefined>();
   #focused = $state(false);
   #effectCleanup: (() => void) | null = null;
 

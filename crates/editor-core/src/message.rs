@@ -117,6 +117,7 @@ pub enum SelectionOp {
     Set {
         selection: Selection,
     },
+    Unset,
     SetFlat {
         start: usize,
         end: usize,

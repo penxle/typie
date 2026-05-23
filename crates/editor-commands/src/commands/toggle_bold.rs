@@ -10,7 +10,9 @@ use crate::helpers::{
 use crate::{CommandError, CommandResult};
 
 pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
 
     if selection.is_collapsed() {
         return toggle_bold_collapsed(tr, resource);
@@ -246,7 +248,10 @@ fn toggle_bold_off_range(
 }
 
 fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandResult {
-    let pos = tr.selection().head;
+    let pos = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let doc = tr.doc();
     let node = doc
         .node(pos.node_id)
@@ -343,6 +348,18 @@ mod tests {
 
     use super::*;
     use crate::test_utils::*;
+
+    #[test]
+    fn toggle_bold_returns_false_when_no_selection() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc { root { paragraph { text("Hello") [font_weight(400), font_family("Pretendard".to_string())] } } }
+            selection: none
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        let result = toggle_bold(&mut tr, &resource);
+        assert!(matches!(result, Ok(false)));
+    }
 
     #[test]
     fn bold_target_prefers_700_when_available() {
@@ -607,9 +624,10 @@ mod tests {
             selection: (t1, 0) -> (t2, 5)
         };
         let doc = state.doc;
+        let sel = state.selection.as_ref().unwrap();
         let nodes = vec![
-            doc.node(state.selection.anchor.node_id).unwrap(),
-            doc.node(state.selection.head.node_id).unwrap(),
+            doc.node(sel.anchor.node_id).unwrap(),
+            doc.node(sel.head.node_id).unwrap(),
         ];
         assert!(check_range_is_bold(&nodes));
     }
@@ -787,7 +805,7 @@ mod tests {
             selection: (t1, 0) -> (t1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.head.node_id;
+        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
         let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             !entry
@@ -811,7 +829,7 @@ mod tests {
             selection: (t1, 0) -> (t1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.head.node_id;
+        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
         let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             !entry
@@ -841,7 +859,7 @@ mod tests {
             selection: (t1, 0) -> (t1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.head.node_id;
+        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
         let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             !entry
@@ -865,7 +883,7 @@ mod tests {
             selection: (t1, 0) -> (t1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.head.node_id;
+        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
         let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             entry
@@ -950,7 +968,7 @@ mod tests {
             selection: (t1, 5) -> (t1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.anchor.node_id;
+        let t1_id = actual.selection.as_ref().unwrap().anchor.node_id;
         let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             entry
@@ -1098,7 +1116,7 @@ mod tests {
             toggle_bold(&mut tr, &resource)
         });
 
-        let sel = &actual.selection;
+        let sel = actual.selection.as_ref().unwrap();
         let doc = &actual.doc;
         assert!(
             doc.get_entry(sel.anchor.node_id).is_some(),

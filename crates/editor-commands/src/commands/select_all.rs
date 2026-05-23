@@ -10,9 +10,9 @@ pub fn select_all(tr: &mut Transaction) -> CommandResult {
     let children_count = root.children().count();
 
     if children_count == 0 {
-        tr.set_selection(Selection::collapsed(Position::new(root.id(), 0)))?;
+        tr.set_selection(Some(Selection::collapsed(Position::new(root.id(), 0))))?;
     } else {
-        tr.set_selection(Selection::new(
+        tr.set_selection(Some(Selection::new(
             Position {
                 node_id: root.id(),
                 offset: 0,
@@ -23,7 +23,7 @@ pub fn select_all(tr: &mut Transaction) -> CommandResult {
                 offset: root.children().count(),
                 affinity: Affinity::Upstream,
             },
-        ))?;
+        )))?;
     }
 
     Ok(true)
@@ -38,6 +38,18 @@ mod tests {
     use crate::test_utils::*;
 
     #[test]
+    fn select_all_from_none_selects_entire_doc() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { text("Hello") } } }
+            selection: none
+        };
+        let (actual, ..) = transact!(initial, |tr| select_all(&mut tr));
+        assert!(actual.selection.is_some());
+        let sel = actual.selection.unwrap();
+        assert!(!sel.is_collapsed(), "select_all must produce a range");
+    }
+
+    #[test]
     fn select_all_single_paragraph() {
         let (state, r) = state! {
             doc { r: root { paragraph { text("hello") } } }
@@ -48,14 +60,14 @@ mod tests {
 
         assert_eq!(
             actual.selection,
-            Selection::new(
+            Some(Selection::new(
                 Position::new(r, 0),
                 Position {
                     node_id: r,
                     offset: 1,
                     affinity: Affinity::Upstream,
                 },
-            )
+            ))
         );
     }
 
@@ -74,9 +86,10 @@ mod tests {
 
         let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
-        assert_eq!(actual.selection.anchor, Position::new(r, 0));
+        let sel = actual.selection.unwrap();
+        assert_eq!(sel.anchor, Position::new(r, 0));
         assert_eq!(
-            actual.selection.head,
+            sel.head,
             Position {
                 node_id: r,
                 offset: 3,
@@ -94,9 +107,10 @@ mod tests {
 
         let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
-        assert_eq!(actual.selection.anchor, Position::new(r, 0));
+        let sel = actual.selection.unwrap();
+        assert_eq!(sel.anchor, Position::new(r, 0));
         assert_eq!(
-            actual.selection.head,
+            sel.head,
             Position {
                 node_id: r,
                 offset: 3,
@@ -116,14 +130,14 @@ mod tests {
 
         assert_eq!(
             actual.selection,
-            Selection::new(
+            Some(Selection::new(
                 Position::new(r, 0),
                 Position {
                     node_id: r,
                     offset: 1,
                     affinity: Affinity::Upstream,
                 },
-            )
+            ))
         );
     }
 }

@@ -11,7 +11,11 @@ use crate::message::*;
 /// correct after Shift-click, where `pos` is a `(TableRow, _)` position with
 /// no `TableCell` ancestor), else the cell enclosing `pos`.
 fn drag_anchor_cell(editor: &Editor, pos: &editor_state::Position) -> Option<editor_model::NodeId> {
-    if let Some(resolved) = editor.state.selection.resolve(&editor.state.doc)
+    if let Some(resolved) = editor
+        .state
+        .selection
+        .as_ref()
+        .and_then(|s| s.resolve(&editor.state.doc))
         && let Some(cr) = resolved.as_cell_rect()
     {
         return Some(cr.anchor_cell.id());
@@ -35,24 +39,27 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                 0 => return Ok(()),
                 1 => {
                     if modifiers.shift {
-                        let anchor = editor.state.selection.anchor;
-                        let cell_sel = drag_anchor_cell(editor, &anchor).and_then(|a| {
-                            let cells = table_cell_ids(&editor.state.doc, a);
-                            editor
-                                .view
-                                .nearest_node_box(page, x, y, &cells)
-                                .filter(|&h| h != a)
-                                .and_then(|h| cell_rect_selection(&editor.state.doc, a, h))
-                        });
-                        cell_sel.or_else(|| {
-                            ext_hit.as_ref().map(|h| {
-                                let doc = &editor.state.doc;
-                                let cur = editor.state.selection;
-                                let fixed = farther_endpoint(doc, h.head, cur.anchor, cur.head);
-                                let head = farther_endpoint(doc, fixed, h.anchor, h.head);
-                                Selection::new(fixed, head)
+                        if let Some(cur) = editor.state.selection {
+                            let anchor = cur.anchor;
+                            let cell_sel = drag_anchor_cell(editor, &anchor).and_then(|a| {
+                                let cells = table_cell_ids(&editor.state.doc, a);
+                                editor
+                                    .view
+                                    .nearest_node_box(page, x, y, &cells)
+                                    .filter(|&h| h != a)
+                                    .and_then(|h| cell_rect_selection(&editor.state.doc, a, h))
+                            });
+                            cell_sel.or_else(|| {
+                                ext_hit.as_ref().map(|h| {
+                                    let doc = &editor.state.doc;
+                                    let fixed = farther_endpoint(doc, h.head, cur.anchor, cur.head);
+                                    let head = farther_endpoint(doc, fixed, h.anchor, h.head);
+                                    Selection::new(fixed, head)
+                                })
                             })
-                        })
+                        } else {
+                            raw_hit
+                        }
                     } else {
                         raw_hit
                     }
@@ -76,7 +83,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             if let Some(new_selection) = selection {
                 editor.view.clear_preferred_x();
                 editor.transact(|tr| {
-                    tr.set_selection(new_selection)?;
+                    tr.set_selection(Some(new_selection))?;
                     Ok(())
                 })?;
             }
@@ -86,13 +93,16 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             // edge that keeps the unit enveloped whichever way the drag goes. A
             // text caret or promoted gutter slot is collapsed, so a single point
             // is preserved as before. Non-shift keeps ext_hit's gutter promotion.
-            editor.drag_anchor = (count == 1).then(|| {
-                if modifiers.shift {
-                    Selection::collapsed(editor.state.selection.anchor)
-                } else {
-                    ext_hit.unwrap_or_else(|| Selection::collapsed(editor.state.selection.anchor))
-                }
-            });
+            editor.drag_anchor = (count == 1)
+                .then(|| {
+                    let anchor = editor.state.selection.map(|s| s.anchor);
+                    if modifiers.shift {
+                        anchor.map(Selection::collapsed)
+                    } else {
+                        ext_hit.or_else(|| anchor.map(Selection::collapsed))
+                    }
+                })
+                .flatten();
         }
 
         PointerEvent::Move { page, x, y } => {
@@ -106,14 +116,15 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                     let is_cell_mode = editor
                         .state
                         .selection
-                        .resolve(&editor.state.doc)
+                        .as_ref()
+                        .and_then(|s| s.resolve(&editor.state.doc))
                         .is_some_and(|r| r.as_cell_rect().is_some());
                     if (h != a || is_cell_mode)
                         && let Some(sel) = cell_rect_selection(&editor.state.doc, a, h)
                     {
                         editor.view.clear_preferred_x();
                         editor.transact(|tr| {
-                            tr.set_selection(sel)?;
+                            tr.set_selection(Some(sel))?;
                             Ok(())
                         })?;
                         return Ok(());
@@ -134,7 +145,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                 let new_selection = Selection::new(fixed, head);
                 editor.view.clear_preferred_x();
                 editor.transact(|tr| {
-                    tr.set_selection(new_selection)?;
+                    tr.set_selection(Some(new_selection))?;
                     Ok(())
                 })?;
             }
@@ -239,7 +250,11 @@ mod tests {
             },
         });
 
-        let anchor = editor.state().selection.anchor;
+        let anchor = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .anchor;
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Down {
@@ -254,7 +269,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(sel.anchor, anchor);
         assert_ne!(sel.anchor, sel.head);
     }
@@ -278,7 +293,11 @@ mod tests {
             },
         });
 
-        let anchor = editor.state().selection.anchor;
+        let anchor = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .anchor;
         assert!(editor.drag_anchor.is_some());
 
         editor.apply(Message::Pointer {
@@ -289,7 +308,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(sel.anchor, anchor);
         assert_ne!(sel.anchor, sel.head);
     }
@@ -314,10 +333,14 @@ mod tests {
                 modifiers: InputModifiers::default(),
             },
         });
-        let drag_anchor = editor.state().selection.anchor;
+        let drag_anchor = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .anchor;
         assert!(editor.drag_anchor.is_some());
 
-        editor.state.selection = Selection::collapsed(Position::new(t, 11));
+        editor.state.selection = Some(Selection::collapsed(Position::new(t, 11)));
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -327,7 +350,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(
             sel.anchor, drag_anchor,
             "drag anchor must survive an intermediate collapse"
@@ -388,7 +411,7 @@ mod tests {
             },
         });
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         let (lo, hi) = if s.anchor.offset <= s.head.offset {
             (s.anchor.offset, s.head.offset)
         } else {
@@ -455,7 +478,7 @@ mod tests {
         });
         assert_eq!(
             editor.state().selection,
-            Selection::new(
+            Some(Selection::new(
                 Position {
                     node_id: r1,
                     offset: 0,
@@ -466,7 +489,7 @@ mod tests {
                     offset: 1,
                     affinity: Affinity::Upstream,
                 },
-            ),
+            )),
             "Down on the first image must node-select it"
         );
 
@@ -481,7 +504,7 @@ mod tests {
 
         assert_eq!(
             editor.state().selection,
-            Selection::new(
+            Some(Selection::new(
                 Position {
                     node_id: r1,
                     offset: 0,
@@ -492,7 +515,7 @@ mod tests {
                     offset: 3,
                     affinity: Affinity::Upstream,
                 },
-            ),
+            )),
             "dragging down from the first image must keep it selected: \
              anchor stays at the image's leading edge (r1,0), not its trailing edge (r1,1)"
         );
@@ -523,7 +546,7 @@ mod tests {
                 modifiers: InputModifiers::default(),
             },
         });
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert!(
             sel.is_collapsed(),
             "Down on the trailing paragraph collapses"
@@ -542,7 +565,7 @@ mod tests {
 
         assert_eq!(
             editor.state().selection,
-            Selection::new(
+            Some(Selection::new(
                 Position {
                     node_id: p1,
                     offset: 0,
@@ -553,7 +576,7 @@ mod tests {
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
-            ),
+            )),
             "dragging up to the top must envelope the first image: \
              head reaches the doc start (r1,0), not the gap after image0 (r1,1)"
         );
@@ -620,7 +643,7 @@ mod tests {
 
         assert_eq!(
             editor.state().selection,
-            Selection::new(
+            Some(Selection::new(
                 Position {
                     node_id: r1,
                     offset: 3,
@@ -631,7 +654,7 @@ mod tests {
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
-            ),
+            )),
             "dragging up from the last image must keep it selected: \
              anchor stays at the image's trailing edge (r1,3), not its leading edge (r1,2)"
         );
@@ -739,7 +762,11 @@ mod tests {
                 modifiers: InputModifiers::default(),
             },
         });
-        let anchor = editor.state().selection.anchor;
+        let anchor = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .anchor;
         assert!(editor.drag_anchor.is_some());
 
         editor.apply(Message::Pointer {
@@ -750,7 +777,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(
             sel.anchor.node_id, anchor.node_id,
             "drag anchor must not jump to another node"
@@ -797,7 +824,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert!(sel.is_collapsed());
         assert_ne!(
             sel.head.node_id,
@@ -845,7 +872,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert!(
             !sel.is_collapsed(),
             "gutter-started drag must envelope the leading fold, not collapse, got {:?}",
@@ -892,7 +919,11 @@ mod tests {
                 modifiers: InputModifiers::default(),
             },
         });
-        let anchor = editor.state().selection.anchor;
+        let anchor = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .anchor;
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -902,7 +933,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(
             sel.anchor.node_id, anchor.node_id,
             "anchor must stay in the leading paragraph (affinity may flip)"
@@ -945,7 +976,11 @@ mod tests {
                 modifiers: InputModifiers::default(),
             },
         });
-        let anchor = editor.state().selection.anchor;
+        let anchor = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .anchor;
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -955,7 +990,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(
             sel.anchor.node_id, anchor.node_id,
             "anchor must stay in the trailing paragraph (affinity may flip)"
@@ -1022,7 +1057,12 @@ mod tests {
             },
         });
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
+            .unwrap();
         let cr = resolved
             .as_cell_rect()
             .expect("cross-cell drag must be a cell-rect");
@@ -1054,7 +1094,12 @@ mod tests {
             },
         });
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
+            .unwrap();
         assert!(
             resolved.as_cell_rect().is_none(),
             "same-cell drag stays text"
@@ -1093,7 +1138,12 @@ mod tests {
             },
         });
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
+            .unwrap();
         assert!(
             resolved.as_cell_rect().is_some(),
             "leaving the table must keep a clamped cell-rect, not revert to text"
@@ -1130,7 +1180,12 @@ mod tests {
             },
         });
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
+            .unwrap();
         let cr = resolved
             .as_cell_rect()
             .expect("shift+click other cell → cell-rect");
@@ -1172,7 +1227,12 @@ mod tests {
             },
         });
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
+            .unwrap();
         let cr = resolved.as_cell_rect().expect(
             "returning to the anchor cell mid-drag must stay a 1x1 cell-rect, not revert to text",
         );
@@ -1226,7 +1286,8 @@ mod tests {
             editor
                 .state
                 .selection
-                .resolve(&editor.state.doc)
+                .as_ref()
+                .and_then(|s| s.resolve(&editor.state.doc))
                 .unwrap()
                 .as_cell_rect()
                 .is_some(),
@@ -1249,7 +1310,12 @@ mod tests {
             },
         });
 
-        let resolved = editor.state.selection.resolve(&editor.state.doc).unwrap();
+        let resolved = editor
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
+            .unwrap();
         let cr = resolved
             .as_cell_rect()
             .expect("shift-click extending an existing cell-rect must stay a cell-rect");
@@ -1303,7 +1369,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert!(
             sel.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1367,7 +1433,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert!(
             sel.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1443,7 +1509,7 @@ mod tests {
             },
         });
 
-        let sel = editor.state().selection;
+        let sel = editor.state().selection.expect("selection exists in test");
         assert_ne!(
             sel.anchor.node_id,
             editor_model::NodeId::ROOT,

@@ -6,7 +6,9 @@ use crate::helpers::merge_element_cross_parent;
 use crate::{CommandError, CommandResult};
 
 pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -65,7 +67,7 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         .ok_or(CommandError::NoParent(source_paragraph_id))?
         .id();
 
-    let raw_cursor_selection = tr.selection();
+    let raw_cursor_selection = selection;
     // If the target paragraph carries a trailing PageBreak, the pre-batch
     // cleanup will strip it. Adjust the captured selection now so the
     // post-batch restore sees a still-valid offset.
@@ -153,11 +155,11 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         if let Some(p) = doc.node(paragraph_id)
             && let Some(pos) = p.first_cursor_position()
         {
-            tr.set_selection(Selection::collapsed(pos))?;
+            tr.set_selection(Some(Selection::collapsed(pos)))?;
             return Ok(true);
         }
     }
-    tr.set_selection(cursor_selection)?;
+    tr.set_selection(Some(cursor_selection))?;
 
     Ok(true)
 }

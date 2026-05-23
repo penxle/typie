@@ -29,7 +29,10 @@ pub fn edit_modifier(
         )));
     }
 
-    let collapsed = tr.selection().is_collapsed();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+    let collapsed = selection.is_collapsed();
     if collapsed {
         edit_modifier_collapsed(tr, modifier_type, modifier)
     } else {
@@ -42,7 +45,10 @@ fn edit_modifier_collapsed(
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
-    let pos: Position = tr.selection().head;
+    let pos: Position = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let Some(span_ids) = resolve_modifier_span_at(tr.state(), &pos, modifier_type) else {
         return Ok(false);
     };
@@ -77,7 +83,7 @@ fn edit_modifier_range(
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
-    let selection = tr.selection();
+    let selection = tr.selection().expect("entry caller guaranteed selection");
     let doc = tr.doc();
     let resolved = selection
         .resolve(&doc)

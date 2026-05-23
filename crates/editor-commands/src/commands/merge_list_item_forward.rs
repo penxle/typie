@@ -6,7 +6,9 @@ use crate::helpers::{find_enclosing_list_item_id, merge_element_cross_parent};
 use crate::{CommandError, CommandResult};
 
 pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -121,7 +123,7 @@ pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
             Ok(())
         })?;
 
-        tr.set_selection(Selection::collapsed(cursor_target))?;
+        tr.set_selection(Some(Selection::collapsed(cursor_target)))?;
         return Ok(true);
     }
 
@@ -165,7 +167,7 @@ pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
         Ok(())
     })?;
 
-    tr.set_selection(Selection::collapsed(cursor_target))?;
+    tr.set_selection(Some(Selection::collapsed(cursor_target)))?;
     Ok(true)
 }
 

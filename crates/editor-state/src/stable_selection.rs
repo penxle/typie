@@ -71,7 +71,7 @@ mod tests {
             doc { root { paragraph { t1: text("hello") } } }
             selection: (t1, 3)
         };
-        let sel = state.selection;
+        let sel = state.selection.unwrap();
         let stable = StableSelection::freeze(&sel, &state.doc);
         let back = stable.thaw(&state.doc);
         assert_eq!(back, sel);
@@ -85,7 +85,7 @@ mod tests {
             doc { root { paragraph { t1: text("hello") } } }
             selection: (t1, 1) -> (t1, 4)
         };
-        let sel = state.selection;
+        let sel = state.selection.unwrap();
         let stable = StableSelection::freeze(&sel, &state.doc);
         let back = stable.thaw(&state.doc);
         assert_eq!(back, sel);
@@ -102,7 +102,7 @@ mod tests {
             }
             selection: (t1, 2) -> (t2, 3)
         };
-        let stable = StableSelection::freeze(&state.selection, &state.doc);
+        let stable = StableSelection::freeze(state.selection.as_ref().unwrap(), &state.doc);
 
         let dead_state = remove_paragraph(&state, p1);
         let back = stable.thaw(&dead_state.doc);

@@ -10,13 +10,13 @@ use crate::selection::Selection;
 pub struct State {
     pub graph: OpGraph<DocOp>,
     pub doc: Doc,
-    pub selection: Selection,
+    pub selection: Option<Selection>,
     pub pending_modifiers: PendingModifiers,
     pub composition: Option<Composition>,
 }
 
 impl State {
-    pub fn new(doc: Doc, graph: OpGraph<DocOp>, selection: Selection) -> Self {
+    pub fn new(doc: Doc, graph: OpGraph<DocOp>, selection: Option<Selection>) -> Self {
         Self {
             doc,
             graph,
@@ -28,7 +28,7 @@ impl State {
 
     pub fn from_changesets(
         css: Vec<Changeset<DocOp>>,
-        selection: Selection,
+        selection: Option<Selection>,
     ) -> Result<Self, StateError> {
         let graph = OpGraph::from_changesets(css)?;
         let doc = Doc::from_op_graph(&graph)?;

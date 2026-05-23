@@ -142,7 +142,8 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&doc);
 
-        let elements = view.external_elements(&doc, &Selection::collapsed(Position::new(img, 0)));
+        let elements =
+            view.external_elements(&doc, Some(&Selection::collapsed(Position::new(img, 0))));
 
         assert_eq!(elements.len(), 4);
         assert_eq!(elements[0].node_id, img);
@@ -164,7 +165,7 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&state.doc);
 
-        let elements = view.external_elements(&state.doc, &state.selection);
+        let elements = view.external_elements(&state.doc, state.selection.as_ref());
 
         let image = elements
             .iter()

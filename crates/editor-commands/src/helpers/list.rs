@@ -152,7 +152,7 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: NodeId) -
                 affinity: Affinity::Downstream,
             },
         };
-        tr.set_selection(Selection::collapsed(cursor_pos))?;
+        tr.set_selection(Some(Selection::collapsed(cursor_pos)))?;
     }
 
     Ok(true)

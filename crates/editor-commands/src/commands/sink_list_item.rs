@@ -6,7 +6,9 @@ use crate::helpers::{collect_top_level_list_items_in_selection, find_enclosing_l
 use crate::{CommandError, CommandResult};
 
 pub fn sink_list_item(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     let doc = tr.doc();
 
     if selection.is_collapsed() {

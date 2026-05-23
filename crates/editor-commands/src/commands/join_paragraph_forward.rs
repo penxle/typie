@@ -4,7 +4,9 @@ use editor_transaction::{Transaction, compact};
 use crate::{CommandError, CommandResult};
 
 pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -52,7 +54,7 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
     let next_id = next.id();
 
     // Record cursor position before merge (stays at current position)
-    let cursor_selection = tr.selection();
+    let cursor_selection = selection;
 
     tr.merge_node(next_id, paragraph_id)?;
 
@@ -61,7 +63,7 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         tr.apply_steps(compact(&p))?;
     }
 
-    tr.set_selection(cursor_selection)?;
+    tr.set_selection(Some(cursor_selection))?;
 
     Ok(true)
 }

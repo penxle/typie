@@ -5,7 +5,9 @@ use crate::helpers::{find_enclosing_list_item_id, lift_list_item_inner};
 use crate::{CommandError, CommandResult};
 
 pub fn lift_first_list_item(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }

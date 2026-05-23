@@ -5,7 +5,9 @@ use editor_transaction::{Transaction, fulfill, prune};
 use crate::{CommandError, CommandResult};
 
 pub fn select_node_backward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -83,7 +85,7 @@ pub fn select_node_backward(tr: &mut Transaction) -> CommandResult {
         })?;
     }
 
-    tr.set_selection(Selection::new(
+    tr.set_selection(Some(Selection::new(
         Position {
             node_id: parent_id,
             offset: prev_idx,
@@ -94,7 +96,7 @@ pub fn select_node_backward(tr: &mut Transaction) -> CommandResult {
             offset: prev_idx + 1,
             affinity: Affinity::Upstream,
         },
-    ))?;
+    )))?;
 
     Ok(true)
 }

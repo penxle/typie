@@ -35,7 +35,9 @@ impl Editor {
     pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorMetrics>>> {
         self.with_inner(|inner| {
             let state = inner.editor.state();
-            let selection = state.selection;
+            let Some(selection) = state.selection.as_ref() else {
+                return Ok(None);
+            };
             if selection.is_collapsed() {
                 Ok(inner
                     .editor
@@ -48,7 +50,7 @@ impl Editor {
         })
     }
 
-    pub fn selection(&self) -> EditorResult<Complex<editor_state::Selection>> {
+    pub fn selection(&self) -> EditorResult<Option<Complex<editor_state::Selection>>> {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
 
@@ -86,11 +88,11 @@ impl Editor {
         })
     }
 
-    pub fn modifier_state(&self) -> EditorResult<Complex<editor_model::ModifierState>> {
+    pub fn modifier_state(&self) -> EditorResult<Option<Complex<editor_model::ModifierState>>> {
         self.with_inner(|inner| Ok(inner.editor.modifier_state().into_ffi()?))
     }
 
-    pub fn block_state(&self) -> EditorResult<Complex<editor_core::BlockState>> {
+    pub fn block_state(&self) -> EditorResult<Option<Complex<editor_core::BlockState>>> {
         self.with_inner(|inner| Ok(inner.editor.block_state().into_ffi()?))
     }
 
@@ -177,10 +179,11 @@ impl Editor {
 
     pub fn external_elements(&self) -> EditorResult<Vec<Complex<editor_view::ExternalElement>>> {
         self.with_inner(|inner| {
+            let state = inner.editor.state();
             Ok(inner
                 .editor
                 .view()
-                .external_elements(&inner.editor.state().doc, &inner.editor.state().selection)
+                .external_elements(&state.doc, state.selection.as_ref())
                 .into_ffi()?)
         })
     }
@@ -437,6 +440,154 @@ mod tests {
         assert!(
             hit,
             "probe resolving to current cursor must register as hit through FFI"
+        );
+    }
+
+    #[test]
+    fn ffi_selection_returns_none_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.selection().expect("ffi call returns Ok");
+        assert!(
+            result.is_none(),
+            "selection FFI must return None when state.selection is None"
+        );
+    }
+
+    #[test]
+    fn ffi_cursor_returns_none_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.cursor().expect("ffi call returns Ok");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_copy_selection_returns_none_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.copy_selection().expect("ffi call returns Ok");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_selection_endpoints_returns_none_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.selection_endpoints().expect("ffi call returns Ok");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_modifier_state_returns_none_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.modifier_state().expect("ffi call returns Ok");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_block_state_returns_none_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.block_state().expect("ffi call returns Ok");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_external_elements_returns_empty_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.external_elements().expect("ffi call returns Ok");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn ffi_selection_hit_test_returns_false_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let hit = editor
+            .selection_hit_test(0, 10.0, 10.0)
+            .expect("ffi call returns Ok");
+        assert!(
+            !hit,
+            "selection_hit_test must return false when state.selection is None"
+        );
+    }
+
+    #[test]
+    fn ffi_cursor_hit_test_returns_false_for_no_selection_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let hit = editor
+            .cursor_hit_test(0, 10.0, 10.0)
+            .expect("ffi call returns Ok");
+        assert!(
+            !hit,
+            "cursor_hit_test must return false when state.selection is None"
+        );
+    }
+
+    #[test]
+    fn ffi_selection_unset_then_set_roundtrip() {
+        use editor_core::{Message, SelectionOp};
+        use editor_state::{Position, Selection};
+
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 3)
+        };
+        let editor = make_ffi_editor(initial);
+
+        editor
+            .enqueue(Message::Selection {
+                op: SelectionOp::Unset,
+            })
+            .expect("enqueue unset");
+        let _ = editor.tick().expect("tick");
+        assert!(
+            editor.selection().expect("ffi ok").is_none(),
+            "Unset must clear selection through FFI",
+        );
+
+        let new_sel = Selection::collapsed(Position::new(t1, 1));
+        editor
+            .enqueue(Message::Selection {
+                op: SelectionOp::Set { selection: new_sel },
+            })
+            .expect("enqueue set");
+        let _ = editor.tick().expect("tick");
+        let after_set = editor.selection().expect("ffi ok");
+        assert!(
+            after_set.is_some(),
+            "Set must restore selection through FFI"
         );
     }
 }

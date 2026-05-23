@@ -19,7 +19,9 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         ));
     }
 
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -42,11 +44,11 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
             effective_sorted.sort_by_key(|m| m.as_type());
             if effective_sorted == node_mods {
                 tr.insert_text(pos.node_id, pos.offset, text)?;
-                tr.set_selection(Selection::collapsed(Position {
+                tr.set_selection(Some(Selection::collapsed(Position {
                     node_id: pos.node_id,
                     offset: pos.offset + insert_len,
                     affinity: Affinity::Upstream,
-                }))?;
+                })))?;
             } else {
                 let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
                 let node_index = node
@@ -68,11 +70,11 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
                 }
                 tr.insert_text(new_id, 0, text)?;
 
-                tr.set_selection(Selection::collapsed(Position {
+                tr.set_selection(Some(Selection::collapsed(Position {
                     node_id: new_id,
                     offset: insert_len,
                     affinity: Affinity::Upstream,
-                }))?;
+                })))?;
             }
         }
         _ => {
@@ -83,11 +85,11 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
 
             tr.insert_subtree(pos.node_id, pos.offset, subtree)?;
             tr.insert_text(new_id, 0, text)?;
-            tr.set_selection(Selection::collapsed(Position {
+            tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: new_id,
                 offset: insert_len,
                 affinity: Affinity::Upstream,
-            }))?;
+            })))?;
         }
     }
 
@@ -99,7 +101,9 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
 }
 
 pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -128,11 +132,11 @@ pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult 
             if pos.offset == 0 {
                 // Case B: cursor at start of text → insert hard break before
                 tr.insert_subtree(parent.id(), node_index, break_subtree)?;
-                tr.set_selection(Selection::collapsed(Position {
+                tr.set_selection(Some(Selection::collapsed(Position {
                     node_id: pos.node_id,
                     offset: 0,
                     affinity: Affinity::Downstream,
-                }))?;
+                })))?;
             } else if pos.offset == text_len {
                 // Case C: cursor at end of text → insert hard break after
                 tr.insert_subtree(parent.id(), node_index + 1, break_subtree)?;
@@ -144,51 +148,51 @@ pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult 
 
                 if let Some(next) = break_node.next_sibling() {
                     if matches!(next.node(), Node::Text(_)) {
-                        tr.set_selection(Selection::collapsed(Position {
+                        tr.set_selection(Some(Selection::collapsed(Position {
                             node_id: next.id(),
                             offset: 0,
                             affinity: Affinity::Downstream,
-                        }))?;
+                        })))?;
                     } else {
                         let idx = next
                             .index()
                             .ok_or(CommandError::orphan_child(next.id(), parent.id()))?;
-                        tr.set_selection(Selection::collapsed(Position {
+                        tr.set_selection(Some(Selection::collapsed(Position {
                             node_id: parent.id(),
                             offset: idx,
                             affinity: Affinity::Downstream,
-                        }))?;
+                        })))?;
                     }
                 } else {
                     let break_idx = break_node
                         .index()
                         .ok_or(CommandError::orphan_child(break_id, parent.id()))?;
-                    tr.set_selection(Selection::collapsed(Position {
+                    tr.set_selection(Some(Selection::collapsed(Position {
                         node_id: parent.id(),
                         offset: break_idx + 1,
                         affinity: Affinity::Downstream,
-                    }))?;
+                    })))?;
                 }
             } else {
                 // Case A: cursor in middle of text → split, insert hard break between
                 let split_id = NodeId::new();
                 tr.split_node(pos.node_id, pos.offset, split_id)?;
                 tr.insert_subtree(parent.id(), node_index + 1, break_subtree)?;
-                tr.set_selection(Selection::collapsed(Position {
+                tr.set_selection(Some(Selection::collapsed(Position {
                     node_id: split_id,
                     offset: 0,
                     affinity: Affinity::Downstream,
-                }))?;
+                })))?;
             }
         }
         _ => {
             // Case D: non-text node (empty paragraph, etc.)
             tr.insert_subtree(pos.node_id, pos.offset, break_subtree)?;
-            tr.set_selection(Selection::collapsed(Position {
+            tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: pos.node_id,
                 offset: pos.offset + 1,
                 affinity: Affinity::Downstream,
-            }))?;
+            })))?;
         }
     }
 

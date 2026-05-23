@@ -26,7 +26,7 @@ fn rooted_state() -> State {
     let plain = PlainDoc { nodes };
     let (doc, op_graph) = Doc::from_plain(plain);
     let sel = Selection::collapsed(Position::new(root_id, 0));
-    State::new(doc, op_graph, sel)
+    State::new(doc, op_graph, Some(sel))
 }
 
 #[test]

@@ -5,7 +5,9 @@ use editor_transaction::Transaction;
 use crate::CommandResult;
 
 pub fn select_unit_across_gap_forward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     let doc = tr.doc();
 
     let (parent_id, anchor_off, head_off): (NodeId, usize, usize) = match selection
@@ -17,7 +19,7 @@ pub fn select_unit_across_gap_forward(tr: &mut Transaction) -> CommandResult {
         Some(GapCursor::BetweenMonolithic { parent, index, .. }) => (parent.id(), index, index + 1),
     };
 
-    tr.set_selection(Selection::new(
+    tr.set_selection(Some(Selection::new(
         Position {
             node_id: parent_id,
             offset: anchor_off,
@@ -28,7 +30,7 @@ pub fn select_unit_across_gap_forward(tr: &mut Transaction) -> CommandResult {
             offset: head_off,
             affinity: Affinity::Upstream,
         },
-    ))?;
+    )))?;
     Ok(true)
 }
 

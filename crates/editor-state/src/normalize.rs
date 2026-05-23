@@ -1004,7 +1004,12 @@ mod tests {
             }
             selection: (ta, 5, <) -> (tb, 0, <)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let canonical = resolved.normalize();
         assert!(canonical.is_collapsed());
         assert_eq!(canonical.anchor.node_id, ta);
@@ -1025,7 +1030,12 @@ mod tests {
             }
             selection: (ta, 0) -> (tb, 5)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let canonical = resolved.normalize();
         assert!(!canonical.is_collapsed());
         assert_eq!(canonical.anchor.node_id, ta);
@@ -1042,7 +1052,12 @@ mod tests {
             doc { root { paragraph { ta: text("Hello") } } }
             selection: (ta, 5) -> (ta, 0)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let canonical = resolved.normalize();
         assert_eq!(canonical.anchor.node_id, ta);
         assert_eq!(canonical.anchor.offset, 5);
@@ -1058,7 +1073,12 @@ mod tests {
             doc { root: root { paragraph { ta: text("Hello") } } }
             selection: (root, 0) -> (ta, 3)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let canonical = resolved.normalize();
         assert!(canonical.is_collapsed());
         assert_eq!(canonical.head.node_id, ta);
@@ -1072,7 +1092,12 @@ mod tests {
             doc { root: root { paragraph { ta: text("Hello") } } }
             selection: (root, 0) -> (ta, 3, <)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let canonical = resolved.normalize();
         assert!(canonical.is_collapsed());
         assert_eq!(canonical.head.node_id, ta);
@@ -1091,8 +1116,13 @@ mod tests {
             }
             selection: (ta, 5, <) -> (tb, 0, <)
         };
-        let via_selection = state.selection.normalize(&state.doc);
-        let via_resolved = state.selection.resolve(&state.doc).map(|r| r.normalize());
+        let via_selection = state.selection.as_ref().unwrap().normalize(&state.doc);
+        let via_resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .map(|r| r.normalize());
         assert_eq!(via_selection, via_resolved);
     }
 
@@ -1159,7 +1189,12 @@ mod tests {
             }
             selection: (ta, 5, <) -> (tb, 0, <)
         };
-        let once = state.selection.normalize(&state.doc).unwrap();
+        let once = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .normalize(&state.doc)
+            .unwrap();
         let twice = once.normalize(&state.doc).unwrap();
         assert_eq!(once, twice);
     }
@@ -1175,7 +1210,12 @@ mod tests {
             }
             selection: (ta, 0) -> (tb, 5)
         };
-        let once = state.selection.normalize(&state.doc).unwrap();
+        let once = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .normalize(&state.doc)
+            .unwrap();
         let twice = once.normalize(&state.doc).unwrap();
         assert_eq!(once, twice);
     }
@@ -1186,7 +1226,12 @@ mod tests {
             doc { root: root { paragraph { ta: text("Hello") } } }
             selection: (root, 0) -> (ta, 3)
         };
-        let once = state.selection.normalize(&state.doc).unwrap();
+        let once = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .normalize(&state.doc)
+            .unwrap();
         let twice = once.normalize(&state.doc).unwrap();
         assert_eq!(once, twice);
     }
@@ -1205,7 +1250,12 @@ mod tests {
             }
             selection: (root, 0) -> (ta, 3)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let canonical = resolved.normalize();
         assert!(
             !canonical.is_collapsed(),
@@ -1225,7 +1275,12 @@ mod tests {
             }
             selection: (ta, 5) -> (root, 1)
         };
-        let resolved = state.selection.resolve(&state.doc).unwrap();
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
         let canonical = resolved.normalize();
         assert!(
             canonical.is_collapsed(),
@@ -1457,7 +1512,7 @@ mod tests {
             selection: (t1, 0)
         };
         let doc = &state.doc;
-        let text = state.selection.head.node_id;
+        let text = state.selection.as_ref().unwrap().head.node_id;
         let root = state
             .doc
             .node(text)

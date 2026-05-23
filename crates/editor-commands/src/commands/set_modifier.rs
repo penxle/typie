@@ -18,7 +18,10 @@ pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
     }
 
     let modifier_type = modifier.as_type();
-    let collapsed = tr.selection().is_collapsed();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+    let collapsed = selection.is_collapsed();
     let text_applicable = is_text_applicable(modifier_type);
 
     match (collapsed, text_applicable) {
@@ -31,7 +34,10 @@ pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
 
 fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
     let modifier_type = modifier.as_type();
-    let pos = tr.selection().head;
+    let pos = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let doc = tr.doc();
     let node = doc
         .node(pos.node_id)
@@ -61,7 +67,10 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
 
 fn set_modifier_collapsed_block(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
     let modifier_type = modifier.as_type();
-    let pos = tr.selection().head;
+    let pos = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let doc = tr.doc();
 
     let Some(target) = resolve_applicable_target_collapsed(&doc, pos.node_id, modifier_type) else {
@@ -72,7 +81,7 @@ fn set_modifier_collapsed_block(tr: &mut Transaction, modifier: &Modifier) -> Co
 }
 
 fn set_modifier_range_text(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
-    let selection = tr.selection();
+    let selection = tr.selection().expect("entry caller guaranteed selection");
     let doc = tr.doc();
     let resolved = selection
         .resolve(&doc)
@@ -102,7 +111,7 @@ fn set_modifier_range_text(tr: &mut Transaction, modifier: &Modifier) -> Command
 
 fn set_modifier_range_block(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
     let modifier_type = modifier.as_type();
-    let selection = tr.selection();
+    let selection = tr.selection().expect("entry caller guaranteed selection");
     let doc = tr.doc();
     let resolved = selection
         .resolve(&doc)

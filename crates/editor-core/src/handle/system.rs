@@ -550,7 +550,7 @@ mod tests {
 
         let before = editor
             .view
-            .external_elements(&editor.state.doc, &editor.state.selection)
+            .external_elements(&editor.state.doc, editor.state.selection.as_ref())
             .into_iter()
             .find(|element| element.node_id == img)
             .expect("image external element before height update");
@@ -583,7 +583,7 @@ mod tests {
 
         let after = editor
             .view
-            .external_elements(&editor.state.doc, &editor.state.selection)
+            .external_elements(&editor.state.doc, editor.state.selection.as_ref())
             .into_iter()
             .find(|element| element.node_id == img)
             .expect("image external element after height update");
@@ -617,7 +617,7 @@ mod tests {
         assert!(events.is_empty());
         let element = editor
             .view
-            .external_elements(&editor.state.doc, &editor.state.selection)
+            .external_elements(&editor.state.doc, editor.state.selection.as_ref())
             .into_iter()
             .find(|element| element.node_id == img)
             .expect("image external element");

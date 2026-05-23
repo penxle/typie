@@ -6,7 +6,9 @@ use crate::helpers::is_block_container;
 use crate::{CommandError, CommandResult};
 
 pub fn insert_paragraph_before_unit_selection(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     let doc = tr.doc();
 
     if !selection.is_unit_node_selection(&doc) {
@@ -35,11 +37,11 @@ pub fn insert_paragraph_before_unit_selection(tr: &mut Transaction) -> CommandRe
     );
     tr.insert_subtree(parent_id, before_index, subtree)?;
 
-    tr.set_selection(Selection::collapsed(Position {
+    tr.set_selection(Some(Selection::collapsed(Position {
         node_id: new_para_id,
         offset: 0,
         affinity: Affinity::Downstream,
-    }))?;
+    })))?;
 
     Ok(true)
 }

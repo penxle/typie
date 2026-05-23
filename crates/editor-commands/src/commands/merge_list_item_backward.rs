@@ -6,7 +6,9 @@ use crate::helpers::{find_enclosing_list_item_id, merge_element_cross_parent};
 use crate::{CommandError, CommandResult};
 
 pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -136,7 +138,7 @@ pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
         Ok(())
     })?;
 
-    tr.set_selection(Selection::collapsed(join_cursor))?;
+    tr.set_selection(Some(Selection::collapsed(join_cursor)))?;
     Ok(true)
 }
 

@@ -6,7 +6,9 @@ use editor_transaction::Transaction;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     if !selection.is_collapsed() {
         return Ok(false);
     }
@@ -47,14 +49,14 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
 
             let new_selection =
                 resolve_cursor_after_removal(tr, prev_id, next_id, parent_id, node_index);
-            tr.set_selection(new_selection)?;
+            tr.set_selection(Some(new_selection))?;
         } else {
             tr.remove_text(pos.node_id, prev_offset, delete_count)?;
-            tr.set_selection(Selection::collapsed(Position {
+            tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: pos.node_id,
                 offset: prev_offset,
                 affinity: Affinity::Upstream,
-            }))?;
+            })))?;
         }
     } else {
         // offset == 0: try deleting last char of previous text sibling
@@ -73,18 +75,18 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
 
         if is_last_char {
             tr.remove_subtree(prev_id)?;
-            tr.set_selection(Selection::collapsed(Position {
+            tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: pos.node_id,
                 offset: 0,
                 affinity: Affinity::Downstream,
-            }))?;
+            })))?;
         } else {
             tr.remove_text(prev_id, prev_len - 1, 1)?;
-            tr.set_selection(Selection::collapsed(Position {
+            tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: prev_id,
                 offset: prev_len - 1,
                 affinity: Affinity::Upstream,
-            }))?;
+            })))?;
         }
     }
 

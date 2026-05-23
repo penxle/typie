@@ -12,7 +12,9 @@ use crate::message::*;
 pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(), EditorError> {
     match op {
         NavigationOp::Move { movement, extend } => {
-            let selection = editor.state.selection;
+            let Some(selection) = editor.state.selection else {
+                return Ok(());
+            };
 
             // Backward/up is the reverse direction across every movement kind.
             let backward = matches!(
@@ -92,7 +94,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     if let Some(sel) = exit {
                         editor.transact(|tr| {
                             tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                            tr.set_selection(sel)?;
+                            tr.set_selection(Some(sel))?;
                             Ok(())
                         })?;
                     }
@@ -120,7 +122,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     if let Some(sel) = entry {
                         editor.transact(|tr| {
                             tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                            tr.set_selection(sel)?;
+                            tr.set_selection(Some(sel))?;
                             Ok(())
                         })?;
                         return Ok(());
@@ -193,7 +195,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
 
                     editor.transact(|tr| {
                         tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                        tr.set_selection(target)?;
+                        tr.set_selection(Some(target))?;
                         Ok(())
                     })?;
                     return Ok(());
@@ -222,7 +224,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     }
                     editor.transact(|tr| {
                         tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                        tr.set_selection(sel)?;
+                        tr.set_selection(Some(sel))?;
                         Ok(())
                     })?;
                     return Ok(());
@@ -255,7 +257,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
 
                 editor.transact(|tr| {
                     tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                    tr.set_selection(final_selection)?;
+                    tr.set_selection(Some(final_selection))?;
                     Ok(())
                 })?;
             }
@@ -578,7 +580,7 @@ mod tests {
 
         shift_left(&mut editor);
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         let (lo, hi) = if s.anchor.offset <= s.head.offset {
             (s.anchor.offset, s.head.offset)
         } else {
@@ -610,7 +612,7 @@ mod tests {
 
         shift_right(&mut editor);
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         let (lo, hi) = if s.anchor.offset <= s.head.offset {
             (s.anchor.offset, s.head.offset)
         } else {
@@ -745,13 +747,29 @@ mod tests {
         editor.view.layout(&editor.state.doc);
         let doc = editor.state.doc.clone();
 
-        let h0 = editor.state().selection.head;
+        let h0 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_up(&mut editor);
-        let h1 = editor.state().selection.head;
+        let h1 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_up(&mut editor);
-        let h2 = editor.state().selection.head;
+        let h2 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_up(&mut editor);
-        let h3 = editor.state().selection.head;
+        let h3 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
 
         let r = |p: Position| p.resolve(&doc).expect("resolves");
         assert!(r(h1) < r(h0), "1st Shift+Up must move head up");
@@ -776,15 +794,35 @@ mod tests {
         editor.view.layout(&editor.state.doc);
         let doc = editor.state.doc.clone();
 
-        let h0 = editor.state().selection.head;
+        let h0 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_right(&mut editor);
-        let h1 = editor.state().selection.head;
+        let h1 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_right(&mut editor);
-        let h2 = editor.state().selection.head;
+        let h2 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_right(&mut editor);
-        let h3 = editor.state().selection.head;
+        let h3 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_right(&mut editor);
-        let h4 = editor.state().selection.head;
+        let h4 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
 
         let r = |p: Position| p.resolve(&doc).expect("resolves");
         assert!(r(h1) > r(h0), "1st Shift+Right selects 'a'");
@@ -810,15 +848,35 @@ mod tests {
         editor.view.layout(&editor.state.doc);
         let doc = editor.state.doc.clone();
 
-        let h0 = editor.state().selection.head;
+        let h0 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_left(&mut editor);
-        let h1 = editor.state().selection.head;
+        let h1 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_left(&mut editor);
-        let h2 = editor.state().selection.head;
+        let h2 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_left(&mut editor);
-        let h3 = editor.state().selection.head;
+        let h3 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_left(&mut editor);
-        let h4 = editor.state().selection.head;
+        let h4 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
 
         let r = |p: Position| p.resolve(&doc).expect("resolves");
         assert!(r(h1) < r(h0), "1st Shift+Left selects 'b'");
@@ -841,11 +899,23 @@ mod tests {
         editor.view.layout(&editor.state.doc);
         let doc = editor.state.doc.clone();
 
-        let h0 = editor.state().selection.head;
+        let h0 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_down(&mut editor);
-        let h1 = editor.state().selection.head;
+        let h1 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_down(&mut editor);
-        let h2 = editor.state().selection.head;
+        let h2 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
 
         let r = |p: Position| p.resolve(&doc).expect("resolves");
         assert!(
@@ -872,11 +942,23 @@ mod tests {
         editor.view.layout(&editor.state.doc);
         let doc = editor.state.doc.clone();
 
-        let h0 = editor.state().selection.head;
+        let h0 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_up(&mut editor);
-        let h1 = editor.state().selection.head;
+        let h1 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
         shift_up(&mut editor);
-        let h2 = editor.state().selection.head;
+        let h2 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
 
         let r = |p: Position| p.resolve(&doc).expect("resolves");
         assert!(
@@ -922,7 +1004,11 @@ mod tests {
             "lower atom must be replaced away"
         );
         assert!(
-            editor.state().selection.is_collapsed(),
+            editor
+                .state()
+                .selection
+                .expect("selection exists in test")
+                .is_collapsed(),
             "replace must collapse the selection, not leave a stale node-selection"
         );
     }
@@ -956,7 +1042,7 @@ mod tests {
             },
         );
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, t);
         assert_eq!(s.head.offset, 1);
@@ -982,7 +1068,7 @@ mod tests {
             },
         );
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, t);
         assert_eq!(s.head.offset, 3);
@@ -1008,7 +1094,7 @@ mod tests {
             },
         );
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, t);
         assert_eq!(s.head.offset, 0);
@@ -1037,7 +1123,7 @@ mod tests {
             },
         );
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, next);
         assert_eq!(s.head.offset, 6);
@@ -1065,7 +1151,7 @@ mod tests {
             },
         );
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, prev);
         assert_eq!(s.head.offset, 4);
@@ -1083,14 +1169,14 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state.doc);
 
-        let before = editor.state().selection;
+        let before = editor.state().selection.expect("selection exists in test");
         arrow(
             &mut editor,
             Movement::Grapheme {
                 direction: Direction::Forward,
             },
         );
-        let moved = editor.state().selection;
+        let moved = editor.state().selection.expect("selection exists in test");
 
         assert_ne!(
             (before.anchor, before.head),
@@ -1113,7 +1199,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state.doc);
-        let before = editor.state().selection;
+        let before = editor.state().selection.expect("selection exists in test");
         arrow(
             &mut editor,
             Movement::Line {
@@ -1121,12 +1207,10 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
+        let after = editor.state().selection.expect("selection exists in test");
         assert_ne!(
             (before.anchor, before.head),
-            (
-                editor.state().selection.anchor,
-                editor.state().selection.head
-            ),
+            (after.anchor, after.head),
             "arrow-down from a fold node-selection must not be a silent no-op"
         );
     }
@@ -1150,7 +1234,7 @@ mod tests {
                 direction: Direction::Forward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, ft);
         assert_eq!(s.head.offset, 0);
@@ -1164,19 +1248,17 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state.doc);
-        let before = editor.state().selection;
+        let before = editor.state().selection.expect("selection exists in test");
         arrow(
             &mut editor,
             Movement::Grapheme {
                 direction: Direction::Backward,
             },
         );
+        let after = editor.state().selection.expect("selection exists in test");
         assert_eq!(
             (before.anchor, before.head),
-            (
-                editor.state().selection.anchor,
-                editor.state().selection.head
-            ),
+            (after.anchor, after.head),
             "leading gap + left = doc-start no-op"
         );
     }
@@ -1195,7 +1277,7 @@ mod tests {
                 direction: Direction::Forward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             !s.is_collapsed(),
             "image gap-exit must node-select the image"
@@ -1234,7 +1316,12 @@ mod tests {
             },
         );
         assert_eq!(
-            e_fwd.state().selection.head.node_id,
+            e_fwd
+                .state()
+                .selection
+                .expect("selection exists in test")
+                .head
+                .node_id,
             b,
             "right enters 2nd fold inner"
         );
@@ -1247,7 +1334,12 @@ mod tests {
             },
         );
         let doc = &e_bwd.state().doc;
-        let head = e_bwd.state().selection.head.node_id;
+        let head = e_bwd
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head
+            .node_id;
         let first_fold = doc
             .node(a)
             .unwrap()
@@ -1280,7 +1372,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
         assert_eq!(s.head.offset, 0);
@@ -1307,7 +1399,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.is_collapsed(),
             "Up from leading-unit node-sel must enter the gap (not no-op)"
@@ -1338,7 +1430,7 @@ mod tests {
             },
         );
 
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1360,7 +1452,7 @@ mod tests {
                 direction: Direction::Forward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
         assert_eq!(s.head.offset, 1);
@@ -1382,7 +1474,7 @@ mod tests {
                 direction: Direction::Forward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, t);
     }
@@ -1409,7 +1501,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
         assert_eq!(s.head.offset, 1);
@@ -1438,7 +1530,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1464,7 +1556,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1491,7 +1583,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1523,6 +1615,7 @@ mod tests {
             editor
                 .state()
                 .selection
+                .expect("selection exists in test")
                 .resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
                 .is_some(),
@@ -1535,7 +1628,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, t2);
         assert_eq!(s.head.offset, 3);
@@ -1569,6 +1662,7 @@ mod tests {
             editor
                 .state()
                 .selection
+                .expect("selection exists in test")
                 .resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
                 .is_some(),
@@ -1581,7 +1675,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, t1);
         assert_eq!(s.head.offset, 3);
@@ -1610,7 +1704,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1637,7 +1731,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1664,7 +1758,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1689,7 +1783,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1718,7 +1812,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1752,7 +1846,7 @@ mod tests {
                 direction: Direction::Forward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1778,7 +1872,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1804,7 +1898,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1842,7 +1936,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
     }
 
@@ -1866,7 +1960,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1899,7 +1993,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1929,7 +2023,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1961,7 +2055,7 @@ mod tests {
                 extend: true,
             },
         });
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -1990,7 +2084,7 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let s = editor.state().selection;
+        let s = editor.state().selection.expect("selection exists in test");
         assert!(
             s.resolve(&editor.state().doc)
                 .and_then(|rs| rs.as_gap_cursor())
@@ -2023,7 +2117,7 @@ mod tests {
         );
         assert_eq!(
             {
-                let s = editor.state().selection;
+                let s = editor.state().selection.expect("selection exists in test");
                 (s.anchor, s.head)
             },
             (gap.anchor, gap.head),
@@ -2036,7 +2130,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let inside = editor.state().selection;
+        let inside = editor.state().selection.expect("selection exists in test");
         assert!(inside.is_collapsed() && inside.head.node_id != r);
         arrow(
             &mut editor,
@@ -2045,7 +2139,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
         );
-        let back = editor.state().selection;
+        let back = editor.state().selection.expect("selection exists in test");
         assert_eq!(
             (back.anchor, back.head),
             (gap.anchor, gap.head),

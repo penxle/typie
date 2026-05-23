@@ -9,14 +9,20 @@ use crate::helpers::{
 use crate::{CommandError, CommandResult};
 
 pub fn clear_all_modifiers(tr: &mut Transaction) -> CommandResult {
-    if tr.selection().is_collapsed() {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+    if selection.is_collapsed() {
         return clear_all_modifiers_collapsed(tr);
     }
     clear_all_modifiers_range(tr)
 }
 
 fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
-    let pos = tr.selection().head;
+    let pos = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let doc = tr.doc();
     let node = doc
         .node(pos.node_id)
@@ -48,7 +54,7 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
 }
 
 fn clear_all_modifiers_range(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let selection = tr.selection().expect("entry caller guaranteed selection");
     let doc = tr.doc();
     let resolved = selection
         .resolve(&doc)

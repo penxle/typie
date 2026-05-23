@@ -90,19 +90,20 @@ fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers)
 
 /// 현재 selection 기준 `ModifierState` 계산. Collapsed면 effective 집합을 Uniform으로 lift,
 /// range면 per-type aggregator에 위임.
-pub fn resolve_modifier_state(state: &State) -> ModifierState {
-    if state.selection.is_collapsed() {
-        let pos = state.selection.head;
+pub fn resolve_modifier_state(state: &State) -> Option<ModifierState> {
+    let sel = state.selection.as_ref()?;
+    if sel.is_collapsed() {
+        let pos = sel.head;
         let modifiers = resolve_effective_modifiers_at(state, &pos);
         let mut out = ModifierState::default();
         for m in &modifiers {
             out.set_uniform(m);
         }
-        out
+        Some(out)
     } else {
-        let from = state.selection.anchor;
-        let to = state.selection.head;
-        resolve_modifier_state_in_range(state, &from, &to)
+        let from = sel.anchor;
+        let to = sel.head;
+        Some(resolve_modifier_state_in_range(state, &from, &to))
     }
 }
 
@@ -308,7 +309,7 @@ mod tests {
             }
             selection: (t1, 2)
         };
-        let head = state.selection.head;
+        let head = state.selection.as_ref().unwrap().head;
         let result = resolve_effective_modifiers_at(&state, &head);
         assert!(
             result
@@ -327,7 +328,8 @@ mod tests {
             }
             selection: (t1, 2)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(
             result
                 .iter()
@@ -351,7 +353,8 @@ mod tests {
             selection: (t1, 2)
             pending_modifiers: [font_size(3200)]
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(
             result
                 .iter()
@@ -370,7 +373,8 @@ mod tests {
             selection: (t1, 2)
             pending_modifiers: [!font_size]
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(!result.iter().any(|m| m.as_type() == ModifierType::FontSize));
     }
 
@@ -380,7 +384,8 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") [bold] } } }
             selection: (t1, 2)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(result.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
@@ -390,7 +395,8 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") [bold] } } }
             selection: (t1, 5)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(result.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
@@ -400,7 +406,8 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") [bold] } } }
             selection: (t1, 0)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(!result.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
@@ -410,7 +417,8 @@ mod tests {
             doc { root { paragraph { t1: text("Click") [link(href: "https://example.com".to_string())] } } }
             selection: (t1, 5)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(!result.iter().any(|m| matches!(m, Modifier::Link { .. })));
     }
 
@@ -420,7 +428,8 @@ mod tests {
             doc { root { paragraph { t1: text("Click") [link(href: "https://example.com".to_string())] } } }
             selection: (t1, 2)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(
             result
                 .iter()
@@ -435,7 +444,8 @@ mod tests {
             selection: (p1, 0)
             pending_modifiers: [bold]
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(result.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
@@ -453,7 +463,8 @@ mod tests {
             selection: (t1, 2)
             pending_modifiers: [bold]
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         // FoldTitle's implicit text style reaches the cursor so the toolbar
         // shows the real size/weight/color. FoldTitle's own FontSize(1050)
         // wins over the root's inherited 1600.
@@ -488,7 +499,7 @@ mod tests {
             selection: (t1, 2)
             pending_modifiers: [bold]
         };
-        let s = resolve_modifier_state(&state);
+        let s = resolve_modifier_state(&state).unwrap();
         assert_ne!(s.bold, editor_common::Tri::Absent);
         assert_eq!(
             s.font_size,
@@ -504,7 +515,8 @@ mod tests {
             doc { root { paragraph { t1: text("") [bold] } } }
             selection: (t1, 0)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(result.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
@@ -520,7 +532,8 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        let result = resolve_effective_modifiers_at(&state, &state.selection.head);
+        let result =
+            resolve_effective_modifiers_at(&state, &state.selection.as_ref().unwrap().head);
         assert!(
             result
                 .iter()
@@ -542,8 +555,8 @@ mod tests {
             } } }
             selection: (t1, 0) -> (t2, 5)
         };
-        let from = state.selection.anchor;
-        let to = state.selection.head;
+        let from = state.selection.as_ref().unwrap().anchor;
+        let to = state.selection.as_ref().unwrap().head;
         let s = resolve_modifier_state_in_range(&state, &from, &to);
         assert_eq!(s.bold, editor_common::Tri::Uniform { value: () });
     }
@@ -557,8 +570,8 @@ mod tests {
             } } }
             selection: (t1, 0) -> (t2, 5)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(s.bold, editor_common::Tri::Mixed);
     }
 
@@ -571,8 +584,8 @@ mod tests {
             } } }
             selection: (t1, 0) -> (t2, 5)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(s.bold, editor_common::Tri::Absent);
     }
 
@@ -585,8 +598,8 @@ mod tests {
             } } }
             selection: (t1, 0) -> (t2, 5)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(
             s.font_size,
             editor_common::Tri::Uniform {
@@ -604,8 +617,8 @@ mod tests {
             } } }
             selection: (t1, 0) -> (t2, 1)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(
             s.alignment,
             editor_common::Tri::Uniform {
@@ -626,8 +639,8 @@ mod tests {
             } }
             selection: (t1, 0) -> (t2, 1)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(s.alignment, editor_common::Tri::Mixed);
     }
 
@@ -637,7 +650,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hi") [bold] } } }
             selection: (t1, 1)
         };
-        let s = resolve_modifier_state(&state);
+        let s = resolve_modifier_state(&state).unwrap();
         assert_eq!(s.bold, editor_common::Tri::Uniform { value: () });
     }
 
@@ -647,7 +660,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hi") } } }
             selection: (t1, 1)
         };
-        let s = resolve_modifier_state(&state);
+        let s = resolve_modifier_state(&state).unwrap();
         assert_eq!(s.bold, editor_common::Tri::Absent);
     }
 
@@ -657,8 +670,8 @@ mod tests {
             doc { root [block_gap(150)] { paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 5)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(
             s.block_gap,
             editor_common::Tri::Uniform {
@@ -673,8 +686,8 @@ mod tests {
             doc { root [paragraph_indent(200)] { paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 5)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(
             s.paragraph_indent,
             editor_common::Tri::Uniform {
@@ -690,8 +703,8 @@ mod tests {
             doc { root [] { paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 5)
         };
-        let s =
-            resolve_modifier_state_in_range(&state, &state.selection.anchor, &state.selection.head);
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
         assert_eq!(s.block_gap, editor_common::Tri::Absent);
     }
 
@@ -704,7 +717,7 @@ mod tests {
             } } }
             selection: (t1, 0) -> (t2, 5)
         };
-        let s = resolve_modifier_state(&state);
+        let s = resolve_modifier_state(&state).unwrap();
         assert_eq!(s.bold, editor_common::Tri::Mixed);
     }
 
@@ -714,7 +727,11 @@ mod tests {
             doc { root { paragraph { t1: text("Click") [link(href: "https://a.com".to_string())] } } }
             selection: (t1, 2)
         };
-        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        let span = resolve_modifier_span_at(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
         assert_eq!(span, Some(vec![t1]));
     }
 
@@ -727,7 +744,11 @@ mod tests {
             } } }
             selection: (t1, 2)
         };
-        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        let span = resolve_modifier_span_at(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
         assert_eq!(span, Some(vec![t1, t2]));
     }
 
@@ -740,7 +761,11 @@ mod tests {
             } } }
             selection: (t2, 2)
         };
-        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        let span = resolve_modifier_span_at(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
         assert_eq!(span, Some(vec![t2]));
     }
 
@@ -754,7 +779,11 @@ mod tests {
             } } }
             selection: (t1, 2)
         };
-        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        let span = resolve_modifier_span_at(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
         assert_eq!(span, Some(vec![t1]));
     }
 
@@ -764,7 +793,11 @@ mod tests {
             doc { root { paragraph { t1: text("plain") } } }
             selection: (t1, 2)
         };
-        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        let span = resolve_modifier_span_at(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
         assert_eq!(span, None);
     }
 
@@ -777,7 +810,11 @@ mod tests {
             } }
             selection: (t1, 0)
         };
-        let span = resolve_modifier_span_at(&state, &state.selection.head, ModifierType::Link);
+        let span = resolve_modifier_span_at(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
         assert_eq!(span, Some(vec![t1]));
     }
 }

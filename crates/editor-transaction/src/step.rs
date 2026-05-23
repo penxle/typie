@@ -80,8 +80,8 @@ pub enum Step {
         modifier: Modifier,
     },
     SetSelection {
-        old: StableSelection,
-        new: StableSelection,
+        old: Option<StableSelection>,
+        new: Option<StableSelection>,
     },
     SetPendingModifiers {
         old: PendingModifiers,
@@ -313,12 +313,14 @@ mod tests {
     use editor_macros::state;
     use editor_model::{PlainNode, PlainParagraphNode};
 
-    fn fixture_stable_selection() -> StableSelection {
+    fn fixture_stable_selection() -> Option<StableSelection> {
         let (s, _t1) = state! {
             doc { root { paragraph { _t1: text("x") } } }
             selection: (_t1, 0)
         };
-        StableSelection::freeze(&s.selection, &s.doc)
+        s.selection
+            .as_ref()
+            .map(|sel| StableSelection::freeze(sel, &s.doc))
     }
 
     #[test]
@@ -384,7 +386,7 @@ mod tests {
         let non_commitable: Vec<Step> = vec![
             Step::SetSelection {
                 old: sel.clone(),
-                new: sel.clone(),
+                new: sel,
             },
             Step::SetPendingModifiers {
                 old: PendingModifiers::new(),

@@ -14,7 +14,7 @@ pub struct InspectStateOptions {
 }
 
 pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
-    let labeler = Labeler::new(&state.doc, &state.selection);
+    let labeler = Labeler::new(&state.doc, state.selection.as_ref());
     let mut output = String::new();
 
     let root = state.doc.root().unwrap();
@@ -43,7 +43,7 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     }
 
     output.push('\n');
-    write_selection_tree(&state.selection, &labeler, &mut output);
+    write_selection_tree(state.selection.as_ref(), &labeler, &mut output);
 
     output
 }
@@ -100,17 +100,22 @@ fn write_tree_node(
 }
 
 fn write_selection_tree(
-    selection: &editor_state::Selection,
+    selection: Option<&editor_state::Selection>,
     labeler: &Labeler,
     output: &mut String,
 ) {
+    let Some(sel) = selection else {
+        output.push_str("selection: <none>\n");
+        return;
+    };
+
     output.push_str("selection: (");
-    write_position_tree(&selection.anchor, labeler, output);
+    write_position_tree(&sel.anchor, labeler, output);
     output.push(')');
 
-    if !selection.is_collapsed() {
+    if !sel.is_collapsed() {
         output.push_str(" -> (");
-        write_position_tree(&selection.head, labeler, output);
+        write_position_tree(&sel.head, labeler, output);
         output.push(')');
     }
     output.push('\n');
@@ -243,6 +248,20 @@ mod tests {
         InspectStateOptions {
             show_node_ids: false,
         }
+    }
+
+    #[test]
+    fn none_selection() {
+        use editor_macros::state;
+        let (state, ..) = state! {
+            doc { root { paragraph { text("hello") } } }
+            selection: none
+        };
+        let output = inspect_state(&state, &opts());
+        assert!(
+            output.contains("selection: <none>"),
+            "expected `selection: <none>` in {output}"
+        );
     }
 
     #[test]

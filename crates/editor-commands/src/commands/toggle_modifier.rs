@@ -21,7 +21,9 @@ fn modifier_from_unit_type(modifier_type: ModifierType) -> Result<Modifier, Comm
 
 pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> CommandResult {
     let modifier = modifier_from_unit_type(modifier_type)?;
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
 
     if selection.is_collapsed() {
         return toggle_modifier_collapsed(tr, modifier_type, &modifier);
@@ -74,7 +76,10 @@ fn toggle_modifier_collapsed(
     modifier_type: ModifierType,
     modifier: &Modifier,
 ) -> CommandResult {
-    let pos = tr.selection().head;
+    let pos = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
     let doc = tr.doc();
     doc.node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
@@ -106,6 +111,17 @@ mod tests {
 
     use super::*;
     use crate::test_utils::*;
+
+    #[test]
+    fn toggle_modifier_returns_false_when_no_selection() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { text("Hello") } } }
+            selection: none
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        let result = toggle_modifier(&mut tr, ModifierType::Italic);
+        assert!(matches!(result, Ok(false)));
+    }
 
     #[test]
     fn collapsed_toggle_italic_on() {
@@ -394,10 +410,11 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
 
-        assert_eq!(actual.selection.anchor.node_id, tr1);
-        assert_eq!(actual.selection.anchor.offset, 0);
-        assert_eq!(actual.selection.head.node_id, tr2);
-        assert_eq!(actual.selection.head.offset, 4);
+        let sel = actual.selection.as_ref().unwrap();
+        assert_eq!(sel.anchor.node_id, tr1);
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.node_id, tr2);
+        assert_eq!(sel.head.offset, 4);
 
         let mut italic_texts = Vec::new();
         for desc in actual.doc.root().unwrap().descendants() {

@@ -15,7 +15,9 @@ use crate::{CommandError, CommandResult};
 /// the existing "insert block into empty paragraph replaces it" behavior
 /// yields the block at the gap with no leftover paragraph.
 pub fn materialize_gap_paragraph(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection();
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     let doc = tr.doc();
 
     let (parent_id, index): (NodeId, usize) =
@@ -43,11 +45,11 @@ pub fn materialize_gap_paragraph(tr: &mut Transaction) -> CommandResult {
     );
     tr.insert_subtree(parent_id, index, subtree)?;
 
-    tr.set_selection(Selection::collapsed(Position {
+    tr.set_selection(Some(Selection::collapsed(Position {
         node_id: new_para_id,
         offset: 0,
         affinity: Affinity::Downstream,
-    }))?;
+    })))?;
 
     Ok(true)
 }

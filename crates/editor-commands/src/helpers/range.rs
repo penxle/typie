@@ -116,7 +116,7 @@ pub(crate) fn compact_textblock_preserving_caret(
 
     let doc = tr.doc();
     if let Some(new_pos) = position_from_text_offset(&doc, tb_id, abs, at_end) {
-        tr.set_selection(Selection::new(new_pos, new_pos))?;
+        tr.set_selection(Some(Selection::new(new_pos, new_pos)))?;
     }
     Ok(())
 }
@@ -135,7 +135,7 @@ pub(crate) fn compact_and_restore_selection(
         }
     }
 
-    let original = tr.selection();
+    let original = tr.selection().expect("entry caller guaranteed selection");
     let endpoints_are_text = doc
         .node(original.anchor.node_id)
         .is_some_and(|n| matches!(n.node(), Node::Text(_)))
@@ -162,7 +162,7 @@ pub(crate) fn compact_and_restore_selection(
             position_from_text_offset(&doc, from_tb, from_abs, false),
             position_from_text_offset(&doc, to_tb, to_abs, true),
         ) {
-            tr.set_selection(Selection::new(from_pos, to_pos))?;
+            tr.set_selection(Some(Selection::new(from_pos, to_pos)))?;
         }
     }
 

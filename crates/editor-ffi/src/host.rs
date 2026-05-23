@@ -86,7 +86,7 @@ impl EditorHost {
         let plain: editor_model::PlainDoc = doc.from_ffi()?;
         let (doc, op_graph) = editor_model::Doc::from_plain(plain);
         let selection = doc_start_selection(&doc)?;
-        let state = editor_state::State::new(doc, op_graph, selection);
+        let state = editor_state::State::new(doc, op_graph, Some(selection));
 
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
@@ -101,7 +101,7 @@ impl EditorHost {
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let (doc, graph) = doc_from_graph_changesets(changesets)?;
         let selection = doc_start_selection(&doc)?;
-        let state = editor_state::State::new(doc, graph, selection);
+        let state = editor_state::State::new(doc, graph, Some(selection));
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))

@@ -5,7 +5,7 @@ use std::fmt::Write;
 use crate::labeler::Labeler;
 
 pub fn inspect_state_as_macro(state: &State) -> String {
-    let labeler = Labeler::new(&state.doc, &state.selection);
+    let labeler = Labeler::new(&state.doc, state.selection.as_ref());
     let mut output = String::new();
 
     output.push_str("state! {\n");
@@ -36,7 +36,7 @@ pub fn inspect_state_as_macro(state: &State) -> String {
 
     write_indent(&mut output, 1);
     output.push_str("}\n");
-    write_selection_macro(&state.selection, &labeler, &mut output);
+    write_selection_macro(state.selection.as_ref(), &labeler, &mut output);
     write_pending_modifiers(&state.pending_modifiers, &mut output);
     output.push_str("}\n");
     output
@@ -90,21 +90,27 @@ fn write_macro_node(
 }
 
 fn write_selection_macro(
-    selection: &editor_state::Selection,
+    selection: Option<&editor_state::Selection>,
     labeler: &Labeler,
     output: &mut String,
 ) {
-    let show_affinity = selection.anchor.affinity != Affinity::Downstream
-        || selection.head.affinity != Affinity::Downstream;
-
     write_indent(output, 1);
+
+    let Some(sel) = selection else {
+        output.push_str("selection: none\n");
+        return;
+    };
+
+    let show_affinity =
+        sel.anchor.affinity != Affinity::Downstream || sel.head.affinity != Affinity::Downstream;
+
     output.push_str("selection: (");
-    write_position_macro(&selection.anchor, show_affinity, labeler, output);
+    write_position_macro(&sel.anchor, show_affinity, labeler, output);
     output.push(')');
 
-    if !selection.is_collapsed() {
+    if !sel.is_collapsed() {
         output.push_str(" -> (");
-        write_position_macro(&selection.head, show_affinity, labeler, output);
+        write_position_macro(&sel.head, show_affinity, labeler, output);
         output.push(')');
     }
     output.push('\n');
@@ -453,6 +459,20 @@ state! {
         };
         let output = inspect_state_as_macro(&state);
         assert!(output.contains("root [font_size(1600)]"));
+    }
+
+    #[test]
+    fn macro_output_for_none_selection() {
+        use editor_macros::state;
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: none
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(
+            output.contains("selection: none"),
+            "expected `selection: none` in {output}"
+        );
     }
 
     #[test]
