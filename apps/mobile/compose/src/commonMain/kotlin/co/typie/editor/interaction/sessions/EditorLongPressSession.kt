@@ -85,6 +85,19 @@ internal class EditorLongPressSession {
       return false
     }
     context.semantics.magnifier.show(position)
+    if (isWordSelection) {
+      context.semantics.edgeAutoScroll.trackSelectionExpansion(
+        edgePosition = position,
+        dispatchPosition = position,
+        context = context,
+      )
+    } else {
+      context.semantics.edgeAutoScroll.trackCursorMove(
+        edgePosition = position,
+        dispatchPosition = position,
+        context = context,
+      )
+    }
     val point = context.effects.resolvePoint(positionInNode = position) ?: return true
     if (point.page < 0) {
       return true
@@ -112,6 +125,7 @@ internal class EditorLongPressSession {
       }
     if (!context.mode.canApply(event)) {
       end()
+      context.semantics.edgeAutoScroll.stop()
       context.semantics.magnifier.hide()
       context.semantics.selectionExpansion.reset()
       return false
@@ -125,6 +139,7 @@ internal class EditorLongPressSession {
     }
     context.reduceMode(event)
     end()
+    context.semantics.edgeAutoScroll.stop()
     context.semantics.magnifier.hide()
     context.semantics.selectionExpansion.reset()
     return true

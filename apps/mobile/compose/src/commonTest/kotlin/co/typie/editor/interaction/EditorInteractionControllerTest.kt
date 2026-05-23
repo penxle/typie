@@ -1,6 +1,7 @@
 package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
 import co.typie.editor.Editor
 import co.typie.editor.EditorZoomController
@@ -31,7 +32,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -633,6 +636,113 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `selection handle edge auto-scroll extends from opposite endpoint anchor without initial selection`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(0f, 14f)
+        }
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 95f))
+      )
+      fake.enqueued.clear()
+
+      advanceTimeBy(16)
+      runCurrent()
+
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(0, extend.anchorPage)
+      assertEquals(10f, extend.anchorX)
+      assertEquals(24f, extend.anchorY)
+      assertEquals(0, extend.headPage)
+      assertEquals(50f, extend.headX)
+      assertEquals(70f, extend.headY)
+      assertNull(extend.initialSelection)
+
+      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+    }
+
+  @Test
+  fun `selection handle edge auto-scroll stops after cancel`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints = selectionEndpoints()
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(0f, 14f)
+        }
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 95f))
+      )
+
+      controller.handleSelectionHandleDragCancel()
+      fake.enqueued.clear()
+      advanceTimeBy(16)
+      runCurrent()
+
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+    }
+
+  @Test
+  fun `selection handle edge auto-scroll dispatches to viewport edge when scroll reaches boundary`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints = selectionEndpoints()
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(0f, 8f)
+        }
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 95f))
+      )
+      fake.enqueued.clear()
+
+      advanceTimeBy(16)
+      runCurrent()
+
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(100f, extend.headY)
+
+      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+    }
+
+  @Test
   fun `selection handle down only owns pending drag until movement starts drag`() =
     runTest(StandardTestDispatcher()) {
       val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
@@ -841,6 +951,51 @@ class EditorInteractionControllerTest {
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(initialSelection, extend.initialSelection)
       assertEquals(15f, extend.headX)
+    }
+
+  @Test
+  fun `double tap drag edge auto-scroll keeps materialized initial selection`() =
+    runTest(StandardTestDispatcher()) {
+      val initialSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints = selectionEndpoints()
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { initialSelection },
+          selectionEndpointsProvider = { endpoints },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(0f, 14f)
+        }
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      advanceUntilIdle()
+      controller.onPointerMove(pointerId = 2L, position = Offset(22f, 95f), nowMillis = 140L)
+      fake.enqueued.clear()
+
+      advanceTimeBy(16)
+      runCurrent()
+
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(initialSelection, extend.initialSelection)
+      assertEquals(10f, extend.anchorX)
+      assertEquals(24f, extend.anchorY)
+      assertEquals(22f, extend.headX)
+      assertEquals(70f, extend.headY)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 2L, position = Offset(22f, 95f), nowMillis = 180L)
+      )
+      advanceUntilIdle()
     }
 
   @Test
@@ -1235,12 +1390,21 @@ class EditorInteractionControllerTest {
     var focused = false
     var scrollGestureLockActive = false
     var point: PagePoint? = PagePoint(page = 0, x = 10f, y = 20f)
+    var edgeAutoScrollViewport: EditorEdgeAutoScrollViewport? = null
+    var edgeAutoScrollConsumedDelta = Offset.Zero
     val requestedBringIntoViewVersions = mutableListOf<Long>()
 
     override fun resolvePoint(positionInNode: Offset): PagePoint? =
       point?.copy(x = positionInNode.x, y = positionInNode.y)
 
     override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? = Offset(x, y)
+
+    override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? =
+      edgeAutoScrollViewport
+
+    override fun dispatchEdgeAutoScroll(delta: Offset): Offset {
+      return edgeAutoScrollConsumedDelta
+    }
 
     override fun scheduleTapDispatch(dispatchAtMillis: Long) {
       scheduledTapDispatchAtMillis = dispatchAtMillis
@@ -1344,5 +1508,8 @@ class EditorInteractionControllerTest {
         from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
         to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
       )
+
+    fun testEdgeAutoScrollViewport(rect: ComposeRect): EditorEdgeAutoScrollViewport =
+      EditorEdgeAutoScrollViewport(rect = rect, density = 1f)
   }
 }

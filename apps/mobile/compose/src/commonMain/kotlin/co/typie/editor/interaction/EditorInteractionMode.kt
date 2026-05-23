@@ -36,6 +36,9 @@ internal val EditorInteractionMode.isLongPressing: Boolean
     this == EditorInteractionMode.LongPressSelecting ||
       this == EditorInteractionMode.LongPressWordSelecting
 
+internal val EditorInteractionMode.allowsViewportScrollReconcile: Boolean
+  get() = !isSelecting && !isDndActive && !isAuxiliaryGesture
+
 internal sealed interface EditorInteractionEvent {
   data object PointerCancel : EditorInteractionEvent
 

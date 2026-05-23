@@ -86,6 +86,7 @@ internal class EditorSelectionHandleGesture(
     val wasActive = activeDrag || pendingDrag
     val wasDragging = activeDrag
     session.reset()
+    context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()
     if (context.mode.canApply(EditorInteractionEvent.SelectionHandleDragEnd)) {
@@ -107,6 +108,7 @@ internal class EditorSelectionHandleGesture(
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
     session.reset()
+    context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()
   }

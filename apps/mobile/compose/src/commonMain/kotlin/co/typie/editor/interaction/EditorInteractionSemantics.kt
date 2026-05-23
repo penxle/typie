@@ -2,9 +2,9 @@ package co.typie.editor.interaction
 
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
-import co.typie.editor.interaction.semantics.EditorAutoScrollSemantic
 import co.typie.editor.interaction.semantics.EditorContextMenuSemantic
 import co.typie.editor.interaction.semantics.EditorCursorMoveSemantic
+import co.typie.editor.interaction.semantics.EditorEdgeAutoScrollSemantic
 import co.typie.editor.interaction.semantics.EditorMagnifierSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionExpansionSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionHapticSemantic
@@ -17,7 +17,7 @@ internal class EditorInteractionSemantics(
   val viewportZoom: EditorViewportZoomSemantic = EditorViewportZoomSemantic(),
   val contextMenu: EditorContextMenuSemantic = EditorContextMenuSemantic(),
   val magnifier: EditorMagnifierSemantic = EditorMagnifierSemantic(),
-  val autoScroll: EditorAutoScrollSemantic = EditorAutoScrollSemantic(),
+  val edgeAutoScroll: EditorEdgeAutoScrollSemantic = EditorEdgeAutoScrollSemantic(),
   val selectionHaptic: EditorSelectionHapticSemantic =
     EditorSelectionHapticSemantic(effects = effects),
 ) {
@@ -33,7 +33,7 @@ internal class EditorInteractionSemantics(
     viewportZoom.reset()
     contextMenu.reset()
     magnifier.reset()
-    autoScroll.reset()
+    edgeAutoScroll.reset()
     selectionHaptic.reset()
   }
 }

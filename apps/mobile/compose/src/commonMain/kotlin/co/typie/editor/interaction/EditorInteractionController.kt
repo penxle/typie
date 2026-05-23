@@ -1,5 +1,8 @@
 package co.typie.editor.interaction
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
@@ -13,7 +16,7 @@ internal class EditorInteractionController(
   private val semantics: EditorInteractionSemantics = EditorInteractionSemantics(effects = effects),
   private val platformProvider: () -> Platform = { Platform.Desktop },
 ) {
-  private var mode = EditorInteractionMode.Idle
+  private var mode by mutableStateOf(EditorInteractionMode.Idle)
   private val gestureContext =
     object : EditorGestureContext {
       override val editor: Editor

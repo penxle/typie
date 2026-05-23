@@ -51,6 +51,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.interaction.allowsViewportScrollReconcile
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.rememberEditorZoomController
 import co.typie.editor.runtime.EditorRuntime
@@ -434,6 +435,8 @@ fun EditorScreen(entityId: String) {
         editor = editor,
         bringIntoViewRequests = bringIntoViewRequests,
         uiState = uiState,
+        visibleArea = visibleArea,
+        viewportState = screenState.viewportState,
         density = density,
         scrollGestureLockState = scrollGestureLockState,
         viewportZoomConfig = viewportZoomConfig,
@@ -505,7 +508,10 @@ fun EditorScreen(entityId: String) {
         viewportScrollableState = viewportScrollableState,
         viewportContentWidth = bodyTrackWidth,
         viewportScrollReconcileEnabled =
-          uiState.focused && screenState.sceneInForeground && editor != null,
+          uiState.focused &&
+            screenState.sceneInForeground &&
+            editor != null &&
+            interactionScope.controller.interactionMode.allowsViewportScrollReconcile,
         onViewportWheelScroll = interactionScope.controller::onViewportScrollStarted,
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor

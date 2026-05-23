@@ -13,6 +13,8 @@ import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.EditorVisibleArea
+import co.typie.editor.viewport.EditorViewportState
 import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.ScrollGestureLockState
 import co.typie.platform.PlatformModule
@@ -26,6 +28,8 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
   private var editor: Editor? = null
   private var bringIntoViewRequests: EditorBringIntoViewRequests? = null
   private var uiState: EditorUiState? = null
+  private var visibleArea: EditorVisibleArea? = null
+  private var viewportState: EditorViewportState? = null
   private var density: Float = 0f
   private var onSelectionHaptic: (() -> Unit)? = null
   private var tapDispatchJob: Job? = null
@@ -46,6 +50,8 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     editor: Editor?,
     bringIntoViewRequests: EditorBringIntoViewRequests,
     uiState: EditorUiState,
+    visibleArea: EditorVisibleArea,
+    viewportState: EditorViewportState,
     density: Float,
     scrollGestureLockState: ScrollGestureLockState,
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
@@ -54,6 +60,8 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     this.editor = editor
     this.bringIntoViewRequests = bringIntoViewRequests
     this.uiState = uiState
+    this.visibleArea = visibleArea
+    this.viewportState = viewportState
     this.density = density
     this.scrollGestureLockState = scrollGestureLockState
     this.onSelectionHaptic = onSelectionHaptic
@@ -97,6 +105,8 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     editor = null
     bringIntoViewRequests = null
     uiState = null
+    visibleArea = null
+    viewportState = null
     density = 0f
     onSelectionHaptic = null
     scrollGestureLockState = null
@@ -128,6 +138,31 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
         .resolveViewportTransform(pageSizes = currentEditor.pageSizes)
         .localToGlobal(page = page, x = x, y = y) ?: return null
     return Offset(x = positionDp.x * density, y = positionDp.y * density)
+  }
+
+  override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? {
+    val currentUiState = uiState ?: return null
+    val currentVisibleArea = visibleArea ?: return null
+    val currentViewportState = viewportState ?: return null
+    return resolveEditorEdgeAutoScrollViewport(
+      uiState = currentUiState,
+      visibleArea = currentVisibleArea,
+      viewportState = currentViewportState,
+      density = density,
+    )
+  }
+
+  override fun dispatchEdgeAutoScroll(delta: Offset): Offset {
+    val currentViewportState = viewportState ?: return Offset.Zero
+    if (density <= 0f) {
+      return Offset.Zero
+    }
+    val consumed =
+      currentViewportState.consumePan(
+        delta = Offset(x = delta.x / density, y = delta.y / density),
+        isAutoScroll = true,
+      )
+    return Offset(x = consumed.x * density, y = consumed.y * density)
   }
 
   override fun scheduleTapDispatch(dispatchAtMillis: Long) {

@@ -8,6 +8,7 @@ import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.ffi.Rect
+import co.typie.editor.interaction.EditorEdgeAutoScrollViewport
 import co.typie.editor.interaction.EditorInteractionEffects
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -127,6 +128,12 @@ class EditorCursorMoveSemanticTest {
       error("Unused in direct cursor semantic dispatch tests")
 
     override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? =
+      error("Unused in direct cursor semantic dispatch tests")
+
+    override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? =
+      error("Unused in direct cursor semantic dispatch tests")
+
+    override fun dispatchEdgeAutoScroll(delta: Offset): Offset =
       error("Unused in direct cursor semantic dispatch tests")
 
     override fun scheduleTapDispatch(dispatchAtMillis: Long) =

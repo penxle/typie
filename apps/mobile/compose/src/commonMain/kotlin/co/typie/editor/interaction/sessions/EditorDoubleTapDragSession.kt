@@ -72,6 +72,7 @@ internal class EditorDoubleTapDragSession {
     if (!stop()) {
       return false
     }
+    context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
     if (wasDragging) {
       if (context.mode.canApply(EditorInteractionEvent.DoubleTapDragEnd)) {
@@ -108,6 +109,7 @@ internal class EditorDoubleTapDragSession {
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
     context.effects.setScrollGestureLocked(false)
+    context.semantics.edgeAutoScroll.stop()
     resetSelectionExtensionState(context = context)
     reset()
   }
@@ -170,6 +172,11 @@ internal class EditorDoubleTapDragSession {
   }
 
   private fun extendSelection(position: Offset, context: EditorGestureContext): Boolean {
+    context.semantics.edgeAutoScroll.trackSelectionExpansion(
+      edgePosition = position,
+      dispatchPosition = position,
+      context = context,
+    )
     val point = context.effects.resolvePoint(positionInNode = position) ?: return false
     val editor = context.editor
     val selectionContext = context.semantics.selectionExpansion.context(editor)

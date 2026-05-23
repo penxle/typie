@@ -9,6 +9,10 @@ internal interface EditorInteractionEffects {
 
   fun resolvePagePosition(page: Int, x: Float, y: Float): Offset?
 
+  fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport?
+
+  fun dispatchEdgeAutoScroll(delta: Offset): Offset
+
   fun scheduleTapDispatch(dispatchAtMillis: Long)
 
   fun cancelTapDispatch()

@@ -1,6 +1,7 @@
 package co.typie.editor
 
 import co.typie.editor.ffi.BlockState
+import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElement
@@ -63,6 +64,8 @@ internal class FakeFfiEditor(
   override fun modifierState(): ModifierState = modifierStateProvider()
 
   override fun blockState(): BlockState = blockStateProvider()
+
+  override fun copySelection(): ClipboardPayload? = null
 
   override fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? = null
 

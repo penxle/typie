@@ -71,6 +71,12 @@ internal class EditorSelectionHandleDragSession {
 
     val selectionPosition = drag.startHandlePosition + (touchPosition - drag.startTouchPosition)
     context.semantics.magnifier.show(selectionPosition)
+    context.semantics.edgeAutoScroll.trackSelectionHandle(
+      edgePosition = touchPosition,
+      dispatchPosition = selectionPosition,
+      anchor = drag.anchor,
+      context = context,
+    )
     val point = context.effects.resolvePoint(positionInNode = selectionPosition) ?: return false
     if (point.page < 0) {
       return false
