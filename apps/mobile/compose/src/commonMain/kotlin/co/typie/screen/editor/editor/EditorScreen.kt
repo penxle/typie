@@ -431,14 +431,15 @@ fun EditorScreen(entityId: String) {
           )
         }
       interactionScope.update(
-        editor = runtime.editor,
+        editor = editor,
         bringIntoViewRequests = bringIntoViewRequests,
         uiState = uiState,
         density = density,
         scrollGestureLockState = scrollGestureLockState,
         viewportZoomConfig = viewportZoomConfig,
+        onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
       )
-      interactionScope.controller.onEditorStateChanged(editorState)
+      interactionScope.onEditorStateChanged(editorState)
     }
     val toolbarSuppressesSoftwareKeyboard = toolbarPanel?.let(::suppressSoftwareKeyboard) ?: false
     val toolbarTextInputSessionEnabled =

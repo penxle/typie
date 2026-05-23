@@ -213,6 +213,7 @@ internal class EditorInteractionGestures(
   }
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
+    selectionHandle.resetPointerOwnedState(context = context)
     doubleTapDrag.resetPointerOwnedState(context = context)
     longPress.reset()
     context.semantics.magnifier.hide()

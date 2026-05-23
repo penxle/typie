@@ -126,6 +126,9 @@ class EditorCursorMoveSemanticTest {
     override fun resolvePoint(positionInNode: Offset): PagePoint? =
       error("Unused in direct cursor semantic dispatch tests")
 
+    override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? =
+      error("Unused in direct cursor semantic dispatch tests")
+
     override fun scheduleTapDispatch(dispatchAtMillis: Long) =
       error("Unused in direct cursor semantic dispatch tests")
 
@@ -150,6 +153,8 @@ class EditorCursorMoveSemanticTest {
 
     override fun setScrollGestureLocked(locked: Boolean) =
       error("Unused in direct cursor semantic dispatch tests")
+
+    override fun performSelectionHaptic() = error("Unused in direct cursor semantic dispatch tests")
 
     override fun requestCurrentCursorLine(version: Long) =
       error("Unused in direct cursor semantic dispatch tests")

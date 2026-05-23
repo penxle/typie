@@ -3,6 +3,7 @@ package co.typie.editor.interaction
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
+import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
@@ -26,6 +27,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
   private var bringIntoViewRequests: EditorBringIntoViewRequests? = null
   private var uiState: EditorUiState? = null
   private var density: Float = 0f
+  private var onSelectionHaptic: (() -> Unit)? = null
   private var tapDispatchJob: Job? = null
   private var longPressDispatchJob: Job? = null
   private var scrollGestureLockState: ScrollGestureLockState? = null
@@ -47,13 +49,22 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     density: Float,
     scrollGestureLockState: ScrollGestureLockState,
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
+    onSelectionHaptic: () -> Unit,
   ) {
     this.editor = editor
     this.bringIntoViewRequests = bringIntoViewRequests
     this.uiState = uiState
     this.density = density
     this.scrollGestureLockState = scrollGestureLockState
+    this.onSelectionHaptic = onSelectionHaptic
     semantics.viewportZoom.configure(viewportZoomConfig)
+  }
+
+  fun onEditorStateChanged(state: EditorState) {
+    if (editor == null) {
+      return
+    }
+    controller.onEditorStateChanged(state)
   }
 
   fun beginPointerSignalZoom(): Boolean {
@@ -87,6 +98,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     bringIntoViewRequests = null
     uiState = null
     density = 0f
+    onSelectionHaptic = null
     scrollGestureLockState = null
   }
 
@@ -102,6 +114,20 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     return currentUiState
       .resolveViewportTransform(pageSizes = currentEditor.pageSizes)
       .globalToLocal(x = xDp, y = yDp)
+  }
+
+  override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? {
+    val currentEditor = editor ?: return null
+    val currentUiState = uiState ?: return null
+    if (density <= 0f) {
+      return null
+    }
+
+    val positionDp =
+      currentUiState
+        .resolveViewportTransform(pageSizes = currentEditor.pageSizes)
+        .localToGlobal(page = page, x = x, y = y) ?: return null
+    return Offset(x = positionDp.x * density, y = positionDp.y * density)
   }
 
   override fun scheduleTapDispatch(dispatchAtMillis: Long) {
@@ -164,6 +190,10 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     } else {
       releaseScrollGestureLock()
     }
+  }
+
+  override fun performSelectionHaptic() {
+    onSelectionHaptic?.invoke()
   }
 
   override fun requestCurrentCursorLine(version: Long) {

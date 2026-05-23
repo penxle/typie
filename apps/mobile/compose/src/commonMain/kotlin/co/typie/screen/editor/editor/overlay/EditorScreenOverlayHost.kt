@@ -86,29 +86,33 @@ internal fun EditorScreenOverlayHost(
 
     if (overlayBounds != null) {
       val editor = runtime.editor
-      if (
-        editor != null &&
-          editorRectInOverlay != null &&
-          interactionController.isContextMenuVisibleFor(editor.state)
-      ) {
-        val anchor =
-          resolveContextMenuAnchor(
-            editor = editor,
-            uiState = uiState,
-            editorRectInOverlay = editorRectInOverlay,
-            density = density.density,
-          )
-        if (anchor != null) {
-          EditorSelectionContextMenuOverlay(
-            anchor = anchor,
-            overlaySize = overlayBounds.size,
-            visibleArea = visibleArea,
-          )
+      if (editor != null && editorRectInOverlay != null) {
+        EditorSelectionHandleOverlay(
+          editor = editor,
+          uiState = uiState,
+          editorRectInOverlay = editorRectInOverlay,
+          density = density.density,
+          interactionController = interactionController,
+        )
+
+        if (interactionController.isContextMenuVisibleFor(editor.state)) {
+          val anchor =
+            resolveContextMenuAnchor(
+              editor = editor,
+              uiState = uiState,
+              editorRectInOverlay = editorRectInOverlay,
+              density = density.density,
+            )
+          if (anchor != null) {
+            EditorSelectionContextMenuOverlay(
+              anchor = anchor,
+              overlaySize = overlayBounds.size,
+              visibleArea = visibleArea,
+            )
+          }
         }
       }
     }
-
-    // TODO(editor-parity): selection handle과 drag auto-scroll affordance를 포팅해야 한다.
   }
 }
 

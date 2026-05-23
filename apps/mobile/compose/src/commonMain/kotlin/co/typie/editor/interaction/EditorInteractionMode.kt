@@ -102,12 +102,12 @@ internal fun EditorInteractionMode.canApply(event: EditorInteractionEvent): Bool
     EditorInteractionEvent.LongPressWordEnd -> this == EditorInteractionMode.LongPressWordSelecting
     EditorInteractionEvent.ViewportZoomStart -> !isDndActive && !isViewportZooming
     EditorInteractionEvent.ViewportZoomEnd -> this == EditorInteractionMode.ViewportZooming
-    EditorInteractionEvent.SelectionHandleDragStart -> !isViewportZooming && !isDndActive
+    EditorInteractionEvent.SelectionHandleDragStart -> this == EditorInteractionMode.Idle
     EditorInteractionEvent.SelectionHandleDragEnd ->
       this == EditorInteractionMode.SelectionHandleDragging
     EditorInteractionEvent.DoubleTapDragStart -> this == EditorInteractionMode.Idle
     EditorInteractionEvent.DoubleTapDragEnd -> this == EditorInteractionMode.DoubleTapSelecting
-    EditorInteractionEvent.TableHandleDragStart -> !isViewportZooming && !isDndActive
+    EditorInteractionEvent.TableHandleDragStart -> this == EditorInteractionMode.Idle
     EditorInteractionEvent.TableHandleDragEnd ->
       this == EditorInteractionMode.TableCellHandleDragging
     EditorInteractionEvent.DndEnter -> this != EditorInteractionMode.DndLocal

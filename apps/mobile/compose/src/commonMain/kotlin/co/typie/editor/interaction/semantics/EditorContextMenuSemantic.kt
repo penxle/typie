@@ -20,7 +20,13 @@ internal class EditorContextMenuSemantic {
   }
 
   fun hide() {
-    showAfterSelectionCommit = false
+    hide(clearPendingCommitRequest = true)
+  }
+
+  private fun hide(clearPendingCommitRequest: Boolean) {
+    if (clearPendingCommitRequest) {
+      showAfterSelectionCommit = false
+    }
     shownForSelection = null
     visible = false
   }
@@ -56,7 +62,7 @@ internal class EditorContextMenuSemantic {
       return
     }
     if (!isVisibleFor(state)) {
-      hide()
+      hide(clearPendingCommitRequest = !showAfterSelectionCommit)
     }
   }
 

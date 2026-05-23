@@ -7,6 +7,8 @@ import co.typie.editor.PagePoint
 internal interface EditorInteractionEffects {
   fun resolvePoint(positionInNode: Offset): PagePoint?
 
+  fun resolvePagePosition(page: Int, x: Float, y: Float): Offset?
+
   fun scheduleTapDispatch(dispatchAtMillis: Long)
 
   fun cancelTapDispatch()
@@ -22,6 +24,8 @@ internal interface EditorInteractionEffects {
   fun enqueuePointerCancel()
 
   fun setScrollGestureLocked(locked: Boolean)
+
+  fun performSelectionHaptic()
 
   fun requestCurrentCursorLine(version: Long)
 }

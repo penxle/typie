@@ -67,13 +67,13 @@ fn resolve_extend_to_selection(editor: &Editor, op: &SelectionOp) -> Option<Sele
         .view
         .hit_test_extending(*head_page, *head_x, *head_y)?;
 
-    if let Some(initial_selection) = initial_selection {
+    let selection = if let Some(initial_selection) = initial_selection {
         let initial = initial_selection.resolve(doc)?;
         let head = head_hit.resolve(doc)?;
         let initial_from = Position::from(initial.from());
         let initial_to = Position::from(initial.to());
 
-        return Some(if head.from() < initial.from() {
+        if head.from() < initial.from() {
             let head = farther_endpoint(doc, initial_to, head_hit.anchor, head_hit.head);
             Selection::new(initial_to, head)
         } else if head.to() > initial.to() {
@@ -81,17 +81,17 @@ fn resolve_extend_to_selection(editor: &Editor, op: &SelectionOp) -> Option<Sele
             Selection::new(initial_from, head)
         } else {
             Selection::new(initial_from, initial_to)
-        });
-    }
+        }
+    } else {
+        let anchor_hit = editor
+            .view
+            .hit_test_extending(*anchor_page, *anchor_x, *anchor_y)?;
+        let anchor = farther_endpoint(doc, head_hit.head, anchor_hit.anchor, anchor_hit.head);
+        let head = farther_endpoint(doc, anchor, head_hit.anchor, head_hit.head);
+        Selection::new(anchor, head)
+    };
 
-    editor
-        .view
-        .hit_test_extending(*anchor_page, *anchor_x, *anchor_y)
-        .map(|anchor_hit| {
-            let anchor = farther_endpoint(doc, head_hit.head, anchor_hit.anchor, anchor_hit.head);
-            let head = farther_endpoint(doc, anchor, head_hit.anchor, head_hit.head);
-            Selection::new(anchor, head)
-        })
+    (!selection.is_collapsed()).then_some(selection)
 }
 
 #[cfg(test)]
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn extend_to_without_initial_selection_allows_collapsed_promoted_slot() {
+    fn extend_to_without_initial_selection_ignores_collapsed_result() {
         let (state, ..) = state! {
             doc { root { paragraph { t: text("hello") } } }
             selection: (t, 0) -> (t, 5)
@@ -173,8 +173,8 @@ mod tests {
             },
         });
 
-        assert_ne!(editor.state().selection, before);
-        assert!(editor.state().selection.is_collapsed());
+        assert_eq!(editor.state().selection, before);
+        assert!(!editor.state().selection.is_collapsed());
         assert!(!editor.history.can_undo());
     }
 }

@@ -3,6 +3,7 @@ package co.typie.editor.interaction
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.interaction.gestures.EditorSelectionHandleGesture
 import co.typie.platform.Platform
 
 internal class EditorInteractionController(
@@ -46,6 +47,12 @@ internal class EditorInteractionController(
 
   val isIgnoringUntilAllPointersUp: Boolean
     get() = gestures.isIgnoringUntilAllPointersUp
+
+  val selectionHandleGesture: EditorSelectionHandleGesture
+    get() = gestures.selectionHandle
+
+  val interactionContext: EditorGestureContext
+    get() = gestureContext
 
   val magnifierPosition: Offset?
     get() = semantics.magnifier.position
@@ -102,7 +109,7 @@ internal class EditorInteractionController(
   }
 
   fun onEditorStateChanged(state: EditorState) {
-    semantics.contextMenu.onEditorStateChanged(state)
+    semantics.onEditorStateChanged(editor = editorProvider(), state = state, mode = mode)
   }
 
   fun onViewportScrollStarted() {

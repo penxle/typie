@@ -17,6 +17,7 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
@@ -452,6 +453,286 @@ class EditorInteractionControllerTest {
         fake.enqueued.last(),
       )
     }
+
+  @Test
+  fun `from selection handle drag extends selection from to endpoint anchor`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(12f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.From, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.From, down))
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertTrue(host.scrollGestureLockActive)
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.From, Offset(22f, 50f))
+      )
+
+      val extend =
+        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+      assertEquals(0, extend.anchorPage)
+      assertEquals(40f, extend.anchorX)
+      assertEquals(24f, extend.anchorY)
+      assertEquals(0, extend.headPage)
+      assertEquals(20f, extend.headX)
+      assertEquals(44f, extend.headY)
+      assertNull(extend.initialSelection)
+      assertEquals(Offset(20f, 44f), controller.magnifierPosition)
+
+      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.From))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+      assertNull(controller.magnifierPosition)
+    }
+
+  @Test
+  fun `to selection handle drag extends selection from from endpoint anchor`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 50f))
+      )
+
+      val extend =
+        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+      assertEquals(0, extend.anchorPage)
+      assertEquals(10f, extend.anchorX)
+      assertEquals(24f, extend.anchorY)
+      assertEquals(50f, extend.headX)
+      assertEquals(44f, extend.headY)
+      assertNull(extend.initialSelection)
+
+      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `selection handle drag keeps consuming when pointer temporarily resolves outside pages`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+
+      host.point = null
+
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(200f, -40f))
+      )
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertTrue(host.scrollGestureLockActive)
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+    }
+
+  @Test
+  fun `selection handle cancel clears drag state scroll lock and magnifier`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 50f))
+      )
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertTrue(host.scrollGestureLockActive)
+      assertEquals(Offset(50f, 44f), controller.magnifierPosition)
+
+      controller.handleSelectionHandleDragCancel()
+
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+      assertNull(controller.magnifierPosition)
+    }
+
+  @Test
+  fun `selection handle drag refreshes context menu after delayed selection commit`() =
+    runTest(StandardTestDispatcher()) {
+      var selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val committedSelection = Selection(anchor = Position("text", 0), head = Position("text", 8))
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 50f))
+      )
+      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+
+      selection = committedSelection
+      editor.sync {}
+      controller.onEditorStateChanged(editor.state)
+
+      assertTrue(controller.isContextMenuVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `selection handle down only owns pending drag until movement starts drag`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller = EditorInteractionController(editorProvider = { editor }, effects = host)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertTrue(host.scrollGestureLockActive)
+
+      assertFalse(controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, down))
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+      assertNull(controller.magnifierPosition)
+
+      controller.handleSelectionHandleDragCancel()
+
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `selection handle drag cannot interrupt active long press interaction`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.iOS },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertEquals(EditorInteractionMode.LongPressSelecting, controller.interactionMode)
+
+      assertFalse(
+        controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, Offset(42f, 30f))
+      )
+      assertEquals(EditorInteractionMode.LongPressSelecting, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 600L))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+    }
+
+  private fun EditorInteractionController.handleSelectionHandleDragDown(
+    type: EditorSelectionHandleType,
+    position: Offset,
+  ): Boolean =
+    selectionHandleGesture.handleDragDown(
+      type = type,
+      position = position,
+      context = interactionContext,
+    )
+
+  private fun EditorInteractionController.handleSelectionHandleDragStart(
+    type: EditorSelectionHandleType,
+    position: Offset,
+  ): Boolean =
+    selectionHandleGesture.handleDragStart(
+      type = type,
+      position = position,
+      context = interactionContext,
+    )
+
+  private fun EditorInteractionController.handleSelectionHandleDragUpdate(
+    type: EditorSelectionHandleType,
+    position: Offset,
+  ): Boolean =
+    selectionHandleGesture.handleDragUpdate(
+      type = type,
+      position = position,
+      context = interactionContext,
+    )
+
+  private fun EditorInteractionController.handleSelectionHandleDragEnd(
+    type: EditorSelectionHandleType
+  ): Boolean = selectionHandleGesture.handleDragEnd(type = type, context = interactionContext)
+
+  private fun EditorInteractionController.handleSelectionHandleDragCancel() {
+    selectionHandleGesture.cancel(context = interactionContext)
+  }
 
   @Test
   fun `pending double tap drag locks scroll gesture until pointer up`() =
@@ -959,6 +1240,8 @@ class EditorInteractionControllerTest {
     override fun resolvePoint(positionInNode: Offset): PagePoint? =
       point?.copy(x = positionInNode.x, y = positionInNode.y)
 
+    override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? = Offset(x, y)
+
     override fun scheduleTapDispatch(dispatchAtMillis: Long) {
       scheduledTapDispatchAtMillis = dispatchAtMillis
     }
@@ -996,6 +1279,8 @@ class EditorInteractionControllerTest {
     override fun setScrollGestureLocked(locked: Boolean) {
       scrollGestureLockActive = locked
     }
+
+    override fun performSelectionHaptic() = Unit
 
     override fun requestCurrentCursorLine(version: Long) {
       requestedBringIntoViewVersions += version
