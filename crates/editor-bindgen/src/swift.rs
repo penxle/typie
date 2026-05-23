@@ -139,16 +139,11 @@ fn generate_regular_method(
         format!("{}, {}", user_params, error_param)
     };
 
-    let ret_swift = swift_return_type(&method.return_type, custom_types);
-    let ret_part = if ret_swift.is_empty() {
+    let objc_ret_swift = objc_return_type(&method.return_type, custom_types);
+    let ret_part = if objc_ret_swift.is_empty() {
         String::new()
     } else {
-        let opt = if ret_swift.ends_with('?') {
-            ret_swift.clone()
-        } else {
-            format!("{}?", ret_swift)
-        };
-        format!(" -> {}", opt)
+        format!(" -> {}", objc_ret_swift)
     };
 
     let sig = format!(
@@ -163,8 +158,8 @@ fn generate_regular_method(
         format!("inner.{}({})", swift_name, call_args)
     };
 
-    let has_return = !ret_swift.is_empty();
     let return_expr = build_return_expr(&method.return_type, &call_expr, custom_types);
+    let error_return = build_error_return(&method.return_type, custom_types);
 
     let mut out = String::new();
     out.push_str(&format!("{} {{\n", sig));
@@ -175,11 +170,7 @@ fn generate_regular_method(
         out.push_str(
             "                userInfo: [NSLocalizedDescriptionKey: \"EditorHost not initialized\"])\n",
         );
-        if has_return {
-            out.push_str("            return nil\n");
-        } else {
-            out.push_str("            return\n");
-        }
+        out.push_str(&format!("            {}\n", error_return));
         out.push_str("        }\n");
     }
 
@@ -187,9 +178,7 @@ fn generate_regular_method(
     out.push_str(&format!("            {}\n", return_expr));
     out.push_str("        } catch let e {\n");
     out.push_str("            error.pointee = e as NSError\n");
-    if has_return {
-        out.push_str("            return nil\n");
-    }
+    out.push_str(&format!("            {}\n", error_return));
     out.push_str("        }\n");
 
     out.push_str("    }\n");
@@ -199,15 +188,52 @@ fn generate_regular_method(
 fn build_return_expr(
     ret: &FfiReturnType,
     call_expr: &str,
-    _custom_types: &HashMap<String, String>,
+    custom_types: &HashMap<String, String>,
 ) -> String {
     match ret {
         FfiReturnType::Unit => format!("try {}", call_expr),
+        FfiReturnType::Primitive(p) => build_primitive_return_expr(p, call_expr, custom_types),
         FfiReturnType::Owned(name) => {
             let native_name = format!("Native{}", name);
             format!("return {}(inner: try {})", native_name, call_expr)
         }
+        FfiReturnType::Option(FfiScalarReturn::Primitive(p))
+            if is_objc_scalar_primitive(p, custom_types) =>
+        {
+            format!(
+                "let result = try {}\n            return result.map {{ NSNumber(value: $0) }}",
+                call_expr
+            )
+        }
         _ => format!("return try {}", call_expr),
+    }
+}
+
+fn build_primitive_return_expr(
+    primitive: &str,
+    call_expr: &str,
+    custom_types: &HashMap<String, String>,
+) -> String {
+    match custom_types
+        .get(primitive)
+        .map(|s| s.as_str())
+        .unwrap_or(primitive)
+    {
+        "u8" | "u16" | "u32" | "usize" | "i8" | "i16" | "i32" => {
+            format!("return Int32(try {})", call_expr)
+        }
+        "u64" | "i64" => format!("return Int64(try {})", call_expr),
+        _ => format!("return try {}", call_expr),
+    }
+}
+
+fn build_error_return(ret: &FfiReturnType, custom_types: &HashMap<String, String>) -> String {
+    match ret {
+        FfiReturnType::Unit => "return".into(),
+        FfiReturnType::Primitive(p) if is_objc_scalar_primitive(p, custom_types) => {
+            format!("return {}", objc_scalar_default_value(p, custom_types))
+        }
+        _ => "return nil".into(),
     }
 }
 
@@ -232,27 +258,61 @@ fn swift_param_type(ty: &FfiParamType, custom_types: &HashMap<String, String>) -
     }
 }
 
-fn swift_return_type(ret: &FfiReturnType, custom_types: &HashMap<String, String>) -> String {
+fn objc_return_type(ret: &FfiReturnType, custom_types: &HashMap<String, String>) -> String {
     match ret {
         FfiReturnType::Unit => String::new(),
-        FfiReturnType::Primitive(p) => resolve_swift_primitive(p, custom_types),
-        FfiReturnType::Complex(_) => "String".into(),
-        FfiReturnType::Owned(name) => format!("Native{}", name),
-        FfiReturnType::Vec(inner) => match inner {
-            FfiScalarReturn::Primitive(p) if p == "u8" => "Data".into(),
-            FfiScalarReturn::Complex(_) | FfiScalarReturn::Owned(_) => "[String]".into(),
-            FfiScalarReturn::Primitive(p) => {
-                format!("[{}]", resolve_swift_primitive(p, custom_types))
-            }
-        },
+        FfiReturnType::Primitive(p) if is_objc_scalar_primitive(p, custom_types) => {
+            resolve_swift_primitive(p, custom_types)
+        }
+        FfiReturnType::Primitive(p) => format!("{}?", resolve_swift_primitive(p, custom_types)),
+        FfiReturnType::Complex(_) => "String?".into(),
+        FfiReturnType::Owned(name) => format!("Native{}?", name),
+        FfiReturnType::Vec(inner) => {
+            let base = match inner {
+                FfiScalarReturn::Primitive(p) if p == "u8" => "Data".into(),
+                FfiScalarReturn::Complex(_) | FfiScalarReturn::Owned(_) => "[String]".into(),
+                FfiScalarReturn::Primitive(p) => {
+                    format!("[{}]", resolve_swift_primitive(p, custom_types))
+                }
+            };
+            format!("{}?", base)
+        }
         FfiReturnType::Option(inner) => {
             let base = match inner {
+                FfiScalarReturn::Primitive(p) if is_objc_scalar_primitive(p, custom_types) => {
+                    "NSNumber".into()
+                }
                 FfiScalarReturn::Primitive(p) => resolve_swift_primitive(p, custom_types),
                 FfiScalarReturn::Complex(_) => "String".into(),
                 FfiScalarReturn::Owned(name) => format!("Native{}", name),
             };
             format!("{}?", base)
         }
+    }
+}
+
+fn is_objc_scalar_primitive(name: &str, custom_types: &HashMap<String, String>) -> bool {
+    matches!(
+        custom_types.get(name).map(|s| s.as_str()).unwrap_or(name),
+        "bool"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "usize"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "u64"
+            | "i64"
+            | "f32"
+            | "f64"
+    )
+}
+
+fn objc_scalar_default_value(name: &str, custom_types: &HashMap<String, String>) -> &'static str {
+    match custom_types.get(name).map(|s| s.as_str()).unwrap_or(name) {
+        "bool" => "false",
+        _ => "0",
     }
 }
 
@@ -279,7 +339,7 @@ fn resolve_swift_primitive(name: &str, custom_types: &HashMap<String, String>) -
     let resolved = custom_types.get(name).map(|s| s.as_str()).unwrap_or(name);
     match resolved {
         "bool" => "Bool".into(),
-        "u16" | "i16" | "u32" | "i32" | "usize" => "Int32".into(),
+        "u8" | "u16" | "i8" | "i16" | "u32" | "i32" | "usize" => "Int32".into(),
         "u64" | "i64" => "Int64".into(),
         "f32" => "Float".into(),
         "f64" => "Double".into(),
@@ -428,6 +488,83 @@ mod tests {
         let iface = editor_host_iface();
         let output = generate_class(&iface, &empty_ct());
         assert!(output.contains("-> NativeEditor?"));
+    }
+
+    #[test]
+    fn scalar_primitive_return_is_non_optional_for_objc_export() {
+        let iface = FfiInterface {
+            name: "Editor".into(),
+            methods: vec![FfiMethod {
+                name: "cursor_hit_test".into(),
+                is_async: false,
+                is_constructor: false,
+                params: vec![],
+                return_type: FfiReturnType::Primitive("bool".into()),
+            }],
+        };
+
+        let output = generate_class(&iface, &empty_ct());
+
+        assert!(output.contains(
+            "func cursorHitTest(error: AutoreleasingUnsafeMutablePointer<NSError?>) -> Bool"
+        ));
+        assert!(output.contains("return try inner.cursorHitTest()"));
+        assert!(output.contains("return false"));
+        assert!(!output.contains("-> Bool?"));
+        assert!(!output.contains("NSNumber"));
+    }
+
+    #[test]
+    fn host_scalar_primitive_return_uses_dummy_value_on_uninitialized_or_error() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![
+                FfiMethod {
+                    name: "create".into(),
+                    is_async: false,
+                    is_constructor: true,
+                    params: vec![],
+                    return_type: FfiReturnType::Owned("EditorHost".into()),
+                },
+                FfiMethod {
+                    name: "revision".into(),
+                    is_async: false,
+                    is_constructor: false,
+                    params: vec![],
+                    return_type: FfiReturnType::Primitive("u32".into()),
+                },
+            ],
+        };
+
+        let output = generate_class(&iface, &empty_ct());
+
+        assert!(output.contains(
+            "func revision(error: AutoreleasingUnsafeMutablePointer<NSError?>) -> Int32"
+        ));
+        assert!(output.contains("return Int32(try inner.revision())"));
+        assert!(output.contains("EditorHost not initialized\"])\n            return 0"));
+        assert!(output.contains("error.pointee = e as NSError\n            return 0"));
+    }
+
+    #[test]
+    fn optional_scalar_primitive_return_stays_boxed_for_objc_export() {
+        let iface = FfiInterface {
+            name: "Editor".into(),
+            methods: vec![FfiMethod {
+                name: "maybe_hit".into(),
+                is_async: false,
+                is_constructor: false,
+                params: vec![],
+                return_type: FfiReturnType::Option(FfiScalarReturn::Primitive("bool".into())),
+            }],
+        };
+
+        let output = generate_class(&iface, &empty_ct());
+
+        assert!(output.contains(
+            "func maybeHit(error: AutoreleasingUnsafeMutablePointer<NSError?>) -> NSNumber?"
+        ));
+        assert!(output.contains("return result.map { NSNumber(value: $0) }"));
     }
 
     #[test]

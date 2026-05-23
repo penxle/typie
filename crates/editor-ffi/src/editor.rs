@@ -108,6 +108,10 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.selection_hit_test(page as usize, x, y)))
     }
 
+    pub fn cursor_hit_test(&self, page: u32, x: f32, y: f32) -> EditorResult<bool> {
+        self.with_inner(|inner| Ok(inner.editor.cursor_hit_test(page as usize, x, y)))
+    }
+
     pub fn pointer_style(
         &self,
         page: u32,
@@ -368,6 +372,31 @@ mod tests {
         assert!(
             hit,
             "probe inside selection rect must register as hit through FFI"
+        );
+    }
+
+    #[test]
+    fn ffi_cursor_hit_test_resolves_and_forwards() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 2)
+        };
+        let editor = make_ffi_editor(initial);
+        let cursor = editor
+            .cursor()
+            .expect("ffi call returns Ok")
+            .expect("collapsed cursor has metrics")
+            .from_ffi()
+            .expect("cursor metrics decode");
+        let probe_x = cursor.caret.x;
+        let probe_y = cursor.line.y + cursor.line.height * 0.5;
+        let hit = editor
+            .cursor_hit_test(0, probe_x, probe_y)
+            .expect("ffi call returns Ok");
+
+        assert!(
+            hit,
+            "probe resolving to current cursor must register as hit through FFI"
         );
     }
 }

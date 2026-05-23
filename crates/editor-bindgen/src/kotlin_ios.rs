@@ -249,6 +249,15 @@ fn generate_method(
             }
         },
         FfiReturnType::Option(inner) => match inner {
+            FfiScalarReturn::Primitive(p) if is_objc_scalar_primitive(p, custom_types) => {
+                emit_pre_call_conversions(w, &method.params);
+                w.line(&format!("val result = {}", native_call));
+                w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
+                w.line(&format!(
+                    "result?.{}",
+                    objc_number_value_property(p, custom_types)
+                ));
+            }
             FfiScalarReturn::Primitive(_) => {
                 emit_pre_call_conversions(w, &method.params);
                 w.line(&format!("val result = {}", native_call));
@@ -284,7 +293,12 @@ fn generate_method(
             emit_pre_call_conversions(w, &method.params);
             w.line(&format!("val result = {}", native_call));
             w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-            w.line("result!!");
+            if matches!(&method.return_type, FfiReturnType::Primitive(p) if is_objc_scalar_primitive(p, custom_types))
+            {
+                w.line("result");
+            } else {
+                w.line("result!!");
+            }
         }
     }
 
@@ -348,6 +362,34 @@ fn convert_param_value(param: &FfiParam, _custom_types: &HashMap<String, String>
 
 fn is_byte_array(ty: &FfiParamType) -> bool {
     matches!(ty, FfiParamType::Vec(FfiScalarParam::Primitive(p)) if p == "u8")
+}
+
+fn is_objc_scalar_primitive(name: &str, custom_types: &HashMap<String, String>) -> bool {
+    matches!(
+        custom_types.get(name).map(|s| s.as_str()).unwrap_or(name),
+        "bool"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "usize"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "u64"
+            | "i64"
+            | "f32"
+            | "f64"
+    )
+}
+
+fn objc_number_value_property(name: &str, custom_types: &HashMap<String, String>) -> &'static str {
+    match custom_types.get(name).map(|s| s.as_str()).unwrap_or(name) {
+        "bool" => "boolValue",
+        "u64" | "i64" => "longLongValue",
+        "f32" => "floatValue",
+        "f64" => "doubleValue",
+        _ => "intValue",
+    }
 }
 
 fn format_call_args_multiline(args: &[(usize, String, String)]) -> String {
@@ -760,5 +802,36 @@ mod tests {
         };
         let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
         assert!(output.contains("result?.let { json.decodeFromString(it) }"));
+    }
+
+    #[test]
+    fn scalar_primitive_return_uses_non_optional_cinterop_result() {
+        let iface = FfiInterface {
+            name: "Editor".into(),
+            methods: vec![make_method(
+                "cursor_hit_test",
+                vec![],
+                FfiReturnType::Primitive("bool".into()),
+            )],
+        };
+        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        assert!(output.contains("val result = native.cursorHitTestWithError(error = error.ptr)"));
+        assert!(output.contains("error.value?.let { throw EditorException(it.localizedDescription) }\n            result"));
+        assert!(!output.contains("boolValue"));
+        assert!(!output.contains("result!!"));
+    }
+
+    #[test]
+    fn optional_scalar_primitive_return_unboxes_nsnumber() {
+        let iface = FfiInterface {
+            name: "Editor".into(),
+            methods: vec![make_method(
+                "maybe_hit",
+                vec![],
+                FfiReturnType::Option(FfiScalarReturn::Primitive("bool".into())),
+            )],
+        };
+        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        assert!(output.contains("result?.boolValue"));
     }
 }

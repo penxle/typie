@@ -142,6 +142,28 @@ impl Editor {
         self.view.selection_hit_test(&resolved, page_idx, x, y)
     }
 
+    pub fn cursor_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
+        let selection = self.state.selection;
+        if !selection.is_collapsed() {
+            return false;
+        }
+
+        let Some(hit_selection) = self.view.hit_test(page_idx, x, y) else {
+            return false;
+        };
+        if !hit_selection.is_collapsed() {
+            return false;
+        }
+
+        let Some(current_head) = selection.head.resolve(&self.state.doc) else {
+            return false;
+        };
+        let Some(hit_head) = hit_selection.head.resolve(&self.state.doc) else {
+            return false;
+        };
+        current_head == hit_head
+    }
+
     pub fn pointer_style(
         &self,
         page_idx: usize,
@@ -1572,6 +1594,62 @@ mod tests {
             event: crate::message::SystemEvent::Initialize,
         });
         assert!(!editor.selection_hit_test(0, 10.0, 10.0));
+    }
+
+    #[test]
+    fn editor_cursor_hit_test_matches_current_collapsed_position() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let cursor = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &editor.state.selection.head)
+            .expect("collapsed cursor has metrics");
+        let probe_x = cursor.caret.x;
+        let probe_y = cursor.line.y + cursor.line.height * 0.5;
+
+        assert!(editor.cursor_hit_test(0, probe_x, probe_y));
+    }
+
+    #[test]
+    fn editor_cursor_hit_test_rejects_different_position() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let cursor = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &editor.state.selection.head)
+            .expect("collapsed cursor has metrics");
+        let probe_x = cursor.caret.x + 100.0;
+        let probe_y = cursor.line.y + cursor.line.height * 0.5;
+
+        assert!(!editor.cursor_hit_test(0, probe_x, probe_y));
+    }
+
+    #[test]
+    fn editor_cursor_hit_test_rejects_range_selection() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0) -> (t, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        assert!(!editor.cursor_hit_test(0, 10.0, 10.0));
     }
 
     #[test]
