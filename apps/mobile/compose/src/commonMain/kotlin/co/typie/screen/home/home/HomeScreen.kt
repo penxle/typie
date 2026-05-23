@@ -564,23 +564,25 @@ private fun RecentDocumentsSection(docs: List<HomeScreen_RecentDocumentRow_docum
 
     Spacer(Modifier.height(16.dp))
 
-    Skeleton.Keep {
-      Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.Bottom,
-      ) {
+    Row(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+      verticalAlignment = Alignment.Bottom,
+    ) {
+      Skeleton.Keep {
         Text("최근 문서", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
+      }
 
-        Spacer(Modifier.width(4.dp))
+      Spacer(Modifier.width(4.dp))
 
-        Text(
-          docs.size.toString(),
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textHint,
-        )
+      Text(
+        docs.size.toString(),
+        style = AppTheme.typography.caption,
+        color = AppTheme.colors.textHint,
+      )
 
-        Spacer(Modifier.weight(1f))
+      Spacer(Modifier.weight(1f))
 
+      Skeleton.Keep {
         SortToggle(
           mode = sortMode,
           onToggle = {
