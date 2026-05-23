@@ -160,6 +160,42 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `android single tap on range selection hit moves cursor instead of toggling context menu`() =
+    runTest(StandardTestDispatcher()) {
+      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { rangeSelection },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertFalse(controller.isContextMenuVisibleFor(editor.state))
+      assertTrue(host.focused)
+      assertEquals(
+        listOf<Message>(
+          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 1)),
+          Message.Pointer(EditorPointerEvent.Up),
+        ),
+        fake.enqueued,
+      )
+    }
+
+  @Test
   fun `context menu hides when observed editor selection changes`() =
     runTest(StandardTestDispatcher()) {
       val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))

@@ -9,6 +9,7 @@ import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.semantics.hasRangeSelection
 import co.typie.editor.interaction.semantics.isSelectionHit
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
+import co.typie.platform.Platform
 
 private const val EditorTapDownDelayMillis = 100L
 private const val EditorTapTimerDelayMillis = 150L
@@ -272,7 +273,11 @@ internal fun EditorTapGesture.handleTapTimer(
     return
   }
   val clickCount = nextTapCount(position = position, nowMillis = nowMillis)
-  if (clickCount == 1 && isSelectionHit(position = position, context = context)) {
+  if (
+    clickCount == 1 &&
+      context.platform != Platform.Android &&
+      isSelectionHit(position = position, context = context)
+  ) {
     markTapDispatched()
     if (shouldOpenContextMenuForCurrentTap()) {
       context.semantics.contextMenu.show(context.editor.state)
@@ -308,7 +313,11 @@ private fun EditorTapGesture.dispatchTap(
   recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
   val editor = context.editor
   context.semantics.cursorMove.requestFocus(editor)
-  if (clickCount == 1 && context.semantics.cursorMove.isSelectionHit(editor, point)) {
+  if (
+    clickCount == 1 &&
+      context.platform != Platform.Android &&
+      context.semantics.cursorMove.isSelectionHit(editor, point)
+  ) {
     if (shouldOpenContextMenuForCurrentTap()) {
       context.semantics.contextMenu.show(editor.state)
     }
