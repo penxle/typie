@@ -203,7 +203,7 @@ fn position_after_or_at_node_end(
     pos_path.len() == node_path.len() && pos_offset >= node_end_offset
 }
 
-fn is_prefix_of(prefix: &[usize], full: &[usize]) -> bool {
+pub fn is_prefix_of(prefix: &[usize], full: &[usize]) -> bool {
     prefix.len() <= full.len() && prefix == &full[..prefix.len()]
 }
 

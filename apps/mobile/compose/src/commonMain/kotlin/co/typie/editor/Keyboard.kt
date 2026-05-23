@@ -23,6 +23,7 @@ import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.platform.Clipboard
 import co.typie.platform.Platform
 
 internal enum class KeyModifier {
@@ -39,7 +40,7 @@ internal data class KeyBinding(
   // TODO(editor-parity): movement/selection shortcut은 키별 고정 target보다, dispatch 이후의
   // 실제 scroll anchor(selection head 또는 cursor)를 따라가도록 정리해야 한다.
   val bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
-  val action: Editor.() -> List<Message>,
+  val action: suspend Editor.(Clipboard) -> List<Message>,
 )
 
 private fun move(movement: Movement, extend: Boolean): Message =
@@ -280,13 +281,31 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       ComposeKey.C,
       setOf(KeyModifier.Mod),
       bringIntoViewTarget = null,
-      action = { listOf(Message.Clipboard(ClipboardOp.Copy)) },
+      action = { clipboard ->
+        copySelection()?.let { clipboard.copy(html = it.html, text = it.text) }
+        emptyList()
+      },
     ),
     KeyBinding(
       ComposeKey.X,
       setOf(KeyModifier.Mod),
       bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
-      action = { listOf(Message.Clipboard(ClipboardOp.Cut)) },
+      action = { clipboard ->
+        val payload = copySelection() ?: return@KeyBinding emptyList()
+        if (clipboard.copy(html = payload.html, text = payload.text)) {
+          listOf(Message.Clipboard(ClipboardOp.Cut))
+        } else {
+          emptyList()
+        }
+      },
+    ),
+    KeyBinding(
+      ComposeKey.V,
+      setOf(KeyModifier.Mod),
+      action = { clipboard ->
+        val read = clipboard.paste() ?: return@KeyBinding emptyList()
+        listOf(Message.Clipboard(ClipboardOp.Paste(html = read.html, text = read.text)))
+      },
     ),
     KeyBinding(
       ComposeKey.A,

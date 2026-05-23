@@ -186,7 +186,6 @@ pub enum ViewOp {
 pub enum ClipboardOp {
     Paste { html: Option<String>, text: String },
     Cut,
-    Copy,
 }
 
 #[ffi]

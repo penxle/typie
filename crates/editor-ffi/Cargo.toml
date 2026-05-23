@@ -13,6 +13,7 @@ uniffi = [
   "dep:android_logger",
   "dep:env_filter",
   "dep:env_logger",
+  "editor-clipboard/uniffi",
   "editor-common/uniffi",
   "editor-core/uniffi",
   "editor-crdt/uniffi",
@@ -31,6 +32,7 @@ wasm = [
   "dep:wasm-bindgen-futures",
   "dep:serde-wasm-bindgen",
   "dep:tsify",
+  "editor-clipboard/wasm",
   "editor-common/wasm",
   "editor-core/wasm",
   "editor-crdt/wasm",
@@ -46,6 +48,7 @@ wasm-browser = ["wasm", "dep:web-sys"]
 wasm-server = ["wasm", "dep:editor-server", "editor-server/wasm"]
 
 [dependencies]
+editor-clipboard = { path = "../editor-clipboard" }
 editor-common = { path = "../editor-common" }
 editor-core = { path = "../editor-core" }
 editor-crdt = { path = "../editor-crdt" }

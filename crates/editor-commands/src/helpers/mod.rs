@@ -1,4 +1,5 @@
 mod deletion;
+mod insertion;
 mod lift;
 mod list;
 mod merge;
@@ -8,6 +9,7 @@ mod table;
 mod tree;
 
 pub(crate) use deletion::*;
+pub(crate) use insertion::*;
 pub(crate) use lift::*;
 pub(crate) use list::*;
 pub(crate) use merge::*;

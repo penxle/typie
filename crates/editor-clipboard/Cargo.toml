@@ -1,0 +1,39 @@
+[package]
+name = "editor-clipboard"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-utils = ["editor-model/test-utils", "editor-state/test-utils"]
+uniffi = [
+  "dep:uniffi",
+  "editor-model/uniffi",
+  "editor-state/uniffi",
+]
+wasm = [
+  "dep:tsify",
+  "dep:wasm-bindgen",
+  "editor-model/wasm",
+  "editor-state/wasm",
+]
+
+[dependencies]
+editor-model = { path = "../editor-model" }
+editor-state = { path = "../editor-state" }
+editor-common = { path = "../editor-common" }
+editor-resource = { path = "../editor-resource" }
+editor-macros = { path = "../editor-macros" }
+base64 = { workspace = true }
+html5ever = { workspace = true }
+markup5ever_rcdom = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-state = { path = "../editor-state", features = ["test-utils"] }
+editor-resource = { path = "../editor-resource", features = ["test-utils"] }
+serde_json = { workspace = true }

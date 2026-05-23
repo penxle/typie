@@ -73,7 +73,35 @@ internal class IOSClipboard : Clipboard {
         }
         .getOrDefault(false)
     }
+
+  override suspend fun copy(html: String, text: String): Boolean =
+    withContext(Dispatchers.Default) {
+      runCatching {
+          UIPasteboard.generalPasteboard.setItems(
+            listOf(mapOf(UTI_HTML to html, UTI_PLAIN_TEXT to text))
+          )
+          true
+        }
+        .getOrDefault(false)
+    }
+
+  override suspend fun paste(): ClipboardReadPayload? =
+    withContext(Dispatchers.Default) {
+      runCatching {
+          val pasteboard = UIPasteboard.generalPasteboard
+          val html = pasteboard.valueForPasteboardType(UTI_HTML) as? String
+          val text =
+            (pasteboard.valueForPasteboardType(UTI_PLAIN_TEXT) as? String)
+              ?: pasteboard.string
+              ?: return@runCatching null
+          ClipboardReadPayload(html = html, text = text)
+        }
+        .getOrNull()
+    }
 }
+
+private const val UTI_HTML = "public.html"
+private const val UTI_PLAIN_TEXT = "public.utf8-plain-text"
 
 internal class IOSFileSystem : FileSystem {
   override suspend fun save(

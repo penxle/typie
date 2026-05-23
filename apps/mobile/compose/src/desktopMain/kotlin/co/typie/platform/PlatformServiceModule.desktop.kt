@@ -7,6 +7,7 @@ import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.StringReader
 import javax.imageio.ImageIO
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,6 +51,43 @@ internal class DesktopClipboard : Clipboard {
         }
         .getOrDefault(false)
     }
+
+  override suspend fun copy(html: String, text: String): Boolean =
+    withContext(Dispatchers.IO) {
+      runCatching {
+          Toolkit.getDefaultToolkit()
+            .systemClipboard
+            .setContents(HtmlTextTransferable(html = html, text = text), null)
+          true
+        }
+        .getOrDefault(false)
+    }
+
+  override suspend fun paste(): ClipboardReadPayload? =
+    withContext(Dispatchers.IO) {
+      runCatching {
+          val contents = Toolkit.getDefaultToolkit().systemClipboard.getContents(null)
+          val text =
+            if (contents.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+              contents.getTransferData(DataFlavor.stringFlavor) as? String
+            } else {
+              null
+            } ?: return@runCatching null
+
+          val html =
+            if (contents.isDataFlavorSupported(DataFlavor.allHtmlFlavor)) {
+              when (val data = contents.getTransferData(DataFlavor.allHtmlFlavor)) {
+                is String -> data
+                is java.io.Reader -> data.readText()
+                else -> null
+              }
+            } else {
+              null
+            }
+          ClipboardReadPayload(html = html, text = text)
+        }
+        .getOrNull()
+    }
 }
 
 internal class ImageTransferable(private val image: Image) : Transferable {
@@ -61,6 +99,22 @@ internal class ImageTransferable(private val image: Image) : Transferable {
     require(isDataFlavorSupported(flavor)) { "Unsupported data flavor: $flavor" }
     return image
   }
+}
+
+internal class HtmlTextTransferable(private val html: String, private val text: String) :
+  Transferable {
+  override fun getTransferDataFlavors(): Array<DataFlavor> =
+    arrayOf(DataFlavor.allHtmlFlavor, DataFlavor.stringFlavor)
+
+  override fun isDataFlavorSupported(flavor: DataFlavor): Boolean =
+    flavor == DataFlavor.allHtmlFlavor || flavor == DataFlavor.stringFlavor
+
+  override fun getTransferData(flavor: DataFlavor): Any =
+    when (flavor) {
+      DataFlavor.allHtmlFlavor -> StringReader(html)
+      DataFlavor.stringFlavor -> text
+      else -> throw IllegalArgumentException("Unsupported data flavor: $flavor")
+    }
 }
 
 internal class DesktopFileSystem : FileSystem {

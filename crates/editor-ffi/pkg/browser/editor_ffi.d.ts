@@ -236,6 +236,11 @@ export interface BlockState {
     nodes: Block[];
 }
 
+export interface ClipboardPayload {
+    html: string;
+    text: string;
+}
+
 export interface CursorMetrics {
     page_idx: number;
     caret: Rect;
@@ -479,7 +484,7 @@ export type CalloutNodeAttr = { type: "variant" } & CalloutVariant;
 
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
-export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "cut" } | { type: "copy" };
+export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "cut" };
 
 export type CompositionOp = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" } | { type: "flat"; ops: FlatImeOp[] };
 
@@ -598,6 +603,7 @@ declare class Editor {
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
     block_state(): BlockState;
+    copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
     cursor_hit_test(page: number, x: number, y: number): boolean;

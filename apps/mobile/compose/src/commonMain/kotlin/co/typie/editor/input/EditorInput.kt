@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.Editor
+import co.typie.editor.KeyBinding
 import co.typie.editor.createBindings
 import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.InsertionOp
@@ -34,7 +35,9 @@ import co.typie.ext.TextInputClient
 import co.typie.ext.TextInputKey
 import co.typie.ext.notifyTextInputFocusChanged
 import co.typie.ext.registerTextInputClient
+import co.typie.platform.Clipboard
 import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -195,6 +198,17 @@ internal class EditorInputNode(
     }
   }
 
+  private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
+    coroutineScope.launch {
+      val messages = with(binding) { editor.action(clipboard) }
+      if (messages.isEmpty()) return@launch
+      editor.awaitWithBringIntoView(bringIntoViewRequests) {
+        messages.forEach(::enqueue)
+        beforeCommit { binding.bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+      }
+    }
+  }
+
   private fun dispatchSync(
     messages: List<Message>,
     bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
@@ -261,7 +275,7 @@ internal class EditorInputNode(
       if (platformInputBridge.shouldConsumeKeyEvent(event)) {
         return true
       }
-      dispatch(messages = binding.action(editor), bringIntoViewTarget = binding.bringIntoViewTarget)
+      dispatchBinding(binding, PlatformModule.clipboard)
       return true
     }
     if (!requiresRawKeyTextFallback(platform)) {
@@ -297,12 +311,7 @@ internal class EditorInputNode(
       event = event,
       selection = editor.ime?.selection,
       inputCoroutineScope = coroutineScope,
-      dispatch = {
-        dispatch(
-          messages = binding.action(editor),
-          bringIntoViewTarget = binding.bringIntoViewTarget,
-        )
-      },
+      dispatch = { dispatchBinding(binding, PlatformModule.clipboard) },
     )
   }
 

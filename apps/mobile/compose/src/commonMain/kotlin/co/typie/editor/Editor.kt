@@ -8,6 +8,7 @@ import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.BlockState
+import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElement
@@ -312,6 +313,8 @@ internal constructor(
   fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = inner.cursorHitTest(page, x, y)
 
   fun selectionEndpoints(): SelectionEndpoints? = inner.selectionEndpoints()
+
+  fun copySelection(): ClipboardPayload? = inner.copySelection()
 
   internal suspend fun collectLocalChangesets(
     baseHeads: ByteArray?,

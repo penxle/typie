@@ -7,6 +7,7 @@ edition.workspace = true
 test-utils = ["editor-view/test-utils", "editor-resource/test-utils"]
 uniffi = [
   "dep:uniffi",
+  "editor-clipboard/uniffi",
   "editor-commands/uniffi",
   "editor-common/uniffi",
   "editor-crdt/uniffi",
@@ -20,6 +21,7 @@ uniffi = [
 wasm = [
   "dep:tsify",
   "dep:wasm-bindgen",
+  "editor-clipboard/wasm",
   "editor-commands/wasm",
   "editor-common/wasm",
   "editor-crdt/wasm",
@@ -32,6 +34,7 @@ wasm = [
 ]
 
 [dependencies]
+editor-clipboard = { path = "../editor-clipboard" }
 editor-commands = { path = "../editor-commands" }
 editor-common = { path = "../editor-common" }
 editor-crdt = { path = "../editor-crdt" }

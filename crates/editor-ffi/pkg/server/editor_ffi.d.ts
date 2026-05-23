@@ -250,6 +250,11 @@ export interface ChunkCodepoints {
     chunks: number[][];
 }
 
+export interface ClipboardPayload {
+    html: string;
+    text: string;
+}
+
 export interface CursorMetrics {
     page_idx: number;
     caret: Rect;
@@ -506,7 +511,7 @@ export type CalloutNodeAttr = { type: "variant" } & CalloutVariant;
 
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
-export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "cut" } | { type: "copy" };
+export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "cut" };
 
 export type CompositionOp = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" } | { type: "flat"; ops: FlatImeOp[] };
 
@@ -594,7 +599,7 @@ export type PointerStyle = "default" | "text" | "pointer";
 
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
-export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
+export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined };
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "ime" | "modifiers" | "block";
 
@@ -624,8 +629,10 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     block_state(): BlockState;
+    copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
+    cursor_hit_test(page: number, x: number, y: number): boolean;
     enqueue(message: Message): void;
     external_elements(): ExternalElement[];
     ime(before_limit: number, after_limit: number): Ime;
@@ -658,9 +665,9 @@ declare class EditorHost {
     extract_text_from_graph(changesets: Uint8Array): string;
     root_attrs_from_graph(changesets: Uint8Array): PlainRootNode;
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
+    set_auto_surround_enabled(enabled: boolean): void;
     set_fonts(families: FontFamily[]): void;
     set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
-    set_auto_surround_enabled(enabled: boolean): void;
 }
 
 declare class EditorServer {

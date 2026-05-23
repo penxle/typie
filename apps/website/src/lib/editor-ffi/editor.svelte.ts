@@ -6,6 +6,7 @@ import { fontDataMissingHandler } from './fonts';
 import { register, unregister } from './registry';
 import type {
   BlockState,
+  ClipboardPayload,
   CursorMetrics,
   Editor as WasmEditor,
   EditorEvent,
@@ -340,6 +341,10 @@ export class Editor {
   receiveRemoteChangeset(payload: Uint8Array): void {
     this.#wasm.receive_remote_changeset(payload);
     this.#scheduleTick();
+  }
+
+  copySelection(): ClipboardPayload | undefined {
+    return this.#wasm.copy_selection();
   }
 
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {

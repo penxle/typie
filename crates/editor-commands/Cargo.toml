@@ -6,6 +6,7 @@ edition.workspace = true
 [features]
 uniffi = [
   "dep:uniffi",
+  "editor-clipboard/uniffi",
   "editor-common/uniffi",
   "editor-model/uniffi",
   "editor-resource/uniffi",
@@ -15,6 +16,7 @@ uniffi = [
 wasm = [
   "dep:tsify",
   "dep:wasm-bindgen",
+  "editor-clipboard/wasm",
   "editor-common/wasm",
   "editor-model/wasm",
   "editor-resource/wasm",
@@ -23,6 +25,7 @@ wasm = [
 ]
 
 [dependencies]
+editor-clipboard = { path = "../editor-clipboard" }
 editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }

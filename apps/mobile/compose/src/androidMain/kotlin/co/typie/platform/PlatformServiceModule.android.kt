@@ -62,6 +62,31 @@ internal class AndroidClipboard(private val context: Context) : Clipboard {
         }
         .getOrDefault(false)
     }
+
+  override suspend fun copy(html: String, text: String): Boolean =
+    withContext(Dispatchers.IO) {
+      runCatching {
+          val clipData = ClipData.newHtmlText("clipboard", text, html)
+          val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          clipboard.setPrimaryClip(clipData)
+          true
+        }
+        .getOrDefault(false)
+    }
+
+  override suspend fun paste(): ClipboardReadPayload? =
+    withContext(Dispatchers.IO) {
+      runCatching {
+          val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          val clip = clipboard.primaryClip ?: return@runCatching null
+          if (clip.itemCount == 0) return@runCatching null
+          val item = clip.getItemAt(0)
+          val html = item.htmlText
+          val text = item.coerceToText(context).toString()
+          ClipboardReadPayload(html = html, text = text)
+        }
+        .getOrNull()
+    }
 }
 
 internal class AndroidFileSystem(private val context: Context) : FileSystem {

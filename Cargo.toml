@@ -9,6 +9,7 @@ edition = "2024"
 [workspace.dependencies]
 android_logger = "0.15"
 base62 = "2"
+base64 = "0.22"
 bitcode = "0.6"
 rapidhash = "4"
 bytecount = { version = "0.6", features = ["runtime-dispatch-simd"] }
@@ -24,6 +25,7 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 hashbrown = "0.17"
 heck = "0.5"
 hex = "0.4"
+html5ever = "0.27"
 itertools = "0.14"
 icu_provider = { version = "2", default-features = false, features = [
   "serde",
@@ -34,6 +36,7 @@ icu_segmenter = { version = "2", default-features = false }
 imbl = "7"
 kurbo = "0.13"
 log = "0.4"
+markup5ever_rcdom = "0.3"
 objc2 = "0.6"
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 objc2-metal = { version = "0.3", features = [

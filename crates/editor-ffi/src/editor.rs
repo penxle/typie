@@ -52,6 +52,16 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
 
+    pub fn copy_selection(
+        &self,
+    ) -> EditorResult<Option<Complex<editor_clipboard::ClipboardPayload>>> {
+        self.with_inner(|inner| {
+            let payload = editor_clipboard::Slice::extract(inner.editor.state())
+                .map(|slice| slice.to_payload());
+            Ok(payload.into_ffi()?)
+        })
+    }
+
     pub fn root_attrs(&self) -> EditorResult<Complex<editor_model::PlainRootNode>> {
         self.with_inner(|inner| {
             let doc = &inner.editor.state().doc;
@@ -372,6 +382,36 @@ mod tests {
         assert!(
             hit,
             "probe inside selection rect must register as hit through FFI"
+        );
+    }
+
+    #[test]
+    fn copy_selection_returns_payload_for_text_range() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let editor = make_ffi_editor(state);
+        let payload = editor
+            .copy_selection()
+            .expect("ffi call returns Ok")
+            .expect("non-collapsed selection produces payload");
+        assert_eq!(payload.text, "Hello");
+        assert!(payload.html.contains("data-slice"));
+    }
+
+    #[test]
+    fn copy_selection_returns_none_for_collapsed() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 2)
+        };
+        let editor = make_ffi_editor(state);
+        assert!(
+            editor
+                .copy_selection()
+                .expect("ffi call returns Ok")
+                .is_none()
         );
     }
 

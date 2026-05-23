@@ -1,0 +1,9 @@
+editor_macros::preamble!();
+
+pub mod html;
+pub mod payload;
+pub mod slice;
+pub mod text;
+
+pub use payload::ClipboardPayload;
+pub use slice::Slice;
