@@ -28,6 +28,7 @@ import co.typie.editor.scroll.EditorAutoScrollMode
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.viewport.EditorViewportState
+import kotlin.math.roundToInt
 
 @Composable
 internal fun EditorScreenOverlayHost(
@@ -46,6 +47,23 @@ internal fun EditorScreenOverlayHost(
   val uiState = LocalEditorUiState.current
   var overlayBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
   val overlayBounds = overlayBoundsInRoot
+  val editorBoundsInContainer = uiState.editorBoundsInContainer
+  val editorRectInViewport =
+    if (editorBoundsInContainer.isValid && density.density > 0f) {
+      val left =
+        editorBoundsInContainer.x * density.density - viewportState.scrollOffset.x * density.density
+      val top =
+        (visibleArea.headerHeight + editorBoundsInContainer.y) * density.density -
+          (viewportState.scrollOffset.y * density.density).roundToInt()
+      Rect(
+        left = left,
+        top = top,
+        right = left + editorBoundsInContainer.width * density.density,
+        bottom = top + editorBoundsInContainer.height * density.density,
+      )
+    } else {
+      null
+    }
   val editorRectInOverlay = overlayBounds?.let { bounds ->
     uiState.editorRectInRoot()?.translate(translateX = -bounds.left, translateY = -bounds.top)
   }
@@ -86,16 +104,20 @@ internal fun EditorScreenOverlayHost(
 
     if (overlayBounds != null) {
       val editor = runtime.editor
-      if (editor != null && editorRectInOverlay != null) {
-        EditorSelectionHandleOverlay(
-          editor = editor,
-          uiState = uiState,
-          editorRectInOverlay = editorRectInOverlay,
-          density = density.density,
-          interactionController = interactionController,
-        )
+      if (editor != null) {
+        if (editorRectInViewport != null) {
+          EditorSelectionHandleOverlay(
+            editor = editor,
+            uiState = uiState,
+            editorRectInOverlay = editorRectInViewport,
+            density = density.density,
+            interactionController = interactionController,
+          )
+        }
 
-        if (interactionController.isContextMenuVisibleFor(editor.state)) {
+        if (
+          editorRectInOverlay != null && interactionController.isContextMenuVisibleFor(editor.state)
+        ) {
           val anchor =
             resolveContextMenuAnchor(
               editor = editor,
