@@ -3,11 +3,37 @@ use std::sync::{Arc, Mutex};
 
 use crate::prelude::*;
 
+#[cfg(feature = "wasm")]
+struct WasmFilteredLogger;
+
+#[cfg(feature = "wasm")]
+impl log::Log for WasmFilteredLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        let max = if metadata.target().starts_with("editor") {
+            log::Level::Debug
+        } else {
+            log::Level::Warn
+        };
+        metadata.level() <= max
+    }
+
+    fn log(&self, record: &log::Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        console_log::log(record);
+    }
+
+    fn flush(&self) {}
+}
+
 fn init_logger() {
     cfg_if! {
         if #[cfg(feature = "wasm")] {
-            console_log::init_with_level(log::Level::Debug)
-                .expect("logger already initialized");
+            static LOGGER: WasmFilteredLogger = WasmFilteredLogger;
+            if log::set_logger(&LOGGER).is_ok() {
+                log::set_max_level(log::LevelFilter::Debug);
+            }
         } else if #[cfg(all(feature = "uniffi", target_os = "android"))] {
             android_logger::init_once(
                 android_logger::Config::default()
