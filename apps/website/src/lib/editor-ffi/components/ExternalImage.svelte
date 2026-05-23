@@ -14,6 +14,7 @@
     calculateImageWidth,
     createDeleteNodeMessage,
     createSetImageAttrsMessage,
+    deriveImageStage,
     getFirstImageFile,
     processImageUpload,
   } from '../handlers/image-flow';
@@ -30,22 +31,22 @@
 
   const ctx = getEditorContext();
 
-  let pickerOpened = $state(false);
   let proportion = $state(100);
   let isResizing = $state(false);
   let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean; boundsWidth: number } | null = null;
   let enlarged = $state(false);
   let containerEl = $state<HTMLDivElement>();
+  let pickerOpened = $state(false);
 
   const imageData = $derived(element.data.type === 'image' ? element.data : undefined);
-  const asset = $derived(imageData?.id ? ctx.editor?.imageAssets.get(imageData.id) : undefined);
+  const imageId = $derived(imageData?.id || undefined);
+  const asset = $derived(imageId ? ctx.editor?.imageAssets.get(imageId) : undefined);
   const inflight = $derived(ctx.editor?.inflightImages.get(element.node_id));
+  const stage = $derived(deriveImageStage({ imageId, inflight, asset }));
+
   const imageSrc = $derived(asset?.url ?? inflight?.url);
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
-  const hasImage = $derived(!!imageSrc && originalWidth > 0);
-  const isUploading = $derived(!!inflight && !asset);
-  const isResolvingAsset = $derived(!!imageData?.id && !asset && !inflight);
   const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
   const liveHeight = $derived(calculateImageHeight(liveWidth, originalWidth, originalHeight));
   const canEdit = $derived(!ctx.editor?.readOnly);
@@ -63,11 +64,11 @@
   });
 
   $effect(() => {
-    pickerOpened = element.is_selected && !hasImage && !isResolvingAsset && !isUploading;
+    pickerOpened = element.is_selected && stage === 'empty';
   });
 
   $effect(() => {
-    if (!hasImage) {
+    if (stage !== 'ready') {
       enlarged = false;
     }
   });
@@ -75,22 +76,10 @@
   $effect(() => {
     if (asset && inflight) {
       const url = inflight.url;
-      deleteInflightImage(element.node_id);
-      revokeObjectUrl(url);
+      ctx.editor?.inflightImages.delete(element.node_id);
+      URL.revokeObjectURL(url);
     }
   });
-
-  const enqueueImageAttrs = (id: string | undefined, nextProportion: number) => {
-    ctx.editor?.enqueue(createSetImageAttrsMessage(element.node_id, id, nextProportion));
-  };
-
-  const deleteInflightImage = (nodeId: string) => {
-    ctx.editor?.inflightImages.delete(nodeId);
-  };
-
-  const revokeObjectUrl = (url: string) => {
-    URL.revokeObjectURL(url);
-  };
 
   const deleteNode = () => {
     ctx.editor?.enqueue(createDeleteNodeMessage(element.node_id));
@@ -106,12 +95,12 @@
       nodeId: element.node_id,
       getProportion: () => proportion,
       setInflightImage: (nodeId, image) => editor.inflightImages.set(nodeId, image),
-      deleteInflightImage,
+      deleteInflightImage: (nodeId) => editor.inflightImages.delete(nodeId),
       setImageAsset: (asset) => editor.imageAssets.set(asset.id, asset),
       enqueue: (message) => editor.enqueue(message),
       focus: () => editor.focus(),
       createObjectUrl: (file) => URL.createObjectURL(file),
-      revokeObjectUrl,
+      revokeObjectUrl: (url) => URL.revokeObjectURL(url),
       readImageDimensions: getImageDimensions,
       uploadImageFile,
     });
@@ -123,26 +112,21 @@
 
   const handleUpload = () => {
     if (!canEdit) return;
-    // TODO: restrictedBlob 용량 제한 처리.
 
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = 'image/*';
 
     picker.addEventListener('change', () => {
-      pickerOpened = false;
-
       const file = picker.files?.[0];
       if (!file) {
         deleteNode();
         return;
       }
-
       void processFile(file);
     });
 
     picker.addEventListener('cancel', () => {
-      pickerOpened = false;
       deleteNode();
     });
 
@@ -150,7 +134,7 @@
   };
 
   const handleDragOver = (event: DragEvent) => {
-    if (!canEdit || hasImage) return;
+    if (!canEdit || stage === 'ready') return;
 
     const items = [...(event.dataTransfer?.items ?? [])];
     if (items.length > 0 && !items.some((item) => item.kind === 'file' && item.type.startsWith('image/'))) return;
@@ -163,14 +147,13 @@
   };
 
   const handleDrop = (event: DragEvent) => {
-    if (!canEdit || hasImage) return;
+    if (!canEdit || stage === 'ready') return;
 
     event.preventDefault();
 
     const file = getFirstImageFile(event.dataTransfer?.files ?? []);
     if (!file) return;
 
-    pickerOpened = false;
     void processFile(file);
   };
 
@@ -221,32 +204,28 @@
 
     isResizing = false;
     initialResizeData = null;
-    enqueueImageAttrs(imageData?.id, proportion);
+    ctx.editor?.enqueue(createSetImageAttrsMessage(element.node_id, imageId, proportion));
     ctx.editor?.focus();
   };
 </script>
 
-<ExternalElementWrapper {element} minHeight={hasImage ? undefined : '48px'}>
+<ExternalElementWrapper {element} minHeight={stage === 'ready' ? undefined : '48px'}>
   <div
     bind:this={containerEl}
-    style:width={hasImage ? `${liveWidth}px` : '100%'}
-    style:height={hasImage ? `${liveHeight}px` : undefined}
+    style:width={stage === 'ready' ? `${liveWidth}px` : '100%'}
+    style:height={stage === 'ready' ? `${liveHeight}px` : undefined}
     class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
     ondragovercapture={handleDragOver}
     ondropcapture={handleDrop}
     role="group"
   >
-    {#if hasImage}
+    {#if stage === 'ready' && imageSrc}
       <Img
         style={css.raw({ width: 'full', borderRadius: '4px' }, !canEdit && { cursor: 'zoom-in' })}
         alt="본문 이미지"
         aria-label={canEdit ? undefined : '이미지 확대 보기'}
         onclick={() => {
-          if (canEdit) {
-            return;
-          }
-
-          enlarged = true;
+          if (!canEdit) enlarged = true;
         }}
         onkeydown={(event) => {
           if (!canEdit && (event.key === 'Enter' || event.key === ' ')) {
@@ -263,14 +242,8 @@
         role={canEdit ? undefined : 'button'}
         size="full"
         tabindex={canEdit ? undefined : 0}
-        url={imageSrc ?? ''}
+        url={imageSrc}
       />
-
-      {#if isUploading}
-        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50' })}>
-          <RingSpinner style={css.raw({ size: '24px', color: 'text.disabled' })} />
-        </div>
-      {/if}
 
       {#if canEdit}
         <div class={flex({ position: 'absolute', top: '10px', right: '10px', gap: '6px', zIndex: '10' })}>
@@ -381,10 +354,16 @@
       >
         <div class={flex({ align: 'center', gap: '12px', paddingX: '14px', paddingY: '12px', fontSize: '14px', color: 'text.disabled' })}>
           <Icon icon={ImageIcon} size={20} />
-          {isUploading ? '이미지를 업로드하는 중...' : isResolvingAsset ? '이미지를 불러오는 중...' : '이미지'}
+          {#if stage === 'uploading'}
+            이미지를 업로드하는 중...
+          {:else if stage === 'resolving'}
+            이미지를 불러오는 중...
+          {:else}
+            이미지
+          {/if}
         </div>
 
-        {#if isResolvingAsset || isUploading}
+        {#if stage === 'uploading' || stage === 'resolving'}
           <div class={css({ marginRight: '14px' })}>
             <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
           </div>
@@ -439,7 +418,7 @@
   </button>
 {/if}
 
-{#if enlarged && hasImage && imageSrc && containerEl}
+{#if enlarged && stage === 'ready' && imageSrc && containerEl}
   <ExternalImageEnlarge
     onclose={() => (enlarged = false)}
     placeholder={asset?.placeholder}

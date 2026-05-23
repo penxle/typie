@@ -108,7 +108,7 @@ describe('v2 image upload processing', () => {
     expect(focus).toHaveBeenCalled();
   });
 
-  it('deletes the empty image node and cleans up preview when upload fails', async () => {
+  it('cleans up preview and leaves node as empty placeholder when upload fails', async () => {
     const { deps, messages, inflight, focus } = createDeps();
     const file = createFile('image.png', 'image/png');
     const revokeObjectUrl = vi.fn();
@@ -127,7 +127,7 @@ describe('v2 image upload processing', () => {
     });
 
     expect(result).toBe('failed');
-    expect(messages).toEqual([createDeleteNodeMessage('node-1')]);
+    expect(messages).toEqual([]);
     expect(inflight.has('node-1')).toBe(false);
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:image');
     expect(focus).toHaveBeenCalled();

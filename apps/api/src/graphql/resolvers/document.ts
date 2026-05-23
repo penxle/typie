@@ -217,15 +217,34 @@ Document.implement({
     assets: t.field({
       type: [DocumentAsset],
       resolve: async (self) => {
-        const content = await db
-          .select({ snapshot: DocumentContents.snapshot })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, self.id))
-          .then(firstOrThrow);
+        const state = await db
+          .select({ json: DocumentStates.json })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, self.id))
+          .then(first);
 
-        const doc = new LoroDoc();
-        doc.import(content.snapshot);
-        const { imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromLoroDoc(doc);
+        let imageIds: string[];
+        let fileIds: string[];
+        let embedIds: string[];
+        let archivedIds: string[];
+
+        if (state) {
+          const plain = state.json as { nodes: Record<string, { node: { type: string; id?: string | null } }> };
+          const nodes = Object.values(plain.nodes);
+          imageIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'image' && e.node.id != null ? [e.node.id] : [])))];
+          fileIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'file' && e.node.id != null ? [e.node.id] : [])))];
+          embedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'embed' && e.node.id != null ? [e.node.id] : [])))];
+          archivedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'archived' && e.node.id != null ? [e.node.id] : [])))];
+        } else {
+          const content = await db
+            .select({ snapshot: DocumentContents.snapshot })
+            .from(DocumentContents)
+            .where(eq(DocumentContents.documentId, self.id))
+            .then(firstOrThrow);
+          const doc = new LoroDoc();
+          doc.import(content.snapshot);
+          ({ imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromLoroDoc(doc));
+        }
 
         const [existingImageIds, existingFileIds, existingEmbedIds, existingArchivedIds] = await Promise.all([
           imageIds.length > 0

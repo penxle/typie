@@ -1,5 +1,20 @@
 import type { Message } from '@typie/editor-ffi/browser';
-import type { ImageAsset } from '../types';
+import type { ImageAsset, ImageStage } from '../types';
+
+export const deriveImageStage = ({
+  imageId,
+  inflight,
+  asset,
+}: {
+  imageId: string | undefined;
+  inflight: { url: string; width: number; height: number } | undefined;
+  asset: ImageAsset | undefined;
+}): ImageStage => {
+  if (asset) return 'ready';
+  if (inflight) return 'uploading';
+  if (imageId != null && imageId !== '') return 'resolving';
+  return 'empty';
+};
 
 type UploadImageFile = (file: File) => Promise<ImageAsset>;
 type ReadImageDimensions = (src: string) => Promise<{ width: number; height: number }>;
@@ -82,7 +97,6 @@ export const processImageUpload = async ({
   } catch {
     deleteInflightImage(nodeId);
     revokeObjectUrl(objectUrl);
-    enqueue(createDeleteNodeMessage(nodeId));
     focus();
     return 'failed';
   }
