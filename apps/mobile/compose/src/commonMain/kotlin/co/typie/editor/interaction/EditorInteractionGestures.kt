@@ -216,6 +216,7 @@ internal class EditorInteractionGestures(
     selectionHandle.resetPointerOwnedState(context = context)
     doubleTapDrag.resetPointerOwnedState(context = context)
     longPress.reset()
+    context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()
     context.semantics.edgeAutoScroll.stop()
     context.semantics.selectionExpansion.reset()

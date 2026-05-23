@@ -836,10 +836,11 @@ class EditorInteractionControllerTest {
         controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, Offset(42f, 30f))
       )
       assertEquals(EditorInteractionMode.LongPressSelecting, controller.interactionMode)
-      assertFalse(host.scrollGestureLockActive)
+      assertTrue(host.scrollGestureLockActive)
 
       assertTrue(controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 600L))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
     }
 
   private fun EditorInteractionController.handleSelectionHandleDragDown(
@@ -1256,6 +1257,64 @@ class EditorInteractionControllerTest {
       }
 
       assertEquals(6, fake.enqueued.size)
+    }
+
+  @Test
+  fun `long press cursor move locks desktop drag scroll until pointer up`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Desktop },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+
+      assertTrue(host.scrollGestureLockActive)
+
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 1L,
+          position = start + Offset(12f, 0f),
+          nowMillis = 520L,
+        )
+      )
+      assertTrue(host.scrollGestureLockActive)
+
+      controller.onPointerUp(pointerId = 1L, position = start + Offset(12f, 0f), nowMillis = 540L)
+
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `long press cancel clears desktop drag scroll lock`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          platformProvider = { Platform.Desktop },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertTrue(host.scrollGestureLockActive)
+
+      controller.cancel()
+
+      assertFalse(host.scrollGestureLockActive)
     }
 
   @Test

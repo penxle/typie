@@ -57,6 +57,7 @@ internal class EditorLongPressSession {
     if (!begin(pointerId = pointerId, semanticIntent = semanticIntent)) {
       return false
     }
+    context.effects.setScrollGestureLocked(true)
 
     context.semantics.contextMenu.hide()
     context.semantics.magnifier.show(position)
@@ -69,6 +70,7 @@ internal class EditorLongPressSession {
     context.reduceMode(event)
     if (context.mode != expectedMode) {
       end()
+      context.effects.setScrollGestureLocked(false)
       context.semantics.magnifier.hide()
       context.semantics.selectionExpansion.reset()
       return false
@@ -126,6 +128,7 @@ internal class EditorLongPressSession {
     if (!context.mode.canApply(event)) {
       end()
       context.semantics.edgeAutoScroll.stop()
+      context.effects.setScrollGestureLocked(false)
       context.semantics.magnifier.hide()
       context.semantics.selectionExpansion.reset()
       return false
@@ -140,6 +143,7 @@ internal class EditorLongPressSession {
     context.reduceMode(event)
     end()
     context.semantics.edgeAutoScroll.stop()
+    context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()
     context.semantics.selectionExpansion.reset()
     return true
