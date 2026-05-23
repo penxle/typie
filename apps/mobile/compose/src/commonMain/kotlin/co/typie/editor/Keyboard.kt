@@ -282,7 +282,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       setOf(KeyModifier.Mod),
       bringIntoViewTarget = null,
       action = { clipboard ->
-        copySelection()?.let { clipboard.copy(html = it.html, text = it.text) }
+        copySelection()?.let { clipboard.copyRichText(html = it.html, text = it.text) }
         emptyList()
       },
     ),
@@ -292,7 +292,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { clipboard ->
         val payload = copySelection() ?: return@KeyBinding emptyList()
-        if (clipboard.copy(html = payload.html, text = payload.text)) {
+        if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
           listOf(Message.Clipboard(ClipboardOp.Cut))
         } else {
           emptyList()

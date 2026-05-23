@@ -63,7 +63,7 @@ internal class AndroidClipboard(private val context: Context) : Clipboard {
         .getOrDefault(false)
     }
 
-  override suspend fun copy(html: String, text: String): Boolean =
+  override suspend fun copyRichText(html: String, text: String): Boolean =
     withContext(Dispatchers.IO) {
       runCatching {
           val clipData = ClipData.newHtmlText("clipboard", text, html)

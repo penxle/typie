@@ -74,7 +74,7 @@ internal class IOSClipboard : Clipboard {
         .getOrDefault(false)
     }
 
-  override suspend fun copy(html: String, text: String): Boolean =
+  override suspend fun copyRichText(html: String, text: String): Boolean =
     withContext(Dispatchers.Default) {
       runCatching {
           UIPasteboard.generalPasteboard.setItems(
