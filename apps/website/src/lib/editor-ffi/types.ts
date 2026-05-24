@@ -18,6 +18,15 @@ export type ImageAsset = {
   placeholder: string;
 };
 
+export type EmbedAsset = {
+  id: string;
+  url: string;
+  title: string | null;
+  description: string | null;
+  thumbnailUrl: string | null;
+  html: string | null;
+};
+
 export type ContextMenuItem = {
   label: string;
   icon?: Component;

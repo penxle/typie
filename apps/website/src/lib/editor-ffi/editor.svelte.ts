@@ -32,6 +32,7 @@ import type {
   ContextMenuPlacement,
   ContextMenuSource,
   EditorEventListener,
+  EmbedAsset,
   FileAsset,
   ImageAsset,
 } from './types';
@@ -109,6 +110,8 @@ export class Editor {
   }
 
   inflightFiles = $state(new SvelteMap<string, { name: string; size: number }>());
+
+  embedAssets = $state(new SvelteMap<string, EmbedAsset>());
 
   private constructor() {
     // no-op

@@ -7,6 +7,7 @@
   import FileUpIcon from '~icons/lucide/file-up';
   import ImageIcon from '~icons/lucide/image';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
+  import ExternalEmbed from './ExternalEmbed.svelte';
   import ExternalFile from './ExternalFile.svelte';
   import ExternalImage from './ExternalImage.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
@@ -40,6 +41,8 @@
   <ExternalImage {element} />
 {:else if element.data.type === 'file'}
   <ExternalFile {element} />
+{:else if element.data.type === 'embed'}
+  <ExternalEmbed {element} />
 {:else}
   <ExternalElementWrapper {element}>
     <div class={css({ width: 'full', minHeight: '48px' })}>

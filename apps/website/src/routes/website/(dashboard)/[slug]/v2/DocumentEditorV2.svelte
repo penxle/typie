@@ -47,6 +47,15 @@
             size
             url
           }
+
+          ... on Embed {
+            id
+            url
+            title
+            description
+            thumbnailUrl
+            html
+          }
         }
         ...Editor_document
         ...BottomToolbar_document
@@ -209,25 +218,36 @@
     if (!editor) return;
 
     for (const asset of document.data.assets) {
-      if (asset.__typename !== 'Image') continue;
-      editor.imageAssets.set(asset.id, {
-        id: asset.id,
-        url: asset.url,
-        originalUrl: asset.originalUrl,
-        width: asset.width,
-        height: asset.height,
-        placeholder: asset.placeholder,
-      });
-    }
+      if (asset.__typename === 'Image') {
+        editor.imageAssets.set(asset.id, {
+          id: asset.id,
+          url: asset.url,
+          originalUrl: asset.originalUrl,
+          width: asset.width,
+          height: asset.height,
+          placeholder: asset.placeholder,
+        });
+      }
 
-    for (const asset of document.data.assets) {
-      if (asset.__typename !== 'File') continue;
-      ctx.fileAssets.set(asset.id, {
-        id: asset.id,
-        name: asset.name,
-        size: asset.size,
-        url: asset.url,
-      });
+      if (asset.__typename === 'File') {
+        ctx.fileAssets.set(asset.id, {
+          id: asset.id,
+          name: asset.name,
+          size: asset.size,
+          url: asset.url,
+        });
+      }
+
+      if (asset.__typename === 'Embed') {
+        editor.embedAssets.set(asset.id, {
+          id: asset.id,
+          url: asset.url,
+          title: asset.title ?? null,
+          description: asset.description ?? null,
+          thumbnailUrl: asset.thumbnailUrl ?? null,
+          html: asset.html ?? null,
+        });
+      }
     }
   });
 
