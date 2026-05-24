@@ -416,10 +416,12 @@ fn structural_forward(tr: &mut Transaction) -> CommandResult {
 
 struct FlatDelta {
     start_tokens: usize,
-    text_start: usize,
-    text_end: usize,
+    replace_start: usize,
+    replace_end: usize,
     end_tokens: usize,
     ins_text: String,
+    // Result-buffer text start for remapping composition after token-only replacement.
+    composition_text_start: Option<usize>,
 }
 
 fn analyze_delta(
@@ -430,11 +432,25 @@ fn analyze_delta(
     cursor: usize,
 ) -> FlatDelta {
     let del = &chars[del_start..del_end];
+    let ins_text: String = ins.iter().collect();
+
+    if !ins_text.is_empty() && !del.is_empty() && del.iter().all(|c| is_token(*c)) {
+        // Keep the structural range intact so replace_text_range can create a
+        // paragraph before inserting into a selected empty block.
+        return FlatDelta {
+            start_tokens: 0,
+            replace_start: del_start,
+            replace_end: del_end,
+            end_tokens: 0,
+            ins_text,
+            composition_text_start: Some(del_start),
+        };
+    }
 
     let first_text = del.iter().position(|c| !is_token(*c));
     let last_text = del.iter().rposition(|c| !is_token(*c));
 
-    let (text_start, text_end, left_tokens, right_tokens) = match (first_text, last_text) {
+    let (replace_start, replace_end, left_tokens, right_tokens) = match (first_text, last_text) {
         (Some(first), Some(last)) => {
             let left = &del[..first];
             let right = &del[last + 1..];
@@ -458,10 +474,11 @@ fn analyze_delta(
 
     FlatDelta {
         start_tokens: backward_count,
-        text_start,
-        text_end,
+        replace_start,
+        replace_end,
         end_tokens: forward_count,
-        ins_text: ins.iter().collect(),
+        ins_text,
+        composition_text_start: None,
     }
 }
 
@@ -521,21 +538,53 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
     let delta = analyze_delta(&initial.text, prefix, del_end, ins, initial.sel_start);
 
     if delta.start_tokens == 0 && delta.end_tokens == 0 {
-        if !del.is_empty() || !ins.is_empty() {
+        if !del.is_empty()
+            || !ins.is_empty()
+            || result.comp.is_some()
+            || editor.state().composition.is_some()
+        {
             editor.transact(|tr| {
-                replace_text_range(tr, prefix, del_end, &delta.ins_text)?;
-                Ok(())
-            })?;
-        }
+                if !del.is_empty() || !ins.is_empty() {
+                    replace_text_range(
+                        tr,
+                        delta.replace_start,
+                        delta.replace_end,
+                        &delta.ins_text,
+                    )?;
+                }
 
-        if let Some((start, end)) = result.comp {
-            editor.transact(|tr| {
-                tr.set_composition(Some(Composition { start, end }))?;
-                Ok(())
-            })?;
-        } else if editor.state().composition.is_some() {
-            editor.transact(|tr| {
-                tr.set_composition(None)?;
+                let composition = match (result.comp, delta.composition_text_start) {
+                    (Some((start, end)), Some(text_start)) => {
+                        let invalid = || EditorError::General {
+                            msg: "invariant violated: flat IME token-only composition remap failed"
+                                .into(),
+                        };
+                        let inserted_len = delta.ins_text.char_count();
+                        let relative_start = start.checked_sub(text_start).ok_or_else(invalid)?;
+                        let relative_end = end.checked_sub(text_start).ok_or_else(invalid)?;
+                        if relative_start > relative_end || relative_end > inserted_len {
+                            return Err(invalid());
+                        }
+
+                        let doc = tr.doc();
+                        let inserted_start = tr
+                            .selection()
+                            .and_then(|selection| selection.head.resolve(&doc))
+                            .and_then(|head| head.to_flat().checked_sub(inserted_len))
+                            .ok_or_else(invalid)?;
+
+                        Some(Composition {
+                            start: inserted_start + relative_start,
+                            end: inserted_start + relative_end,
+                        })
+                    }
+                    (Some((start, end)), None) => Some(Composition { start, end }),
+                    (None, _) => None,
+                };
+
+                if composition.is_some() || tr.composition().is_some() {
+                    tr.set_composition(composition)?;
+                }
                 Ok(())
             })?;
         }
@@ -543,7 +592,7 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
         editor.transact(|tr| {
             if delta.end_tokens > 0 {
                 let doc = tr.doc();
-                if let Some(pos) = ResolvedPosition::from_flat(&doc, delta.text_end) {
+                if let Some(pos) = ResolvedPosition::from_flat(&doc, delta.replace_end) {
                     commands::set_selection(tr, Selection::collapsed((&pos).into()))?;
                 }
                 for _ in 0..delta.end_tokens {
@@ -551,13 +600,13 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
                 }
             }
 
-            if delta.text_start != delta.text_end || !delta.ins_text.is_empty() {
-                replace_text_range(tr, delta.text_start, delta.text_end, &delta.ins_text)?;
+            if delta.replace_start != delta.replace_end || !delta.ins_text.is_empty() {
+                replace_text_range(tr, delta.replace_start, delta.replace_end, &delta.ins_text)?;
             }
 
             if delta.start_tokens > 0 {
                 let doc = tr.doc();
-                if let Some(pos) = ResolvedPosition::from_flat(&doc, delta.text_start) {
+                if let Some(pos) = ResolvedPosition::from_flat(&doc, delta.replace_start) {
                     commands::set_selection(tr, Selection::collapsed((&pos).into()))?;
                 }
                 for _ in 0..delta.start_tokens {
@@ -1425,6 +1474,78 @@ mod tests {
             selection: (t1, 6)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_selection_replaces_empty_paragraph_selection() {
+        let (s, ..) = state! {
+            doc { r: root { paragraph {} } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "a".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("a") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_compose_replaces_empty_paragraph_selection() {
+        let (s, ..) = state! {
+            doc { r: root { paragraph {} } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅎ") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_compose_replaces_nested_empty_paragraph_selection() {
+        let (s, ..) = state! {
+            doc { root {
+                bq: blockquote { paragraph {} }
+                paragraph { text("after") }
+            } }
+            selection: (bq, 0, >) -> (bq, 1, <)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::Compose { text: "나".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("나") } }
+                paragraph { text("after") }
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
     }
 
     #[test]
