@@ -36,30 +36,22 @@ impl History {
             .last_push_time
             .map(|t| now.duration_since(t) < self.merge_interval)
             .unwrap_or(false);
+        let can_merge_into_last =
+            should_merge && matches!(self.undos.last(), Some(e) if e.tag.is_none());
 
-        if should_merge {
-            if let Some(last) = self.undos.last_mut() {
-                if self.last_tag.is_none() {
-                    last.steps.extend_from_slice(steps);
-                } else {
-                    self.undos.push(HistoryEntry {
-                        steps: steps.to_vec(),
-                        tag: None,
-                    });
-                }
-            } else {
-                self.undos.push(HistoryEntry {
-                    steps: steps.to_vec(),
-                    tag: None,
-                });
-            }
+        if can_merge_into_last {
+            self.undos
+                .last_mut()
+                .expect("can_merge_into_last guarantees Some")
+                .steps
+                .extend_from_slice(steps);
         } else {
             self.undos.push(HistoryEntry {
                 steps: steps.to_vec(),
                 tag: None,
             });
         }
-
+        self.last_tag = None;
         self.last_push_time = Some(now);
     }
 
@@ -84,6 +76,11 @@ impl History {
         let inverse_steps: Vec<Step> = entry.steps.iter().rev().map(|s| s.inverse()).collect();
         self.redos.push(entry);
         Some(inverse_steps)
+    }
+
+    pub fn last_inverse_steps(&self) -> Option<Vec<Step>> {
+        let entry = self.undos.last()?;
+        Some(entry.steps.iter().rev().map(|s| s.inverse()).collect())
     }
 
     pub fn redo(&mut self) -> Option<Vec<Step>> {
@@ -321,5 +318,111 @@ mod tests {
         let redone = h.redo().unwrap();
         assert_eq!(redone.len(), 1);
         assert!(matches!(&redone[0], Step::InsertText { .. }));
+    }
+
+    #[test]
+    fn untagged_push_after_tagged_clears_last_tag() {
+        let mut h = History::new(Duration::from_millis(300));
+        let t = Instant::now();
+        h.push_tagged_at(
+            &[text_step()],
+            HistoryTag::PasteHtml {
+                plain_text: "hi".into(),
+            },
+            t,
+        );
+        h.push_at(&[text_step()], t + Duration::from_millis(100));
+        assert!(h.last_tag().is_none());
+    }
+
+    #[test]
+    fn untagged_push_in_merge_window_keeps_last_tag_none() {
+        let mut h = History::new(Duration::from_millis(300));
+        let t = Instant::now();
+        h.push_at(&[text_step()], t);
+        h.push_at(&[text_step()], t + Duration::from_millis(50));
+        assert!(h.last_tag().is_none());
+    }
+
+    #[test]
+    fn untagged_push_after_auto_replacement_clears_last_tag() {
+        let mut h = History::new(Duration::from_millis(300));
+        let t = Instant::now();
+        h.push_tagged_at(&[text_step()], HistoryTag::AutoReplacement, t);
+        h.push_at(&[text_step()], t + Duration::from_millis(100));
+        assert!(h.last_tag().is_none());
+    }
+
+    #[test]
+    fn last_inverse_steps_returns_inverse_of_top_entry_without_mutation() {
+        let mut h = History::new(Duration::from_millis(300));
+        h.push_tagged_at(
+            &[text_step()],
+            HistoryTag::PasteHtml {
+                plain_text: "hi".into(),
+            },
+            Instant::now(),
+        );
+        let undos_before = h.undos_len();
+        let redos_before = h.redos_len();
+        let tag_before = h.last_tag().cloned();
+
+        let inverse = h.last_inverse_steps().expect("Some");
+        assert_eq!(inverse.len(), 1);
+        assert!(matches!(&inverse[0], Step::RemoveText { .. }));
+
+        assert_eq!(h.undos_len(), undos_before);
+        assert_eq!(h.redos_len(), redos_before);
+        assert_eq!(h.last_tag().cloned(), tag_before);
+    }
+
+    #[test]
+    fn last_inverse_steps_returns_none_on_empty() {
+        let h = History::new(Duration::from_millis(300));
+        assert!(h.last_inverse_steps().is_none());
+    }
+
+    #[test]
+    fn untagged_push_after_clear_last_tag_does_not_merge_into_tagged_top() {
+        let mut h = History::new(Duration::from_millis(300));
+        let t = Instant::now();
+        h.push_tagged_at(
+            &[text_step()],
+            HistoryTag::PasteHtml {
+                plain_text: "hi".into(),
+            },
+            t,
+        );
+        h.clear_last_tag();
+
+        let undos_before = h.undos_len();
+        h.push_at(&[text_step()], t + Duration::from_millis(50));
+
+        assert_eq!(
+            h.undos_len(),
+            undos_before + 1,
+            "untagged push must not merge into tagged top entry"
+        );
+        assert!(
+            h.last_tag().is_none(),
+            "last_tag remains None after untagged push"
+        );
+    }
+
+    #[test]
+    fn merge_extend_clears_stale_last_tag() {
+        let mut h = History::new(Duration::from_millis(300));
+        let t = Instant::now();
+        h.push_at(&[text_step()], t);
+        h.push_tagged_at(
+            &[text_step()],
+            HistoryTag::PasteHtml {
+                plain_text: "x".into(),
+            },
+            t + Duration::from_millis(100),
+        );
+        h.undo();
+        h.push_at(&[text_step()], t + Duration::from_millis(150));
+        assert!(h.last_tag().is_none());
     }
 }

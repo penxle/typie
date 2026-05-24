@@ -207,6 +207,7 @@ pub enum ViewOp {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClipboardOp {
     Paste { html: Option<String>, text: String },
+    RepasteAsText,
     Cut,
 }
 

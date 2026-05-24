@@ -678,6 +678,14 @@ impl Editor {
         self.drag_anchor
     }
 
+    pub(crate) fn history_last_tag(&self) -> Option<&HistoryTag> {
+        self.history.last_tag()
+    }
+
+    pub(crate) fn history_last_inverse_steps(&self) -> Option<Vec<Step>> {
+        self.history.last_inverse_steps()
+    }
+
     pub(crate) fn try_undo(&mut self) -> Option<Vec<Step>> {
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= self.history.can_undo();
@@ -740,6 +748,7 @@ impl Editor {
             thawed.normalize(&next.doc).unwrap_or(thawed)
         });
         self.state = next;
+        self.history.clear_last_tag();
         self.pending_ops.extend(applied_ops);
         Ok(())
     }
