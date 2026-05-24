@@ -22,7 +22,7 @@ import type {
   ThemeVariant,
   Viewport,
 } from '@typie/editor-ffi/browser';
-import type { EditorEventListener, ImageAsset } from './types';
+import type { EditorEventListener, FileAsset, ImageAsset } from './types';
 
 let wasmInitPromise: Promise<void> | null = null;
 
@@ -34,6 +34,7 @@ function ensureWasmInitialized(): Promise<void> {
 
 class EditorContext {
   editor = $state<Editor>();
+  fileAssets = $state(new SvelteMap<string, FileAsset>());
 }
 
 const [getEditorContext, setEditorContext] = createContext<EditorContext>();
@@ -76,6 +77,8 @@ export class Editor {
 
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
+
+  inflightFiles = $state(new SvelteMap<string, { name: string; size: number }>());
 
   private constructor() {
     // no-op

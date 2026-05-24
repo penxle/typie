@@ -2,6 +2,7 @@ import type { EditorEvent } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
 
 export type ImageStage = 'empty' | 'uploading' | 'resolving' | 'ready';
+export type FileStage = 'empty' | 'uploading' | 'resolving' | 'ready';
 
 export type EditorEventListener<K extends EditorEvent['type']> = (editor: Editor, event: Extract<EditorEvent, { type: K }>) => void;
 
@@ -14,4 +15,11 @@ export type ImageAsset = {
   width: number;
   height: number;
   placeholder: string;
+};
+
+export type FileAsset = {
+  id: string;
+  name: string;
+  size: string;
+  url: string;
 };

@@ -223,18 +223,12 @@ Document.implement({
           .where(eq(DocumentStates.documentId, self.id))
           .then(first);
 
-        let imageIds: string[];
-        let fileIds: string[];
-        let embedIds: string[];
-        let archivedIds: string[];
+        const assetTypes = new Set(['image', 'file', 'embed', 'archived']);
 
         if (state) {
           const plain = state.json as { nodes: Record<string, { node: { type: string; id?: string | null } }> };
           const nodes = Object.values(plain.nodes);
-          imageIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'image' && e.node.id != null ? [e.node.id] : [])))];
-          fileIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'file' && e.node.id != null ? [e.node.id] : [])))];
-          embedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'embed' && e.node.id != null ? [e.node.id] : [])))];
-          archivedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'archived' && e.node.id != null ? [e.node.id] : [])))];
+          return [...new Set(nodes.flatMap((e) => (assetTypes.has(e.node.type) && e.node.id ? [e.node.id] : [])))];
         } else {
           const content = await db
             .select({ snapshot: DocumentContents.snapshot })
@@ -243,41 +237,9 @@ Document.implement({
             .then(firstOrThrow);
           const doc = new LoroDoc();
           doc.import(content.snapshot);
-          ({ imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromLoroDoc(doc));
+          const { imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromLoroDoc(doc);
+          return [...new Set([...imageIds, ...fileIds, ...embedIds, ...archivedIds])];
         }
-
-        const [existingImageIds, existingFileIds, existingEmbedIds, existingArchivedIds] = await Promise.all([
-          imageIds.length > 0
-            ? db
-                .select({ id: Images.id })
-                .from(Images)
-                .where(inArray(Images.id, imageIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          fileIds.length > 0
-            ? db
-                .select({ id: Files.id })
-                .from(Files)
-                .where(inArray(Files.id, fileIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          embedIds.length > 0
-            ? db
-                .select({ id: Embeds.id })
-                .from(Embeds)
-                .where(inArray(Embeds.id, embedIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          archivedIds.length > 0
-            ? db
-                .select({ id: DocumentArchivedNodes.id })
-                .from(DocumentArchivedNodes)
-                .where(inArray(DocumentArchivedNodes.id, archivedIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-        ]);
-
-        return [...existingImageIds, ...existingFileIds, ...existingEmbedIds, ...existingArchivedIds];
       },
     }),
 
