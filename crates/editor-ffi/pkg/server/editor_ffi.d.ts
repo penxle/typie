@@ -657,6 +657,7 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     block_state(): BlockState | undefined;
+    can(message: Message): boolean;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;

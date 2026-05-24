@@ -29,7 +29,9 @@ fn build_corpus() -> Vec<Message> {
             op: ModifierOp::ClearAll,
         },
         Message::Selection {
-            op: SelectionOp::All,
+            op: SelectionOp::Expand {
+                unit: SelectionExpansionUnit::All,
+            },
         },
         Message::Selection {
             op: SelectionOp::Unset,

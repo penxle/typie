@@ -183,7 +183,9 @@ mod tests {
         assert_probe_predicts_apply(
             state,
             Message::Selection {
-                op: SelectionOp::All,
+                op: SelectionOp::Expand {
+                    unit: SelectionExpansionUnit::All,
+                },
             },
         );
     }

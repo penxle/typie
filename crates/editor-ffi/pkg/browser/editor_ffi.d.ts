@@ -631,6 +631,7 @@ declare class Editor {
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
     block_state(): BlockState | undefined;
+    can(message: Message): boolean;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
