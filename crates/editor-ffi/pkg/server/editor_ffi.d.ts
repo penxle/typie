@@ -537,7 +537,7 @@ export type CalloutNodeAttr = { type: "variant" } & CalloutVariant;
 
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
-export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "cut" };
+export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "repaste_as_text" } | { type: "cut" };
 
 export type CompositionOp = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" } | { type: "flat"; ops: FlatImeOp[] };
 

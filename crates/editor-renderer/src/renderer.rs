@@ -2,7 +2,7 @@ use editor_common::Rect;
 use editor_model::{Doc, Modifier, Node, NodeId, TableBorderStyle};
 use editor_resource::Resource;
 use editor_view::glyph_run::RubyAnnotation;
-use editor_view::style::{BorderMode, BoxStyle, DecorationData};
+use editor_view::style::{BoxStyle, DecorationData};
 use editor_view::{Edges, LineMetrics, PageRect, PageVisitor, TableLayoutInfo};
 use std::sync::{Arc, Mutex};
 
@@ -498,7 +498,6 @@ impl Renderer {
 struct BoxFrame {
     local_rect: Rect,
     border: editor_common::EdgeInsets,
-    border_mode: BorderMode,
     edges: Edges<bool>,
     node: Option<Node>,
     table_info: Option<TableLayoutInfo>,
@@ -857,7 +856,6 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         self.box_stack.push(BoxFrame {
             local_rect,
             border: style.border,
-            border_mode: style.border_mode,
             edges,
             node,
             table_info: table_info.cloned(),
