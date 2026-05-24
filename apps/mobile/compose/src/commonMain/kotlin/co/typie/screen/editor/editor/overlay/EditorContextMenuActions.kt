@@ -2,7 +2,6 @@ package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import co.typie.editor.Editor
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.ClipboardOp
@@ -36,20 +35,12 @@ internal fun rememberEditorContextMenuActions(
   contextMenu: EditorContextMenuState,
   clipboard: Clipboard = PlatformModule.clipboard,
 ): EditorContextMenuActions {
-  val coroutineScope = rememberCoroutineScope()
   val selection = editor.selection
-  return remember(
-    editor,
-    selection,
-    bringIntoViewRequests,
-    contextMenu,
-    clipboard,
-    coroutineScope,
-  ) {
+  return remember(editor, selection, bringIntoViewRequests, contextMenu, clipboard) {
     val expandSelection =
       { unit: SelectionExpansionUnit, bringIntoViewTarget: EditorBringIntoViewTarget? ->
         contextMenu.requestShowAfterSelectionCommit()
-        coroutineScope.launch {
+        editor.scope.launch {
           if (bringIntoViewTarget == null) {
             editor.await { enqueue(Message.Selection(SelectionOp.Expand(unit))) }
           } else {
@@ -64,12 +55,12 @@ internal fun rememberEditorContextMenuActions(
     EditorContextMenuActions(
       showCopyCutActions = !selection.isCollapsed(),
       onCopy = {
-        coroutineScope.launch {
+        editor.scope.launch {
           editor.copySelection()?.let { clipboard.copyRichText(html = it.html, text = it.text) }
         }
       },
       onCut = {
-        coroutineScope.launch {
+        editor.scope.launch {
           val payload = editor.copySelection() ?: return@launch
           if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
             editor.awaitWithBringIntoView(bringIntoViewRequests) {
@@ -80,7 +71,7 @@ internal fun rememberEditorContextMenuActions(
         }
       },
       onPaste = {
-        coroutineScope.launch {
+        editor.scope.launch {
           val read = clipboard.paste() ?: return@launch
           editor.awaitWithBringIntoView(bringIntoViewRequests) {
             enqueue(Message.Clipboard(ClipboardOp.Paste(html = read.html, text = read.text)))

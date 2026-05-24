@@ -7,7 +7,6 @@ import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.StringReader
 import javax.imageio.ImageIO
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -111,7 +110,7 @@ internal class HtmlTextTransferable(private val html: String, private val text: 
 
   override fun getTransferData(flavor: DataFlavor): Any =
     when (flavor) {
-      DataFlavor.allHtmlFlavor -> StringReader(html)
+      DataFlavor.allHtmlFlavor -> html
       DataFlavor.stringFlavor -> text
       else -> throw IllegalArgumentException("Unsupported data flavor: $flavor")
     }
