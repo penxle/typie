@@ -1,55 +1,36 @@
-use editor_view::Viewport;
-use strum::IntoEnumIterator;
-
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
-use crate::font;
 use crate::message::*;
-use crate::state_field::StateField;
 
 pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<(), EditorError> {
     match event {
-        SystemEvent::Initialize => {
-            font::reresolve_fonts(editor)?;
-            editor.view.layout(&editor.state.doc);
-            editor.push_event(EditorEvent::StateChanged {
-                fields: StateField::iter().collect(),
-            });
-        }
+        SystemEvent::Initialize => editor.run_initialize(),
 
         SystemEvent::Resize {
             width,
             height,
             scale_factor,
         } => {
-            let changed = editor.view.resize(
-                Viewport::new(width, height, scale_factor),
-                &editor.state.doc,
-            );
-            if changed {
-                editor.push_event(EditorEvent::StateChanged {
-                    fields: vec![StateField::PageSizes, StateField::ExternalElements],
-                });
-                editor.push_event(EditorEvent::RenderInvalidated);
-            }
+            editor.resize_view(editor_view::Viewport::new(width, height, scale_factor));
+            Ok(())
         }
 
         SystemEvent::SetFocused { focused } => {
-            if editor.focused != focused {
-                editor.focused = focused;
-                editor.push_event(EditorEvent::RenderInvalidated);
-            }
+            editor.set_focused(focused);
+            Ok(())
         }
 
         SystemEvent::SetThemeVariant { variant } => {
             if editor.set_theme_variant(variant) {
                 editor.push_event(EditorEvent::RenderInvalidated);
             }
+            Ok(())
         }
 
         SystemEvent::FontBaseLoaded { family, weight: _ } => {
-            font::retry_pending_on_load(editor, &family);
+            editor.retry_font_load(&family);
+            Ok(())
         }
 
         SystemEvent::FontChunkLoaded {
@@ -57,30 +38,17 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             weight: _,
             chunk_id: _,
         } => {
-            font::retry_pending_on_load(editor, &family);
+            editor.retry_font_load(&family);
+            Ok(())
         }
 
         SystemEvent::SetExternalHeight { node_id, height } => {
-            if editor
-                .view
-                .set_external_height(&editor.state.doc, node_id, height)
-            {
-                editor.push_event(EditorEvent::StateChanged {
-                    fields: vec![
-                        StateField::Cursor,
-                        StateField::PageSizes,
-                        StateField::ExternalElements,
-                    ],
-                });
-                editor.push_event(EditorEvent::RenderInvalidated);
-            }
+            editor.set_external_height(node_id, height);
+            Ok(())
         }
 
-        SystemEvent::FontsChanged => {
-            font::reresolve_fonts(editor)?;
-        }
+        SystemEvent::FontsChanged => editor.reresolve_fonts(),
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -89,7 +57,8 @@ mod tests {
     use editor_renderer::ThemeVariant;
 
     use super::*;
-    use crate::event::FontData;
+    use crate::event::{EditorEvent, FontData};
+    use crate::state_field::StateField;
 
     fn test_config_single_chunk(
         family: &str,
@@ -235,7 +204,7 @@ mod tests {
             event: SystemEvent::SetFocused { focused: true },
         });
 
-        assert!(editor.focused);
+        assert!(editor.is_focused());
         assert_eq!(events, vec![EditorEvent::RenderInvalidated]);
     }
 
@@ -255,7 +224,7 @@ mod tests {
             event: SystemEvent::SetFocused { focused: false },
         });
 
-        assert!(!editor.focused);
+        assert!(!editor.is_focused());
         assert!(events.is_empty());
     }
 
@@ -1261,5 +1230,269 @@ mod tests {
             has_render_invalidated,
             "continuous mode must emit RenderInvalidated when effective width shrinks"
         );
+    }
+
+    #[test]
+    fn probe_resize_same_viewport_noop() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 800.0,
+                height: 600.0,
+                scale_factor: 1.0,
+            },
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::Resize {
+                    width: 800.0,
+                    height: 600.0,
+                    scale_factor: 1.0,
+                },
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_resize_different_viewport() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 800.0,
+                height: 600.0,
+                scale_factor: 1.0,
+            },
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::Resize {
+                    width: 1024.0,
+                    height: 600.0,
+                    scale_factor: 1.0,
+                },
+            })
+            .unwrap();
+        assert!(probed);
+    }
+
+    #[test]
+    fn probe_set_focused_same_value() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::SetFocused { focused: false },
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_set_focused_different() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::SetFocused { focused: true },
+            })
+            .unwrap();
+        assert!(probed);
+    }
+
+    #[test]
+    fn probe_set_theme_variant_same() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::SetThemeVariant {
+                    variant: ThemeVariant::LightWhite,
+                },
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_set_theme_variant_different() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::SetThemeVariant {
+                    variant: ThemeVariant::DarkBlack,
+                },
+            })
+            .unwrap();
+        assert!(probed);
+    }
+
+    #[test]
+    fn probe_set_external_height_same_value() {
+        let (state, img, _) = state! {
+            doc { root { img: image paragraph { text: text("x") } } }
+            selection: (text, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        editor.apply(Message::System {
+            event: SystemEvent::SetExternalHeight {
+                node_id: img,
+                height: 72.0,
+            },
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::SetExternalHeight {
+                    node_id: img,
+                    height: 72.0,
+                },
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_set_external_height_different_value() {
+        let (state, img, _) = state! {
+            doc { root { img: image paragraph { text: text("x") } } }
+            selection: (text, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::SetExternalHeight {
+                    node_id: img,
+                    height: 72.0,
+                },
+            })
+            .unwrap();
+        assert!(probed);
+    }
+
+    #[test]
+    fn probe_set_external_height_zero_is_noop() {
+        let (state, img, _) = state! {
+            doc { root { img: image paragraph { text: text("x") } } }
+            selection: (text, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::SetExternalHeight {
+                    node_id: img,
+                    height: 0.0,
+                },
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_initialize_after_initialize_is_false() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::Initialize,
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_fonts_changed_is_false_with_no_pending() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::FontsChanged,
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_font_base_loaded_for_unknown_family_is_false() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::FontBaseLoaded {
+                    family: "UnknownFont".into(),
+                    weight: 400,
+                },
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn probe_font_chunk_loaded_for_unknown_family_is_false() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::FontChunkLoaded {
+                    family: "UnknownFont".into(),
+                    weight: 400,
+                    chunk_id: 0,
+                },
+            })
+            .unwrap();
+        assert!(!probed);
     }
 }

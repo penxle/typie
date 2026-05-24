@@ -2,7 +2,7 @@ use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 #[ffi]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Viewport {
     pub width: f32,

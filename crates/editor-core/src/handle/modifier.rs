@@ -52,6 +52,69 @@ mod tests {
     use super::*;
     use crate::event::EditorEvent;
     use crate::state_field::StateField;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_toggle_bold_with_textblock() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Modifier {
+                op: ModifierOp::Toggle {
+                    modifier_type: ModifierType::Bold,
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_toggle_italic_with_no_applicable_target() {
+        let (state, ..) = state! {
+            doc { root { fold { fold_title { t1: text("title") } fold_content { paragraph { text("body") } } } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Modifier {
+                op: ModifierOp::Toggle {
+                    modifier_type: ModifierType::Italic,
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_set_modifier_same_value_noop() {
+        let (state, ..) = state! {
+            doc { root [font_size(1600)] { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Modifier {
+                op: ModifierOp::Set {
+                    modifier: editor_model::Modifier::FontSize { value: 1600 },
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_clear_all_empty_pending() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Modifier {
+                op: ModifierOp::ClearAll,
+            },
+        );
+    }
 
     #[test]
     fn clear_all_collapsed_unsets_effective_inline() {

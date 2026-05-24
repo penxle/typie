@@ -11,7 +11,7 @@ use crate::message::*;
 
 pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), EditorError> {
     if matches!(op, SelectionOp::Unset) {
-        editor.view.clear_preferred_x();
+        editor.clear_preferred_x();
         return editor.transact(|tr| {
             tr.set_composition(None)?;
             tr.set_pending_modifiers(PendingModifiers::new())?;
@@ -23,7 +23,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
     let extend_to_selection = resolve_extend_to_selection(editor, &op);
     let resource = editor.resource.clone();
 
-    editor.view.clear_preferred_x();
+    editor.clear_preferred_x();
     editor.transact(|tr| {
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
         match op {
@@ -128,6 +128,79 @@ mod tests {
     use editor_state::{Composition, PendingModifier, Position, Selection};
 
     use super::*;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_set_same_selection_noop() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        let sel = Selection::collapsed(Position::new(t1, 2));
+        assert_probe_predicts_apply(
+            state,
+            Message::Selection {
+                op: SelectionOp::Set { selection: sel },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_set_different_selection_changes() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        let sel = Selection::collapsed(Position::new(t1, 4));
+        assert_probe_predicts_apply(
+            state,
+            Message::Selection {
+                op: SelectionOp::Set { selection: sel },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_unset_with_active_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Selection {
+                op: SelectionOp::Unset,
+            },
+        );
+    }
+
+    #[test]
+    fn probe_select_all() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Selection {
+                op: SelectionOp::All,
+            },
+        );
+    }
+
+    #[test]
+    fn probe_unset_already_unset() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: none
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Selection {
+                op: SelectionOp::Unset,
+            },
+        );
+    }
 
     #[test]
     fn select_set() {

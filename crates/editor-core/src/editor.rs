@@ -1,15 +1,17 @@
-use editor_common::time::Duration;
+use editor_common::{Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{DocOp, ModifierState, Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
 use editor_state::{
-    DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, State,
+    DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
+    State,
 };
-use editor_transaction::{Effect, HistoryMeta, Transaction};
+use editor_transaction::{Effect, HistoryMeta, HistoryTag, Step, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use strum::IntoEnumIterator;
 
 use crate::block_state::BlockState;
 use crate::error::EditorError;
@@ -19,6 +21,12 @@ use crate::history::History;
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
+
+#[derive(Clone, Copy, Debug)]
+enum Mode {
+    Apply,
+    Probe { changed: bool },
+}
 
 fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
     if state.pending_modifiers.is_empty() {
@@ -63,13 +71,49 @@ pub struct Editor {
     pub(crate) history: History,
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
-    pub(crate) drag_anchor: Option<Selection>,
-    pub(crate) focused: bool,
+    drag_anchor: Option<Selection>,
+    focused: bool,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,
     pub(crate) pending_ops: Vec<Op<DocOp>>,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>,
+    mode: Mode,
+}
+
+struct ProbeGuard<'e> {
+    editor: &'e mut Editor,
+    prev: Mode,
+    finished: bool,
+}
+
+impl<'e> ProbeGuard<'e> {
+    fn enter(editor: &'e mut Editor) -> Self {
+        let prev = std::mem::replace(&mut editor.mode, Mode::Probe { changed: false });
+        Self {
+            editor,
+            prev,
+            finished: false,
+        }
+    }
+
+    fn finish(mut self) -> bool {
+        let restored = std::mem::replace(&mut self.editor.mode, self.prev);
+        self.finished = true;
+        let Mode::Probe { changed } = restored else {
+            unreachable!("ProbeGuard installed Probe at enter; only finish replaces it")
+        };
+        changed
+    }
+}
+
+impl Drop for ProbeGuard<'_> {
+    fn drop(&mut self) {
+        // panic 등 비정상 경로에서 mode를 안전하게 복원.
+        if !self.finished {
+            self.editor.mode = self.prev;
+        }
+    }
 }
 
 impl Editor {
@@ -87,6 +131,7 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            mode: Mode::Apply,
         }
     }
 
@@ -181,10 +226,6 @@ impl Editor {
     ) -> Option<editor_view::PointerStyle> {
         self.view
             .pointer_style_at(&self.state.doc, page_idx, x, y, read_only)
-    }
-
-    pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
-        self.renderer.set_theme_variant(variant)
     }
 
     pub fn ime(&self, before_limit: usize, after_limit: usize) -> Result<Ime, EditorError> {
@@ -403,6 +444,12 @@ impl Editor {
     ) -> Result<(), EditorError> {
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
+
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= editor_state::state_observably_changed(&self.state, tr.state());
+            return Ok(());
+        }
+
         let (state, steps, ops, effects, meta) = tr.commit();
 
         if !steps.is_empty() {
@@ -421,6 +468,9 @@ impl Editor {
     }
 
     pub(crate) fn push_event(&mut self, event: EditorEvent) {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return;
+        }
         let event = match event {
             EditorEvent::StateChanged { mut fields } => {
                 fields.sort_unstable();
@@ -473,6 +523,248 @@ impl Editor {
                 codepoints: all_cps.into_iter().collect(),
             });
         }
+    }
+
+    pub fn can(&mut self, msg: Message) -> Result<bool, EditorError> {
+        let guard = ProbeGuard::enter(self);
+        let result = guard.editor.process_message(msg);
+        let changed = guard.finish();
+        result.map(|()| changed)
+    }
+
+    pub(crate) fn set_focused(&mut self, focused: bool) {
+        let would_change = self.focused != focused;
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return;
+        }
+        if would_change {
+            self.focused = focused;
+            self.push_event(EditorEvent::RenderInvalidated);
+        }
+    }
+
+    pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
+        let would_change = self.renderer.would_set_theme_variant(variant);
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return would_change;
+        }
+        self.renderer.set_theme_variant(variant)
+    }
+
+    pub(crate) fn resize_view(&mut self, viewport: Viewport) -> bool {
+        let would_change = self.view.would_resize(viewport, &self.state.doc);
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return would_change;
+        }
+        let did_change = self.view.resize(viewport, &self.state.doc);
+        if did_change {
+            self.push_event(EditorEvent::StateChanged {
+                fields: vec![StateField::PageSizes, StateField::ExternalElements],
+            });
+            self.push_event(EditorEvent::RenderInvalidated);
+        }
+        did_change
+    }
+
+    pub(crate) fn set_external_height(&mut self, node_id: NodeId, height: f32) -> bool {
+        let would_change = self
+            .view
+            .would_set_external_height(&self.state.doc, node_id, height);
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return would_change;
+        }
+        let did_change = self
+            .view
+            .set_external_height(&self.state.doc, node_id, height);
+        if did_change {
+            self.push_event(EditorEvent::StateChanged {
+                fields: vec![
+                    StateField::Cursor,
+                    StateField::PageSizes,
+                    StateField::ExternalElements,
+                ],
+            });
+            self.push_event(EditorEvent::RenderInvalidated);
+        }
+        did_change
+    }
+
+    pub(crate) fn toggle_fold(&mut self, id: NodeId) -> bool {
+        let would_change = self.view.would_toggle_fold(&self.state.doc, id);
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return would_change;
+        }
+        let did_change = self.view.toggle_fold(&self.state.doc, id);
+        if did_change {
+            self.push_event(EditorEvent::StateChanged {
+                fields: vec![
+                    StateField::Cursor,
+                    StateField::PageSizes,
+                    StateField::ExternalElements,
+                ],
+            });
+            self.push_event(EditorEvent::RenderInvalidated);
+        }
+        did_change
+    }
+
+    pub(crate) fn fold_expanded(&self, id: NodeId) -> bool {
+        self.view.fold_expanded(id)
+    }
+
+    pub(crate) fn clear_preferred_x(&mut self) {
+        let would_change = self.view.would_clear_preferred_x();
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return;
+        }
+        self.view.clear_preferred_x();
+    }
+
+    pub(crate) fn ensure_preferred_x_at(&mut self, pos: &Position) {
+        let would_change = self.view.would_ensure_preferred_x_at(pos);
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return;
+        }
+        self.view.ensure_preferred_x_at(pos);
+    }
+
+    pub(crate) fn resolve_movement(
+        &mut self,
+        pos: &Position,
+        movement: &Movement,
+    ) -> Option<Selection> {
+        let probe = matches!(self.mode, Mode::Probe { .. });
+        if probe {
+            let current_sel = self.state.selection;
+            let current_px = self.view.view_state().preferred_x;
+            let probe_result = {
+                let resource = self.resource.lock().unwrap();
+                self.view.would_resolve_movement(pos, movement, &resource)
+            };
+            return match probe_result {
+                Some((sel, would_px)) => {
+                    let sel_changed = sel != current_sel;
+                    let px_changed = would_px != current_px;
+                    if let Mode::Probe { ref mut changed } = self.mode {
+                        *changed |= sel_changed || px_changed;
+                    }
+                    sel
+                }
+                None => None,
+            };
+        }
+        let resource = self.resource.lock().unwrap();
+        self.view.resolve_movement(pos, movement, &resource)
+    }
+
+    pub(crate) fn set_drag_anchor(&mut self, anchor: Option<Selection>) {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return;
+        }
+        self.drag_anchor = anchor;
+    }
+
+    pub(crate) fn drag_anchor(&self) -> Option<Selection> {
+        self.drag_anchor
+    }
+
+    pub(crate) fn try_undo(&mut self) -> Option<Vec<Step>> {
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= self.history.can_undo();
+            return None;
+        }
+        self.history.undo()
+    }
+
+    pub(crate) fn try_redo(&mut self) -> Option<Vec<Step>> {
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= self.history.can_redo();
+            return None;
+        }
+        self.history.redo()
+    }
+
+    pub(crate) fn try_undo_auto_replacement(&mut self) -> Option<Vec<Step>> {
+        let is_auto = matches!(self.history.last_tag(), Some(HistoryTag::AutoReplacement));
+        if !is_auto {
+            return None;
+        }
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= self.history.can_undo();
+            return None;
+        }
+        self.history.undo()
+    }
+
+    pub(crate) fn sync_history_last_tag_from_top(&mut self) {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return;
+        }
+        self.history.sync_last_tag_from_top();
+    }
+
+    pub(crate) fn apply_remote_changeset(
+        &mut self,
+        changeset: Changeset<DocOp>,
+    ) -> Result<(), EditorError> {
+        if let Mode::Probe { ref mut changed } = self.mode {
+            let would_change = self
+                .state
+                .would_receive_remote_changeset(&changeset)
+                .map_err(|e| EditorError::Step(StepError::State(e)))?;
+            *changed |= would_change;
+            return Ok(());
+        }
+
+        let frozen = self
+            .state
+            .selection
+            .as_ref()
+            .map(|s| StableSelection::freeze(s, &self.state.doc));
+        let (mut next, applied_ops) = self
+            .state
+            .receive_remote_changeset(changeset)
+            .map_err(|e| EditorError::Step(StepError::State(e)))?;
+        next.selection = frozen.map(|f| {
+            let thawed = f.thaw(&next.doc);
+            thawed.normalize(&next.doc).unwrap_or(thawed)
+        });
+        self.state = next;
+        self.pending_ops.extend(applied_ops);
+        Ok(())
+    }
+
+    pub(crate) fn run_initialize(&mut self) -> Result<(), EditorError> {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return Ok(());
+        }
+        crate::font::reresolve_fonts(self)?;
+        self.view.layout(&self.state.doc);
+        self.push_event(EditorEvent::StateChanged {
+            fields: StateField::iter().collect(),
+        });
+        Ok(())
+    }
+
+    pub(crate) fn retry_font_load(&mut self, family: &str) {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return;
+        }
+        crate::font::retry_pending_on_load(self, family);
+    }
+
+    pub(crate) fn reresolve_fonts(&mut self) -> Result<(), EditorError> {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return Ok(());
+        }
+        crate::font::reresolve_fonts(self)
     }
 
     pub(crate) fn resolve_fonts(&mut self, family: &str, weight: u16, codepoints: &[u32]) {
@@ -554,6 +846,11 @@ impl Editor {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn probe_guard_for_test(editor: &mut Editor) -> impl Drop + '_ {
+    ProbeGuard::enter(editor)
+}
+
 #[cfg(any(test, feature = "test-utils"))]
 impl Editor {
     pub fn new_test(state: State) -> Self {
@@ -575,12 +872,29 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            mode: Mode::Apply,
         }
     }
 
     pub fn apply(&mut self, msg: Message) -> Vec<EditorEvent> {
         self.enqueue(msg);
         self.tick().unwrap()
+    }
+
+    pub(crate) fn is_focused(&self) -> bool {
+        self.focused
+    }
+
+    pub(crate) fn history_undos_len(&self) -> usize {
+        self.history.undos_len()
+    }
+
+    pub(crate) fn history_redos_len(&self) -> usize {
+        self.history.redos_len()
+    }
+
+    pub(crate) fn theme_variant(&self) -> ThemeVariant {
+        self.renderer.theme_variant()
     }
 }
 
@@ -1799,6 +2113,62 @@ mod tests {
             pre_can_undo,
             "no history entries pushed"
         );
+    }
+
+    #[test]
+    fn can_returns_true_for_insertion_with_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let probed = editor.can(Message::Insertion {
+            op: InsertionOp::Text { text: "x".into() },
+        });
+        assert_eq!(probed.unwrap(), true);
+    }
+
+    #[test]
+    fn can_returns_false_for_undo_with_empty_history() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let probed = editor.can(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_eq!(probed.unwrap(), false);
+    }
+
+    #[test]
+    fn can_returns_false_for_set_same_selection() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        let same = editor_state::Selection::collapsed(editor_state::Position::new(t1, 2));
+        let probed = editor.can(Message::Selection {
+            op: SelectionOp::Set { selection: same },
+        });
+        assert_eq!(probed.unwrap(), false);
+    }
+
+    #[test]
+    fn can_does_not_mutate_state_for_insertion() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let before_doc = editor.state().doc.clone();
+        let before_sel = editor.state().selection;
+        let _ = editor.can(Message::Insertion {
+            op: InsertionOp::Text { text: "x".into() },
+        });
+        assert_eq!(editor.state().doc, before_doc);
+        assert_eq!(editor.state().selection, before_sel);
     }
 
     #[test]

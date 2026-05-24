@@ -82,6 +82,19 @@ impl State {
         Ok((next, applied_ops))
     }
 
+    pub fn would_receive_remote_changeset(
+        &self,
+        changeset: &Changeset<DocOp>,
+    ) -> Result<bool, StateError> {
+        if changeset.ops.iter().all(|op| self.graph.contains(&op.id)) {
+            return Ok(false);
+        }
+        let snapshot = self.clone();
+        let (next, ops) = snapshot.receive_remote_changeset(changeset.clone())?;
+        use crate::state_observably_changed;
+        Ok(state_observably_changed(self, &next) || !ops.is_empty())
+    }
+
     pub fn local_changesets_since(
         &self,
         remote_heads: &HashSet<Dot>,
@@ -730,5 +743,74 @@ mod tests {
             !next.pending_modifiers.is_empty(),
             "set_selection(None) must not touch pending_modifiers"
         );
+    }
+
+    #[test]
+    fn would_receive_remote_changeset_false_for_already_applied() {
+        use editor_macros::state;
+
+        let (replica_a, t1) = state! {
+            doc { root { paragraph { t1: text("ab") } } }
+            selection: (t1, 1)
+        };
+        let css = replica_a.graph.changesets_as_vec();
+        let replica_b = State::from_changesets(css, replica_a.selection).unwrap();
+
+        let baseline: hashbrown::HashSet<_> = replica_a.graph.current_heads().copied().collect();
+        let (replica_a, _op) = replica_a
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'X',
+                },
+            })
+            .unwrap();
+        let replica_a = State {
+            graph: replica_a.graph.commit(),
+            ..replica_a
+        };
+        let cs = replica_a
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0);
+
+        let (replica_b, _ops) = replica_b.receive_remote_changeset(cs.clone()).unwrap();
+        let probed = replica_b.would_receive_remote_changeset(&cs).unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn would_receive_remote_changeset_true_for_new() {
+        use editor_macros::state;
+
+        let (replica_a, t1) = state! {
+            doc { root { paragraph { t1: text("ab") } } }
+            selection: (t1, 1)
+        };
+        let css = replica_a.graph.changesets_as_vec();
+        let replica_b = State::from_changesets(css, replica_a.selection).unwrap();
+
+        let baseline: hashbrown::HashSet<_> = replica_a.graph.current_heads().copied().collect();
+        let (replica_a, _op) = replica_a
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'X',
+                },
+            })
+            .unwrap();
+        let replica_a = State {
+            graph: replica_a.graph.commit(),
+            ..replica_a
+        };
+        let cs = replica_a
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0);
+
+        let probed = replica_b.would_receive_remote_changeset(&cs).unwrap();
+        assert!(probed);
     }
 }

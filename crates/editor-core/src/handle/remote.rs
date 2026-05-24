@@ -1,28 +1,11 @@
 use editor_crdt::Changeset;
 use editor_model::DocOp;
-use editor_state::StableSelection;
-use editor_transaction::StepError;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
 
 pub fn handle_remote(editor: &mut Editor, changeset: Changeset<DocOp>) -> Result<(), EditorError> {
-    let frozen = editor
-        .state
-        .selection
-        .as_ref()
-        .map(|s| StableSelection::freeze(s, &editor.state.doc));
-    let (mut next, applied_ops) = editor
-        .state
-        .receive_remote_changeset(changeset)
-        .map_err(|e| EditorError::Step(StepError::State(e)))?;
-    next.selection = frozen.map(|f| {
-        let thawed = f.thaw(&next.doc);
-        thawed.normalize(&next.doc).unwrap_or(thawed)
-    });
-    editor.state = next;
-    editor.pending_ops.extend(applied_ops);
-    Ok(())
+    editor.apply_remote_changeset(changeset)
 }
 
 #[cfg(test)]
@@ -178,6 +161,83 @@ mod tests {
             editor.state().selection.is_none(),
             "selection must remain None when it was None before the remote changeset"
         );
+    }
+
+    #[test]
+    fn probe_remote_changeset_new_op_predicts_true_and_is_safe() {
+        use crate::message::Message;
+        use crate::test_utils::EditorSnapshot;
+
+        let (replica_a, t1) = state! {
+            doc { root { paragraph { t1: text("ab") } } }
+            selection: (t1, 1)
+        };
+        let css = replica_a.graph.changesets_as_vec();
+        let replica_b = State::from_changesets(css, replica_a.selection).unwrap();
+
+        let baseline: HashSet<_> = replica_a.graph.current_heads().copied().collect();
+        let (replica_a, _op) = replica_a
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'X',
+                },
+            })
+            .unwrap();
+        let replica_a = State {
+            graph: replica_a.graph.commit(),
+            ..replica_a
+        };
+        let cs = replica_a
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0);
+
+        let mut editor = Editor::new_test(replica_b);
+        let before = EditorSnapshot::capture(&editor);
+        let probed = editor.can(Message::Remote { changeset: cs }).unwrap();
+        let after = EditorSnapshot::capture(&editor);
+        assert!(probed, "new remote op must predict true");
+        assert_eq!(before, after, "probe must not mutate");
+    }
+
+    #[test]
+    fn probe_remote_changeset_already_applied_predicts_false() {
+        use crate::message::Message;
+
+        let (replica_a, t1) = state! {
+            doc { root { paragraph { t1: text("ab") } } }
+            selection: (t1, 1)
+        };
+        let css = replica_a.graph.changesets_as_vec();
+        let replica_b = State::from_changesets(css, replica_a.selection).unwrap();
+
+        let baseline: HashSet<_> = replica_a.graph.current_heads().copied().collect();
+        let (replica_a, _op) = replica_a
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'X',
+                },
+            })
+            .unwrap();
+        let replica_a = State {
+            graph: replica_a.graph.commit(),
+            ..replica_a
+        };
+        let cs = replica_a
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0);
+
+        let mut editor = Editor::new_test(replica_b);
+        editor.apply(Message::Remote {
+            changeset: cs.clone(),
+        });
+        let probed = editor.can(Message::Remote { changeset: cs }).unwrap();
+        assert!(!probed);
     }
 
     #[test]

@@ -129,6 +129,37 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_insert_text_into_paragraph() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 3)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Insertion {
+                op: InsertionOp::Text { text: "X".into() },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_insert_break_paragraph() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 3)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Insertion {
+                op: InsertionOp::Break {
+                    kind: Break::Paragraph,
+                },
+            },
+        );
+    }
 
     #[test]
     fn insert_text() {

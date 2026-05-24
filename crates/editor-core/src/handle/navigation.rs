@@ -152,8 +152,12 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     };
                     let left_or_right = matches!(movement, Movement::Grapheme { .. });
                     let base_position = Position::from(base);
+                    let base_is_inline = base.is_inline_position();
+                    let base_is_block = base.is_block_position();
+                    // Drop the doc borrow before calling the mutable wrapper.
+                    drop(resolved);
 
-                    let target = if left_or_right && base.is_inline_position() {
+                    let target = if left_or_right && base_is_inline {
                         // Left/Right from inline content only collapses the range.
                         Selection::collapsed(base_position)
                     } else if !left_or_right
@@ -164,24 +168,22 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         // Vertical/word/block movement can stop at an adjacent
                         // gap before asking the view for geometric movement.
                         if matches!(movement, Movement::Line { .. }) {
-                            editor.view.ensure_preferred_x_at(&base_position);
+                            editor.ensure_preferred_x_at(&base_position);
                         }
                         sel
                     } else {
-                        let view_target = {
-                            let resource_guard = editor.resource.lock().unwrap();
-                            editor
-                                .view
-                                .resolve_movement(&base_position, &movement, &resource_guard)
-                        };
+                        let view_target = editor.resolve_movement(&base_position, &movement);
 
                         match view_target {
                             Some(sel) => sel,
-                            None if base.is_block_position() => {
+                            None if base_is_block => {
                                 // Block positions are container boundaries, so
                                 // the view has no caret rect to move from.
+                                let resolved = base_position
+                                    .resolve(&editor.state.doc)
+                                    .expect("base position node still exists");
                                 Selection::collapsed(move_from_block_position(
-                                    editor, base, !backward,
+                                    editor, &resolved, !backward,
                                 ))
                             }
                             None => {
@@ -220,7 +222,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         gap_cursor_from_inner_edge(editor, selection.head, backward, &movement)
                 {
                     if matches!(movement, Movement::Line { .. }) {
-                        editor.view.ensure_preferred_x_at(&selection.head);
+                        editor.ensure_preferred_x_at(&selection.head);
                     }
                     editor.transact(|tr| {
                         tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
@@ -231,12 +233,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 }
             }
 
-            let new_selection = {
-                let resource_guard = editor.resource.lock().unwrap();
-                editor
-                    .view
-                    .resolve_movement(&selection.head, &movement, &resource_guard)
-            };
+            let new_selection = editor.resolve_movement(&selection.head, &movement);
             if let Some(new_selection) = new_selection {
                 let final_selection = if extend {
                     let doc = &editor.state.doc;
@@ -516,6 +513,45 @@ mod tests {
 
     use crate::editor::Editor;
     use crate::message::*;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_move_forward_in_middle() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Navigation {
+                op: NavigationOp::Move {
+                    movement: Movement::Grapheme {
+                        direction: Direction::Forward,
+                    },
+                    extend: false,
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_move_forward_at_end() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 5)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Navigation {
+                op: NavigationOp::Move {
+                    movement: Movement::Grapheme {
+                        direction: Direction::Forward,
+                    },
+                    extend: false,
+                },
+            },
+        );
+    }
 
     fn shift_up(editor: &mut Editor) {
         editor.apply(Message::Navigation {

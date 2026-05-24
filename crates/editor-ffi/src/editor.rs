@@ -28,6 +28,10 @@ impl Editor {
         })
     }
 
+    pub fn can(&self, message: Complex<editor_core::Message>) -> EditorResult<bool> {
+        self.with_inner(|inner| Ok(inner.editor.can(message.from_ffi()?)?))
+    }
+
     pub fn tick(&self) -> EditorResult<Vec<Complex<editor_core::EditorEvent>>> {
         self.with_inner(|inner| Ok(inner.editor.tick()?.into_ffi()?))
     }
@@ -588,6 +592,70 @@ mod tests {
         assert!(
             after_set.is_some(),
             "Set must restore selection through FFI"
+        );
+    }
+
+    #[test]
+    fn ffi_can_returns_true_for_insertion_with_selection() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let msg = editor_core::Message::Insertion {
+            op: editor_core::InsertionOp::Text { text: "x".into() },
+        };
+        let probed = editor.can(msg.into_ffi().unwrap()).unwrap();
+        assert!(probed);
+    }
+
+    #[test]
+    fn ffi_can_returns_false_for_undo_empty_history() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let msg = editor_core::Message::History {
+            op: editor_core::HistoryOp::Undo,
+        };
+        let probed = editor.can(msg.into_ffi().unwrap()).unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn ffi_can_returns_false_for_same_selection_set() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        let editor = make_ffi_editor(initial);
+        let same = editor_state::Selection::collapsed(editor_state::Position::new(t1, 2));
+        let msg = editor_core::Message::Selection {
+            op: editor_core::SelectionOp::Set { selection: same },
+        };
+        let probed = editor.can(msg.into_ffi().unwrap()).unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
+    fn ffi_can_does_not_mutate_observable_state() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let inspect_before = editor.inspect_state_as_macro().unwrap();
+        let msg = editor_core::Message::Insertion {
+            op: editor_core::InsertionOp::Text { text: "x".into() },
+        };
+        let _ = editor.can(msg.into_ffi().unwrap()).unwrap();
+        let inspect_after = editor.inspect_state_as_macro().unwrap();
+
+        assert_eq!(
+            inspect_before, inspect_after,
+            "can() must not mutate observable state visible through inspect_state_as_macro",
         );
     }
 }

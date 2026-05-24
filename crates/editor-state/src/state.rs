@@ -35,3 +35,52 @@ impl State {
         Ok(Self::new(doc, graph, selection))
     }
 }
+
+pub fn state_observably_changed(a: &State, b: &State) -> bool {
+    a.doc != b.doc
+        || a.selection != b.selection
+        || a.pending_modifiers != b.pending_modifiers
+        || a.composition != b.composition
+}
+
+#[cfg(test)]
+mod tests_observable {
+    use super::*;
+    use crate::pending_modifier::PendingModifier;
+    use crate::position::Position;
+    use editor_macros::state;
+    use editor_model::Modifier;
+
+    #[test]
+    fn same_state_is_unchanged() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        assert!(!state_observably_changed(&s, &s));
+    }
+
+    #[test]
+    fn different_selection_is_changed() {
+        let (a, t1) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut b = a.clone();
+        b.selection = Some(Selection::collapsed(Position::new(t1, 1)));
+        assert!(state_observably_changed(&a, &b));
+    }
+
+    #[test]
+    fn different_pending_modifiers_is_changed() {
+        let (a, ..) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut b = a.clone();
+        b.pending_modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::Bold,
+        }];
+        assert!(state_observably_changed(&a, &b));
+    }
+}

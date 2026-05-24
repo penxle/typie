@@ -15,6 +15,10 @@ impl Theme {
         }
     }
 
+    pub fn variant(&self) -> ThemeVariant {
+        self.variant
+    }
+
     pub fn set_variant(&mut self, variant: ThemeVariant) -> bool {
         if self.variant == variant {
             return false;

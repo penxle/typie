@@ -33,6 +33,38 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_cut_with_collapsed_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Clipboard {
+                op: ClipboardOp::Cut,
+            },
+        );
+    }
+
+    #[test]
+    fn probe_paste_empty() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Clipboard {
+                op: ClipboardOp::Paste {
+                    text: "".into(),
+                    html: None,
+                },
+            },
+        );
+    }
 
     #[test]
     fn paste_text_replaces_node_selection() {

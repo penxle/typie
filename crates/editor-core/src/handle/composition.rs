@@ -648,6 +648,37 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_composition_commit_empty() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 3)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Composition {
+                op: CompositionOp::Commit {
+                    text: String::new(),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn probe_composition_cancel_no_composition() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 3)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Composition {
+                op: CompositionOp::Cancel,
+            },
+        );
+    }
 
     #[test]
     fn composition_range_valid_rejects_cross_block() {

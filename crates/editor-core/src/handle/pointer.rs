@@ -85,7 +85,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             };
 
             if let Some(new_selection) = selection {
-                editor.view.clear_preferred_x();
+                editor.clear_preferred_x();
                 editor.transact(|tr| {
                     tr.set_selection(Some(new_selection))?;
                     Ok(())
@@ -97,20 +97,22 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             // edge that keeps the unit enveloped whichever way the drag goes. A
             // text caret or promoted gutter slot is collapsed, so a single point
             // is preserved as before. Non-shift keeps ext_hit's gutter promotion.
-            editor.drag_anchor = (count == 1)
-                .then(|| {
-                    let anchor = editor.state.selection.map(|s| s.anchor);
-                    if modifiers.shift {
-                        anchor.map(Selection::collapsed)
-                    } else {
-                        ext_hit.or_else(|| anchor.map(Selection::collapsed))
-                    }
-                })
-                .flatten();
+            editor.set_drag_anchor(
+                (count == 1)
+                    .then(|| {
+                        let anchor = editor.state.selection.map(|s| s.anchor);
+                        if modifiers.shift {
+                            anchor.map(Selection::collapsed)
+                        } else {
+                            ext_hit.or_else(|| anchor.map(Selection::collapsed))
+                        }
+                    })
+                    .flatten(),
+            );
         }
 
         PointerEvent::Move { page, x, y } => {
-            let Some(armed) = editor.drag_anchor else {
+            let Some(armed) = editor.drag_anchor() else {
                 return Ok(());
             };
 
@@ -126,7 +128,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                     if (h != a || is_cell_mode)
                         && let Some(sel) = cell_rect_selection(&editor.state.doc, a, h)
                     {
-                        editor.view.clear_preferred_x();
+                        editor.clear_preferred_x();
                         editor.transact(|tr| {
                             tr.set_selection(Some(sel))?;
                             Ok(())
@@ -147,7 +149,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                 let fixed = farther_endpoint(doc, hit.head, armed.anchor, armed.head);
                 let head = farther_endpoint(doc, fixed, hit.anchor, hit.head);
                 let new_selection = Selection::new(fixed, head);
-                editor.view.clear_preferred_x();
+                editor.clear_preferred_x();
                 editor.transact(|tr| {
                     tr.set_selection(Some(new_selection))?;
                     Ok(())
@@ -156,7 +158,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
         }
 
         PointerEvent::Up | PointerEvent::Cancel => {
-            editor.drag_anchor = None;
+            editor.set_drag_anchor(None);
         }
     }
 
@@ -302,7 +304,7 @@ mod tests {
             .selection
             .expect("selection exists in test")
             .anchor;
-        assert!(editor.drag_anchor.is_some());
+        assert!(editor.drag_anchor().is_some());
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -342,7 +344,7 @@ mod tests {
             .selection
             .expect("selection exists in test")
             .anchor;
-        assert!(editor.drag_anchor.is_some());
+        assert!(editor.drag_anchor().is_some());
 
         editor.state.selection = Some(Selection::collapsed(Position::new(t, 11)));
 
@@ -557,7 +559,7 @@ mod tests {
         );
         assert_eq!(sel.head.node_id, p1);
         assert_eq!(sel.head.offset, 0);
-        assert!(editor.drag_anchor.is_some());
+        assert!(editor.drag_anchor().is_some());
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -683,7 +685,7 @@ mod tests {
         });
 
         assert_eq!(editor.state().selection, before);
-        assert!(editor.drag_anchor.is_none());
+        assert!(editor.drag_anchor().is_none());
     }
 
     #[test]
@@ -704,13 +706,13 @@ mod tests {
             },
         });
 
-        assert!(editor.drag_anchor.is_some());
+        assert!(editor.drag_anchor().is_some());
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Up,
         });
 
-        assert!(editor.drag_anchor.is_none());
+        assert!(editor.drag_anchor().is_none());
     }
 
     #[test]
@@ -731,13 +733,13 @@ mod tests {
             },
         });
 
-        assert!(editor.drag_anchor.is_some());
+        assert!(editor.drag_anchor().is_some());
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Cancel,
         });
 
-        assert!(editor.drag_anchor.is_none());
+        assert!(editor.drag_anchor().is_none());
     }
 
     #[test]
@@ -771,7 +773,7 @@ mod tests {
             .selection
             .expect("selection exists in test")
             .anchor;
-        assert!(editor.drag_anchor.is_some());
+        assert!(editor.drag_anchor().is_some());
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -864,7 +866,7 @@ mod tests {
             },
         });
         assert!(
-            editor.drag_anchor.is_some(),
+            editor.drag_anchor().is_some(),
             "Down must arm a drag anchor (count==1)"
         );
 
@@ -1532,5 +1534,75 @@ mod tests {
             sel.head.node_id, t1,
             "head lands in the fold-title text, not on the fold node"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests_probe {
+    use editor_macros::state;
+
+    use crate::editor::Editor;
+    use crate::message::*;
+    use crate::test_utils::EditorSnapshot;
+
+    fn build_pointer_fixture() -> Editor {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello world") } } }
+            selection: (t1, 0)
+        };
+        let mut e = Editor::new_test(state);
+        e.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        e.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 800.0,
+                height: 600.0,
+                scale_factor: 1.0,
+            },
+        });
+        e
+    }
+
+    #[test]
+    fn probe_pointer_down_is_safe() {
+        // Pointer hit-test is layout-dependent and also mutates drag_anchor (non-applicability
+        // state). Prediction accuracy is not tested here; only probe-safety is verified.
+        let msg = Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: 50.0,
+                y: 50.0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        };
+        let mut e = build_pointer_fixture();
+        let before = EditorSnapshot::capture(&e);
+        let _ = e.can(msg);
+        let after = EditorSnapshot::capture(&e);
+        assert_eq!(before, after, "probe must not mutate observable state");
+    }
+
+    #[test]
+    fn probe_pointer_up_with_no_drag() {
+        let mut e = build_pointer_fixture();
+        let before = EditorSnapshot::capture(&e);
+        let _ = e.can(Message::Pointer {
+            event: PointerEvent::Up,
+        });
+        let after = EditorSnapshot::capture(&e);
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn probe_pointer_cancel() {
+        let mut e = build_pointer_fixture();
+        let before = EditorSnapshot::capture(&e);
+        let _ = e.can(Message::Pointer {
+            event: PointerEvent::Cancel,
+        });
+        let after = EditorSnapshot::capture(&e);
+        assert_eq!(before, after);
     }
 }

@@ -396,6 +396,14 @@ impl Renderer {
         }
     }
 
+    pub fn theme_variant(&self) -> ThemeVariant {
+        self.theme.variant()
+    }
+
+    pub fn would_set_theme_variant(&self, variant: ThemeVariant) -> bool {
+        self.theme.variant() != variant
+    }
+
     pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
         self.theme.set_variant(variant)
     }
@@ -1117,6 +1125,29 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_would {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn renderer() -> Renderer {
+        let resource = Arc::new(Mutex::new(editor_resource::Resource::new_test()));
+        Renderer::new(ThemeVariant::LightWhite, resource)
+    }
+
+    #[test]
+    fn would_set_theme_variant_false_for_same() {
+        let r = renderer();
+        assert!(!r.would_set_theme_variant(ThemeVariant::LightWhite));
+    }
+
+    #[test]
+    fn would_set_theme_variant_true_for_different() {
+        let r = renderer();
+        assert!(r.would_set_theme_variant(ThemeVariant::DarkBlack));
     }
 }
 

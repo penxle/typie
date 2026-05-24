@@ -113,6 +113,14 @@ impl History {
     pub fn clear_last_tag(&mut self) {
         self.last_tag = None
     }
+
+    pub fn undos_len(&self) -> usize {
+        self.undos.len()
+    }
+
+    pub fn redos_len(&self) -> usize {
+        self.redos.len()
+    }
 }
 
 #[cfg(test)]

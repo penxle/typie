@@ -301,6 +301,14 @@ impl Transaction {
     }
 
     pub fn set_selection(&mut self, selection: Option<Selection>) -> Result<(), StepError> {
+        // Mirror what apply_to does: normalize through the current doc.
+        // If the effective result matches the live selection, the step is a noop.
+        let new_effective = selection
+            .as_ref()
+            .map(|s| s.normalize(&self.state.doc).unwrap_or(*s));
+        if new_effective == self.state.selection {
+            return Ok(());
+        }
         let old = self.selection_stable.clone();
         let new = selection
             .as_ref()
@@ -309,6 +317,9 @@ impl Transaction {
     }
 
     pub fn set_pending_modifiers(&mut self, modifiers: PendingModifiers) -> Result<(), StepError> {
+        if self.state.pending_modifiers == modifiers {
+            return Ok(());
+        }
         let old = self.state.pending_modifiers.clone();
         self.apply_step(Step::SetPendingModifiers {
             old,
@@ -318,6 +329,9 @@ impl Transaction {
 
     pub fn set_composition(&mut self, composition: Option<Composition>) -> Result<(), StepError> {
         let old = self.state.composition;
+        if old == composition {
+            return Ok(());
+        }
         self.apply_step(Step::SetComposition {
             old,
             new: composition,

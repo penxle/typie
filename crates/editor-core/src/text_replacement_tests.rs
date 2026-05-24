@@ -1,6 +1,9 @@
 use editor_macros::state;
 use editor_resource::RawTextReplacementRule;
-use editor_state::{Composition, DocFlatExt, assert_state_eq};
+use editor_state::{
+    Composition, DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+    assert_state_eq,
+};
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
@@ -253,15 +256,41 @@ fn cursor_movement_invalidates_restore() {
     type_text(&mut editor, PLAIN_PATTERN);
 
     // In tests, view-based movement (move_grapheme) is a no-op because the view
-    // has no layout. Push a SetSelection step directly so history reflects that
-    // the user moved the cursor, exactly as navigation would in production.
-    // Navigation uses HistoryMeta::Skip so that selection-only moves are not
-    // undoable and also clear the last_tag (preventing shortcut restore).
-    let sel = editor.state().selection;
+    // has no layout. Push a SetSelection step with a genuinely different cursor
+    // position so history reflects that the user moved the cursor, exactly as
+    // navigation would in production. Navigation uses HistoryMeta::Skip so that
+    // selection-only moves are not undoable and also clear the last_tag (preventing
+    // shortcut restore). Move left one char then immediately back so the cursor ends
+    // up at the original position for the subsequent Backspace assertion.
+    let current_sel = editor
+        .state()
+        .selection
+        .expect("selection must exist after typing");
+    let current_flat = {
+        let doc = editor.state().doc.clone();
+        current_sel
+            .head
+            .resolve(&doc)
+            .map(|rp| rp.to_flat())
+            .expect("cursor must resolve")
+    };
+    let left_sel = {
+        let doc = editor.state().doc.clone();
+        let pos = ResolvedPosition::from_flat(&doc, current_flat - 1)
+            .expect("flat pos left of cursor resolves");
+        Selection::collapsed(Position::from(&pos))
+    };
     editor
         .transact(|tr| {
             tr.update_meta(|m| m.history = HistoryMeta::Skip);
-            tr.set_selection(sel)?;
+            tr.set_selection(Some(left_sel))?;
+            Ok(())
+        })
+        .unwrap();
+    editor
+        .transact(|tr| {
+            tr.update_meta(|m| m.history = HistoryMeta::Skip);
+            tr.set_selection(Some(current_sel))?;
             Ok(())
         })
         .unwrap();

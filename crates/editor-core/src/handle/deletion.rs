@@ -202,6 +202,35 @@ mod tests {
 
     use super::*;
     use crate::editor::Editor;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_delete_selection_collapsed_at_start() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Deletion {
+                op: DeletionOp::Selection,
+            },
+        );
+    }
+
+    #[test]
+    fn probe_delete_selection_range() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Deletion {
+                op: DeletionOp::Selection,
+            },
+        );
+    }
 
     #[test]
     fn delete_selection() {

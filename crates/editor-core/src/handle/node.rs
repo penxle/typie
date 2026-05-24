@@ -57,6 +57,24 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_delete_node() {
+        let (state, _r, img) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                img: image
+            } }
+            selection: (r, 1, >) -> (r, 1, <)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Node {
+                op: NodeOp::Delete { id: img },
+            },
+        );
+    }
 
     #[test]
     fn delete_node_removes_selected_external_block_and_records_history() {

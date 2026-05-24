@@ -4,14 +4,12 @@ use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
-use crate::event::EditorEvent;
 use crate::message::*;
-use crate::state_field::StateField;
 
 pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError> {
     match op {
         ViewOp::ToggleFold { id } => {
-            let was_expanded = editor.view.fold_expanded(id);
+            let was_expanded = editor.fold_expanded(id);
             if was_expanded
                 && let Some(sel) = editor.state.selection
                 && let Some(remapped) =
@@ -26,16 +24,7 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
                     Ok(())
                 })?;
             }
-            if editor.view.toggle_fold(&editor.state.doc, id) {
-                editor.push_event(EditorEvent::StateChanged {
-                    fields: vec![
-                        StateField::Cursor,
-                        StateField::PageSizes,
-                        StateField::ExternalElements,
-                    ],
-                });
-                editor.push_event(EditorEvent::RenderInvalidated);
-            }
+            editor.toggle_fold(id);
             Ok(())
         }
     }
@@ -89,6 +78,28 @@ mod tests {
     use editor_macros::state;
 
     use super::*;
+    use crate::event::EditorEvent;
+    use crate::state_field::StateField;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_toggle_fold_existing() {
+        let (state, f1, ..) = state! {
+            doc { root {
+                f1: fold {
+                    fold_title { t1: text("Title") }
+                    fold_content { paragraph { text("Body") } }
+                }
+            } }
+            selection: (t1, 0)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::View {
+                op: ViewOp::ToggleFold { id: f1 },
+            },
+        );
+    }
 
     #[test]
     fn toggle_fold_relayouts_and_emits_events() {

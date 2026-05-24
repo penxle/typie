@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use editor_commands::{self as commands};
-use editor_transaction::{HistoryMeta, HistoryTag};
+use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -12,15 +12,13 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
     let resource = resource.lock().unwrap();
 
     if matches!(event.key, Key::Backspace)
-        && matches!(editor.history.last_tag(), Some(HistoryTag::AutoReplacement))
+        && let Some(steps) = editor.try_undo_auto_replacement()
     {
-        if let Some(steps) = editor.history.undo() {
-            editor.transact(|tr| {
-                tr.update_meta(|m| m.history = HistoryMeta::Skip);
-                tr.apply_steps(steps)?;
-                Ok(())
-            })?;
-        }
+        editor.transact(|tr| {
+            tr.update_meta(|m| m.history = HistoryMeta::Skip);
+            tr.apply_steps(steps)?;
+            Ok(())
+        })?;
         return Ok(());
     }
 
@@ -109,6 +107,24 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
+    use crate::test_utils::assert_probe_predicts_apply;
+
+    #[test]
+    fn probe_backspace_at_boundary() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::Key {
+                event: KeyEvent {
+                    key: Key::Backspace,
+                    modifiers: InputModifiers::default(),
+                },
+            },
+        );
+    }
 
     fn key(k: Key) -> Message {
         Message::Key {

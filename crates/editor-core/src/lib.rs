@@ -11,8 +11,14 @@ mod ime;
 mod message;
 mod state_field;
 
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+
 #[cfg(test)]
 mod text_replacement_tests;
+
+#[cfg(test)]
+mod tests;
 
 pub use block_state::*;
 pub use editor::*;

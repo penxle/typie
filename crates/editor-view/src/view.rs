@@ -447,6 +447,70 @@ impl View {
     pub fn clear_preferred_x(&mut self) {
         self.view_state.preferred_x = None;
     }
+
+    pub fn preferred_x(&self) -> Option<f32> {
+        self.view_state.preferred_x
+    }
+
+    pub fn view_state(&self) -> &ViewState {
+        &self.view_state
+    }
+
+    pub fn would_resize(&self, viewport: Viewport, _doc: &Doc) -> bool {
+        if self.viewport != viewport {
+            return true;
+        }
+        // When viewport is unchanged, fingerprint change depends on doc attributes.
+        // Without computing, we conservatively report no change.
+        false
+    }
+
+    pub fn would_set_external_height(&self, doc: &Doc, node_id: NodeId, height: f32) -> bool {
+        if !height.is_finite() || height <= 0.0 || doc.node(node_id).is_none() {
+            return false;
+        }
+        self.view_state.external_height(node_id) != Some(height)
+    }
+
+    pub fn would_toggle_fold(&self, doc: &Doc, id: NodeId) -> bool {
+        doc.node(id)
+            .is_some_and(|n| matches!(n.node(), Node::Fold(_)))
+    }
+
+    pub fn would_clear_preferred_x(&self) -> bool {
+        self.view_state.preferred_x.is_some()
+    }
+
+    pub fn would_ensure_preferred_x_at(&self, pos: &Position) -> bool {
+        if self.view_state.preferred_x.is_some() {
+            return false;
+        }
+        let Some(result) = self.layout.as_ref() else {
+            return false;
+        };
+        query::navigation::compute_preferred_x_at(&result.tree, pos).is_some()
+    }
+
+    /// Dry-run of `resolve_movement` without mutating state.
+    ///
+    /// Returns `(would_selection, would_preferred_x)` so the caller can compare
+    /// against the current selection to detect whether a mutation would actually change anything.
+    pub fn would_resolve_movement(
+        &self,
+        pos: &Position,
+        movement: &Movement,
+        resource: &Resource,
+    ) -> Option<(Option<Selection>, Option<f32>)> {
+        let result = self.layout.as_ref()?;
+        Some(query::resolve_movement(
+            &result.tree,
+            pos,
+            movement,
+            &self.viewport,
+            resource,
+            self.view_state.preferred_x,
+        ))
+    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -1293,6 +1357,44 @@ mod tests {
         assert!(probe_x < max_x);
         assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
         assert!(!view.selection_hit_test(&resolved, 0, max_x + 10.0, probe_y));
+    }
+}
+
+#[cfg(test)]
+mod tests_would {
+    use super::*;
+    use editor_macros::doc;
+
+    #[test]
+    fn would_clear_preferred_x_false_when_none() {
+        let v = View::new_test();
+        assert!(!v.would_clear_preferred_x());
+    }
+
+    #[test]
+    fn would_toggle_fold_false_for_non_fold_node() {
+        let (d, p1) = doc! { root { p1: paragraph { text("hi") } } };
+        let v = View::new_test();
+        assert!(!v.would_toggle_fold(&d, p1));
+    }
+
+    #[test]
+    fn would_resize_false_for_same_viewport() {
+        let (d,) = doc! { root { paragraph { text("hi") } } };
+        let mut v = View::new_test();
+        let vp = Viewport::new(800.0, 600.0, 1.0);
+        v.resize(vp, &d);
+        assert!(!v.would_resize(vp, &d));
+    }
+
+    #[test]
+    fn would_resize_true_for_different_viewport() {
+        let (d,) = doc! { root { paragraph { text("hi") } } };
+        let mut v = View::new_test();
+        let vp = Viewport::new(800.0, 600.0, 1.0);
+        v.resize(vp, &d);
+        let vp2 = Viewport::new(1024.0, 600.0, 1.0);
+        assert!(v.would_resize(vp2, &d));
     }
 }
 
