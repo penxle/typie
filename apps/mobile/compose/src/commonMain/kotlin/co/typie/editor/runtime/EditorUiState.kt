@@ -17,6 +17,8 @@ class EditorUiState {
   var focused by mutableStateOf(false)
     private set
 
+  internal val contextMenu = EditorContextMenuState()
+
   var displayZoom by mutableStateOf(1f)
     private set
 
@@ -36,6 +38,7 @@ class EditorUiState {
 
   fun clear() {
     focused = false
+    contextMenu.reset()
     displayZoom = 1f
     pageOffsets.clear()
     pagePositionsInRoot.clear()

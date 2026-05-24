@@ -24,7 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal class EditorInteractionScope(private val coroutineScope: CoroutineScope) :
-  EditorInteractionEffects {
+  EditorInteractionEffects, EditorInteractionGeometry {
   private var editor: Editor? = null
   private var bringIntoViewRequests: EditorBringIntoViewRequests? = null
   private var uiState: EditorUiState? = null
@@ -42,8 +42,10 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     EditorInteractionController(
       editorProvider = { checkNotNull(editor) { "Editor interaction scope has no editor" } },
       effects = this,
+      geometry = this,
       semantics = semantics,
       platformProvider = { PlatformModule.platform },
+      uiStateProvider = { checkNotNull(uiState) { "Editor interaction scope has no UI state" } },
     )
 
   fun update(

@@ -75,7 +75,7 @@ internal class EditorEdgeAutoScrollSemantic {
     context: EditorGestureContext,
     dispatch: (PagePoint) -> Boolean,
   ) {
-    val viewport = context.effects.resolveEdgeAutoScrollViewport()
+    val viewport = context.geometry.resolveEdgeAutoScrollViewport()
     if (viewport == null || planFor(edgePosition = edgePosition, viewport = viewport).isNoOp) {
       stop()
       return
@@ -99,7 +99,7 @@ internal class EditorEdgeAutoScrollSemantic {
         while (true) {
           delay(EditorEdgeAutoScrollTickMillis)
           val request = activeRequest ?: break
-          val viewport = context.effects.resolveEdgeAutoScrollViewport() ?: break
+          val viewport = context.geometry.resolveEdgeAutoScrollViewport() ?: break
           val plan = planFor(edgePosition = request.edgePosition, viewport = viewport)
           if (plan.isNoOp) {
             break
@@ -121,7 +121,7 @@ internal class EditorEdgeAutoScrollSemantic {
             continue
           }
 
-          val scrolledViewport = context.effects.resolveEdgeAutoScrollViewport() ?: viewport
+          val scrolledViewport = context.geometry.resolveEdgeAutoScrollViewport() ?: viewport
           dispatchScrolledPosition(
             request = request,
             viewport = scrolledViewport,
@@ -165,7 +165,7 @@ internal class EditorEdgeAutoScrollSemantic {
       x = if (horizontalBoundaryReached) rect.left else rect.left + viewport.edgeThresholdPx
     }
 
-    val point = context.effects.resolvePoint(Offset(x = x, y = y)) ?: return
+    val point = context.geometry.resolvePoint(Offset(x = x, y = y)) ?: return
     if (point.page < 0 || point == lastDispatchedPoint) {
       return
     }

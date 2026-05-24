@@ -5,7 +5,6 @@ import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent
-import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorInteractionEffects
 
 internal class EditorCursorMoveSemantic(private val effects: EditorInteractionEffects) {
@@ -67,15 +66,3 @@ internal fun EditorCursorMoveSemantic.enqueuePrimaryClick(
   editor.enqueue(Message.Pointer(PointerEvent.Up))
   return true
 }
-
-internal fun EditorCursorMoveSemantic.isSelectionHit(editor: Editor, point: PagePoint): Boolean {
-  return editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
-}
-
-internal fun EditorCursorMoveSemantic.hasRangeSelection(editor: Editor): Boolean =
-  !editor.state.selection.isCollapsed()
-
-internal fun EditorCursorMoveSemantic.isCursorHit(editor: Editor, point: PagePoint): Boolean =
-  editor.cursorHitTest(page = point.page, x = point.x, y = point.y)
-
-private fun Selection?.isCollapsed(): Boolean = this == null || anchor == head

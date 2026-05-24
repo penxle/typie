@@ -25,14 +25,13 @@ import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -244,16 +243,6 @@ internal fun EditorScreenLayout(
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
     }
   }
-}
-
-private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect {
-  val position = positionInRoot()
-  return Rect(
-    left = position.x,
-    top = position.y,
-    right = position.x + size.width,
-    bottom = position.y + size.height,
-  )
 }
 
 internal class EditorViewportScrollReconcileState {

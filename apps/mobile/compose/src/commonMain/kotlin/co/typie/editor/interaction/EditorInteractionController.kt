@@ -7,14 +7,16 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.interaction.gestures.EditorSelectionHandleGesture
+import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
 
 internal class EditorInteractionController(
   private val editorProvider: () -> Editor,
   private val effects: EditorInteractionEffects,
-  private val gestures: EditorInteractionGestures = EditorInteractionGestures(),
+  private val geometry: EditorInteractionGeometry,
   private val semantics: EditorInteractionSemantics = EditorInteractionSemantics(effects = effects),
   private val platformProvider: () -> Platform = { Platform.Desktop },
+  private val uiStateProvider: () -> EditorUiState,
 ) {
   private var mode by mutableStateOf(EditorInteractionMode.Idle)
   private val gestureContext =
@@ -28,8 +30,14 @@ internal class EditorInteractionController(
       override val effects: EditorInteractionEffects
         get() = this@EditorInteractionController.effects
 
+      override val geometry: EditorInteractionGeometry
+        get() = this@EditorInteractionController.geometry
+
       override val mode: EditorInteractionMode
         get() = this@EditorInteractionController.mode
+
+      override val uiState: EditorUiState
+        get() = uiStateProvider()
 
       override val platform: Platform
         get() = platformProvider()
@@ -42,6 +50,8 @@ internal class EditorInteractionController(
         this@EditorInteractionController.reduceMode(event)
       }
     }
+  private val gestures = EditorInteractionGestures(contextProvider = { gestureContext })
+
   val interactionMode: EditorInteractionMode
     get() = mode
 
@@ -54,14 +64,8 @@ internal class EditorInteractionController(
   val selectionHandleGesture: EditorSelectionHandleGesture
     get() = gestures.selectionHandle
 
-  val interactionContext: EditorGestureContext
-    get() = gestureContext
-
   val magnifierPosition: Offset?
     get() = semantics.magnifier.position
-
-  fun isContextMenuVisibleFor(state: EditorState): Boolean =
-    semantics.contextMenu.isVisibleFor(state)
 
   fun updateTapSlop(tapSlopPx: Float) {
     gestures.updateTapSlop(tapSlopPx)
@@ -113,16 +117,6 @@ internal class EditorInteractionController(
 
   fun onEditorStateChanged(state: EditorState) {
     semantics.onEditorStateChanged(editor = editorProvider(), state = state, mode = mode)
-  }
-
-  fun onViewportScrollStarted() {
-    semantics.contextMenu.hide()
-  }
-
-  fun onEditorFocusChanged(focused: Boolean) {
-    if (!focused) {
-      semantics.contextMenu.hide()
-    }
   }
 
   fun applyModeEvent(event: EditorInteractionEvent) {

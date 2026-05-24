@@ -2,6 +2,7 @@ package co.typie.editor.interaction.semantics
 
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
@@ -52,7 +53,7 @@ internal class EditorSelectionHapticSemantic(private val effects: EditorInteract
 }
 
 private fun Editor.selectionEndpointsForHaptics(selection: Selection?): SelectionEndpoints? {
-  if (selection == null || selection.anchor == selection.head) {
+  if (selection.isCollapsed()) {
     return null
   }
   return selectionEndpoints()

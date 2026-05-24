@@ -2,12 +2,10 @@ package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.EditorState
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.CursorMetrics
-import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.isViewportZooming
-import co.typie.editor.interaction.semantics.hasRangeSelection
-import co.typie.editor.interaction.semantics.isSelectionHit
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
 import co.typie.platform.Platform
 
@@ -197,8 +195,8 @@ internal fun EditorTapGesture.handlePointerDown(
   }
 
   startActivePointer(pointerId = pointerId, position = position)
-  captureContextMenuStateAtPointerDown(context.semantics.contextMenu.visible)
-  context.semantics.contextMenu.hide()
+  captureContextMenuStateAtPointerDown(context.uiState.contextMenu.visible)
+  context.uiState.contextMenu.hide()
   if (nextTapCount(position = position, nowMillis = nowMillis) == 2) {
     markTapDispatched()
     context.effects.cancelTapDispatch()
@@ -273,18 +271,19 @@ internal fun EditorTapGesture.handleTapTimer(
     return
   }
   val clickCount = nextTapCount(position = position, nowMillis = nowMillis)
-  if (
-    clickCount == 1 &&
-      context.platform != Platform.Android &&
-      isSelectionHit(position = position, context = context)
-  ) {
+  val point = context.geometry.resolvePoint(positionInNode = position)
+  val hitSelection =
+    point != null &&
+      point.page >= 0 &&
+      context.editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
+  if (clickCount == 1 && context.platform != Platform.Android && hitSelection) {
     markTapDispatched()
     if (shouldOpenContextMenuForCurrentTap()) {
-      context.semantics.contextMenu.show(context.editor.state)
+      context.uiState.contextMenu.show(context.editor.state)
     }
     return
   }
-  if (clickCount == 1 && context.semantics.cursorMove.hasRangeSelection(context.editor)) {
+  if (clickCount == 1 && !context.editor.selection.isCollapsed()) {
     return
   }
   markTapDispatched()
@@ -306,20 +305,19 @@ private fun EditorTapGesture.dispatchTap(
   context: EditorGestureContext,
   beforeLaunch: () -> Unit,
 ): Boolean {
-  val point = context.effects.resolvePoint(positionInNode = position) ?: return false
+  val point = context.geometry.resolvePoint(positionInNode = position) ?: return false
   if (context.mode.isViewportZooming || point.page < 0) {
     return false
   }
   recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
   val editor = context.editor
+  val wasFocused = context.uiState.focused
   context.semantics.cursorMove.requestFocus(editor)
-  if (
-    clickCount == 1 &&
-      context.platform != Platform.Android &&
-      context.semantics.cursorMove.isSelectionHit(editor, point)
-  ) {
+  val hitExistingSelectionAtTap =
+    editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
+  if (clickCount == 1 && context.platform != Platform.Android && hitExistingSelectionAtTap) {
     if (shouldOpenContextMenuForCurrentTap()) {
-      context.semantics.contextMenu.show(editor.state)
+      context.uiState.contextMenu.show(editor.state)
     }
     return false
   }
@@ -332,14 +330,24 @@ private fun EditorTapGesture.dispatchTap(
     clickCount = clickCount,
     beforeCommit = { snapshot ->
       if (clickCount == 1) {
-        if (isSameCursorTap(previousCursor, snapshot)) {
-          if (shouldOpenContextMenuForCurrentTap()) {
-            context.semantics.contextMenu.show(snapshot)
+        when {
+          !snapshot.selection.isCollapsed() -> {
+            if (!hitExistingSelectionAtTap) {
+              context.uiState.contextMenu.show(snapshot)
+            } else {
+              context.uiState.contextMenu.hide()
+            }
           }
-        } else {
-          context.semantics.contextMenu.hide()
-          if (snapshot.cursor != null) {
-            context.semantics.cursorMove.requestCurrentCursorLine(version = snapshot.version)
+          isSameCursorTap(previousCursor, snapshot) -> {
+            if (wasFocused && shouldOpenContextMenuForCurrentTap()) {
+              context.uiState.contextMenu.show(snapshot)
+            }
+          }
+          else -> {
+            context.uiState.contextMenu.hide()
+            if (snapshot.cursor != null) {
+              context.semantics.cursorMove.requestCurrentCursorLine(version = snapshot.version)
+            }
           }
         }
       }
@@ -353,14 +361,6 @@ private fun EditorTapGesture.dispatchTap(
   return true
 }
 
-private fun EditorTapGesture.isSelectionHit(
-  position: Offset,
-  context: EditorGestureContext,
-): Boolean {
-  val point = context.effects.resolvePoint(positionInNode = position) ?: return true
-  return point.page < 0 || context.semantics.cursorMove.isSelectionHit(context.editor, point)
-}
-
 private fun isSameCursorTap(previousCursor: CursorMetrics?, nextState: EditorState): Boolean {
   val nextCursor = nextState.cursor ?: return false
   if (
@@ -372,8 +372,6 @@ private fun isSameCursorTap(previousCursor: CursorMetrics?, nextState: EditorSta
   }
   return false
 }
-
-private fun Selection?.isCollapsed(): Boolean = this == null || anchor == head
 
 private fun CursorMetrics.isSamePosition(other: CursorMetrics): Boolean =
   pageIdx == other.pageIdx &&

@@ -2,10 +2,8 @@ package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.interaction.EditorGestureContext
-import co.typie.editor.interaction.semantics.hasRangeSelection
-import co.typie.editor.interaction.semantics.isCursorHit
-import co.typie.editor.interaction.semantics.isSelectionHit
 import co.typie.editor.interaction.sessions.EditorLongPressSemanticIntent
 import co.typie.editor.interaction.sessions.EditorLongPressSession
 import co.typie.platform.Platform
@@ -87,7 +85,7 @@ internal fun EditorLongPressGesture.primeModeAtPointerDown(
   if (context.platform != Platform.Android) {
     return
   }
-  val point = context.effects.resolvePoint(positionInNode = position) ?: return
+  val point = context.geometry.resolvePoint(positionInNode = position) ?: return
   primeAndroidSemanticAtPointerDown(useCursorMode = shouldUseAndroidCursorMode(point, context))
 }
 
@@ -122,17 +120,15 @@ private fun EditorLongPressGesture.resolveAdmission(
   position: Offset,
   context: EditorGestureContext,
 ): PagePoint? {
-  val point = context.effects.resolvePoint(positionInNode = position)
+  val point = context.geometry.resolvePoint(positionInNode = position)
   if (point == null || point.page < 0) {
     cancelPending()
     return null
   }
 
   val editor = context.editor
-  if (context.semantics.cursorMove.isSelectionHit(editor = editor, point = point)) {
-    if (
-      context.platform != Platform.Android || context.semantics.cursorMove.hasRangeSelection(editor)
-    ) {
+  if (editor.selectionHitTest(page = point.page, x = point.x, y = point.y)) {
+    if (context.platform != Platform.Android || !editor.selection.isCollapsed()) {
       cancelPending()
       return null
     }
@@ -158,8 +154,8 @@ private fun EditorLongPressGesture.resolveSemanticIntent(
 
 private fun shouldUseAndroidCursorMode(point: PagePoint, context: EditorGestureContext): Boolean {
   val editor = context.editor
-  if (context.semantics.cursorMove.hasRangeSelection(editor)) {
+  if (!editor.selection.isCollapsed()) {
     return false
   }
-  return context.semantics.cursorMove.isCursorHit(editor = editor, point = point)
+  return editor.cursorHitTest(page = point.page, x = point.x, y = point.y)
 }

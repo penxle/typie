@@ -35,6 +35,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.ext.clickable
@@ -52,7 +53,6 @@ private val ContextMenuEdgePadding = 4.dp
 private val ContextMenuGap = 24.dp
 private val ContextMenuEnterEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private const val ContextMenuAnimationMillis = 150
-private val EditorContextMenuExpansionLabels = listOf("단어", "문장", "문단", "전체")
 
 private enum class EditorContextMenuPage {
   Primary,
@@ -64,10 +64,26 @@ internal fun EditorSelectionContextMenuOverlay(
   anchor: EditorContextMenuAnchor,
   overlaySize: Size,
   visibleArea: EditorVisibleArea,
+  showCopyCutActions: Boolean,
+  onCopy: () -> Unit,
+  onCut: () -> Unit,
+  onPaste: () -> Unit,
+  onExpandWord: () -> Unit,
+  onExpandSentence: () -> Unit,
+  onExpandParagraph: () -> Unit,
+  onSelectAll: () -> Unit,
+  onDismiss: () -> Unit,
 ) {
   val enterState = remember { MutableTransitionState(false) }
   enterState.targetState = true
   var page by remember { mutableStateOf(EditorContextMenuPage.Primary) }
+  val expansionItems =
+    listOf(
+      EditorContextMenuExpansionItem("단어", onExpandWord),
+      EditorContextMenuExpansionItem("문장", onExpandSentence),
+      EditorContextMenuExpansionItem("문단", onExpandParagraph),
+      EditorContextMenuExpansionItem("전체", onSelectAll),
+    )
 
   EditorContextMenuLayout(anchor = anchor, overlaySize = overlaySize, visibleArea = visibleArea) {
     AnimatedVisibility(
@@ -132,11 +148,11 @@ internal fun EditorSelectionContextMenuOverlay(
         ) {
           when (targetPage) {
             EditorContextMenuPage.Primary -> {
-              // TODO(editor-parity): hide copy/cut for collapsed selections and wire clipboard
-              // actions through the editor input shortcut path like legacy.
-              EditorContextMenuItem(label = "복사")
-              EditorContextMenuItem(label = "잘라내기")
-              EditorContextMenuItem(label = "붙여넣기")
+              if (showCopyCutActions) {
+                EditorContextMenuItem(label = "복사", onClick = onCopy.withDismiss(onDismiss))
+                EditorContextMenuItem(label = "잘라내기", onClick = onCut.withDismiss(onDismiss))
+              }
+              EditorContextMenuItem(label = "붙여넣기", onClick = onPaste.withDismiss(onDismiss))
               EditorContextMenuItem(
                 label = "선택 확장",
                 onClick = { page = EditorContextMenuPage.Expansion },
@@ -144,16 +160,28 @@ internal fun EditorSelectionContextMenuOverlay(
             }
             EditorContextMenuPage.Expansion -> {
               EditorContextMenuBackItem(onClick = { page = EditorContextMenuPage.Primary })
-              // TODO(editor-parity): make expansion options contextual from the legacy
-              // selection_expandable bitmask and wire
-              // selectWord/selectSentence/selectParagraph/selectAll.
-              EditorContextMenuExpansionLabels.forEach { label -> EditorContextMenuItem(label) }
+              expansionItems.forEach { item ->
+                EditorContextMenuItem(
+                  label = item.label,
+                  onClick = {
+                    item.onClick()
+                    page = EditorContextMenuPage.Primary
+                  },
+                )
+              }
             }
           }
         }
       }
     }
   }
+}
+
+private data class EditorContextMenuExpansionItem(val label: String, val onClick: () -> Unit)
+
+private fun (() -> Unit).withDismiss(onDismiss: () -> Unit): () -> Unit = {
+  this()
+  onDismiss()
 }
 
 @Composable
@@ -269,7 +297,7 @@ internal fun resolveContextMenuAnchor(
   }
 
   val transform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
-  val rangeSelection = editor.selection?.takeIf { it.anchor != it.head }
+  val rangeSelection = editor.selection?.takeIf { !it.isCollapsed() }
   val gapPx = ContextMenuGap.value * density
 
   if (rangeSelection != null) {

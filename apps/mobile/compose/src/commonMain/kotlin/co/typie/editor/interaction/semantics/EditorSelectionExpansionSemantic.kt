@@ -2,6 +2,7 @@ package co.typie.editor.interaction.semantics
 
 import co.typie.editor.Editor
 import co.typie.editor.PagePoint
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Selection
@@ -105,5 +106,3 @@ internal fun Editor.dispatchSelectionExtension(
   )
   return true
 }
-
-private fun Selection?.isCollapsed(): Boolean = this == null || anchor == head

@@ -14,12 +14,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -27,6 +26,7 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollMode
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.scroll.EditorVisibleArea
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.viewport.EditorViewportState
 import kotlin.math.roundToInt
 
@@ -42,9 +42,12 @@ internal fun EditorScreenOverlayHost(
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
-  val interactionController = LocalEditorInteractionScope.current.controller
+  val interactionScope = LocalEditorInteractionScope.current
+  val interactionController = interactionScope.controller
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
+  val contextMenu = uiState.contextMenu
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   var overlayBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
   val overlayBounds = overlayBoundsInRoot
   val editorBoundsInContainer = uiState.editorBoundsInContainer
@@ -115,9 +118,7 @@ internal fun EditorScreenOverlayHost(
           )
         }
 
-        if (
-          editorRectInOverlay != null && interactionController.isContextMenuVisibleFor(editor.state)
-        ) {
+        if (editorRectInOverlay != null && contextMenu.isVisibleFor(editor.state)) {
           val anchor =
             resolveContextMenuAnchor(
               editor = editor,
@@ -126,10 +127,26 @@ internal fun EditorScreenOverlayHost(
               density = density.density,
             )
           if (anchor != null) {
+            val actions =
+              rememberEditorContextMenuActions(
+                editor = editor,
+                bringIntoViewRequests = bringIntoViewRequests,
+                contextMenu = contextMenu,
+              )
+
             EditorSelectionContextMenuOverlay(
               anchor = anchor,
               overlaySize = overlayBounds.size,
               visibleArea = visibleArea,
+              showCopyCutActions = actions.showCopyCutActions,
+              onCopy = actions.onCopy,
+              onCut = actions.onCut,
+              onPaste = actions.onPaste,
+              onExpandWord = actions.onExpandWord,
+              onExpandSentence = actions.onExpandSentence,
+              onExpandParagraph = actions.onExpandParagraph,
+              onSelectAll = actions.onSelectAll,
+              onDismiss = actions.onDismiss,
             )
           }
         }
@@ -146,15 +163,5 @@ private fun DebugViewportLine(y: Float, color: Color) {
         .height(2.dp)
         .graphicsLayer { translationY = y.dp.toPx() }
         .background(color.copy(alpha = 0.9f))
-  )
-}
-
-private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect {
-  val position = positionInRoot()
-  return Rect(
-    left = position.x,
-    top = position.y,
-    right = position.x + size.width,
-    bottom = position.y + size.height,
   )
 }

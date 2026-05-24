@@ -443,6 +443,8 @@ fun EditorScreen(entityId: String) {
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
       )
       interactionScope.onEditorStateChanged(editorState)
+      uiState.contextMenu.onEditorStateChanged(editorState)
+      uiState.contextMenu.showAfterSelectionCommitIfRequested(editorState)
     }
     val toolbarSuppressesSoftwareKeyboard = toolbarPanel?.let(::suppressSoftwareKeyboard) ?: false
     val toolbarTextInputSessionEnabled =
@@ -485,8 +487,8 @@ fun EditorScreen(entityId: String) {
     LaunchedEffect(uiState.focused, screenState.sceneInForeground, editor) {
       val editorInteractionFocused =
         uiState.focused && screenState.sceneInForeground && editor != null
-      interactionScope.controller.onEditorFocusChanged(focused = editorInteractionFocused)
       if (!editorInteractionFocused) {
+        uiState.contextMenu.hide()
         bringIntoViewRequests.cancel()
       }
     }
@@ -512,7 +514,7 @@ fun EditorScreen(entityId: String) {
             screenState.sceneInForeground &&
             editor != null &&
             interactionScope.controller.interactionMode.allowsViewportScrollReconcile,
-        onViewportWheelScroll = interactionScope.controller::onViewportScrollStarted,
+        onViewportWheelScroll = { uiState.contextMenu.hide() },
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {

@@ -1,8 +1,6 @@
 package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -14,13 +12,13 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.interaction.EditorInteractionController
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
@@ -37,7 +35,7 @@ internal fun EditorSelectionHandleOverlay(
   density: Float,
   interactionController: EditorInteractionController,
 ) {
-  if (!uiState.focused || editor.selection?.let { it.anchor != it.head } != true) {
+  if (!uiState.focused || editor.selection.isCollapsed()) {
     return
   }
 
@@ -66,7 +64,7 @@ internal fun resolveSelectionHandleOverlayPlacements(
   editorRectInOverlay: Rect,
   density: Float,
 ): List<EditorSelectionHandleOverlayPlacement>? {
-  if (density <= 0f || editor.selection?.let { it.anchor != it.head } != true) {
+  if (density <= 0f || editor.selection.isCollapsed()) {
     return null
   }
 
@@ -158,14 +156,15 @@ private fun EditorSelectionHandle(
           height = with(density) { geometry.touchTargetSize.height.toDp() },
         )
         .pointerInput(placement.type, interactionController) {
-          detectSelectionHandleDrag(
-            type = placement.type,
-            interactionController = interactionController,
-            positionInEditor = { localPosition ->
-              latestTouchTargetTopLeft.value + localPosition -
-                latestEditorRectInOverlay.value.topLeft
-            },
-          )
+          with(interactionController.selectionHandleGesture) {
+            detectDrag(
+              type = placement.type,
+              positionInEditor = { localPosition ->
+                latestTouchTargetTopLeft.value + localPosition -
+                  latestEditorRectInOverlay.value.topLeft
+              },
+            )
+          }
         }
   ) {
     Canvas(modifier = Modifier.matchParentSize()) {
@@ -197,88 +196,6 @@ private fun EditorSelectionHandle(
             center = Offset(centerX, geometry.stemHeightPx + geometry.radiusPx),
           )
         }
-      }
-    }
-  }
-}
-
-private suspend fun PointerInputScope.detectSelectionHandleDrag(
-  type: EditorSelectionHandleType,
-  interactionController: EditorInteractionController,
-  positionInEditor: (Offset) -> Offset,
-) {
-  awaitEachGesture {
-    var completed = false
-    try {
-      val down = awaitFirstDown(requireUnconsumed = false)
-      val downPosition = positionInEditor(down.position)
-      val touchSlop = viewConfiguration.touchSlop
-      val selectionHandleGesture = interactionController.selectionHandleGesture
-      val interactionContext = interactionController.interactionContext
-      if (
-        !selectionHandleGesture.handleDragDown(
-          type = type,
-          position = downPosition,
-          context = interactionContext,
-        )
-      ) {
-        completed = true
-        return@awaitEachGesture
-      }
-      down.consume()
-
-      var dragging = false
-
-      while (true) {
-        val event = awaitPointerEvent()
-        val change = event.changes.firstOrNull { it.id == down.id } ?: continue
-        val position = positionInEditor(change.position)
-
-        if (!change.pressed) {
-          if (dragging) {
-            if (selectionHandleGesture.handleDragEnd(type = type, context = interactionContext)) {
-              change.consume()
-            }
-          } else {
-            selectionHandleGesture.cancel(context = interactionContext)
-          }
-          completed = true
-          return@awaitEachGesture
-        }
-
-        if (!dragging) {
-          change.consume()
-          if ((position - downPosition).getDistance() <= touchSlop) {
-            continue
-          }
-          if (
-            !selectionHandleGesture.handleDragStart(
-              type = type,
-              position = position,
-              context = interactionContext,
-            )
-          ) {
-            completed = true
-            return@awaitEachGesture
-          }
-          dragging = true
-        }
-        if (
-          dragging &&
-            selectionHandleGesture.handleDragUpdate(
-              type = type,
-              position = position,
-              context = interactionContext,
-            )
-        ) {
-          change.consume()
-        }
-      }
-    } finally {
-      if (!completed) {
-        interactionController.selectionHandleGesture.cancel(
-          context = interactionController.interactionContext
-        )
       }
     }
   }

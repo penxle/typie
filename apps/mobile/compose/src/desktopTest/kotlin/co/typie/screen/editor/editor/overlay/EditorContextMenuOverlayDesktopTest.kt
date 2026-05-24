@@ -21,19 +21,7 @@ import kotlin.test.assertEquals
 class EditorContextMenuOverlayDesktopTest {
   @Test
   fun selectingExpansionShowsLegacyExpansionMenu() = runComposeUiTest {
-    setContent {
-      CompositionLocalProvider(
-        LocalAppColors provides LightColors,
-        LocalAppShadows provides LightAppShadows,
-        LocalThemeMode provides ResolvedThemeMode.Light,
-      ) {
-        EditorSelectionContextMenuOverlay(
-          anchor = EditorContextMenuAnchor(centerX = 200f, above = 220f, below = 320f),
-          overlaySize = Size(width = 400f, height = 700f),
-          visibleArea = EditorVisibleArea(viewport = Size(width = 400f, height = 700f)),
-        )
-      }
-    }
+    setMenuContent()
 
     waitForIdle()
     assertEquals(0, onAllNodesWithText("단어").fetchSemanticsNodes().size)
@@ -46,5 +34,66 @@ class EditorContextMenuOverlayDesktopTest {
     assertEquals(1, onAllNodesWithText("문장").fetchSemanticsNodes().size)
     assertEquals(1, onAllNodesWithText("문단").fetchSemanticsNodes().size)
     assertEquals(1, onAllNodesWithText("전체").fetchSemanticsNodes().size)
+  }
+
+  @Test
+  fun collapsedMenuHidesRangeOnlyActionsButKeepsSelectionExpansion() = runComposeUiTest {
+    setMenuContent(showCopyCutActions = false)
+
+    waitForIdle()
+
+    assertEquals(0, onAllNodesWithText("복사").fetchSemanticsNodes().size)
+    assertEquals(0, onAllNodesWithText("잘라내기").fetchSemanticsNodes().size)
+    assertEquals(1, onAllNodesWithText("붙여넣기").fetchSemanticsNodes().size)
+    assertEquals(1, onAllNodesWithText("선택 확장").fetchSemanticsNodes().size)
+  }
+
+  @Test
+  fun primaryMenuItemInvokesActionAndDismisses() = runComposeUiTest {
+    var copyCount = 0
+    var dismissCount = 0
+    setMenuContent(onCopy = { copyCount++ }, onDismiss = { dismissCount++ })
+
+    waitForIdle()
+    onNodeWithText("복사").performClick()
+    waitForIdle()
+
+    assertEquals(1, copyCount)
+    assertEquals(1, dismissCount)
+  }
+
+  private fun androidx.compose.ui.test.ComposeUiTest.setMenuContent(
+    showCopyCutActions: Boolean = true,
+    onCopy: () -> Unit = {},
+    onCut: () -> Unit = {},
+    onPaste: () -> Unit = {},
+    onExpandWord: () -> Unit = {},
+    onExpandSentence: () -> Unit = {},
+    onExpandParagraph: () -> Unit = {},
+    onSelectAll: () -> Unit = {},
+    onDismiss: () -> Unit = {},
+  ) {
+    setContent {
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalAppShadows provides LightAppShadows,
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorSelectionContextMenuOverlay(
+          anchor = EditorContextMenuAnchor(centerX = 200f, above = 220f, below = 320f),
+          overlaySize = Size(width = 400f, height = 700f),
+          visibleArea = EditorVisibleArea(viewport = Size(width = 400f, height = 700f)),
+          showCopyCutActions = showCopyCutActions,
+          onCopy = onCopy,
+          onCut = onCut,
+          onPaste = onPaste,
+          onExpandWord = onExpandWord,
+          onExpandSentence = onExpandSentence,
+          onExpandParagraph = onExpandParagraph,
+          onSelectAll = onSelectAll,
+          onDismiss = onDismiss,
+        )
+      }
+    }
   }
 }

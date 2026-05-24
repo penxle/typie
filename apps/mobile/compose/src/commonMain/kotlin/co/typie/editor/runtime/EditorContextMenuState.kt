@@ -1,12 +1,13 @@
-package co.typie.editor.interaction.semantics
+package co.typie.editor.runtime
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.typie.editor.EditorState
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.Selection
 
-internal class EditorContextMenuSemantic {
+internal class EditorContextMenuState {
   var visible: Boolean by mutableStateOf(false)
     private set
 
@@ -70,5 +71,3 @@ internal class EditorContextMenuSemantic {
     hide()
   }
 }
-
-private fun Selection?.isCollapsed(): Boolean = this == null || anchor == head

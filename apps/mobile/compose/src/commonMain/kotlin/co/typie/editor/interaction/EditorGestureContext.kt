@@ -1,13 +1,16 @@
 package co.typie.editor.interaction
 
 import co.typie.editor.Editor
+import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
 
 internal interface EditorGestureContext {
   val editor: Editor
   val semantics: EditorInteractionSemantics
   val effects: EditorInteractionEffects
+  val geometry: EditorInteractionGeometry
   val mode: EditorInteractionMode
+  val uiState: EditorUiState
 
   val platform: Platform
 

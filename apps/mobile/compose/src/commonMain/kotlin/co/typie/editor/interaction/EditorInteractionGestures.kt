@@ -22,12 +22,14 @@ import co.typie.editor.interaction.gestures.update
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
 
 internal class EditorInteractionGestures(
+  contextProvider: () -> EditorGestureContext,
   val tap: EditorTapGesture = EditorTapGesture(tapSlopPx = 0f),
   val doubleTapDrag: EditorDoubleTapDragSession = EditorDoubleTapDragSession(),
   val longPress: EditorLongPressGesture = EditorLongPressGesture(),
   val pan: EditorPanGesture = EditorPanGesture(),
   val pinch: EditorPinchGesture = EditorPinchGesture(),
-  val selectionHandle: EditorSelectionHandleGesture = EditorSelectionHandleGesture(),
+  val selectionHandle: EditorSelectionHandleGesture =
+    EditorSelectionHandleGesture(contextProvider = contextProvider),
   val tableHandle: EditorTableHandleGesture = EditorTableHandleGesture(),
   val dnd: EditorDndGesture = EditorDndGesture(),
 ) {

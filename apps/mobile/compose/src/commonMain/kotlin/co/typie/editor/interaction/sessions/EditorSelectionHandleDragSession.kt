@@ -42,7 +42,7 @@ internal class EditorSelectionHandleDragSession {
     val startTouchPosition =
       pendingContext?.takeIf { it.type == type }?.touchPosition ?: touchPosition
     val handleCenter =
-      context.effects.resolvePagePosition(
+      context.geometry.resolvePagePosition(
         page = handle.pageIdx,
         x = handle.rect.x,
         y = handle.rect.y + handle.rect.height / 2f,
@@ -77,7 +77,7 @@ internal class EditorSelectionHandleDragSession {
       anchor = drag.anchor,
       context = context,
     )
-    val point = context.effects.resolvePoint(positionInNode = selectionPosition) ?: return false
+    val point = context.geometry.resolvePoint(positionInNode = selectionPosition) ?: return false
     if (point.page < 0) {
       return false
     }

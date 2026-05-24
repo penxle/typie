@@ -2,6 +2,7 @@ package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.EditorInteractionMode
@@ -10,7 +11,6 @@ import co.typie.editor.interaction.isLongPressing
 import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.semantics.dispatchSelectionExtension
 import co.typie.editor.interaction.semantics.enqueuePrimaryClick
-import co.typie.editor.interaction.semantics.hasRangeSelection
 
 internal enum class EditorLongPressSemanticIntent {
   CursorMove,
@@ -59,7 +59,7 @@ internal class EditorLongPressSession {
     }
     context.effects.setScrollGestureLocked(true)
 
-    context.semantics.contextMenu.hide()
+    context.uiState.contextMenu.hide()
     context.semantics.magnifier.show(position)
     if (semanticIntent == EditorLongPressSemanticIntent.WordSelection) {
       context.semantics.selectionExpansion.awaitWordSelectionCommit(
@@ -100,7 +100,7 @@ internal class EditorLongPressSession {
         context = context,
       )
     }
-    val point = context.effects.resolvePoint(positionInNode = position) ?: return true
+    val point = context.geometry.resolvePoint(positionInNode = position) ?: return true
     if (point.page < 0) {
       return true
     }
@@ -135,10 +135,10 @@ internal class EditorLongPressSession {
     }
 
     val endedWord = isWordSelection
-    if (endedWord && context.semantics.cursorMove.hasRangeSelection(context.editor)) {
-      context.semantics.contextMenu.show(context.editor.state)
+    if (endedWord && !context.editor.selection.isCollapsed()) {
+      context.uiState.contextMenu.show(context.editor.state)
     } else if (endedWord) {
-      context.semantics.contextMenu.requestShowAfterSelectionCommit()
+      context.uiState.contextMenu.requestShowAfterSelectionCommit()
     }
     context.reduceMode(event)
     end()
@@ -174,7 +174,7 @@ internal class EditorLongPressSession {
       clickCount = 2,
       afterDispatch = {
         context.semantics.selectionExpansion.markWordSelectionCommitted()
-        context.semantics.contextMenu.showAfterSelectionCommitIfRequested(context.editor.state)
+        context.uiState.contextMenu.showAfterSelectionCommitIfRequested(context.editor.state)
       },
     )
   }

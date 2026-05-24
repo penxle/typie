@@ -1,6 +1,7 @@
 package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.EditorInteractionMode
@@ -8,7 +9,6 @@ import co.typie.editor.interaction.canApply
 import co.typie.editor.interaction.gestures.EditorTapGesture
 import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.semantics.dispatchSelectionExtension
-import co.typie.editor.interaction.semantics.hasRangeSelection
 
 private const val EditorDoubleTapDragStartThresholdPx = 4f
 
@@ -38,7 +38,7 @@ internal class EditorDoubleTapDragSession {
     tap.markTapDispatched()
     context.semantics.selectionExpansion.reset()
     context.semantics.selectionExpansion.awaitWordSelectionCommit()
-    context.semantics.contextMenu.hide()
+    context.uiState.contextMenu.hide()
     context.effects.setScrollGestureLocked(true)
     startPosition = position
     phase = EditorDoubleTapDragPhase.Pending
@@ -78,12 +78,12 @@ internal class EditorDoubleTapDragSession {
       if (context.mode.canApply(EditorInteractionEvent.DoubleTapDragEnd)) {
         context.reduceMode(EditorInteractionEvent.DoubleTapDragEnd)
       }
-      if (context.semantics.cursorMove.hasRangeSelection(context.editor)) {
-        context.semantics.contextMenu.show(context.editor.state)
+      if (!context.editor.selection.isCollapsed()) {
+        context.uiState.contextMenu.show(context.editor.state)
       }
     } else if (wasPending) {
-      if (context.semantics.cursorMove.hasRangeSelection(context.editor)) {
-        context.semantics.contextMenu.show(context.editor.state)
+      if (!context.editor.selection.isCollapsed()) {
+        context.uiState.contextMenu.show(context.editor.state)
       }
     }
     context.semantics.magnifier.hide()
@@ -94,8 +94,8 @@ internal class EditorDoubleTapDragSession {
     context.semantics.selectionExpansion.markWordSelectionCommitted()
     flushPendingSelectionExtension(context = context)
     if (!tap.hasActivePointer && !active) {
-      if (context.semantics.cursorMove.hasRangeSelection(context.editor)) {
-        context.semantics.contextMenu.show(context.editor.state)
+      if (!context.editor.selection.isCollapsed()) {
+        context.uiState.contextMenu.show(context.editor.state)
       }
       resetSelectionExtensionState(context = context)
     }
@@ -177,7 +177,7 @@ internal class EditorDoubleTapDragSession {
       dispatchPosition = position,
       context = context,
     )
-    val point = context.effects.resolvePoint(positionInNode = position) ?: return false
+    val point = context.geometry.resolvePoint(positionInNode = position) ?: return false
     val editor = context.editor
     val selectionContext = context.semantics.selectionExpansion.context(editor)
     if (selectionContext == null) {
