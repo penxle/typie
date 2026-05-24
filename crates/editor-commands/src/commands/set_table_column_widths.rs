@@ -23,7 +23,7 @@ pub fn set_table_column_widths(
     };
     let update_count = widths.len().min(n_cols);
     for row_id in &row_ids {
-        for col_idx in 0..update_count {
+        for (col_idx, &width) in widths.iter().enumerate().take(update_count) {
             let cell_id = {
                 let doc = tr.doc();
                 let row = doc
@@ -34,8 +34,8 @@ pub fn set_table_column_widths(
                     .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
                     .id()
             };
-            let new_width = if widths[col_idx] > 0.0 {
-                Some(widths[col_idx] as u32)
+            let new_width = if width > 0.0 {
+                Some(width as u32)
             } else {
                 None
             };

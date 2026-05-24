@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn selection_op_unset_cascades_composition_pending_selection() {
-        let (initial, t1) = state! {
+        let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 3)
         };
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn selection_op_unset_undo_restores_all_three() {
-        let (initial, t1) = state! {
+        let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 3)
         };

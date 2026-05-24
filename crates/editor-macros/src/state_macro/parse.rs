@@ -76,11 +76,11 @@ impl Parse for StateInput {
 
 fn parse_selection(input: ParseStream) -> Result<SelectionExpr> {
     let fork = input.fork();
-    if let Ok(ident) = fork.parse::<Ident>() {
-        if ident == "none" {
-            input.parse::<Ident>()?;
-            return Ok(SelectionExpr::None);
-        }
+    if let Ok(ident) = fork.parse::<Ident>()
+        && ident == "none"
+    {
+        input.parse::<Ident>()?;
+        return Ok(SelectionExpr::None);
     }
 
     let anchor = parse_position(input)?;

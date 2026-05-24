@@ -1,4 +1,3 @@
-use editor_common::{Direction, Movement};
 use editor_macros::state;
 use editor_resource::RawTextReplacementRule;
 use editor_state::{Composition, DocFlatExt, assert_state_eq};
@@ -35,15 +34,6 @@ fn key(editor: &mut Editor, k: Key) {
         event: KeyEvent {
             key: k,
             modifiers: InputModifiers::default(),
-        },
-    });
-}
-
-fn move_grapheme(editor: &mut Editor, direction: Direction) {
-    editor.apply(Message::Navigation {
-        op: NavigationOp::Move {
-            movement: Movement::Grapheme { direction },
-            extend: false,
         },
     });
 }
@@ -166,7 +156,7 @@ fn multiline_substitute_creates_hard_break() {
 
 #[test]
 fn multiline_pattern_matches_across_hard_break() {
-    let (s, _, t1) = state! {
+    let (s, ..) = state! {
         doc {
             root {
                 _p1: paragraph {
@@ -295,7 +285,7 @@ fn cursor_movement_invalidates_restore() {
 
 #[test]
 fn multiline_replacement_restored_by_backspace() {
-    let (s, _, t1) = state! {
+    let (s, ..) = state! {
         doc {
             root {
                 _p1: paragraph {

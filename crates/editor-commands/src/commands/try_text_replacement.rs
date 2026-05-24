@@ -23,10 +23,7 @@ pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> Comman
     let mut replaced = false;
     let mut search_start_byte = 0usize;
 
-    loop {
-        let Some((_block_id, text_before)) = get_text_before_cursor(tr) else {
-            break;
-        };
+    while let Some((_block_id, text_before)) = get_text_before_cursor(tr) {
         if text_before.is_empty() {
             break;
         }
@@ -108,12 +105,13 @@ fn match_rule(
             }
             CompiledPattern::Regex(regex) => {
                 for caps in regex.captures_iter(text_before).flatten() {
-                    if let Some(m) = caps.get(0) {
-                        if m.end() == text_before.len() && m.start() >= search_start_byte {
-                            let matched_str = m.as_str().to_string();
-                            let expanded = expand_substitute(&caps, &rule.substitute);
-                            return Some((m.start(), matched_str, expanded, String::new()));
-                        }
+                    if let Some(m) = caps.get(0)
+                        && m.end() == text_before.len()
+                        && m.start() >= search_start_byte
+                    {
+                        let matched_str = m.as_str().to_string();
+                        let expanded = expand_substitute(&caps, &rule.substitute);
+                        return Some((m.start(), matched_str, expanded, String::new()));
                     }
                 }
             }
@@ -237,10 +235,8 @@ fn get_text_before_cursor(tr: &Transaction) -> Option<(NodeId, String)> {
                     text.push_str(&full);
                 }
             }
-            Node::HardBreak(_) => {
-                if i < cursor_index || cursor_offset > 0 {
-                    text.push('\n');
-                }
+            Node::HardBreak(_) if i < cursor_index || cursor_offset > 0 => {
+                text.push('\n');
             }
             _ => {}
         }

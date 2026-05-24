@@ -109,7 +109,7 @@ pub(crate) fn build_ruby_annotations_for_line(
         groups
             .iter()
             .enumerate()
-            .find(|(_, g)| g.node_ids.iter().any(|id| *id == node_id))
+            .find(|(_, g)| g.node_ids.contains(&node_id))
     };
 
     let mut i = 0;
@@ -594,7 +594,7 @@ mod build_tests {
         let out_a = build_ruby_annotations_for_line(
             &line_a,
             200.0,
-            &[group.clone()],
+            std::slice::from_ref(&group),
             &mut offsets,
             &mut res,
         );
