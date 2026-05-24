@@ -4,7 +4,7 @@ use editor_model::{
     PlainTextNode, Schema, Subtree,
 };
 use editor_state::{Affinity, Position, Selection};
-use editor_transaction::Transaction;
+use editor_transaction::{Transaction, fulfill};
 
 use crate::helpers::{insert_hard_break_at_caret, insert_text_at_caret};
 use crate::{CommandError, CommandResult};
@@ -117,9 +117,10 @@ fn coerce_fragment_for_parent(f: Fragment, parent_type: NodeType) -> Vec<Fragmen
     let f_spec = Schema::node_spec(f_type);
     let parent_spec = Schema::node_spec(parent_type);
 
-    // Textblock-in-textblock keeps its boundary so Case B can split the
-    // surrounding textblock around it instead of flattening to inline.
-    if parent_spec.is_textblock() && f_spec.is_textblock() {
+    // Block content inside a textblock parent (nested textblock, or a block
+    // leaf like Image/HorizontalRule) keeps its boundary so the textblock
+    // gets split around it instead of being recursively unwrapped to nothing.
+    if parent_spec.is_textblock() && (f_spec.is_textblock() || f_spec.is_leaf()) && !f_spec.inline {
         return vec![f];
     }
     // Inline content reaches the inline insertion path as-is.
@@ -410,21 +411,40 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
         );
     }
 
-    let textblock_empty_after = tr
-        .doc()
-        .node(textblock_id)
-        .map(|n| n.children().count() == 0)
-        .unwrap_or(false);
-    if textblock_empty_after {
+    // Drop the split halves when they're empty AND the container's schema
+    // still accepts the remaining children without them — for example a Root
+    // requiring a trailing Paragraph keeps p2 when no other textblock follows
+    // the inserted blocks. fulfill below then patches any leftover gaps the
+    // insertion or removal couldn't repair locally.
+    let safe_to_remove = |tr: &Transaction, target: NodeId| -> bool {
+        let doc = tr.doc();
+        let Some(target_node) = doc.node(target) else {
+            return false;
+        };
+        if target_node.children().count() != 0 {
+            return false;
+        }
+        let Some(container) = doc.node(container_id) else {
+            return false;
+        };
+        let remaining: Vec<NodeType> = container
+            .children()
+            .filter(|c| c.id() != target)
+            .map(|c| c.as_type())
+            .collect();
+        container.spec().content.validate(&remaining).is_ok()
+    };
+
+    if safe_to_remove(tr, textblock_id) {
         tr.remove_subtree(textblock_id)?;
     }
-    let p2_empty_after = tr
-        .doc()
-        .node(p2_id)
-        .map(|n| n.children().count() == 0)
-        .unwrap_or(false);
-    if p2_empty_after {
+    if safe_to_remove(tr, p2_id) {
         tr.remove_subtree(p2_id)?;
+    }
+
+    if let Some(container) = tr.doc().node(container_id) {
+        let steps = fulfill(&container);
+        tr.apply_steps(steps)?;
     }
 
     let final_pos = match last_caret {
@@ -865,6 +885,61 @@ mod tests {
                 paragraph { t2: text("second World") }
             } }
             selection: (t2, 6)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_image_at_text_middle_splits_paragraph_and_inserts() {
+        use editor_model::PlainImageNode;
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 3)
+        };
+        let slice = Slice {
+            fragment: Fragment {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: vec![],
+                children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
+            },
+            open_start: 0,
+            open_end: 0,
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("hel") }
+                img: image
+                paragraph { text("lo") }
+            } }
+            selection: (img, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_image_into_empty_paragraph_replaces_it() {
+        use editor_model::PlainImageNode;
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        let slice = Slice {
+            fragment: Fragment {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: vec![],
+                children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
+            },
+            open_start: 0,
+            open_end: 0,
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
+        let (expected, ..) = state! {
+            doc { root {
+                img: image
+                paragraph {}
+            } }
+            selection: (img, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

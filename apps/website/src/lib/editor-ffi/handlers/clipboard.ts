@@ -40,10 +40,10 @@ export const handleCut: EditorEventHandler<HTMLInputElement, ClipboardEvent> = (
 };
 
 export const handlePaste: EditorEventHandler<HTMLInputElement, ClipboardEvent> = (editor, e) => {
-  const text = e.clipboardData?.getData('text/plain') || undefined;
+  const text = e.clipboardData?.getData('text/plain') ?? '';
   const html = e.clipboardData?.getData('text/html') || undefined;
 
-  if (!text) {
+  if (!text && !html) {
     return;
   }
 
