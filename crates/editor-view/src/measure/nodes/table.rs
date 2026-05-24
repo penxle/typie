@@ -5,6 +5,7 @@ use editor_common::EdgeInsets;
 use crate::style::Alignment as LayoutAlignment;
 use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
 
+use crate::TableLayoutInfo;
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
@@ -162,6 +163,7 @@ pub fn measure_table(
                     decorations: vec![],
                     monolithic: node.spec().monolithic,
                 },
+                table_info: None,
                 children: vec![],
             }),
         };
@@ -251,6 +253,7 @@ pub fn measure_table(
                     decorations: vec![],
                     monolithic: row.spec().monolithic,
                 },
+                table_info: None,
                 children: row_children,
             }),
         };
@@ -259,13 +262,11 @@ pub fn measure_table(
     }
 
     let row_count = row_measurements.len();
-    let row_inner_heights_sum: f32 = row_measurements
+    let table_row_inner_heights: Vec<f32> = row_measurements
         .iter()
-        .map(|rm| {
-            // row_inner_height = max_cell_height - 2 * TABLE_BORDER_WIDTH
-            rm.height - 2.0 * TABLE_BORDER_WIDTH
-        })
-        .sum();
+        .map(|rm| (rm.height - 2.0 * TABLE_BORDER_WIDTH).max(0.0))
+        .collect();
+    let row_inner_heights_sum: f32 = table_row_inner_heights.iter().sum();
     let collapsed_height = (row_count + 1) as f32 * TABLE_BORDER_WIDTH + row_inner_heights_sum;
 
     let align = node
@@ -297,6 +298,10 @@ pub fn measure_table(
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
+            table_info: Some(Box::new(TableLayoutInfo {
+                col_inner_widths: col_widths,
+                row_inner_heights: table_row_inner_heights,
+            })),
             children: row_measurements,
         }),
     }
@@ -459,5 +464,81 @@ mod tests {
     fn zero_columns() {
         let widths = calculate_col_widths(0, None, 500.0);
         assert!(widths.is_empty());
+    }
+
+    #[test]
+    fn table_col_inner_widths_len_matches_col_count() {
+        let (doc, t1) = doc! {
+            root {
+                t1: table {
+                    table_row {
+                        table_cell { paragraph { text("A") } }
+                        table_cell { paragraph { text("B") } }
+                        table_cell { paragraph { text("C") } }
+                    }
+                }
+            }
+        };
+
+        let node = doc.node(t1).unwrap();
+        let mut measurer = Measurer::new_test();
+        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
+
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!()
+        };
+        let info = b.table_info.as_ref().expect("table_info must be set");
+        assert_eq!(info.col_inner_widths.len(), 3);
+    }
+
+    #[test]
+    fn table_row_inner_heights_len_matches_row_count() {
+        let (doc, t1) = doc! {
+            root {
+                t1: table {
+                    table_row { table_cell { paragraph { text("A") } } }
+                    table_row { table_cell { paragraph { text("B") } } }
+                    table_row { table_cell { paragraph { text("C") } } }
+                }
+            }
+        };
+
+        let node = doc.node(t1).unwrap();
+        let mut measurer = Measurer::new_test();
+        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
+
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!()
+        };
+        let info = b.table_info.as_ref().expect("table_info must be set");
+        assert_eq!(info.row_inner_heights.len(), 3);
+    }
+
+    #[test]
+    fn table_col_inner_widths_sum_equals_available_width() {
+        let (doc, t1) = doc! {
+            root {
+                t1: table {
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                }
+            }
+        };
+
+        let node = doc.node(t1).unwrap();
+        let mut measurer = Measurer::new_test();
+        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
+
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!()
+        };
+        let info = b.table_info.as_ref().expect("table_info must be set");
+        let col_count = info.col_inner_widths.len();
+        assert_eq!(col_count, 2);
+        let expected_available = result.width - (col_count + 1) as f32 * TABLE_BORDER_WIDTH;
+        let actual_sum: f32 = info.col_inner_widths.iter().sum();
+        assert!((actual_sum - expected_available).abs() < 0.01);
     }
 }

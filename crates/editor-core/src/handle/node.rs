@@ -31,8 +31,8 @@ pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError
                 commands::move_table_axis(tr, id, axis, from, to)?;
                 Ok(())
             }
-            TableOp::SelectAxis { axis } => {
-                commands::select_table_axis(tr, id, axis)?;
+            TableOp::SelectAxis { axis, index } => {
+                commands::select_table_axis(tr, id, axis, index)?;
                 Ok(())
             }
             TableOp::SetColumnWidths { widths } => {
@@ -45,6 +45,14 @@ pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError
             }
             TableOp::SetProportion { proportion } => {
                 commands::set_table_proportion(tr, id, proportion)?;
+                Ok(())
+            }
+            TableOp::SetAxisBackgroundColor { axis, index, color } => {
+                commands::set_table_axis_background_color(tr, id, axis, index, color)?;
+                Ok(())
+            }
+            TableOp::SetCellSelectionBackgroundColor { color } => {
+                commands::set_table_cell_selection_background_color(tr, id, color)?;
                 Ok(())
             }
         },

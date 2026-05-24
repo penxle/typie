@@ -1,7 +1,8 @@
-use editor_model::{Node, NodeId, Schema};
+use editor_model::{Doc, Node, NodeId, Schema};
 use editor_state::{
-    Affinity, GapCursor, Position, ResolvedPosition, Selection, farther_endpoint,
-    gap_cursor_selection_between, gap_cursor_selection_leading,
+    Affinity, GapCursor, Position, ResolvedPosition, Selection, cell_rect_selection,
+    enclosing_table_cell, farther_endpoint, gap_cursor_selection_between,
+    gap_cursor_selection_leading,
 };
 use editor_transaction::HistoryMeta;
 
@@ -233,8 +234,72 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 }
             }
 
+            if extend {
+                let is_cell_movement = matches!(
+                    movement,
+                    Movement::Grapheme { .. }
+                        | Movement::Line {
+                            axis: Axis::Vertical,
+                            ..
+                        }
+                );
+                if is_cell_movement {
+                    let doc = &editor.state.doc;
+                    if let Some(rect) = selection.resolve(doc).and_then(|rs| rs.as_cell_rect()) {
+                        let anchor_cell_id = rect.anchor_cell.id();
+                        let head_cell_id = rect.head_cell.id();
+                        let is_vertical = matches!(movement, Movement::Line { .. });
+                        let new_head_cell_id = step_cell(doc, head_cell_id, backward, is_vertical)
+                            .unwrap_or(head_cell_id);
+                        if let Some(new_sel) =
+                            cell_rect_selection(doc, anchor_cell_id, new_head_cell_id)
+                        {
+                            editor.transact(|tr| {
+                                tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                                tr.set_selection(Some(new_sel))?;
+                                Ok(())
+                            })?;
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+
             let new_selection = editor.resolve_movement(&selection.head, &movement);
             if let Some(new_selection) = new_selection {
+                if extend {
+                    let is_cell_movement = matches!(
+                        movement,
+                        Movement::Grapheme { .. }
+                            | Movement::Line {
+                                axis: Axis::Vertical,
+                                ..
+                            }
+                    );
+                    if is_cell_movement {
+                        let doc = &editor.state.doc;
+                        if let Some(current_cell) =
+                            enclosing_table_cell(doc, selection.head.node_id)
+                        {
+                            let stays_in_cell =
+                                enclosing_table_cell(doc, new_selection.head.node_id)
+                                    == Some(current_cell);
+                            if !stays_in_cell {
+                                if let Some(cell_sel) =
+                                    cell_rect_selection(doc, current_cell, current_cell)
+                                {
+                                    editor.transact(|tr| {
+                                        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                                        tr.set_selection(Some(cell_sel))?;
+                                        Ok(())
+                                    })?;
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let final_selection = if extend {
                     let doc = &editor.state.doc;
                     let fixed = if selection.is_unit_node_selection(doc) {
@@ -501,6 +566,30 @@ fn exit_into_or_node_select(
         Selection::new(back, front)
     } else {
         Selection::new(front, back)
+    }
+}
+
+fn step_cell(doc: &Doc, cell_id: NodeId, backward: bool, vertical: bool) -> Option<NodeId> {
+    let cell = doc.node(cell_id)?;
+    let row = cell.parent()?;
+    let col = cell.index()?;
+    if vertical {
+        let table = row.parent()?;
+        let row_idx = row.index()?;
+        let new_row_idx = if backward {
+            row_idx.checked_sub(1)?
+        } else {
+            row_idx + 1
+        };
+        let new_row = table.children().nth(new_row_idx)?;
+        Some(new_row.children().nth(col)?.id())
+    } else {
+        let new_col = if backward {
+            col.checked_sub(1)?
+        } else {
+            col + 1
+        };
+        Some(row.children().nth(new_col)?.id())
     }
 }
 

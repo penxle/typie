@@ -6,6 +6,7 @@ use editor_state::{Position, ResolvedSelection, Selection};
 use std::sync::{Arc, Mutex};
 
 use crate::ExternalElement;
+use crate::TableOverlay;
 use crate::measure::text::resolve::resolve_text_style;
 use crate::measure::text::strut::compute_strut;
 use crate::measure::{MeasuredTree, Measurer};
@@ -29,6 +30,7 @@ pub struct View {
 struct LayoutResult {
     tree: LayoutTree,
     pages: Vec<LayoutPage>,
+    content_width: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -187,7 +189,11 @@ impl View {
 
         let (tree, pages) = paginator.paginate(measured_tree);
 
-        self.layout = Some(LayoutResult { tree, pages });
+        self.layout = Some(LayoutResult {
+            tree,
+            pages,
+            content_width,
+        });
     }
 
     pub fn visit_page(&self, page_idx: usize, visitor: &mut impl query::PageVisitor) {
@@ -379,6 +385,19 @@ impl View {
             return Vec::new();
         };
         crate::external::external_elements(&result.tree, &result.pages, doc, selection)
+    }
+
+    pub fn table_overlays(&self, doc: &Doc, selection: Option<&Selection>) -> Vec<TableOverlay> {
+        let Some(ref result) = self.layout else {
+            return vec![];
+        };
+        crate::table_overlay::table_overlays(
+            &result.tree,
+            &result.pages,
+            doc,
+            selection,
+            result.content_width,
+        )
     }
 
     pub fn viewport(&self) -> &Viewport {

@@ -425,6 +425,7 @@ mod tests {
                 content: LayoutContent::Box(LayoutBox {
                     node_id: NodeId::new(),
                     style: make_box_style(),
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
                         content: LayoutContent::Line(line),
@@ -433,6 +434,366 @@ mod tests {
                 }),
             },
         }
+    }
+
+    #[test]
+    fn select_paragraph_at_selects_full_paragraph() {
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let n = "hello world".chars().count();
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: para_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(
+                    text_id,
+                    0,
+                    "hello world",
+                    0.0,
+                    gs(n),
+                )],
+                ruby_annotations: vec![],
+                text_indent: 0.0,
+                child_range: None,
+            }),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: para_id,
+                    style: make_box_style(),
+                    table_info: None,
+                    children: vec![line_node],
+                    nav: None,
+                }),
+            },
+        };
+        let pos = Position::new(text_id, 3);
+
+        let sel = select_paragraph_at(&tree, &pos).unwrap();
+        assert_eq!(sel.anchor, Position::new(text_id, 0));
+        assert_eq!(sel.head.node_id, text_id);
+        assert_eq!(sel.head.offset, 11);
+    }
+
+    #[test]
+    fn select_word_at_middle_of_word() {
+        let (doc, id) = doc! { root { paragraph { id: text("hello world") } } };
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(make_line(id, "hello world")),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    table_info: None,
+                    children: vec![line_node],
+                    nav: None,
+                }),
+            },
+        };
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(id, 2).resolve(&doc).unwrap(); // "he|llo world"
+
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
+        assert_eq!(sel.anchor, Position::new(id, 0));
+        assert_eq!(sel.head.node_id, id);
+        assert!(sel.head.offset > 0 && sel.head.offset <= 5);
+    }
+
+    #[test]
+    fn select_word_at_word_boundary() {
+        let (doc, id) = doc! { root { paragraph { id: text("hello world") } } };
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(make_line(id, "hello world")),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    table_info: None,
+                    children: vec![line_node],
+                    nav: None,
+                }),
+            },
+        };
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(id, 5).resolve(&doc).unwrap(); // "hello| world"
+
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
+        assert_ne!(sel.anchor, sel.head);
+    }
+
+    #[test]
+    fn select_word_at_end_of_word() {
+        let (doc, id) = doc! { root { paragraph { id: text("hello world") } } };
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(make_line(id, "hello world")),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    table_info: None,
+                    children: vec![line_node],
+                    nav: None,
+                }),
+            },
+        };
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(id, 11).resolve(&doc).unwrap(); // "hello world|"
+
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
+        assert_eq!(sel.anchor.node_id, id);
+        assert!(sel.anchor.offset >= 6);
+        assert_eq!(sel.head.node_id, id);
+        assert_eq!(sel.head.offset, 11);
+        assert_ne!(sel.anchor, sel.head);
+    }
+
+    use std::ops::Range;
+
+    fn make_empty_line_node(para_id: NodeId, y: f32, child_range: Range<usize>) -> LayoutNode {
+        LayoutNode {
+            rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: para_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![],
+                ruby_annotations: vec![],
+                text_indent: 0.0,
+                child_range: Some(child_range),
+            }),
+        }
+    }
+
+    fn make_text_line_node(
+        para_id: NodeId,
+        text_id: NodeId,
+        y: f32,
+        text: &str,
+        child_range: Range<usize>,
+    ) -> LayoutNode {
+        let advances: Vec<crate::glyph_run::GraphemeSpan> = text
+            .chars()
+            .map(|_| crate::glyph_run::GraphemeSpan {
+                advance: 10.0,
+                codepoints: 1,
+            })
+            .collect();
+        LayoutNode {
+            rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: para_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(text_id, 0, text, 0.0, advances)],
+                ruby_annotations: vec![],
+                text_indent: 0.0,
+                child_range: Some(child_range),
+            }),
+        }
+    }
+
+    #[test]
+    fn select_word_at_on_trailing_empty_hard_break_line_collapses() {
+        use editor_macros::doc;
+        let (doc_, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
+        let t1 = doc_.node(p1).unwrap().children().next().unwrap().id();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: LayoutDirection::Vertical,
+                        padding: editor_common::EdgeInsets::ZERO,
+                        border: editor_common::EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                        monolithic: false,
+                    },
+                    table_info: None,
+                    children: vec![
+                        make_text_line_node(p1, t1, 0.0, "a", 0..2),
+                        make_empty_line_node(p1, 20.0, 2..2),
+                    ],
+                    nav: None,
+                }),
+            },
+        };
+        let resource = editor_resource::Resource::new_test();
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 2,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let resolved = pos.resolve(&doc_).unwrap();
+        let sel = select_word_at(&tree, &resolved, &resource.segmenters).unwrap();
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, p1);
+        assert_eq!(sel.head.offset, 2);
+    }
+
+    #[test]
+    fn select_word_at_between_consecutive_hard_breaks_selects_the_hard_break() {
+        use editor_macros::doc;
+        let (doc_, p1) = doc! {
+            root { p1: paragraph { text("a") hard_break hard_break text("b") } }
+        };
+        let children: Vec<_> = doc_.node(p1).unwrap().children().collect();
+        let t_a = children[0].id();
+        let t_b = children[3].id();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 60.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: LayoutDirection::Vertical,
+                        padding: editor_common::EdgeInsets::ZERO,
+                        border: editor_common::EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                        monolithic: false,
+                    },
+                    table_info: None,
+                    children: vec![
+                        make_text_line_node(p1, t_a, 0.0, "a", 0..2),
+                        make_empty_line_node(p1, 20.0, 2..3),
+                        make_text_line_node(p1, t_b, 40.0, "b", 3..4),
+                    ],
+                    nav: None,
+                }),
+            },
+        };
+        let resource = editor_resource::Resource::new_test();
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 2,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let resolved = pos.resolve(&doc_).unwrap();
+        let sel = select_word_at(&tree, &resolved, &resource.segmenters).unwrap();
+        assert!(!sel.is_collapsed());
+        assert_eq!(sel.anchor.node_id, p1);
+        assert_eq!(sel.anchor.offset, 2);
+        assert_eq!(sel.head.node_id, p1);
+        assert_eq!(sel.head.offset, 3);
+    }
+
+    #[test]
+    fn select_word_at_on_empty_text_paragraph_selects_paragraph_as_unit() {
+        use editor_macros::doc;
+        let (doc_, p1) = doc! { root { p1: paragraph { text("") } } };
+        let root_id = doc_.root().unwrap().id();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: root_id,
+                    style: BoxStyle {
+                        direction: LayoutDirection::Vertical,
+                        padding: editor_common::EdgeInsets::ZERO,
+                        border: editor_common::EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                        monolithic: false,
+                    },
+                    table_info: None,
+                    children: vec![make_empty_line_node(p1, 0.0, 0..1)],
+                    nav: None,
+                }),
+            },
+        };
+        let resource = editor_resource::Resource::new_test();
+        let pos = editor_state::Position {
+            node_id: p1,
+            offset: 0,
+            affinity: editor_state::Affinity::Downstream,
+        };
+        let resolved = pos.resolve(&doc_).unwrap();
+        let sel = select_word_at(&tree, &resolved, &resource.segmenters).unwrap();
+        assert!(
+            !sel.is_collapsed(),
+            "expected non-collapsed paragraph selection"
+        );
+        assert_eq!(sel.anchor.node_id, root_id);
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.node_id, root_id);
+        assert_eq!(sel.head.offset, 1);
+    }
+
+    #[test]
+    fn select_word_at_empty_line() {
+        let (doc, p1, ..) = doc! {
+            root {
+                p1: paragraph {}
+            }
+        };
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 100.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: p1,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![],
+                ruby_annotations: vec![],
+                text_indent: 0.0,
+                child_range: Some(0..0),
+            }),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 100.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::ROOT,
+                    style: make_box_style(),
+                    table_info: None,
+                    children: vec![line_node],
+                    nav: None,
+                }),
+            },
+        };
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(p1, 0).resolve(&doc).unwrap();
+
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
+        assert_eq!(sel.anchor.node_id, NodeId::ROOT);
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(sel.head.offset, 1);
     }
 
     #[test]
@@ -459,6 +820,7 @@ mod tests {
                 content: LayoutContent::Box(LayoutBox {
                     node_id: NodeId::new(),
                     style: make_box_style(),
+                    table_info: None,
                     children: vec![line, atom],
                     nav: None,
                 }),
@@ -514,6 +876,7 @@ mod tests {
                 content: LayoutContent::Box(LayoutBox {
                     node_id: NodeId::new(),
                     style: make_box_style(),
+                    table_info: None,
                     children: vec![atom, line],
                     nav: None,
                 }),

@@ -749,6 +749,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
+                table_info: None,
                 children,
                 nav: None,
             }),

@@ -1,6 +1,7 @@
 use editor_common::Rect;
 use editor_model::NodeId;
 
+use crate::TableLayoutInfo;
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::page::LayoutPage;
 use crate::paginate::*;
@@ -28,6 +29,7 @@ pub trait PageVisitor {
         local_rect: Rect,
         style: &BoxStyle,
         edges: Edges<bool>,
+        table_info: Option<&TableLayoutInfo>,
     );
     fn box_exit(&mut self);
     fn line(
@@ -71,7 +73,13 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
                 right: true,
             };
 
-            visitor.box_enter(b.node_id, local_rect, &b.style, edges);
+            visitor.box_enter(
+                b.node_id,
+                local_rect,
+                &b.style,
+                edges,
+                b.table_info.as_deref(),
+            );
 
             for dec in &b.style.decorations {
                 let dec_abs_y = node_top + dec.rect.y;
@@ -150,7 +158,14 @@ mod tests {
     }
 
     impl PageVisitor for MockVisitor {
-        fn box_enter(&mut self, _: NodeId, _: Rect, _: &BoxStyle, edges: Edges<bool>) {
+        fn box_enter(
+            &mut self,
+            _: NodeId,
+            _: Rect,
+            _: &BoxStyle,
+            edges: Edges<bool>,
+            _: Option<&TableLayoutInfo>,
+        ) {
             self.box_enter_count += 1;
             self.last_edges = Some(edges);
         }
@@ -219,6 +234,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
+                table_info: None,
                 children,
                 nav: None,
             }),

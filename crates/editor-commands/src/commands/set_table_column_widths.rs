@@ -29,10 +29,11 @@ pub fn set_table_column_widths(
                 let row = doc
                     .node(*row_id)
                     .ok_or(CommandError::NodeNotFound(*row_id))?;
-                row.children()
+                let cell = row
+                    .children()
                     .nth(col_idx)
-                    .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
-                    .id()
+                    .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?;
+                cell.id()
             };
             let new_width = if width > 0.0 {
                 Some(width as u32)
@@ -43,6 +44,7 @@ pub fn set_table_column_widths(
                 cell_id,
                 PlainNode::TableCell(PlainTableCellNode {
                     col_width: new_width,
+                    background_color: None,
                 }),
             )?;
         }

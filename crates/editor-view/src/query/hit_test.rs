@@ -1,5 +1,4 @@
 use editor_common::Rect;
-
 use editor_state::{Affinity, Position, Selection};
 
 use crate::page::LayoutPage;
@@ -359,6 +358,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
+                table_info: None,
                 children,
                 nav: None,
             }),
@@ -580,6 +580,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: true,
                 },
+                table_info: None,
                 children: vec![line],
                 nav: None,
             }),
@@ -700,6 +701,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![
                         LayoutNode {
                             rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),

@@ -192,6 +192,19 @@ impl Editor {
         })
     }
 
+    pub fn table_overlays(&self) -> EditorResult<Vec<Complex<editor_view::TableOverlay>>> {
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .view()
+                .table_overlays(
+                    &inner.editor.state().doc,
+                    inner.editor.state().selection.as_ref(),
+                )
+                .into_ffi()?)
+        })
+    }
+
     pub fn ime(
         &self,
         before_limit: usize,

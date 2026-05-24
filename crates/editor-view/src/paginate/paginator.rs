@@ -241,6 +241,7 @@ impl Paginator {
             content: LayoutContent::Box(LayoutBox {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
+                table_info: measured.table_info.clone(),
                 children,
                 nav: None,
             }),
@@ -294,6 +295,7 @@ impl Paginator {
             content: LayoutContent::Box(LayoutBox {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
+                table_info: measured.table_info.clone(),
                 children,
                 nav: None,
             }),
@@ -493,6 +495,7 @@ fn place_node_at(
                 content: LayoutContent::Box(LayoutBox {
                     node_id: b.node_id,
                     style: b.style.clone(),
+                    table_info: b.table_info.clone(),
                     children,
                     nav: if b.style.monolithic {
                         Some(NavUnit {
@@ -588,6 +591,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
+                table_info: None,
                 children,
             }),
         }
@@ -765,6 +769,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
+                table_info: None,
                 children: vec![make_line(20.0)],
             }),
         });
@@ -784,6 +789,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
+                table_info: None,
                 children: vec![inner],
             }),
         };

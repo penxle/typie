@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { Icon, Menu } from '@typie/ui/components';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import FilePlusIcon from '~icons/lucide/file-plus';
   import FileUpIcon from '~icons/lucide/file-up';
@@ -11,6 +12,7 @@
   import QuoteIcon from '~icons/lucide/quote';
   import ScissorsIcon from '~icons/lucide/scissors';
   import TableIcon from '~icons/lucide/table';
+  import TableSizeSelector from '$lib/components/editor/toolbar/TableSizeSelector.svelte';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import type { BlockquoteVariant, CalloutVariant, Fragment, HorizontalRuleVariant, Message } from '@typie/editor-ffi/browser';
@@ -157,45 +159,45 @@
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
   <ToolbarButton icon={ChevronsDownUpIcon} label="접기" onclick={() => enqueue(insertFragment({ node: { type: 'fold' } }))} />
-  <ToolbarButton
-    icon={TableIcon}
-    label="표"
-    onclick={() =>
-      enqueue(
-        insertFragment({
-          node: { type: 'table' },
-          children: [
-            {
-              node: { type: 'table_row' },
-              children: [
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-              ],
-            },
-            {
-              node: { type: 'table_row' },
-              children: [
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-              ],
-            },
-            {
-              node: { type: 'table_row' },
-              children: [
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-                { node: { type: 'table_cell', col_width: undefined }, children: [{ node: { type: 'paragraph' } }] },
-              ],
-            },
-          ],
-        }),
-      )}
-  />
+  <Menu
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      size: '28px',
+      borderRadius: '4px',
+      borderWidth: '1px',
+      borderColor: 'transparent',
+      cursor: 'pointer',
+      color: 'text.subtle',
+      _hover: { backgroundColor: 'surface.muted' },
+    }}
+    offset={4}
+    placement="bottom-start"
+  >
+    {#snippet button()}
+      <Icon icon={TableIcon} size={16} />
+    {/snippet}
+    {#snippet children({ close })}
+      <TableSizeSelector
+        onSelect={(rows, cols) => {
+          close();
+          enqueue(
+            insertFragment({
+              node: { type: 'table' },
+              children: Array.from({ length: rows }, () => ({
+                node: { type: 'table_row' },
+                children: Array.from({ length: cols }, () => ({
+                  node: { type: 'table_cell', col_width: undefined, background_color: undefined },
+                  children: [{ node: { type: 'paragraph' } }],
+                })),
+              })),
+            }),
+          );
+        }}
+      />
+    {/snippet}
+  </Menu>
   <ToolbarButton icon={ListIcon} label="순서 없는 목록" onclick={() => enqueue(insertFragment({ node: { type: 'bullet_list' } }))} />
   <ToolbarButton
     icon={ListOrderedIcon}

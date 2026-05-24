@@ -175,7 +175,7 @@ impl Default for SchemaInner {
                     ..Default::default()
                 },
                 ModifierType::BackgroundColor => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text | TableCell),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },

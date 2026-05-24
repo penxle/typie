@@ -1,9 +1,9 @@
 use editor_common::Rect;
-use editor_model::{Doc, Node, NodeId};
+use editor_model::{Doc, Modifier, Node, NodeId, TableBorderStyle};
 use editor_resource::Resource;
 use editor_view::glyph_run::RubyAnnotation;
-use editor_view::style::{BoxStyle, DecorationData};
-use editor_view::{Edges, LineMetrics, PageRect, PageVisitor};
+use editor_view::style::{BorderMode, BoxStyle, DecorationData};
+use editor_view::{Edges, LineMetrics, PageRect, PageVisitor, TableLayoutInfo};
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{Content, GlyphCache, ScaleContext};
@@ -498,8 +498,10 @@ impl Renderer {
 struct BoxFrame {
     local_rect: Rect,
     border: editor_common::EdgeInsets,
+    border_mode: BorderMode,
     edges: Edges<bool>,
     node: Option<Node>,
+    table_info: Option<TableLayoutInfo>,
 }
 
 pub struct RenderVisitor<'a> {
@@ -660,6 +662,99 @@ impl<'a> RenderVisitor<'a> {
     }
 }
 
+const TABLE_BORDER_WIDTH: f32 = 1.0;
+
+fn draw_table_grid(
+    sink: &mut dyn RenderSink,
+    border_style: TableBorderStyle,
+    col_widths: &[f32],
+    row_heights: &[f32],
+    table_rect: Rect,
+    color: Color,
+    t: Transform,
+) {
+    let bw = TABLE_BORDER_WIDTH;
+    let table_w = table_rect.width;
+    let table_h = table_rect.height;
+
+    let mut x_positions: Vec<f32> = Vec::with_capacity(col_widths.len() + 1);
+    let mut x = 0.0_f32;
+    x_positions.push(x);
+    for &cw in col_widths {
+        x += bw + cw;
+        x_positions.push(x);
+    }
+
+    let mut y_positions: Vec<f32> = Vec::with_capacity(row_heights.len() + 1);
+    let mut y = 0.0_f32;
+    y_positions.push(y);
+    for &rh in row_heights {
+        y += bw + rh;
+        y_positions.push(y);
+    }
+
+    match border_style {
+        TableBorderStyle::Dashed => {
+            let dash = 6.0_f32;
+            let gap = 4.0_f32;
+            let period = dash + gap;
+            for &x_pos in &x_positions {
+                let mut y0 = 0.0_f32;
+                while y0 < table_h {
+                    let h = dash.min(table_h - y0);
+                    sink.fill_path(&Path::rect(Rect::from_xywh(x_pos, y0, bw, h)), color, t);
+                    y0 += period;
+                }
+            }
+            for &y_pos in &y_positions {
+                let mut x0 = 0.0_f32;
+                while x0 < table_w {
+                    let w = dash.min(table_w - x0);
+                    sink.fill_path(&Path::rect(Rect::from_xywh(x0, y_pos, w, bw)), color, t);
+                    x0 += period;
+                }
+            }
+        }
+        TableBorderStyle::Dotted => {
+            let dot = 2.0_f32;
+            let gap = 2.0_f32;
+            let period = dot + gap;
+            for &x_pos in &x_positions {
+                let mut y0 = 0.0_f32;
+                while y0 < table_h {
+                    let h = dot.min(table_h - y0);
+                    sink.fill_path(&Path::rect(Rect::from_xywh(x_pos, y0, bw, h)), color, t);
+                    y0 += period;
+                }
+            }
+            for &y_pos in &y_positions {
+                let mut x0 = 0.0_f32;
+                while x0 < table_w {
+                    let w = dot.min(table_w - x0);
+                    sink.fill_path(&Path::rect(Rect::from_xywh(x0, y_pos, w, bw)), color, t);
+                    x0 += period;
+                }
+            }
+        }
+        _ => {
+            for &x_pos in &x_positions {
+                sink.fill_path(
+                    &Path::rect(Rect::from_xywh(x_pos, 0.0, bw, table_h)),
+                    color,
+                    t,
+                );
+            }
+            for &y_pos in &y_positions {
+                sink.fill_path(
+                    &Path::rect(Rect::from_xywh(0.0, y_pos, table_w, bw)),
+                    color,
+                    t,
+                );
+            }
+        }
+    }
+}
+
 impl<'a> PageVisitor for RenderVisitor<'a> {
     fn box_enter(
         &mut self,
@@ -667,6 +762,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         local_rect: Rect,
         style: &BoxStyle,
         edges: Edges<bool>,
+        table_info: Option<&TableLayoutInfo>,
     ) {
         let node = self.doc.node(node_id).map(|n| n.node().clone());
 
@@ -739,6 +835,21 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     let path = Path::rrect(inner_rect, radii);
                     self.sink.fill_path(&path, color, t);
                 }
+                Some(Node::TableCell(_)) => {
+                    let color_value = self.doc.node(node_id).and_then(|n| {
+                        n.explicit_modifiers().find_map(|m| match m {
+                            Modifier::BackgroundColor { value } => Some(value.clone()),
+                            _ => None,
+                        })
+                    });
+                    if let Some(ref color_value) = color_value {
+                        if color_value != "none" {
+                            let color = self.renderer.theme.color(&format!("bg.{color_value}"));
+                            let path = Path::rect(inner_rect);
+                            self.sink.fill_path(&path, color, t);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -746,8 +857,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         self.box_stack.push(BoxFrame {
             local_rect,
             border: style.border,
+            border_mode: style.border_mode,
             edges,
             node,
+            table_info: table_info.cloned(),
         });
     }
 
@@ -815,45 +928,74 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             return;
         }
 
-        let b = &frame.border;
+        // Table draws the complete grid; Row and Cell draw nothing.
+        if matches!(&frame.node, Some(Node::TableRow(_) | Node::TableCell(_))) {
+            return;
+        }
+        if let Some(Node::Table(table)) = &frame.node {
+            let border_style = *table.border_style.get();
+            if border_style != TableBorderStyle::None {
+                if let Some(ref info) = frame.table_info {
+                    let border_color = self.renderer.theme.color("ui.border.default");
+                    draw_table_grid(
+                        self.sink,
+                        border_style,
+                        &info.col_inner_widths,
+                        &info.row_inner_heights,
+                        frame.local_rect,
+                        border_color,
+                        t,
+                    );
+                }
+            }
+            return;
+        }
 
+        let b = &frame.border;
         let border_color = match &frame.node {
-            Some(Node::Blockquote(_)) => self.renderer.theme.color("ui.border.default"),
-            Some(Node::Table(_) | Node::TableRow(_) | Node::TableCell(_)) => {
+            Some(Node::Blockquote(_) | Node::FoldTitle(_)) => {
                 self.renderer.theme.color("ui.border.default")
             }
-            Some(Node::FoldTitle(_)) => self.renderer.theme.color("ui.border.default"),
             _ => self.renderer.theme.color("ui.border"),
         };
 
         if frame.edges.left && b.left > 0.0 {
-            let path = Path::rect(Rect::from_xywh(0.0, 0.0, b.left, frame.local_rect.height));
-            self.sink.fill_path(&path, border_color, t);
+            self.sink.fill_path(
+                &Path::rect(Rect::from_xywh(0.0, 0.0, b.left, frame.local_rect.height)),
+                border_color,
+                t,
+            );
         }
-
         if frame.edges.right && b.right > 0.0 {
-            let path = Path::rect(Rect::from_xywh(
-                frame.local_rect.width - b.right,
-                0.0,
-                b.right,
-                frame.local_rect.height,
-            ));
-            self.sink.fill_path(&path, border_color, t);
+            self.sink.fill_path(
+                &Path::rect(Rect::from_xywh(
+                    frame.local_rect.width - b.right,
+                    0.0,
+                    b.right,
+                    frame.local_rect.height,
+                )),
+                border_color,
+                t,
+            );
         }
-
         if frame.edges.top && b.top > 0.0 {
-            let path = Path::rect(Rect::from_xywh(0.0, 0.0, frame.local_rect.width, b.top));
-            self.sink.fill_path(&path, border_color, t);
+            self.sink.fill_path(
+                &Path::rect(Rect::from_xywh(0.0, 0.0, frame.local_rect.width, b.top)),
+                border_color,
+                t,
+            );
         }
-
         if frame.edges.bottom && b.bottom > 0.0 {
-            let path = Path::rect(Rect::from_xywh(
-                0.0,
-                frame.local_rect.height - b.bottom,
-                frame.local_rect.width,
-                b.bottom,
-            ));
-            self.sink.fill_path(&path, border_color, t);
+            self.sink.fill_path(
+                &Path::rect(Rect::from_xywh(
+                    0.0,
+                    frame.local_rect.height - b.bottom,
+                    frame.local_rect.width,
+                    b.bottom,
+                )),
+                border_color,
+                t,
+            );
         }
     }
 
@@ -1531,6 +1673,7 @@ mod tests {
                     left: true,
                     right: true,
                 },
+                None,
             );
             v.decoration(icon_rect, &DecorationData::Bool(true));
             v.box_exit();
@@ -1545,6 +1688,7 @@ mod tests {
                     left: true,
                     right: true,
                 },
+                None,
             );
             v.box_exit();
         }
@@ -1553,6 +1697,388 @@ mod tests {
         assert_eq!(
             muted_fills, 2,
             "fold title background must be painted on every page fragment, got {muted_fills}",
+        );
+    }
+
+    #[test]
+    fn table_solid_grid_draws_correct_line_count() {
+        use editor_common::EdgeInsets;
+        use editor_macros::doc;
+        use editor_view::TableLayoutInfo;
+        use editor_view::style::{Alignment, BorderMode, Direction};
+
+        #[derive(Default)]
+        struct FillCounter {
+            count: usize,
+        }
+        impl RenderSink for FillCounter {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
+                self.count += 1;
+            }
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+        }
+
+        let (doc, t1) = doc! {
+            root {
+                t1: table {
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                }
+            }
+        };
+
+        let style = BoxStyle {
+            direction: Direction::Vertical,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::all(1.0),
+            border_mode: BorderMode::Collapse,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![],
+            monolithic: false,
+        };
+        let table_info = TableLayoutInfo {
+            col_inner_widths: vec![100.0, 100.0],
+            row_inner_heights: vec![30.0, 30.0],
+        };
+
+        let mut renderer = Renderer::new(
+            ThemeVariant::LightWhite,
+            Arc::new(Mutex::new(Resource::new_test())),
+        );
+        let mut sink = FillCounter::default();
+        {
+            let mut v =
+                renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Border]));
+            v.box_enter(
+                t1,
+                Rect::from_xywh(0.0, 0.0, 203.0, 63.0),
+                &style,
+                Edges {
+                    top: true,
+                    bottom: true,
+                    left: true,
+                    right: true,
+                },
+                Some(&table_info),
+            );
+            v.box_exit();
+        }
+        assert_eq!(
+            sink.count, 6,
+            "solid 2×2 table should produce 6 fill_path calls, got {}",
+            sink.count
+        );
+    }
+
+    #[test]
+    fn table_none_border_draws_nothing() {
+        use editor_common::EdgeInsets;
+        use editor_macros::doc;
+        use editor_view::TableLayoutInfo;
+        use editor_view::style::{Alignment, BorderMode, Direction};
+
+        #[derive(Default)]
+        struct FillCounter {
+            count: usize,
+        }
+        impl RenderSink for FillCounter {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
+                self.count += 1;
+            }
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+        }
+
+        let (doc, t1) = doc! {
+            root {
+                t1: table(border_style: TableBorderStyle::None) {
+                    table_row { table_cell { paragraph } }
+                }
+            }
+        };
+
+        let style = BoxStyle {
+            direction: Direction::Vertical,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::all(1.0),
+            border_mode: BorderMode::Collapse,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![],
+            monolithic: false,
+        };
+        let table_info = TableLayoutInfo {
+            col_inner_widths: vec![100.0],
+            row_inner_heights: vec![30.0],
+        };
+
+        let mut renderer = Renderer::new(
+            ThemeVariant::LightWhite,
+            Arc::new(Mutex::new(Resource::new_test())),
+        );
+        let mut sink = FillCounter::default();
+        {
+            let mut v =
+                renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Border]));
+            v.box_enter(
+                t1,
+                Rect::from_xywh(0.0, 0.0, 102.0, 32.0),
+                &style,
+                Edges {
+                    top: true,
+                    bottom: true,
+                    left: true,
+                    right: true,
+                },
+                Some(&table_info),
+            );
+            v.box_exit();
+        }
+        assert_eq!(sink.count, 0, "TableBorderStyle::None must draw nothing");
+    }
+
+    #[test]
+    fn table_row_and_cell_draw_no_border() {
+        use editor_common::EdgeInsets;
+        use editor_macros::doc;
+        use editor_view::style::{Alignment, BorderMode, Direction};
+
+        #[derive(Default)]
+        struct FillCounter {
+            count: usize,
+        }
+        impl RenderSink for FillCounter {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
+                self.count += 1;
+            }
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+        }
+
+        let (doc, t1) = doc! {
+            root {
+                t1: table {
+                    table_row {
+                        table_cell { paragraph }
+                    }
+                }
+            }
+        };
+
+        let row_id = {
+            let node = doc.node(t1).unwrap();
+            node.children().next().unwrap().id()
+        };
+        let cell_id = {
+            let row = doc.node(row_id).unwrap();
+            row.children().next().unwrap().id()
+        };
+
+        let row_style = BoxStyle {
+            direction: Direction::Horizontal,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::all(1.0),
+            border_mode: BorderMode::Collapse,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![],
+            monolithic: false,
+        };
+        let cell_style = BoxStyle {
+            direction: Direction::Vertical,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::all(1.0),
+            border_mode: BorderMode::Collapse,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![],
+            monolithic: false,
+        };
+
+        let mut renderer = Renderer::new(
+            ThemeVariant::LightWhite,
+            Arc::new(Mutex::new(Resource::new_test())),
+        );
+        let mut sink = FillCounter::default();
+        {
+            let mut v =
+                renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Border]));
+            v.box_enter(
+                row_id,
+                Rect::from_xywh(0.0, 0.0, 102.0, 32.0),
+                &row_style,
+                Edges {
+                    top: true,
+                    bottom: true,
+                    left: true,
+                    right: true,
+                },
+                None,
+            );
+            v.box_exit();
+            v.box_enter(
+                cell_id,
+                Rect::from_xywh(0.0, 0.0, 100.0, 30.0),
+                &cell_style,
+                Edges {
+                    top: true,
+                    bottom: true,
+                    left: true,
+                    right: true,
+                },
+                None,
+            );
+            v.box_exit();
+        }
+        assert_eq!(
+            sink.count, 0,
+            "TableRow and TableCell box_exit must draw nothing"
+        );
+    }
+
+    #[test]
+    fn table_dashed_produces_more_draws_than_solid() {
+        use editor_common::EdgeInsets;
+        use editor_macros::doc;
+        use editor_view::TableLayoutInfo;
+        use editor_view::style::{Alignment, BorderMode, Direction};
+
+        #[derive(Default)]
+        struct FillCounter {
+            count: usize,
+        }
+        impl RenderSink for FillCounter {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
+                self.count += 1;
+            }
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+        }
+
+        let (doc_solid, t_solid) = doc! {
+            root {
+                t_solid: table {
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                }
+            }
+        };
+        let (doc_dashed, t_dashed) = doc! {
+            root {
+                t_dashed: table(border_style: TableBorderStyle::Dashed) {
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                }
+            }
+        };
+
+        let style = BoxStyle {
+            direction: Direction::Vertical,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::all(1.0),
+            border_mode: BorderMode::Collapse,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![],
+            monolithic: false,
+        };
+        let table_info = TableLayoutInfo {
+            col_inner_widths: vec![200.0, 200.0],
+            row_inner_heights: vec![100.0, 100.0],
+        };
+
+        let mut solid_sink = FillCounter::default();
+        let mut dashed_sink = FillCounter::default();
+
+        let mut renderer = Renderer::new(
+            ThemeVariant::LightWhite,
+            Arc::new(Mutex::new(Resource::new_test())),
+        );
+
+        {
+            let mut v = renderer.page_visitor(
+                &mut solid_sink,
+                &doc_solid,
+                1.0,
+                LayerSet::of(&[RenderLayer::Border]),
+            );
+            v.box_enter(
+                t_solid,
+                Rect::from_xywh(0.0, 0.0, 403.0, 203.0),
+                &style,
+                Edges {
+                    top: true,
+                    bottom: true,
+                    left: true,
+                    right: true,
+                },
+                Some(&table_info),
+            );
+            v.box_exit();
+        }
+        {
+            let mut v = renderer.page_visitor(
+                &mut dashed_sink,
+                &doc_dashed,
+                1.0,
+                LayerSet::of(&[RenderLayer::Border]),
+            );
+            v.box_enter(
+                t_dashed,
+                Rect::from_xywh(0.0, 0.0, 403.0, 203.0),
+                &style,
+                Edges {
+                    top: true,
+                    bottom: true,
+                    left: true,
+                    right: true,
+                },
+                Some(&table_info),
+            );
+            v.box_exit();
+        }
+
+        assert!(
+            dashed_sink.count > solid_sink.count,
+            "dashed ({}) should produce more fill_path calls than solid ({})",
+            dashed_sink.count,
+            solid_sink.count
         );
     }
 }

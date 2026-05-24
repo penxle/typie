@@ -411,6 +411,7 @@ export interface PlainRootNode {
 
 export interface PlainTableCellNode {
     col_width: number | undefined;
+    background_color: string | undefined;
 }
 
 export interface PlainTableNode {
@@ -450,6 +451,31 @@ export interface SelectionEndpoints {
 export interface Size {
     width: number;
     height: number;
+}
+
+export interface TableOverlay {
+    table_id: NodeId;
+    page_idx: number;
+    bounds: Rect;
+    border_style: TableBorderStyle;
+    align: Alignment;
+    proportion: number;
+    content_width: number;
+    col_widths_as_px: number[];
+    col_positions: number[];
+    row_heights: number[];
+    row_positions: number[];
+    row_background_colors: (string | undefined)[];
+    col_background_colors: (string | undefined)[];
+    is_focused: boolean;
+    focused_row_index: number | undefined;
+    focused_col_index: number | undefined;
+    is_cell_selection: boolean;
+    cell_selection_background_color: string | undefined;
+    cell_selection_row_start: number | undefined;
+    cell_selection_row_end: number | undefined;
+    cell_selection_col_start: number | undefined;
+    cell_selection_col_end: number | undefined;
 }
 
 export interface TextColorValue {
@@ -576,17 +602,17 @@ export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
 export type SelectionOp = { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
 
-export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "ime" | "modifiers" | "block";
+export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "ime" | "modifiers" | "block";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "set_theme_variant"; variant: ThemeVariant } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
-export type TableCellNodeAttr = { type: "col_width" } & number | undefined;
+export type TableCellNodeAttr = ({ type: "col_width" } & number | undefined) | ({ type: "background_color" } & string | undefined);
 
 export type TableNodeAttr = ({ type: "border_style" } & TableBorderStyle) | ({ type: "proportion" } & number);
 
-export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined } | { type: "set_column_widths"; widths: number[] } | { type: "set_border_style"; border_style: TableBorderStyle } | { type: "set_proportion"; proportion: number };
+export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined; index: number | undefined } | { type: "set_column_widths"; widths: number[] } | { type: "set_border_style"; border_style: TableBorderStyle } | { type: "set_proportion"; proportion: number } | { type: "set_axis_background_color"; axis: Axis; index: number; color: string | undefined } | { type: "set_cell_selection_background_color"; color: string | undefined };
 
 export type TableRowNodeAttr = void;
 
@@ -628,6 +654,7 @@ declare class Editor {
     selection(): Selection | undefined;
     selection_endpoints(): SelectionEndpoints | undefined;
     selection_hit_test(page: number, x: number, y: number): boolean;
+    table_overlays(): TableOverlay[];
     tick(): EditorEvent[];
 }
 

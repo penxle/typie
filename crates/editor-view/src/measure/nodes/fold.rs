@@ -65,6 +65,7 @@ pub fn measure_fold_title(
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
+            table_info: None,
             children,
         }),
     };
@@ -153,6 +154,7 @@ pub fn measure_fold(
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
+            table_info: None,
             children,
         }),
     }

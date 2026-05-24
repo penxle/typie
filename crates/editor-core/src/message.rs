@@ -165,6 +165,7 @@ pub enum TableOp {
     },
     SelectAxis {
         axis: Option<Axis>,
+        index: Option<usize>,
     },
     SetColumnWidths {
         widths: Vec<f32>,
@@ -174,6 +175,14 @@ pub enum TableOp {
     },
     SetProportion {
         proportion: u32,
+    },
+    SetAxisBackgroundColor {
+        axis: Axis,
+        index: usize,
+        color: Option<String>,
+    },
+    SetCellSelectionBackgroundColor {
+        color: Option<String>,
     },
 }
 

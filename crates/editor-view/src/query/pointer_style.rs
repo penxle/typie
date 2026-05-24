@@ -155,8 +155,10 @@ mod tests {
                     scope: false,
                     decorations,
                     monolithic: false,
+                    ..Default::default()
                 },
                 nav: None,
+                table_info: None,
                 children,
             }),
         }

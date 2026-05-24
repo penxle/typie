@@ -9,8 +9,9 @@ pub enum Alignment {
     End,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Direction {
+    #[default]
     Vertical,
     Horizontal,
 }
@@ -22,7 +23,7 @@ pub enum BorderMode {
     Collapse,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BoxStyle {
     pub direction: Direction,
     pub padding: EdgeInsets,

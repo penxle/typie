@@ -100,6 +100,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -175,6 +176,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(20.0, 0.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -225,6 +227,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -284,6 +287,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -333,6 +337,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 30.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -399,6 +404,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(10.0, 5.0, 150.0, 40.0),
                         content: LayoutContent::Atom(LayoutAtom {
@@ -439,6 +445,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![
                         LayoutNode {
                             rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
@@ -509,6 +516,7 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
+                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {

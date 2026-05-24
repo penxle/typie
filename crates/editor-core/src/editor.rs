@@ -315,11 +315,13 @@ impl Editor {
             fields.insert(StateField::Cursor);
             fields.insert(StateField::PageSizes);
             fields.insert(StateField::ExternalElements);
+            fields.insert(StateField::TableOverlays);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if !ops.is_empty() {
             fields.insert(StateField::Doc);
+            fields.insert(StateField::TableOverlays);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
@@ -335,6 +337,7 @@ impl Editor {
         if old_selection != self.state.selection {
             fields.insert(StateField::Cursor);
             fields.insert(StateField::ExternalElements);
+            fields.insert(StateField::TableOverlays);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Selection);
             fields.insert(StateField::Modifiers);

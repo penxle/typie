@@ -61,6 +61,7 @@ pub fn measure_paragraph(
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
+            table_info: None,
             children,
         }),
     }

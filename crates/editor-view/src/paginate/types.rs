@@ -2,6 +2,7 @@ use editor_common::Rect;
 use editor_model::NodeId;
 use std::ops::Range;
 
+use crate::TableLayoutInfo;
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::style::BoxStyle;
 
@@ -40,6 +41,7 @@ pub struct NavUnit {
 pub struct LayoutBox {
     pub node_id: NodeId,
     pub style: BoxStyle,
+    pub table_info: Option<Box<TableLayoutInfo>>,
     pub children: Vec<LayoutNode>,
     pub nav: Option<NavUnit>,
 }

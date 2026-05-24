@@ -88,7 +88,10 @@ fn make_empty_cell() -> Subtree {
     let text_id = NodeId::new();
     Subtree::leaf(
         cell_id,
-        PlainNode::TableCell(PlainTableCellNode { col_width: None }),
+        PlainNode::TableCell(PlainTableCellNode {
+            col_width: None,
+            background_color: None,
+        }),
     )
     .with_children(vec![
         Subtree::leaf(para_id, PlainNode::Paragraph(PlainParagraphNode {})).with_children(vec![

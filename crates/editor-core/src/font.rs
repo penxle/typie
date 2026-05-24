@@ -248,6 +248,7 @@ pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
                 StateField::Cursor,
                 StateField::PageSizes,
                 StateField::ExternalElements,
+                StateField::TableOverlays,
             ],
         });
         editor.push_event(EditorEvent::RenderInvalidated);

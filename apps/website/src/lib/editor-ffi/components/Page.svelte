@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
   import ExternalElement from './ExternalElement.svelte';
+  import TableOverlay from './TableOverlay.svelte';
 
   type Props = {
     page: number;
@@ -20,6 +21,7 @@
   const cssHeight = $derived(Math.round(height * scaleFactor) / scaleFactor);
   const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
   const externalElements = $derived(ctx.editor?.externalElements.filter((element) => element.page_idx === page) ?? []);
+  const tableOverlays = $derived(ctx.editor?.tableOverlays.filter((overlay) => overlay.page_idx === page) ?? []);
 </script>
 
 <div
@@ -73,5 +75,9 @@
 
   {#each externalElements as element (element.node_id)}
     <ExternalElement {element} />
+  {/each}
+
+  {#each tableOverlays as overlay (overlay.table_id)}
+    <TableOverlay {overlay} />
   {/each}
 </div>

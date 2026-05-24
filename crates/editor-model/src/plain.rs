@@ -366,6 +366,7 @@ mod tests {
                 modifiers: BTreeMap::new(),
                 node: PlainNode::TableCell(PlainTableCellNode {
                     col_width: Some(120),
+                    background_color: None,
                 }),
             },
         );

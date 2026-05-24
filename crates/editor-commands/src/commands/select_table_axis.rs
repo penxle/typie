@@ -10,6 +10,7 @@ pub fn select_table_axis(
     tr: &mut Transaction,
     table_id: NodeId,
     axis: Option<Axis>,
+    index: Option<usize>,
 ) -> CommandResult {
     let (anchor_cell_id, head_cell_id) = match axis {
         None => {
@@ -38,7 +39,8 @@ pub fn select_table_axis(
             (anchor, head)
         }
         Some(Axis::Horizontal) => {
-            let (row_idx, _) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
+            let (cursor_row, _) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
+            let row_idx = index.unwrap_or(cursor_row);
             let doc = tr.doc();
             let table = doc
                 .node(table_id)
@@ -60,7 +62,8 @@ pub fn select_table_axis(
             (anchor, head)
         }
         Some(Axis::Vertical) => {
-            let (_, col_idx) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
+            let (_, cursor_col) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
+            let col_idx = index.unwrap_or(cursor_col);
             let doc = tr.doc();
             let table = doc
                 .node(table_id)
@@ -130,7 +133,7 @@ mod tests {
             } }
             selection: (r0c0, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| select_table_axis(&mut tr, tbl, None));
+        let (actual, ..) = transact!(initial, |tr| select_table_axis(&mut tr, tbl, None, None));
         let rect = as_cell_rect(&actual);
         assert!(rect.is_full_table());
     }
@@ -155,7 +158,8 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| select_table_axis(
             &mut tr,
             tbl,
-            Some(Axis::Horizontal)
+            Some(Axis::Horizontal),
+            None,
         ));
         let rect = as_cell_rect(&actual);
         assert!(rect.is_full_row());
@@ -181,7 +185,8 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| select_table_axis(
             &mut tr,
             tbl,
-            Some(Axis::Vertical)
+            Some(Axis::Vertical),
+            None,
         ));
         let rect = as_cell_rect(&actual);
         assert!(rect.is_full_column());

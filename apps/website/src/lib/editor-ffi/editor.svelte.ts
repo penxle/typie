@@ -22,6 +22,7 @@ import type {
   Selection,
   SelectionEndpoints,
   Size,
+  TableOverlay,
   ThemeVariant,
   Viewport,
 } from '@typie/editor-ffi/browser';
@@ -77,6 +78,7 @@ export class Editor {
   #selection = $state<Selection | undefined>();
   #pageSizes = $state<Size[]>([]);
   #externalElements = $state<ExternalElement[]>([]);
+  #tableOverlays = $state<TableOverlay[]>([]);
   #rootAttrs = $state<PlainRootNode>();
   #modifierState = $state<ModifierState | undefined>();
   #rootModifiers = $state<Modifier[]>();
@@ -183,6 +185,10 @@ export class Editor {
 
   get externalElements() {
     return this.#externalElements;
+  }
+
+  get tableOverlays() {
+    return this.#tableOverlays;
   }
 
   get rootAttrs() {
@@ -517,6 +523,10 @@ export class Editor {
 
     if (fields.includes('external_elements')) {
       this.#externalElements = this.#wasm.external_elements();
+    }
+
+    if (fields.includes('table_overlays')) {
+      this.#tableOverlays = this.#wasm.table_overlays();
     }
 
     if (fields.includes('root_attrs')) {

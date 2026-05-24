@@ -173,7 +173,9 @@ mod tests {
                     scope: false,
                     decorations,
                     monolithic: false,
+                    ..Default::default()
                 },
+                table_info: None,
                 children,
                 nav: None,
             }),

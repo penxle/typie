@@ -28,6 +28,8 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
     return;
   }
 
+  if (e.button !== 0) return;
+
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) {
     return;
