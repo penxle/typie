@@ -5,6 +5,8 @@
   import { createFloatingActions } from '@typie/ui/actions';
   import { Icon, Img, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
+  import DownloadIcon from '~icons/lucide/download';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import ImageIcon from '~icons/lucide/image';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -207,6 +209,52 @@
     ctx.editor?.enqueue(createSetImageAttrsMessage(element.node_id, imageId, proportion));
     ctx.editor?.focus();
   };
+
+  const handleOpenInNewTab = () => {
+    const url = asset?.originalUrl;
+    if (!url) return;
+    window.open(url, '_blank');
+  };
+
+  const handleSaveAs = async () => {
+    const url = asset?.originalUrl;
+    if (!url) return;
+
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const disposition = resp.headers.get('content-disposition');
+      const starMatch = disposition?.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+      const quotedMatch = disposition?.match(/filename="(.+?)"/);
+      const rawFilename = starMatch?.[1] ?? quotedMatch?.[1];
+      const filename = rawFilename ? decodeURIComponent(rawFilename) : `image.${blob.type.split('/')[1] ?? 'png'}`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      Toast.error('이미지 저장에 실패했습니다.');
+    }
+  };
+
+  $effect(() => {
+    const editor = ctx.editor;
+    const el = containerEl;
+    if (!editor || !el) return;
+
+    return editor.registerContextMenuContributor(({ clientX, clientY }) => {
+      if (!asset) return [];
+      const rect = el.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        return [];
+      }
+      return [
+        { label: '이미지 내려받기', icon: DownloadIcon, onclick: () => void handleSaveAs() },
+        { label: '새 탭에서 이미지 열기', icon: ExternalLinkIcon, onclick: handleOpenInNewTab },
+      ];
+    });
+  });
 </script>
 
 <ExternalElementWrapper {element} minHeight={stage === 'ready' ? undefined : '48px'}>
