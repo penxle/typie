@@ -425,14 +425,19 @@ fn sentence_range_in_text(
     }
 
     let char_count = text.char_count();
-    let (start, mut end) = range_from_boundaries(
-        &text_boundaries(
-            text,
-            resource.segmenters.sentence.as_borrowed().segment_str(text),
-        ),
-        char_offset.min(char_count),
-        char_count,
+    let target = char_offset.min(char_count);
+    let boundaries = text_boundaries(
+        text,
+        resource.segmenters.sentence.as_borrowed().segment_str(text),
     );
+    let (start, mut end) = {
+        let range = range_from_boundaries(&boundaries, target, char_count);
+        if range.0 == range.1 && target > 0 {
+            range_from_boundaries(&boundaries, target - 1, char_count)
+        } else {
+            range
+        }
+    };
 
     let chars: Vec<_> = text.chars().collect();
     while end > start && chars.get(end - 1).is_some_and(|c| c.is_whitespace()) {
@@ -625,6 +630,30 @@ mod tests {
                 Position {
                     node_id: t,
                     offset: 6,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn sentence_expansion_at_last_sentence_end_selects_last_sentence() {
+        let resource = Resource::new_test();
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("Hello. Last.") } } }
+            selection: (t, 12)
+        };
+
+        let actual =
+            resolve_sentence_selection_expansion(&state.doc, state.selection.unwrap(), &resource);
+
+        assert_eq!(
+            actual,
+            Some(Selection::new(
+                Position::new(t, 7),
+                Position {
+                    node_id: t,
+                    offset: 12,
                     affinity: Affinity::Upstream,
                 },
             ))
