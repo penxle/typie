@@ -201,7 +201,7 @@
         await goto(`/${resp.createDocument.entity.slug}`);
       },
     },
-    ...(env.PUBLIC_ENVIRONMENT === 'production'
+    ...(env.PUBLIC_ENVIRONMENT === 'prod'
       ? []
       : [
           {
