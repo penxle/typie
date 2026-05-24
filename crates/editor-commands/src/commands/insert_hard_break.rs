@@ -146,4 +146,68 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
         assert!(!actual.pending_modifiers.is_empty());
     }
+
+    #[test]
+    fn insert_hard_break_at_end_attaches_marker_to_paragraph() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph [bold] {
+                        t1: text("Hello") [bold]
+                        hard_break
+                    }
+                }
+            }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_hard_break_in_middle_attaches_marker_to_paragraph() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph [bold] {
+                        t1: text("He") [bold]
+                        hard_break
+                        t2: text("llo") [bold]
+                    }
+                }
+            }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_hard_break_at_start_attaches_no_marker() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        hard_break
+                        t1: text("Hello") [bold]
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
 }

@@ -3,6 +3,9 @@ use editor_resource::Resource;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
+use crate::helpers::{
+    apply_first_text_marker_lift, capture_first_text_marker, find_enclosing_paragraph_id,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> CommandResult {
@@ -22,6 +25,9 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
     let Node::Text(text_node) = node.node() else {
         return Ok(false);
     };
+
+    let captured_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
+    let captured = captured_paragraph_id.and_then(|id| capture_first_text_marker(&doc, id));
 
     if pos.offset > 0 {
         let text_len = text_node.text.len();
@@ -90,6 +96,10 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
         }
     }
 
+    if let Some(captured) = captured {
+        apply_first_text_marker_lift(tr, &captured)?;
+    }
+
     Ok(true)
 }
 
@@ -134,6 +144,7 @@ fn resolve_cursor_after_removal(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::Modifier;
     use editor_resource::Resource;
 
     use super::*;
@@ -317,5 +328,34 @@ mod tests {
             selection: (t1, 1)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_last_char_lifts_first_text_marker_to_paragraph() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("A") [bold] } } }
+            selection: (t1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_text_backward(
+            &mut tr,
+            &Resource::new_test()
+        ));
+        let p = actual.doc.node(p1).unwrap();
+        let mods: Vec<_> = p.modifiers().cloned().collect();
+        assert!(mods.iter().any(|m| matches!(m, Modifier::Bold)));
+    }
+
+    #[test]
+    fn delete_non_last_char_no_lift() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("Hi") [bold] } } }
+            selection: (t1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_text_backward(
+            &mut tr,
+            &Resource::new_test()
+        ));
+        let p = actual.doc.node(p1).unwrap();
+        assert_eq!(p.modifiers().count(), 0);
     }
 }

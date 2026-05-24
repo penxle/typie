@@ -1,7 +1,7 @@
 use editor_model::{
     ContextExpr, Doc, Expand, Modifier, ModifierType, Node, NodeId, NodeRef, NodeType, Schema,
 };
-use editor_state::{PendingModifier, PendingModifiers, ResolvedSelection};
+use editor_state::{PendingModifier, PendingModifiers, Position, ResolvedSelection};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
@@ -16,30 +16,32 @@ pub(crate) fn resolve_effective_modifiers(
 }
 
 fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
-    let Node::Text(text_node) = node.node() else {
-        return vec![];
-    };
+    match node.node() {
+        Node::Text(text_node) => {
+            let node_len = text_node.text.len();
+            let at_start = offset == 0 && node_len > 0;
+            let at_end = offset == node_len && node_len > 0;
 
-    let node_len = text_node.text.len();
-    let at_start = offset == 0 && node_len > 0;
-    let at_end = offset == node_len && node_len > 0;
-
-    if !at_start && !at_end {
-        return node.modifiers().cloned().collect();
-    }
-
-    node.modifiers()
-        .filter(|m| {
-            let expand = &m.spec().expand;
-            match expand {
-                Expand::After => at_end,
-                Expand::Before => at_start,
-                Expand::Both => true,
-                Expand::None => false,
+            if !at_start && !at_end {
+                return node.modifiers().cloned().collect();
             }
-        })
-        .cloned()
-        .collect()
+
+            node.modifiers()
+                .filter(|m| {
+                    let expand = &m.spec().expand;
+                    match expand {
+                        Expand::After => at_end,
+                        Expand::Before => at_start,
+                        Expand::Both => true,
+                        Expand::None => false,
+                    }
+                })
+                .cloned()
+                .collect()
+        }
+        Node::Paragraph(_) => node.modifiers().cloned().collect(),
+        _ => vec![],
+    }
 }
 
 fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers) -> Vec<Modifier> {
@@ -215,6 +217,33 @@ pub(crate) fn apply_modifier_to_node(
     }
 
     Ok(())
+}
+
+pub(crate) fn carryable_modifiers_at(
+    doc: &Doc,
+    pos: Position,
+    pending: &PendingModifiers,
+) -> Vec<Modifier> {
+    let Some(node) = doc.node(pos.node_id) else {
+        return vec![];
+    };
+    let effective = resolve_effective_modifiers(&node, pos.offset, pending);
+    effective
+        .into_iter()
+        .filter(|m| {
+            matches!(
+                Schema::modifier_spec(m.as_type()).expand,
+                Expand::After | Expand::Both
+            )
+        })
+        .collect()
+}
+
+pub(crate) fn find_enclosing_paragraph_id(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
+    doc.node(node_id)?
+        .ancestors()
+        .find(|n| matches!(n.node(), Node::Paragraph(_)))
+        .map(|n| n.id())
 }
 
 #[cfg(test)]
@@ -566,5 +595,76 @@ mod tests {
                 .any(|m| matches!(m, Modifier::Alignment { .. })),
             "Alignment is inheritable: false; ancestor value must not appear as inherited"
         );
+    }
+
+    #[test]
+    fn cursor_on_paragraph_with_marker_returns_marker_as_effective() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph [bold] {} } }
+            selection: (p1, 0)
+        };
+        let node = node_at(&state);
+        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
+        assert_eq!(result, vec![Modifier::Bold]);
+    }
+
+    #[test]
+    fn carryable_at_end_of_bold_text_returns_bold() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 5)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = carryable_modifiers_at(&state.doc, head, &state.pending_modifiers);
+        assert_eq!(result, vec![Modifier::Bold]);
+    }
+
+    #[test]
+    fn carryable_excludes_link_at_end_of_link_text() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("X") [link(href: "https://e.com".to_string())] } } }
+            selection: (t1, 1)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = carryable_modifiers_at(&state.doc, head, &state.pending_modifiers);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn carryable_at_start_of_bold_text_returns_empty() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = carryable_modifiers_at(&state.doc, head, &state.pending_modifiers);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn enclosing_paragraph_from_text_returns_paragraph() {
+        let (state, p1, t1) = state! {
+            doc { root { p1: paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+        assert_eq!(find_enclosing_paragraph_id(&state.doc, t1), Some(p1));
+    }
+
+    #[test]
+    fn enclosing_paragraph_from_paragraph_itself_returns_self() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        assert_eq!(find_enclosing_paragraph_id(&state.doc, p1), Some(p1));
+    }
+
+    #[test]
+    fn enclosing_paragraph_from_fold_title_returns_none() {
+        let (state, ft1) = state! {
+            doc { root { fold { ft1: fold_title { text("T") } fold_content { paragraph {} } } } }
+            selection: (ft1, 0)
+        };
+        assert!(find_enclosing_paragraph_id(&state.doc, ft1).is_none());
     }
 }

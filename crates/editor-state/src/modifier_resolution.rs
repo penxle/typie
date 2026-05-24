@@ -24,30 +24,32 @@ pub fn resolve_effective_modifiers_at(state: &State, pos: &Position) -> Vec<Modi
 }
 
 fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
-    let Node::Text(text_node) = node.node() else {
-        return vec![];
-    };
+    match node.node() {
+        Node::Text(text_node) => {
+            let node_len = text_node.text.len();
+            let at_start = offset == 0 && node_len > 0;
+            let at_end = offset == node_len && node_len > 0;
 
-    let node_len = text_node.text.len();
-    let at_start = offset == 0 && node_len > 0;
-    let at_end = offset == node_len && node_len > 0;
-
-    if !at_start && !at_end {
-        return node.modifiers().cloned().collect::<Vec<_>>();
-    }
-
-    node.modifiers()
-        .filter(|m| {
-            let expand = &m.spec().expand;
-            match expand {
-                Expand::After => at_end,
-                Expand::Before => at_start,
-                Expand::Both => true,
-                Expand::None => false,
+            if !at_start && !at_end {
+                return node.modifiers().cloned().collect::<Vec<_>>();
             }
-        })
-        .cloned()
-        .collect()
+
+            node.modifiers()
+                .filter(|m| {
+                    let expand = &m.spec().expand;
+                    match expand {
+                        Expand::After => at_end,
+                        Expand::Before => at_start,
+                        Expand::Both => true,
+                        Expand::None => false,
+                    }
+                })
+                .cloned()
+                .collect()
+        }
+        Node::Paragraph(_) => node.modifiers().cloned().collect(),
+        _ => vec![],
+    }
 }
 
 fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
@@ -816,5 +818,42 @@ mod tests {
             ModifierType::Link,
         );
         assert_eq!(span, Some(vec![t1]));
+    }
+
+    #[test]
+    fn paragraph_marker_is_effective_at_paragraph_cursor() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph [bold] {} } }
+            selection: (p1, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        assert!(result.iter().any(|m| matches!(m, Modifier::Bold)));
+    }
+
+    #[test]
+    fn paragraph_marker_inherits_into_child_text_at_offset_zero() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph [bold] { t1: text("llo") } } }
+            selection: (t1, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        assert!(result.iter().any(|m| matches!(m, Modifier::Bold)));
+    }
+
+    #[test]
+    fn paragraph_marker_does_not_double_count_with_text_modifier_in_middle() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph [bold] { t1: text("Hi") [bold] } } }
+            selection: (t1, 1)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        let bolds = result
+            .iter()
+            .filter(|m| matches!(m, Modifier::Bold))
+            .count();
+        assert_eq!(bolds, 1);
     }
 }

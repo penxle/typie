@@ -135,52 +135,52 @@ impl Default for SchemaInner {
             },
             modifiers: enum_map! {
                 ModifierType::Bold => ModifierSpec {
-                    context: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::Italic => ModifierSpec {
-                    context: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::Underline => ModifierSpec {
-                    context: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::Strikethrough => ModifierSpec {
-                    context: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::FontSize => ModifierSpec {
-                    context: context_expr!(Root | Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::FontFamily => ModifierSpec {
-                    context: context_expr!(Root | Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::FontWeight => ModifierSpec {
-                    context: context_expr!(Root | Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::TextColor => ModifierSpec {
-                    context: context_expr!(Root | Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::BackgroundColor => ModifierSpec {
-                    context: context_expr!(Root | Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },
                 ModifierType::LetterSpacing => ModifierSpec {
-                    context: context_expr!(Root | Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     ..Default::default()
                 },

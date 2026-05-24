@@ -272,4 +272,46 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn insert_text_into_empty_paragraph_with_marker_consumes_marker() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph [bold] {} } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("Y") [bold] } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_text_in_middle_split_state_coalesces_with_right_half() {
+        let (initial, ..) = state! {
+            doc { root { paragraph [bold] { t1: text("llo") [bold] } } }
+            selection: (t1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("Yllo") [bold] } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_text_clears_paragraph_marker_even_if_text_already_styled() {
+        let (initial, ..) = state! {
+            doc { root { paragraph [bold] { t1: text("Hi") [bold] } } }
+            selection: (t1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("HiX") [bold] } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
 }

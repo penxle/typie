@@ -2,7 +2,7 @@ use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
-use crate::helpers::find_enclosing_list_item_id;
+use crate::helpers::{carryable_modifiers_at, find_enclosing_list_item_id};
 use crate::{CommandError, CommandResult};
 
 pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
@@ -87,6 +87,8 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
         _ => return Ok(false),
     };
 
+    let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
+
     let new_paragraph_id = NodeId::new();
     let new_list_item_id = NodeId::new();
 
@@ -109,6 +111,10 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
         tr.split_node(list_item_id, 1, new_list_item_id)?;
         Ok(())
     })?;
+
+    for m in carryable {
+        tr.add_modifier(new_paragraph_id, m)?;
+    }
 
     let doc = tr.doc();
     let new_li = doc
@@ -344,6 +350,64 @@ mod tests {
                     bullet_list {
                         list_item { paragraph { t1: text("Hello") } }
                         list_item { paragraph { t2: text("World") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_list_item_at_end_attaches_marker_to_new_paragraph() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("Hello") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("Hello") [bold] } }
+                        list_item { p2: paragraph [bold] {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_list_item_in_middle_attaches_marker_to_new_paragraph() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("Hello") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { t1: text("He") [bold] } }
+                        list_item { paragraph [bold] { t2: text("llo") [bold] } }
                     }
                     paragraph {}
                 }

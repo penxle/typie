@@ -3,7 +3,9 @@ use editor_model::{Modifier, Node, NodeId, PlainHardBreakNode, PlainNode, PlainT
 use editor_state::{Affinity, PendingModifiers, Position, Selection};
 use editor_transaction::Transaction;
 
-use crate::helpers::resolve_effective_modifiers;
+use crate::helpers::{
+    carryable_modifiers_at, find_enclosing_paragraph_id, resolve_effective_modifiers,
+};
 use crate::{CommandError, CommandResult};
 
 pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandResult {
@@ -33,8 +35,26 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    let effective_mods = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
+    let mut effective_mods = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
     let insert_len = text.char_count();
+
+    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
+
+    if let Some(p_id) = host_paragraph_id
+        && p_id != pos.node_id
+        && let Some(p_node) = doc.node(p_id)
+    {
+        for m in p_node.modifiers() {
+            if !effective_mods.iter().any(|e| e.as_type() == m.as_type()) {
+                effective_mods.push(m.clone());
+            }
+        }
+    }
+
+    let marker_to_clear: Vec<Modifier> = host_paragraph_id
+        .and_then(|id| doc.node(id))
+        .map(|p| p.modifiers().cloned().collect())
+        .unwrap_or_default();
 
     match node.node() {
         Node::Text(text_node) => {
@@ -97,6 +117,12 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         tr.set_pending_modifiers(PendingModifiers::new())?;
     }
 
+    if let Some(p_id) = host_paragraph_id {
+        for m in marker_to_clear {
+            tr.remove_modifier(p_id, m)?;
+        }
+    }
+
     Ok(true)
 }
 
@@ -114,6 +140,9 @@ pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult 
     let node = doc
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+
+    let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
+    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
 
     let break_id = NodeId::new();
     let break_subtree = Subtree::leaf(
@@ -193,6 +222,12 @@ pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult 
                 offset: pos.offset + 1,
                 affinity: Affinity::Downstream,
             })))?;
+        }
+    }
+
+    if let Some(p_id) = host_paragraph_id {
+        for m in carryable {
+            tr.add_modifier(p_id, m)?;
         }
     }
 

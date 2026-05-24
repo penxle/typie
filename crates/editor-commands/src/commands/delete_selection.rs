@@ -1067,6 +1067,36 @@ mod tests {
     }
 
     #[test]
+    fn delete_selection_emptying_paragraph_lifts_marker() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("Hello") [bold, font_weight(700)] } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let p = actual.doc.node(p1).unwrap();
+        let mods: Vec<_> = p.modifiers().cloned().collect();
+        assert!(
+            mods.iter()
+                .any(|m| matches!(m, editor_model::Modifier::Bold))
+        );
+        assert!(
+            mods.iter()
+                .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
+        );
+    }
+
+    #[test]
+    fn delete_selection_partial_text_no_lift() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 1) -> (t1, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let p = actual.doc.node(p1).unwrap();
+        assert_eq!(p.modifiers().count(), 0);
+    }
+
+    #[test]
     fn delete_selection_from_outside_into_cell_must_not_delete_cell() {
         let (state, _, c00, _, c01, c02, c03) = state! {
             doc { root {

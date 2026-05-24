@@ -102,4 +102,40 @@ mod tests {
         let mut tr = Transaction::new(&state);
         assert!(tr.add_modifier(t1, Modifier::Bold).is_err());
     }
+
+    #[test]
+    fn add_bold_to_paragraph_is_valid() {
+        let (state, p1) = state! {
+            doc {
+                root {
+                    p1: paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        assert!(tr.add_modifier(p1, Modifier::Bold).is_ok());
+    }
+
+    #[test]
+    fn add_font_family_to_paragraph_is_valid() {
+        let (state, p1) = state! {
+            doc {
+                root {
+                    p1: paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        assert!(
+            tr.add_modifier(
+                p1,
+                Modifier::FontFamily {
+                    value: "Arial".to_string()
+                }
+            )
+            .is_ok()
+        );
+    }
 }

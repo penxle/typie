@@ -2,6 +2,7 @@ use editor_model::{Node, NodeId};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
+use crate::helpers::carryable_modifiers_at;
 use crate::{CommandError, CommandResult};
 
 pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
@@ -17,6 +18,7 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
     let node = doc
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+    let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
 
     let new_paragraph_id = NodeId::new();
 
@@ -49,6 +51,10 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
         _ => return Ok(false),
     }
 
+    for m in carryable {
+        tr.add_modifier(new_paragraph_id, m)?;
+    }
+
     let doc = tr.doc();
     let new_paragraph = doc
         .node(new_paragraph_id)
@@ -74,6 +80,7 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::Modifier;
 
     use super::*;
     use crate::test_utils::*;
@@ -284,5 +291,114 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
         assert!(!actual.pending_modifiers.is_empty());
+    }
+
+    #[test]
+    fn split_at_end_of_bold_text_attaches_marker_to_new_paragraph() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("Hello") [bold] }
+                    p2: paragraph [bold] {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_in_middle_of_bold_text_attaches_marker_to_new_paragraph() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("He") [bold] }
+                    paragraph [bold] { t2: text("llo") [bold] }
+                }
+            }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_at_start_of_bold_text_attaches_no_marker() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [bold] } } }
+            selection: (t1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph {}
+                    paragraph { t1: text("Hello") [bold] }
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_carries_font_family_and_weight() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("Hello") [font_family("Arial".to_string()), font_weight(700)]
+                    }
+                }
+            }
+            selection: (t1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
+        let new_paragraph = actual
+            .doc
+            .root()
+            .unwrap()
+            .children()
+            .nth(1)
+            .expect("second paragraph exists");
+        let mods: Vec<_> = new_paragraph.modifiers().cloned().collect();
+        assert!(mods.iter().any(|m| matches!(
+            m,
+            Modifier::FontFamily { value } if value == "Arial"
+        )));
+        assert!(
+            mods.iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
+        );
+    }
+
+    #[test]
+    fn split_does_not_carry_link() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Click") [link(href: "https://e.com".to_string())] } } }
+            selection: (t1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
+        let new_paragraph = actual
+            .doc
+            .root()
+            .unwrap()
+            .children()
+            .nth(1)
+            .expect("second paragraph exists");
+        assert!(
+            !new_paragraph
+                .modifiers()
+                .any(|m| matches!(m, Modifier::Link { .. }))
+        );
     }
 }

@@ -3,7 +3,8 @@ use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, compact, fulfill, prune};
 
 use super::{
-    find_ancestor_textblock, find_lowest_common_ancestor, is_block_container,
+    apply_first_text_marker_lift, capture_first_text_marker, find_ancestor_textblock,
+    find_enclosing_paragraph_id, find_lowest_common_ancestor, is_block_container,
     merge_element_cross_parent, path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
@@ -70,6 +71,9 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
 
     let from = Position::from(resolved.from());
     let to = Position::from(resolved.to());
+
+    let captured_paragraph_id = find_enclosing_paragraph_id(&doc, from.node_id);
+    let captured = captured_paragraph_id.and_then(|id| capture_first_text_marker(&doc, id));
 
     if from.node_id == to.node_id {
         if tr
@@ -158,12 +162,18 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
         } else {
             let sel = resolve_selection_at(&tr.doc(), from.node_id, from.offset);
             tr.set_selection(Some(sel))?;
+            if let Some(captured) = &captured {
+                apply_first_text_marker_lift(tr, captured)?;
+            }
             return Ok(true);
         };
 
         tr.set_selection(Some(Selection::collapsed(cursor)))?;
     }
 
+    if let Some(captured) = captured {
+        apply_first_text_marker_lift(tr, &captured)?;
+    }
     Ok(true)
 }
 

@@ -533,4 +533,173 @@ mod tests {
         };
         assert_state_eq!(editor.state(), &expected);
     }
+
+    #[test]
+    fn enter_preserves_font_family_and_weight() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("Hello") [font_family("KoPubBatang".to_string()), font_weight(700)]
+                    }
+                }
+            }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "World".into(),
+            },
+        });
+
+        let root = editor.state().doc.root().unwrap();
+        let second = root.children().nth(1).expect("second paragraph");
+        let text_in_second = second
+            .children()
+            .find(|c| matches!(c.node(), editor_model::Node::Text(_)))
+            .expect("text exists in second paragraph");
+        let mods: Vec<_> = text_in_second.modifiers().cloned().collect();
+        assert!(mods.iter().any(
+            |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "KoPubBatang")
+        ));
+        assert!(
+            mods.iter()
+                .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
+        );
+    }
+
+    #[test]
+    fn shift_enter_preserves_font_family_and_weight() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("Hello") [font_family("KoPubBatang".to_string()), font_weight(700)]
+                    }
+                }
+            }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break { kind: Break::Line },
+        });
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "World".into(),
+            },
+        });
+
+        let root = editor.state().doc.root().unwrap();
+        let paragraph = root.first_child().unwrap();
+        let world_text = paragraph
+            .children()
+            .filter(|c| matches!(c.node(), editor_model::Node::Text(_)))
+            .nth(1)
+            .expect("second text node (after hard_break)");
+        let mods: Vec<_> = world_text.modifiers().cloned().collect();
+        assert!(mods.iter().any(
+            |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "KoPubBatang")
+        ));
+        assert!(
+            mods.iter()
+                .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
+        );
+    }
+
+    #[test]
+    fn cursor_away_and_back_preserves_marker() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("Hello") [bold] }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+
+        let root = editor.state().doc.root().unwrap();
+        let third_paragraph_id = root.children().nth(2).unwrap().id();
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: editor_state::Selection::collapsed(editor_state::Position::new(
+                    third_paragraph_id,
+                    0,
+                )),
+            },
+        });
+
+        let root = editor.state().doc.root().unwrap();
+        let second_paragraph_id = root.children().nth(1).unwrap().id();
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: editor_state::Selection::collapsed(editor_state::Position::new(
+                    second_paragraph_id,
+                    0,
+                )),
+            },
+        });
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+
+        let root = editor.state().doc.root().unwrap();
+        let second = root.children().nth(1).unwrap();
+        let text = second
+            .children()
+            .find(|c| matches!(c.node(), editor_model::Node::Text(_)))
+            .unwrap();
+        assert!(
+            text.modifiers()
+                .any(|m| matches!(m, editor_model::Modifier::Bold))
+        );
+    }
+
+    #[test]
+    fn delete_all_restores_marker_then_retype() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("X") [bold] } } }
+            selection: (t1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Key {
+            event: KeyEvent {
+                key: Key::Backspace,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "Y".into() },
+        });
+
+        let root = editor.state().doc.root().unwrap();
+        let paragraph = root.first_child().unwrap();
+        let text = paragraph
+            .children()
+            .find(|c| matches!(c.node(), editor_model::Node::Text(_)))
+            .unwrap();
+        assert!(
+            text.modifiers()
+                .any(|m| matches!(m, editor_model::Modifier::Bold))
+        );
+    }
 }
