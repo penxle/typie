@@ -17,6 +17,8 @@ use crate::query::{CursorMetrics, PointerStyle, SelectionEndpoints, SelectionRec
 use crate::view_state::{GapPhantom, PendingStyle, ViewState};
 use crate::viewport::Viewport;
 
+const CONTINUOUS_MARGIN_X: f32 = 20.0;
+
 #[derive(Debug)]
 pub struct View {
     measurer: Measurer,
@@ -157,10 +159,12 @@ impl View {
                 0.0,
             ),
             LayoutMode::Continuous { max_width } => {
-                let effective = (max_width as f32).min(self.viewport.width);
+                let avail_content = (self.viewport.width - 2.0 * CONTINUOUS_MARGIN_X).max(0.0);
+                let content_width = (max_width as f32).min(avail_content);
+                let page_width = content_width + 2.0 * CONTINUOUS_MARGIN_X;
                 (
-                    Paginator::continuous(effective, 1024.0, EdgeInsets::all(20.0)),
-                    effective,
+                    Paginator::continuous(page_width, 1024.0, EdgeInsets::all(CONTINUOUS_MARGIN_X)),
+                    content_width,
                 )
             }
         };

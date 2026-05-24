@@ -601,14 +601,14 @@ mod tests {
 
     #[test]
     fn selection_starting_at_lower_soft_wrap_line_emits_rect() {
-        // Force soft-wrap: max_width=80 with default margin 20 gives content
-        // width 40 — exactly 4 ASCII test chars per line. "abcdefgh" wraps as
+        // Force soft-wrap: max_width=40 (content width) — exactly 4 ASCII test
+        // chars per line. "abcdefgh" wraps as
         //   line A (offset 0..4): "abcd"
         //   line B (offset 4..8): "efgh"
         // Selecting the lower line's leading character (offset 4 → 5) must
         // produce one rect over the lower line.
         let (doc, t) = doc! {
-            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 80 }) {
+            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
                 paragraph { t: text("abcdefgh") }
             }
         };

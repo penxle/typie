@@ -174,7 +174,7 @@ mod tests {
         // Same soft-wrap setup as selection.rs's regression test: text wraps
         // such that offset 6 is the lower visual line's leading boundary.
         let (doc, t) = doc! {
-            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 80 }) {
+            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
                 paragraph { t: text("abcdefgh") }
             }
         };
