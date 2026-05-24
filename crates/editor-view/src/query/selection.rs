@@ -1,5 +1,6 @@
 use editor_common::Rect;
 use editor_macros::ffi;
+use editor_model::Doc;
 use editor_state::{Affinity, Position};
 use serde::{Deserialize, Serialize};
 
@@ -52,7 +53,15 @@ pub fn selection_rects(
     let mut rects = Vec::new();
 
     visit_node(
-        &tree.root, &from, &to, from_owner, to_owner, &mut phase, &mut rects, pages,
+        &tree.root,
+        &from,
+        &to,
+        from_owner,
+        to_owner,
+        &mut phase,
+        &mut rects,
+        pages,
+        selection.doc(),
     );
 
     rects
@@ -192,15 +201,16 @@ fn visit_node(
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
+    doc: &Doc,
 ) {
     match &node.content {
-        LayoutContent::Box(b) => {
-            visit_box(node, b, from, to, from_owner, to_owner, phase, rects, pages)
-        }
+        LayoutContent::Box(b) => visit_box(
+            node, b, from, to, from_owner, to_owner, phase, rects, pages, doc,
+        ),
         LayoutContent::Line(l) => {
             visit_line(node, l, from, to, from_owner, to_owner, phase, rects, pages)
         }
-        LayoutContent::Atom(a) => visit_atom(node, a, from, to, phase, rects, pages),
+        LayoutContent::Atom(a) => visit_atom(node, a, from, to, phase, rects, pages, doc),
         LayoutContent::Spacing(_) => {}
     }
 }
@@ -304,6 +314,7 @@ fn visit_atom(
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
+    doc: &Doc,
 ) {
     let is_from = from.node_id == atom.parent_id && from.offset == atom.index;
     let is_to = to.node_id == atom.parent_id && to.offset == atom.index + 1;
@@ -316,7 +327,10 @@ fn visit_atom(
         return;
     }
 
-    if let Some(page_idx) = page_for_y(pages, node.rect.y) {
+    // External nodes render their own selection affordance; the selection
+    // layer must not paint a rect over them.
+    let is_external = doc.node(atom.node_id).is_some_and(|n| n.spec().external);
+    if !is_external && let Some(page_idx) = page_for_y(pages, node.rect.y) {
         rects.push(PageRect::with_meta(
             page_idx,
             Rect::from_xywh(
@@ -344,6 +358,7 @@ fn visit_box(
     phase: &mut Phase,
     rects: &mut Vec<SelectionRect>,
     pages: &[LayoutPage],
+    doc: &Doc,
 ) {
     // Box-level phase transitions fire only for endpoints anchored at a
     // structural container boundary — positions like `(bullet_list, 0)` that
@@ -376,7 +391,9 @@ fn visit_box(
     for child in &bx.children {
         let is_spacing = matches!(child.content, LayoutContent::Spacing(_));
 
-        visit_node(child, from, to, from_owner, to_owner, phase, rects, pages);
+        visit_node(
+            child, from, to, from_owner, to_owner, phase, rects, pages, doc,
+        );
 
         if !is_spacing {
             has_content_child = true;
@@ -496,6 +513,48 @@ mod tests {
 
         assert_eq!(rects.len(), 1);
         assert_eq!(rects[0].meta, SelectionRectKind::Atom);
+    }
+
+    #[test]
+    fn external_atom_selection_emits_no_rect() {
+        let (doc,) = doc! {
+            root {
+                image
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(
+            rects.is_empty(),
+            "external atom must not emit a selection rect, got {:?}",
+            rects
+        );
+    }
+
+    #[test]
+    fn selection_skips_external_atom_between_text() {
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph { t1: text("hi") }
+                image
+                paragraph { t2: text("bye") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(t1, 0), Position::new(t2, 3));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(rects.len(), 2, "expected text rects only, got {:?}", rects);
+        assert!(rects.iter().all(|r| r.meta == SelectionRectKind::Text));
     }
 
     #[test]
