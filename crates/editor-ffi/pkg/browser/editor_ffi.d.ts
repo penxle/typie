@@ -572,7 +572,9 @@ export type PointerStyle = "default" | "text" | "pointer";
 
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
-export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined };
+export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
+
+export type SelectionOp = { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "ime" | "modifiers" | "block";
 

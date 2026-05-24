@@ -1,5 +1,6 @@
 use editor_state::{
-    Selection, cell_rect_selection, enclosing_table_cell, farther_endpoint, table_cell_ids,
+    Selection, cell_rect_selection, enclosing_table_cell, farther_endpoint,
+    resolve_paragraph_selection_expansion, resolve_word_selection_expansion, table_cell_ids,
 };
 
 use crate::editor::Editor;
@@ -64,20 +65,23 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                         raw_hit
                     }
                 }
-                2 => {
-                    let resolved = raw_hit
-                        .as_ref()
-                        .and_then(|s| s.head.resolve(&editor.state.doc));
-                    let resource = editor.resource.lock().unwrap();
-                    resolved
-                        .and_then(|rp| editor.view.select_word_at(&rp, &resource))
-                        .or(raw_hit)
-                }
-                3.. => {
-                    let pos = raw_hit.as_ref().map(|s| &s.head);
-                    pos.and_then(|p| editor.view.select_paragraph_at(p))
-                        .or(raw_hit)
-                }
+                2 => match raw_hit {
+                    Some(hit) => {
+                        let resource = editor.resource.lock().unwrap();
+                        Some(
+                            resolve_word_selection_expansion(&editor.state.doc, hit, &resource)
+                                .unwrap_or(hit),
+                        )
+                    }
+                    None => None,
+                },
+                3.. => match raw_hit {
+                    Some(hit) => Some(
+                        resolve_paragraph_selection_expansion(&editor.state.doc, hit)
+                            .unwrap_or(hit),
+                    ),
+                    None => None,
+                },
             };
 
             if let Some(new_selection) = selection {

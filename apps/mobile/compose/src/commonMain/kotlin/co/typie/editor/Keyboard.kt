@@ -21,6 +21,7 @@ import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
+import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.platform.Clipboard
@@ -311,7 +312,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       ComposeKey.A,
       setOf(KeyModifier.Mod),
       bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
-      action = { listOf(Message.Selection(SelectionOp.All)) },
+      action = { listOf(Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.All))) },
     ),
     KeyBinding(
       ComposeKey.Q,

@@ -21,6 +21,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
     }
 
     let extend_to_selection = resolve_extend_to_selection(editor, &op);
+    let resource = editor.resource.clone();
 
     editor.view.clear_preferred_x();
     editor.transact(|tr| {
@@ -28,9 +29,6 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
         match op {
             SelectionOp::Set { selection } => {
                 commands::set_selection(tr, selection)?;
-            }
-            SelectionOp::All => {
-                commands::select_all(tr)?;
             }
             SelectionOp::SetFlat { start, end } => {
                 let doc = tr.doc();
@@ -54,6 +52,23 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                     commands::set_selection(tr, selection)?;
                 }
             }
+            SelectionOp::Expand { unit } => match (unit, tr.selection()) {
+                (SelectionExpansionUnit::Word, Some(selection)) => {
+                    let resource = resource.lock().unwrap();
+                    commands::select_word_at(tr, selection, &resource)?;
+                }
+                (SelectionExpansionUnit::Sentence, Some(selection)) => {
+                    let resource = resource.lock().unwrap();
+                    commands::select_sentence_at(tr, selection, &resource)?;
+                }
+                (SelectionExpansionUnit::Paragraph, Some(selection)) => {
+                    commands::select_paragraph_at(tr, selection)?;
+                }
+                (SelectionExpansionUnit::All, _) => {
+                    commands::select_all(tr)?;
+                }
+                (_, None) => {}
+            },
             SelectionOp::Unset => unreachable!("handled above"),
         }
         Ok(())
@@ -188,6 +203,112 @@ mod tests {
 
         assert_eq!(editor.state().selection, before);
         assert!(!before.expect("selection exists in test").is_collapsed());
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn expand_word_expands_selection_inside_one_word() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 1) -> (t, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Expand {
+                unit: SelectionExpansionUnit::Word,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.offset, 5);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn expand_word_does_not_require_layout() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 1) -> (t, 3)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Expand {
+                unit: SelectionExpansionUnit::Word,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.offset, 5);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn expand_word_does_not_shrink_selection_across_words() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 1) -> (t, 8)
+        };
+        let before = state.selection;
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Expand {
+                unit: SelectionExpansionUnit::Word,
+            },
+        });
+
+        assert_eq!(editor.state().selection, before);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn expand_sentence_expands_selection_inside_one_sentence() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("Hello world. Next sentence.") } } }
+            selection: (t, 1) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Expand {
+                unit: SelectionExpansionUnit::Sentence,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor.offset, 0);
+        assert!(
+            sel.head.offset > 5,
+            "sentence expansion should grow past the initial selection: {:?}",
+            sel
+        );
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn expand_all_selects_document_range() {
+        let (state, ..) = state! {
+            doc { root { paragraph { a: text("hello") } paragraph { b: text("world") } } }
+            selection: (a, 1) -> (a, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Expand {
+                unit: SelectionExpansionUnit::All,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.offset, 2);
         assert!(!editor.history.can_undo());
     }
 

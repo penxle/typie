@@ -113,7 +113,6 @@ pub enum ModifierOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionOp {
-    All,
     Set {
         selection: Selection,
     },
@@ -131,6 +130,19 @@ pub enum SelectionOp {
         head_y: f32,
         initial_selection: Option<Selection>,
     },
+    Expand {
+        unit: SelectionExpansionUnit,
+    },
+}
+
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionExpansionUnit {
+    Word,
+    Sentence,
+    Paragraph,
+    All,
 }
 
 #[ffi]

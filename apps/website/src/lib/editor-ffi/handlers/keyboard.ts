@@ -163,7 +163,7 @@ const bindings: KeyBinding[] = [
   {
     key: 'a',
     modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'selection', op: { type: 'all' } }),
+    action: (ed) => ed.enqueue({ type: 'selection', op: { type: 'expand', unit: 'all' } }),
   },
 
   {

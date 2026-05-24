@@ -247,7 +247,7 @@ export class Editor {
   }
 
   requestSelectAll(): void {
-    this.enqueue({ type: 'selection', op: { type: 'all' } });
+    this.enqueue({ type: 'selection', op: { type: 'expand', unit: 'all' } });
   }
 
   async requestCopy(): Promise<void> {

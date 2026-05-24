@@ -45,6 +45,7 @@ import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.PlainNodeEntry
+import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
@@ -221,7 +222,7 @@ private fun EditorPreviewContent(
 
     editor.await {
       if (modifiers.isNotEmpty()) {
-        enqueue(Message.Selection(SelectionOp.All))
+        enqueue(Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.All)))
         modifiers.forEach { modifier -> enqueue(Message.Modifier(ModifierOp.Set(modifier))) }
       }
       enqueue(Message.Selection(SelectionOp.SetFlat(start = 0, end = 0)))

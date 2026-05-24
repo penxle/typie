@@ -6,6 +6,7 @@ mod marker_lift;
 mod merge;
 mod modifiers;
 mod range;
+mod selection;
 mod table;
 mod tree;
 
@@ -17,5 +18,6 @@ pub(crate) use marker_lift::*;
 pub(crate) use merge::*;
 pub(crate) use modifiers::*;
 pub(crate) use range::*;
+pub(crate) use selection::*;
 pub(crate) use table::*;
 pub(crate) use tree::*;
