@@ -536,24 +536,45 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
 
     let del_end = initial.text.len() - suffix;
     let delta = analyze_delta(&initial.text, prefix, del_end, ins, initial.sel_start);
+    let should_insert_after_unit_selection = !delta.ins_text.is_empty()
+        && prefix == initial.sel_start
+        && del_end == initial.sel_end
+        && editor
+            .state()
+            .selection
+            .as_ref()
+            .is_some_and(|selection| selection.is_unit_node_selection(&editor.state().doc));
+    let has_text_delta = !del.is_empty() || !ins.is_empty();
 
-    if delta.start_tokens == 0 && delta.end_tokens == 0 {
-        if !del.is_empty()
-            || !ins.is_empty()
-            || result.comp.is_some()
-            || editor.state().composition.is_some()
-        {
+    if should_insert_after_unit_selection || (delta.start_tokens == 0 && delta.end_tokens == 0) {
+        if has_text_delta || result.comp.is_some() || editor.state().composition.is_some() {
             editor.transact(|tr| {
-                if !del.is_empty() || !ins.is_empty() {
-                    replace_text_range(
+                if has_text_delta {
+                    commands::first!(
                         tr,
-                        delta.replace_start,
-                        delta.replace_end,
-                        &delta.ins_text,
+                        |tr| {
+                            if !should_insert_after_unit_selection {
+                                return Ok(false);
+                            }
+                            commands::chain!(
+                                tr,
+                                commands::insert_paragraph_after_unit_selection(),
+                                commands::insert_text(&delta.ins_text),
+                            )
+                        },
+                        |tr| replace_text_range(
+                            tr,
+                            delta.replace_start,
+                            delta.replace_end,
+                            &delta.ins_text,
+                        ),
                     )?;
                 }
 
-                let composition = match (result.comp, delta.composition_text_start) {
+                let composition_text_start = should_insert_after_unit_selection
+                    .then_some(prefix)
+                    .or(delta.composition_text_start);
+                let composition = match (result.comp, composition_text_start) {
                     (Some((start, end)), Some(text_start)) => {
                         let invalid = || EditorError::General {
                             msg: "invariant violated: flat IME token-only composition remap failed"
@@ -1494,6 +1515,67 @@ mod tests {
         };
         assert_state_eq!(editor.state(), &expected);
         assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_replace_selection_preserves_unit_selection_inserts_after() {
+        let (s, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { text("c") }
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "b".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { t1: text("b") }
+                paragraph { text("c") }
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_compose_preserves_unit_selection_inserts_after() {
+        let (s, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { text("c") }
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { t1: text("ㅎ") }
+                paragraph { text("c") }
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 5, end: 6 })
+        );
     }
 
     #[test]
