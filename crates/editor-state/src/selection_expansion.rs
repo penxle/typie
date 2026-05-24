@@ -89,6 +89,15 @@ fn inline_target_at(doc: &Doc, position: Position) -> Option<InlineTarget> {
     let node = doc.node(position.node_id)?;
     match node.node() {
         Node::Text(text) => {
+            if position.offset == text.text.len()
+                && let Some(next) = node.next_sibling()
+                && matches!(next.node(), Node::HardBreak(_) | Node::PageBreak(_))
+            {
+                return Some(InlineTarget::Unit {
+                    parent_id: next.parent()?.id(),
+                    index: next.index()?,
+                });
+            }
             if position.offset <= text.text.len() {
                 Some(InlineTarget::Text {
                     node_id: node.id(),
@@ -516,6 +525,34 @@ mod tests {
                 Position {
                     node_id: t,
                     offset: 5,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn word_expansion_at_text_hard_break_boundary_selects_hard_break() {
+        let resource = Resource::new_test();
+        let (state, p, t) = state! {
+            doc { root { p: paragraph { t: text("h") hard_break } } }
+            selection: (t, 1)
+        };
+
+        let selection = Selection::collapsed(Position {
+            node_id: t,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        });
+        let actual = resolve_word_selection_expansion(&state.doc, selection, &resource);
+
+        assert_eq!(
+            actual,
+            Some(Selection::new(
+                Position::new(p, 1),
+                Position {
+                    node_id: p,
+                    offset: 2,
                     affinity: Affinity::Upstream,
                 },
             ))
