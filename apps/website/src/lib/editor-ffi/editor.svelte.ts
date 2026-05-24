@@ -27,6 +27,7 @@ import type {
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type {
+  ArchivedAsset,
   ContextMenuContributor,
   ContextMenuContributorContext,
   ContextMenuItem,
@@ -114,6 +115,7 @@ export class Editor {
   inflightFiles = $state(new SvelteMap<string, { name: string; size: number }>());
 
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
+  archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
 
   private constructor() {
     // no-op

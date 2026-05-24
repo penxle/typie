@@ -56,6 +56,11 @@
             thumbnailUrl
             html
           }
+
+          ... on DocumentArchivedNode {
+            id
+            content
+          }
         }
         ...Editor_document
         ...BottomToolbar_document
@@ -246,6 +251,13 @@
           description: asset.description ?? null,
           thumbnailUrl: asset.thumbnailUrl ?? null,
           html: asset.html ?? null,
+        });
+      }
+
+      if (asset.__typename === 'DocumentArchivedNode') {
+        editor.archivedAssets.set(asset.id, {
+          id: asset.id,
+          content: asset.content,
         });
       }
     }

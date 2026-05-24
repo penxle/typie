@@ -27,6 +27,11 @@ export type EmbedAsset = {
   html: string | null;
 };
 
+export type ArchivedAsset = {
+  id: string;
+  content: string | null;
+};
+
 export type ContextMenuItem = {
   label: string;
   icon?: Component;
