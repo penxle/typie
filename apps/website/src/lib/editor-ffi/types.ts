@@ -1,4 +1,5 @@
-import type { EditorEvent } from '@typie/editor-ffi/browser';
+import type { EditorEvent, InteractiveHit } from '@typie/editor-ffi/browser';
+import type { Component } from 'svelte';
 import type { Editor } from './editor.svelte';
 
 export type ImageStage = 'empty' | 'uploading' | 'resolving' | 'ready';
@@ -15,3 +16,22 @@ export type ImageAsset = {
   height: number;
   placeholder: string;
 };
+
+export type ContextMenuItem = {
+  label: string;
+  icon?: Component;
+  variant?: 'default' | 'danger';
+  onclick: () => void | Promise<void>;
+};
+
+export type ContextMenuSource = 'mouse' | 'touch';
+
+export type ContextMenuPlacement = 'bottom-start' | 'top' | 'bottom';
+
+export type ContextMenuContributorContext = {
+  hit: InteractiveHit | undefined;
+  clientX: number;
+  clientY: number;
+};
+
+export type ContextMenuContributor = (ctx: ContextMenuContributorContext) => ContextMenuItem[];

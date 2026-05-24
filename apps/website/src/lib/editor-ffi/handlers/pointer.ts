@@ -1,28 +1,41 @@
-import type { Rect } from '@typie/editor-ffi/browser';
+import type { InteractiveHit, Rect } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { EditorEventHandler } from '../types';
 
 const pointInRect = (x: number, y: number, r: Rect): boolean => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
 
+export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, local: { x: number; y: number }): boolean => {
+  const editMode = !editor.readOnly;
+  if (hit.type === 'fold_title') {
+    const onText = editMode && hit.text_rect !== undefined && pointInRect(local.x, local.y, hit.text_rect);
+    if (!onText) {
+      editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
+      return true;
+    }
+  } else if (hit.type === 'callout_icon' && editMode) {
+    editor.enqueue({ type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } });
+    return true;
+  }
+  return false;
+};
+
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  if (e.pointerType === 'touch') {
+    const local = editor.clientToLocal(e.clientX, e.clientY);
+    const resolved = local ? { page: local.page, x: local.x, y: local.y } : null;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    editor.gesture.handlePointerDown(e, resolved);
+    return;
+  }
+
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) {
     return;
   }
 
   const hit = editor.interactiveHitTest(local.page, local.x, local.y);
-  if (hit) {
-    const editMode = !editor.readOnly;
-    if (hit.type === 'fold_title') {
-      const onText = editMode && hit.text_rect !== undefined && pointInRect(local.x, local.y, hit.text_rect);
-      if (!onText) {
-        editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
-        return;
-      }
-    } else if (hit.type === 'callout_icon' && editMode) {
-      editor.enqueue({ type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } });
-      return;
-    }
+  if (hit && tryHandleInteractiveHit(editor, hit, { x: local.x, y: local.y })) {
+    return;
   }
 
   const { page, x, y } = local;
@@ -34,6 +47,11 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
 };
 
 export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  if (e.pointerType === 'touch') {
+    editor.gesture.handlePointerMove(e);
+    return;
+  }
+
   editor.updatePointerHover(e.clientX, e.clientY);
 
   if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -50,6 +68,11 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
 };
 
 export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  if (e.pointerType === 'touch') {
+    editor.gesture.handlePointerUp(e);
+    return;
+  }
+
   if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
     return;
   }
@@ -58,6 +81,11 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
 };
 
 export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  if (e.pointerType === 'touch') {
+    editor.gesture.handlePointerCancel(e);
+    return;
+  }
+
   if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
     return;
   }

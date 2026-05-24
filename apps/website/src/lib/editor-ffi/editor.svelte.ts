@@ -3,6 +3,8 @@ import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
+import { TouchGestureController } from './gesture.svelte';
+import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { register, unregister } from './registry';
 import type {
   BlockState,
@@ -18,11 +20,20 @@ import type {
   PlainRootNode,
   PointerStyle,
   Selection,
+  SelectionEndpoints,
   Size,
   ThemeVariant,
   Viewport,
 } from '@typie/editor-ffi/browser';
-import type { EditorEventListener, ImageAsset } from './types';
+import type {
+  ContextMenuContributor,
+  ContextMenuContributorContext,
+  ContextMenuItem,
+  ContextMenuPlacement,
+  ContextMenuSource,
+  EditorEventListener,
+  ImageAsset,
+} from './types';
 
 let wasmInitPromise: Promise<void> | null = null;
 
@@ -54,7 +65,7 @@ export class Editor {
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
   scrollContainerEl = $state<HTMLDivElement>();
 
-  readOnly = false;
+  readOnly = $state(false);
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
@@ -77,6 +88,24 @@ export class Editor {
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
 
+  contextMenu = $state({
+    isOpen: false,
+    source: 'mouse' as ContextMenuSource,
+    x: 0,
+    y: 0,
+    placement: 'bottom-start' as ContextMenuPlacement,
+    extraItems: [] as ContextMenuItem[],
+  });
+
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #contextMenuContributors = new Set<ContextMenuContributor>();
+
+  #gesture!: TouchGestureController;
+
+  get gesture(): TouchGestureController {
+    return this.#gesture;
+  }
+
   private constructor() {
     // no-op
   }
@@ -88,6 +117,7 @@ export class Editor {
 
     self.#wasm = wasm.create_editor_from_graph(graph, viewport);
     self.#viewport = viewport;
+    self.#gesture = new TouchGestureController(self);
 
     self.on('state_changed', self.#stateChangedHandler);
     self.on('font_data_missing', fontDataMissingHandler);
@@ -134,6 +164,12 @@ export class Editor {
     return this.#selection;
   }
 
+  get isSelectionCollapsed(): boolean {
+    const sel = this.#selection;
+    if (!sel) return true;
+    return sel.anchor.node_id === sel.head.node_id && sel.anchor.offset === sel.head.offset && sel.anchor.affinity === sel.head.affinity;
+  }
+
   get pageSizes() {
     return this.#pageSizes;
   }
@@ -168,6 +204,78 @@ export class Editor {
 
   blur() {
     this.inputEl?.blur();
+  }
+
+  openContextMenu(opts: {
+    x: number;
+    y: number;
+    source: ContextMenuSource;
+    placement: ContextMenuPlacement;
+    extraItems?: ContextMenuItem[];
+  }): void {
+    this.contextMenu.x = opts.x;
+    this.contextMenu.y = opts.y;
+    this.contextMenu.source = opts.source;
+    this.contextMenu.placement = opts.placement;
+    this.contextMenu.extraItems = opts.extraItems ?? [];
+    this.contextMenu.isOpen = true;
+  }
+
+  closeContextMenu(): void {
+    if (!this.contextMenu.isOpen) return;
+    this.contextMenu.isOpen = false;
+    this.contextMenu.extraItems = [];
+  }
+
+  registerContextMenuContributor(fn: ContextMenuContributor): () => void {
+    this.#contextMenuContributors.add(fn);
+    return () => {
+      this.#contextMenuContributors.delete(fn);
+    };
+  }
+
+  collectContextMenuContributions(ctx: ContextMenuContributorContext): ContextMenuItem[] {
+    const items: ContextMenuItem[] = [];
+    for (const fn of this.#contextMenuContributors) {
+      items.push(...fn(ctx));
+    }
+    return items;
+  }
+
+  requestSelectAll(): void {
+    this.enqueue({ type: 'selection', op: { type: 'all' } });
+  }
+
+  async requestCopy(): Promise<void> {
+    if (this.isSelectionCollapsed) return;
+    const payload = this.copySelection();
+    if (!payload) return;
+    await writeClipboardPayload(payload.html, payload.text);
+  }
+
+  async requestCut(): Promise<void> {
+    if (this.isSelectionCollapsed || this.readOnly) return;
+    const payload = this.copySelection();
+    if (!payload) return;
+    await writeClipboardPayload(payload.html, payload.text);
+    this.enqueue({ type: 'clipboard', op: { type: 'cut' } });
+  }
+
+  async requestPaste(): Promise<void> {
+    if (this.readOnly) return;
+    const result = await readClipboardRich();
+    if (!result) return;
+    // HTML-only clipboard is intentionally accepted here (the WASM Paste op handles text: '' with non-empty html); diverges from handlePaste which gates on text being present.
+    const hasContent = result.html !== undefined || result.text !== '';
+    if (!hasContent) return;
+    this.enqueue({ type: 'clipboard', op: { type: 'paste', html: result.html, text: result.text } });
+  }
+
+  async requestPasteTextOnly(): Promise<void> {
+    if (this.readOnly) return;
+    const result = await readClipboardRich();
+    if (!result || result.text === '') return;
+    this.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text: result.text } });
   }
 
   get focusable() {
@@ -244,6 +352,14 @@ export class Editor {
 
   interactiveHitTest(page: number, x: number, y: number): InteractiveHit | undefined {
     return this.#wasm.interactive_hit_test(page, x, y);
+  }
+
+  selectionEndpoints(): SelectionEndpoints | undefined {
+    return this.#wasm.selection_endpoints();
+  }
+
+  selectionHitTest(page: number, x: number, y: number): boolean {
+    return this.#wasm.selection_hit_test(page, x, y);
   }
 
   updatePointerHover(clientX: number, clientY: number): void {
@@ -430,6 +546,7 @@ export class Editor {
       this.#rafId = null;
     }
 
+    this.#gesture?.destroy();
     this.#wasm?.free();
   }
 }

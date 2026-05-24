@@ -9,9 +9,11 @@
   import { Editor, getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
+  import { handleContextMenu } from '../handlers/contextmenu';
   import { handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import Caret from './Caret.svelte';
   import CaretPositioned from './CaretPositioned.svelte';
+  import ContextMenu from './ContextMenu.svelte';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
@@ -117,6 +119,7 @@
       if (ctx.editor) ctx.editor.scrollContainerEl = undefined;
     };
   }}
+  oncontextmenu={handle(ctx.editor, handleContextMenu)}
   onfocusin={() => ctx.editor?.focus()}
   onfocusout={() => {
     if (!window.document.hasFocus()) return;
@@ -145,5 +148,7 @@
     <LineHighlight />
 
     <Scrollbar />
+
+    <ContextMenu />
   {/if}
 </div>
