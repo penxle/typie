@@ -366,8 +366,6 @@ mod tests {
 
     #[test]
     fn shift_click_first_image_from_selected_second_image_envelops_both() {
-        use editor_state::{Affinity, Position};
-
         let (state, r1, i0, i1) = state! {
             doc { r1: root { i0: image i1: image paragraph {} } }
             selection: (r1, 1, >) -> (r1, 2, <)
@@ -381,25 +379,14 @@ mod tests {
         editor.view.layout(&editor.state.doc);
 
         let atom_center = |editor: &Editor, idx: usize| {
-            let sel = Selection::new(
-                Position {
-                    node_id: r1,
-                    offset: idx,
-                    affinity: Affinity::Downstream,
-                },
-                Position {
-                    node_id: r1,
-                    offset: idx + 1,
-                    affinity: Affinity::Upstream,
-                },
-            );
-            let resolved = sel.resolve(&editor.state.doc).unwrap();
-            let rects = editor.view.selection_rects(&resolved);
-            let pr = &rects[0];
+            let elements = editor
+                .view
+                .external_elements(&editor.state.doc, editor.state().selection.as_ref());
+            let e = &elements[idx];
             (
-                pr.page_idx,
-                pr.rect.x + pr.rect.width / 2.0,
-                pr.rect.y + pr.rect.height / 2.0,
+                e.page_idx,
+                e.bounds.x + e.bounds.width / 2.0,
+                e.bounds.y + e.bounds.height / 2.0,
             )
         };
 
@@ -450,25 +437,14 @@ mod tests {
         editor.view.layout(&editor.state.doc);
 
         let atom_center = |editor: &Editor, idx: usize| {
-            let sel = Selection::new(
-                Position {
-                    node_id: r1,
-                    offset: idx,
-                    affinity: Affinity::Downstream,
-                },
-                Position {
-                    node_id: r1,
-                    offset: idx + 1,
-                    affinity: Affinity::Upstream,
-                },
-            );
-            let resolved = sel.resolve(&editor.state.doc).unwrap();
-            let rects = editor.view.selection_rects(&resolved);
-            let pr = &rects[0];
+            let elements = editor
+                .view
+                .external_elements(&editor.state.doc, editor.state().selection.as_ref());
+            let e = &elements[idx];
             (
-                pr.page_idx,
-                pr.rect.x + pr.rect.width / 2.0,
-                pr.rect.y + pr.rect.height / 2.0,
+                e.page_idx,
+                e.bounds.x + e.bounds.width / 2.0,
+                e.bounds.y + e.bounds.height / 2.0,
             )
         };
 
@@ -605,25 +581,14 @@ mod tests {
         editor.view.layout(&editor.state.doc);
 
         let atom_center = |editor: &Editor, idx: usize| {
-            let sel = Selection::new(
-                Position {
-                    node_id: r1,
-                    offset: idx,
-                    affinity: Affinity::Downstream,
-                },
-                Position {
-                    node_id: r1,
-                    offset: idx + 1,
-                    affinity: Affinity::Upstream,
-                },
-            );
-            let resolved = sel.resolve(&editor.state.doc).unwrap();
-            let rects = editor.view.selection_rects(&resolved);
-            let pr = &rects[0];
+            let elements = editor
+                .view
+                .external_elements(&editor.state.doc, editor.state().selection.as_ref());
+            let e = &elements[idx];
             (
-                pr.page_idx,
-                pr.rect.x + pr.rect.width / 2.0,
-                pr.rect.y + pr.rect.height / 2.0,
+                e.page_idx,
+                e.bounds.x + e.bounds.width / 2.0,
+                e.bounds.y + e.bounds.height / 2.0,
             )
         };
 
