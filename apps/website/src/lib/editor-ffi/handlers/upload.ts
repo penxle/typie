@@ -1,5 +1,5 @@
-import { uploadBlobAsImage } from '$lib/utils/blob.svelte';
-import type { ImageAsset } from '../types';
+import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils/blob.svelte';
+import type { FileAsset, ImageAsset } from '../types';
 
 export const getImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
   return new Promise((resolve, reject) => {
@@ -8,6 +8,16 @@ export const getImageDimensions = (src: string): Promise<{ width: number; height
     img.addEventListener('error', () => reject(new Error('Failed to load image')));
     img.src = src;
   });
+};
+
+export const uploadFileAsFile = async (file: File): Promise<FileAsset> => {
+  const uploaded = await uploadBlobAsFile(file);
+  return {
+    id: uploaded.id,
+    name: uploaded.name,
+    size: uploaded.size,
+    url: uploaded.url,
+  };
 };
 
 export const uploadImageFile = async (file: File): Promise<ImageAsset> => {

@@ -32,6 +32,7 @@ import type {
   ContextMenuPlacement,
   ContextMenuSource,
   EditorEventListener,
+  FileAsset,
   ImageAsset,
 } from './types';
 
@@ -45,6 +46,7 @@ function ensureWasmInitialized(): Promise<void> {
 
 class EditorContext {
   editor = $state<Editor>();
+  fileAssets = $state(new SvelteMap<string, FileAsset>());
 }
 
 const [getEditorContext, setEditorContext] = createContext<EditorContext>();
@@ -105,6 +107,8 @@ export class Editor {
   get gesture(): TouchGestureController {
     return this.#gesture;
   }
+
+  inflightFiles = $state(new SvelteMap<string, { name: string; size: number }>());
 
   private constructor() {
     // no-op

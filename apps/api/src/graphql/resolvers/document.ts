@@ -231,10 +231,10 @@ Document.implement({
         if (state) {
           const plain = state.json as { nodes: Record<string, { node: { type: string; id?: string | null } }> };
           const nodes = Object.values(plain.nodes);
-          imageIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'image' && e.node.id != null ? [e.node.id] : [])))];
-          fileIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'file' && e.node.id != null ? [e.node.id] : [])))];
-          embedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'embed' && e.node.id != null ? [e.node.id] : [])))];
-          archivedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'archived' && e.node.id != null ? [e.node.id] : [])))];
+          imageIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'image' && e.node.id ? [e.node.id] : [])))];
+          fileIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'file' && e.node.id ? [e.node.id] : [])))];
+          embedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'embed' && e.node.id ? [e.node.id] : [])))];
+          archivedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'archived' && e.node.id ? [e.node.id] : [])))];
         } else {
           const content = await db
             .select({ snapshot: DocumentContents.snapshot })

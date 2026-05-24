@@ -3,6 +3,7 @@ import type { Component } from 'svelte';
 import type { Editor } from './editor.svelte';
 
 export type ImageStage = 'empty' | 'uploading' | 'resolving' | 'ready';
+export type FileStage = 'empty' | 'uploading' | 'resolving' | 'ready';
 
 export type EditorEventListener<K extends EditorEvent['type']> = (editor: Editor, event: Extract<EditorEvent, { type: K }>) => void;
 
@@ -35,3 +36,10 @@ export type ContextMenuContributorContext = {
 };
 
 export type ContextMenuContributor = (ctx: ContextMenuContributorContext) => ContextMenuItem[];
+
+export type FileAsset = {
+  id: string;
+  name: string;
+  size: string;
+  url: string;
+};

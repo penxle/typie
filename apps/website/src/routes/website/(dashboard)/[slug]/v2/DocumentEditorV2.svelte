@@ -40,6 +40,13 @@
             height
             placeholder
           }
+
+          ... on File {
+            id
+            name
+            size
+            url
+          }
         }
         ...Editor_document
         ...BottomToolbar_document
@@ -210,6 +217,16 @@
         width: asset.width,
         height: asset.height,
         placeholder: asset.placeholder,
+      });
+    }
+
+    for (const asset of document.data.assets) {
+      if (asset.__typename !== 'File') continue;
+      ctx.fileAssets.set(asset.id, {
+        id: asset.id,
+        name: asset.name,
+        size: asset.size,
+        url: asset.url,
       });
     }
   });
