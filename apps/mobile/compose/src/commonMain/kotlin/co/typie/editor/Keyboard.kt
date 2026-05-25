@@ -106,6 +106,16 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     ),
     KeyBinding(
       ComposeKey.DirectionLeft,
+      setOf(KeyModifier.Ctrl, KeyModifier.Shift),
+      action = { listOf(move(Movement.Word(Direction.Backward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      setOf(KeyModifier.Ctrl, KeyModifier.Shift),
+      action = { listOf(move(Movement.Word(Direction.Forward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionLeft,
       setOf(KeyModifier.Mod),
       predicate = { isMac },
       action = { listOf(move(Movement.Line(Direction.Backward, Axis.Horizontal), false)) },
@@ -160,6 +170,18 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     ),
     KeyBinding(
       ComposeKey.DirectionUp,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Document(Direction.Backward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionDown,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      predicate = { isMac },
+      action = { listOf(move(Movement.Document(Direction.Forward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionUp,
       setOf(KeyModifier.Alt),
       action = { listOf(move(Movement.Sentence(Direction.Backward), false)) },
     ),
@@ -167,6 +189,16 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       ComposeKey.DirectionDown,
       setOf(KeyModifier.Alt),
       action = { listOf(move(Movement.Sentence(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionUp,
+      setOf(KeyModifier.Alt, KeyModifier.Shift),
+      action = { listOf(move(Movement.Sentence(Direction.Backward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionDown,
+      setOf(KeyModifier.Alt, KeyModifier.Shift),
+      action = { listOf(move(Movement.Sentence(Direction.Forward), true)) },
     ),
     KeyBinding(ComposeKey.Enter, action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Enter))) }),
     KeyBinding(
@@ -217,8 +249,18 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     ),
     KeyBinding(
       ComposeKey.MoveHome,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Line(Direction.Backward, Axis.Horizontal), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveHome,
       setOf(KeyModifier.Ctrl),
       action = { listOf(move(Movement.Document(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveHome,
+      setOf(KeyModifier.Ctrl, KeyModifier.Shift),
+      action = { listOf(move(Movement.Document(Direction.Backward), true)) },
     ),
     KeyBinding(
       ComposeKey.MoveEnd,
@@ -226,16 +268,36 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     ),
     KeyBinding(
       ComposeKey.MoveEnd,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Line(Direction.Forward, Axis.Horizontal), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveEnd,
       setOf(KeyModifier.Ctrl),
       action = { listOf(move(Movement.Document(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.MoveEnd,
+      setOf(KeyModifier.Ctrl, KeyModifier.Shift),
+      action = { listOf(move(Movement.Document(Direction.Forward), true)) },
     ),
     KeyBinding(
       ComposeKey.PageUp,
       action = { listOf(move(Movement.Page(Direction.Backward), false)) },
     ),
     KeyBinding(
+      ComposeKey.PageUp,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Page(Direction.Backward), true)) },
+    ),
+    KeyBinding(
       ComposeKey.PageDown,
       action = { listOf(move(Movement.Page(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.PageDown,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Page(Direction.Forward), true)) },
     ),
     KeyBinding(
       ComposeKey.B,
