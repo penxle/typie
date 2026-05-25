@@ -11,6 +11,7 @@ fn walk(fragment: &Fragment, out: &mut String) {
     match &fragment.node {
         PlainNode::Text(t) => out.push_str(&t.text),
         PlainNode::HardBreak(_) => out.push('\n'),
+        PlainNode::Table(_) => walk_table(fragment, out),
         _ => {
             let is_block = is_block_node(&fragment.node);
             let first_in_block = is_block && !out.is_empty() && !out.ends_with("\n\n");
@@ -30,6 +31,51 @@ fn walk(fragment: &Fragment, out: &mut String) {
 
 fn is_block_node(n: &PlainNode) -> bool {
     !matches!(n, PlainNode::Text(_) | PlainNode::HardBreak(_))
+}
+
+// TSV-style emission: tabs between cells, newlines between rows. Cell content
+// is flattened to inline text so multi-block cells don't shred the row layout.
+fn walk_table(table: &Fragment, out: &mut String) {
+    if !out.is_empty() && !out.ends_with("\n\n") {
+        if out.ends_with('\n') {
+            out.push('\n');
+        } else {
+            out.push_str("\n\n");
+        }
+    }
+    let mut first_row = true;
+    for row in &table.children {
+        if !matches!(row.node, PlainNode::TableRow(_)) {
+            continue;
+        }
+        if !first_row {
+            out.push('\n');
+        }
+        first_row = false;
+        let mut first_cell = true;
+        for cell in &row.children {
+            if !matches!(cell.node, PlainNode::TableCell(_)) {
+                continue;
+            }
+            if !first_cell {
+                out.push('\t');
+            }
+            first_cell = false;
+            collect_cell_text(cell, out);
+        }
+    }
+}
+
+fn collect_cell_text(node: &Fragment, out: &mut String) {
+    match &node.node {
+        PlainNode::Text(t) => out.push_str(&t.text),
+        PlainNode::HardBreak(_) => out.push(' '),
+        _ => {
+            for c in &node.children {
+                collect_cell_text(c, out);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -59,5 +105,29 @@ mod tests {
         };
         let slice = Slice::extract(&s).unwrap();
         assert_eq!(slice.to_text(), "first\nline\n\nsecond");
+    }
+
+    #[test]
+    fn to_text_cell_rect_is_tsv() {
+        let (s, _, c00, _, _, _, c11) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let s = editor_state::State {
+            selection: Some(sel),
+            ..s
+        };
+        let slice = Slice::extract(&s).unwrap();
+        assert_eq!(slice.to_text(), "a\tb\nc\td");
     }
 }

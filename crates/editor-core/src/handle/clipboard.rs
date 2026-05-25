@@ -1,5 +1,7 @@
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
+use editor_model::{Fragment, PlainNode};
+use editor_state::enclosing_table_cell;
 use editor_transaction::{HistoryMeta, HistoryTag};
 
 use crate::editor::Editor;
@@ -23,6 +25,15 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                             tag: HistoryTag::PasteHtml { plain_text },
                         };
                     });
+                }
+                let in_cell_context = is_cell_rect_selection(tr) || caret_in_table_cell(tr);
+                if in_cell_context && slice_has_table(&slice) {
+                    commands::paste_cells_into_cell_rect(tr, slice.clone())?;
+                    return Ok(());
+                }
+                if is_cell_rect_selection(tr) {
+                    commands::fill_cell_rect_with_slice(tr, slice.clone())?;
+                    return Ok(());
                 }
                 commands::chain!(
                     tr,
@@ -56,6 +67,35 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
             })
         }
     }
+}
+
+fn is_cell_rect_selection(tr: &editor_transaction::Transaction) -> bool {
+    let Some(sel) = tr.selection() else {
+        return false;
+    };
+    let doc = tr.doc();
+    sel.resolve(&doc).and_then(|rs| rs.as_cell_rect()).is_some()
+}
+
+fn caret_in_table_cell(tr: &editor_transaction::Transaction) -> bool {
+    let Some(sel) = tr.selection() else {
+        return false;
+    };
+    if !sel.is_collapsed() {
+        return false;
+    }
+    let doc = tr.doc();
+    enclosing_table_cell(&doc, sel.head.node_id).is_some()
+}
+
+fn slice_has_table(slice: &Slice) -> bool {
+    fn walk(f: &Fragment) -> bool {
+        if matches!(f.node, PlainNode::Table(_)) {
+            return true;
+        }
+        f.children.iter().any(walk)
+    }
+    walk(&slice.fragment)
 }
 
 #[cfg(test)]
@@ -216,6 +256,410 @@ mod tests {
             selection: (t2, 1)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn cut_on_cell_rect_clears_cells_keeps_structure() {
+        let (s, _, c00, c01, _, c10, c11) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let s = editor_state::State {
+            selection: Some(sel),
+            ..s
+        };
+        let mut editor = Editor::new_test(s);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Cut,
+        });
+        for cid in [c00, c01, c10, c11] {
+            let cell = editor.state().doc.node(cid).expect("cell survives cut");
+            assert_eq!(cell.children().count(), 1);
+            assert_eq!(cell.first_child().unwrap().children().count(), 0);
+        }
+    }
+
+    #[test]
+    fn cut_on_full_table_cell_rect_keeps_table() {
+        let (s, tbl, _, c00, _, _, _, c11) = state! {
+            doc { root { tbl: table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let s = editor_state::State {
+            selection: Some(sel),
+            ..s
+        };
+        let mut editor = Editor::new_test(s);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Cut,
+        });
+        let table = editor
+            .state()
+            .doc
+            .node(tbl)
+            .expect("table survives cell-rect cut");
+        assert!(matches!(table.node(), editor_model::Node::Table(_)));
+        assert_eq!(table.children().count(), 2);
+        for row in table.children() {
+            assert_eq!(row.children().count(), 2);
+        }
+    }
+
+    #[test]
+    fn paste_table_payload_into_cell_rect_overwrites_cells() {
+        let (s_src, _, c00s, _, _, _, c11s) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00s: table_cell { paragraph { text("X") } }
+                    c01s: table_cell { paragraph { text("Y") } }
+                }
+                tr1: table_row {
+                    c10s: table_cell { paragraph { text("Z") } }
+                    c11s: table_cell { paragraph { text("W") } }
+                }
+            } } }
+            selection: (c00s, 0)
+        };
+        let sel_src = editor_state::cell_rect_selection(&s_src.doc, c00s, c11s).unwrap();
+        let s_src = editor_state::State {
+            selection: Some(sel_src),
+            ..s_src
+        };
+        let payload = Slice::extract(&s_src).unwrap().to_payload();
+
+        let (s_tgt, tbl, _, c00t, _, _, _, c11t) = state! {
+            doc { root { tbl: table {
+                tr0: table_row {
+                    c00t: table_cell { paragraph { text("a") } }
+                    c01t: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10t: table_cell { paragraph { text("c") } }
+                    c11t: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00t, 0)
+        };
+        let sel_tgt = editor_state::cell_rect_selection(&s_tgt.doc, c00t, c11t).unwrap();
+        let s_tgt = editor_state::State {
+            selection: Some(sel_tgt),
+            ..s_tgt
+        };
+        let mut editor = Editor::new_test(s_tgt);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let tbl = editor.state().doc.node(tbl).expect("table survives paste");
+        assert_eq!(tbl.children().count(), 2);
+        let texts: Vec<String> = tbl
+            .children()
+            .flat_map(|row| {
+                row.children().map(|cell| {
+                    let mut out = String::new();
+                    fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
+                        if let editor_model::Node::Text(t) = n.node() {
+                            out.push_str(&t.text);
+                        }
+                        for c in n.children() {
+                            walk(c, out);
+                        }
+                    }
+                    walk(cell, &mut out);
+                    out
+                })
+            })
+            .collect();
+        assert_eq!(texts, vec!["X", "Y", "Z", "W"]);
+    }
+
+    #[test]
+    fn paste_5x1_table_into_3x2_extends_target_to_5x2() {
+        let (s_src, _, sc00, _, _, _, _, _, _, _, sc40) = state! {
+            doc { root { table {
+                tr0: table_row { sc00: table_cell { paragraph { text("A") } } }
+                tr1: table_row { sc10: table_cell { paragraph { text("B") } } }
+                tr2: table_row { sc20: table_cell { paragraph { text("C") } } }
+                tr3: table_row { sc30: table_cell { paragraph { text("D") } } }
+                tr4: table_row { sc40: table_cell { paragraph { text("E") } } }
+            } } }
+            selection: (sc00, 0)
+        };
+        let sel_src = editor_state::cell_rect_selection(&s_src.doc, sc00, sc40).unwrap();
+        let s_src = editor_state::State {
+            selection: Some(sel_src),
+            ..s_src
+        };
+        let payload = Slice::extract(&s_src).unwrap().to_payload();
+
+        let (s_tgt, tbl, _, c00, _, _, _, _, _, _, c21) = state! {
+            doc { root { tbl: table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+                tr2: table_row {
+                    c20: table_cell { paragraph { text("e") } }
+                    c21: table_cell { paragraph { text("f") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel_tgt = editor_state::cell_rect_selection(&s_tgt.doc, c00, c21).unwrap();
+        let s_tgt = editor_state::State {
+            selection: Some(sel_tgt),
+            ..s_tgt
+        };
+        let mut editor = Editor::new_test(s_tgt);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        fn cell_text_at(
+            doc: &editor_model::Doc,
+            tbl: editor_model::NodeId,
+            row: usize,
+            col: usize,
+        ) -> String {
+            let table = doc.node(tbl).expect("table");
+            let row_ref = table.children().nth(row).expect("row");
+            let cell = row_ref.children().nth(col).expect("cell");
+            let mut out = String::new();
+            fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
+                if let editor_model::Node::Text(t) = n.node() {
+                    out.push_str(&t.text);
+                }
+                for c in n.children() {
+                    walk(c, out);
+                }
+            }
+            walk(cell, &mut out);
+            out
+        }
+
+        let doc = &editor.state().doc;
+        let table = doc.node(tbl).expect("table survives");
+        assert_eq!(table.children().count(), 5, "target now has 5 rows");
+        for row in table.children() {
+            assert_eq!(row.children().count(), 2, "every row keeps 2 cols");
+        }
+        for (row, ch) in ["A", "B", "C", "D", "E"].iter().enumerate() {
+            assert_eq!(cell_text_at(doc, tbl, row, 0), *ch);
+        }
+        assert_eq!(cell_text_at(doc, tbl, 0, 1), "b");
+        assert_eq!(cell_text_at(doc, tbl, 1, 1), "d");
+        assert_eq!(cell_text_at(doc, tbl, 2, 1), "f");
+        assert_eq!(cell_text_at(doc, tbl, 3, 1), "");
+        assert_eq!(cell_text_at(doc, tbl, 4, 1), "");
+    }
+
+    #[test]
+    fn paste_table_at_cell_caret_extends_target() {
+        let (s_src, _, sc00, _, _, _, sc20) = state! {
+            doc { root { table {
+                tr0: table_row { sc00: table_cell { paragraph { text("A") } } }
+                tr1: table_row { sc10: table_cell { paragraph { text("B") } } }
+                tr2: table_row { sc20: table_cell { paragraph { text("C") } } }
+            } } }
+            selection: (sc00, 0)
+        };
+        let sel_src = editor_state::cell_rect_selection(&s_src.doc, sc00, sc20).unwrap();
+        let s_src = editor_state::State {
+            selection: Some(sel_src),
+            ..s_src
+        };
+        let payload = Slice::extract(&s_src).unwrap().to_payload();
+
+        let (s_tgt, tbl, _, _, ct, _, _, _, _) = state! {
+            doc { root { tbl: table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { ct: text("hi") } }
+                    c01: table_cell { paragraph { text("x") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("y") } }
+                    c11: table_cell { paragraph { text("z") } }
+                }
+            } } }
+            selection: (ct, 1)
+        };
+        let mut editor = Editor::new_test(s_tgt);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let _ = ct;
+
+        let doc = &editor.state().doc;
+        let table = doc.node(tbl).expect("table survives");
+        assert_eq!(table.children().count(), 3);
+        for row in table.children() {
+            assert_eq!(row.children().count(), 2);
+        }
+
+        fn cell_text_at(
+            doc: &editor_model::Doc,
+            tbl: editor_model::NodeId,
+            row: usize,
+            col: usize,
+        ) -> String {
+            let table = doc.node(tbl).expect("table");
+            let row_ref = table.children().nth(row).expect("row");
+            let cell = row_ref.children().nth(col).expect("cell");
+            let mut out = String::new();
+            fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
+                if let editor_model::Node::Text(t) = n.node() {
+                    out.push_str(&t.text);
+                }
+                for c in n.children() {
+                    walk(c, out);
+                }
+            }
+            walk(cell, &mut out);
+            out
+        }
+
+        assert_eq!(cell_text_at(doc, tbl, 0, 0), "A");
+        assert_eq!(cell_text_at(doc, tbl, 1, 0), "B");
+        assert_eq!(cell_text_at(doc, tbl, 2, 0), "C");
+        assert_eq!(cell_text_at(doc, tbl, 0, 1), "x");
+        assert_eq!(cell_text_at(doc, tbl, 1, 1), "z");
+        assert_eq!(cell_text_at(doc, tbl, 2, 1), "");
+    }
+
+    #[test]
+    fn paste_plain_text_into_cell_rect_fills_every_cell() {
+        let (s, _, c00, c01, _, c10, c11) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let s = editor_state::State {
+            selection: Some(sel),
+            ..s
+        };
+        let mut editor = Editor::new_test(s);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: None,
+                text: "hello".into(),
+            },
+        });
+        fn cell_text(doc: &editor_model::Doc, id: editor_model::NodeId) -> String {
+            fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
+                if let editor_model::Node::Text(t) = n.node() {
+                    out.push_str(&t.text);
+                }
+                for c in n.children() {
+                    walk(c, out);
+                }
+            }
+            let mut out = String::new();
+            if let Some(n) = doc.node(id) {
+                walk(n, &mut out);
+            }
+            out
+        }
+        let doc = &editor.state().doc;
+        for cid in [c00, c01, c10, c11] {
+            assert_eq!(cell_text(doc, cid), "hello");
+        }
+    }
+
+    #[test]
+    fn paste_table_into_cell_rect_undo_restores_state() {
+        let (s_src, _, c00s, _, _, _, c11s) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00s: table_cell { paragraph { text("X") } }
+                    c01s: table_cell { paragraph { text("Y") } }
+                }
+                tr1: table_row {
+                    c10s: table_cell { paragraph { text("Z") } }
+                    c11s: table_cell { paragraph { text("W") } }
+                }
+            } } }
+            selection: (c00s, 0)
+        };
+        let sel_src = editor_state::cell_rect_selection(&s_src.doc, c00s, c11s).unwrap();
+        let s_src = editor_state::State {
+            selection: Some(sel_src),
+            ..s_src
+        };
+        let payload = Slice::extract(&s_src).unwrap().to_payload();
+
+        let (s_tgt, _, _, c00t, _, _, _, c11t) = state! {
+            doc { root { tbl: table {
+                tr0: table_row {
+                    c00t: table_cell { paragraph { text("a") } }
+                    c01t: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10t: table_cell { paragraph { text("c") } }
+                    c11t: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00t, 0)
+        };
+        let sel_tgt = editor_state::cell_rect_selection(&s_tgt.doc, c00t, c11t).unwrap();
+        let s_tgt = editor_state::State {
+            selection: Some(sel_tgt),
+            ..s_tgt
+        };
+        let before = s_tgt.doc.clone();
+        let mut editor = Editor::new_test(s_tgt);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        editor_model::assert_doc_eq!(&editor.state().doc, &before);
     }
 
     #[test]

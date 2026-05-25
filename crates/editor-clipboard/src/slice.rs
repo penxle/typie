@@ -1,5 +1,5 @@
-use editor_model::{Fragment, Node, NodeRef, PlainNode, PlainTextNode};
-use editor_state::{ResolvedSelection, State, is_prefix_of};
+use editor_model::{Fragment, Node, NodeRef, PlainNode, PlainRootNode, PlainTextNode};
+use editor_state::{CellRect, ResolvedSelection, State, is_prefix_of};
 use serde::{Deserialize, Serialize};
 
 use crate::html::parse as html_parse;
@@ -22,6 +22,9 @@ impl Slice {
         let rs = state.selection.as_ref()?.resolve(&state.doc)?;
         if rs.is_collapsed() {
             return None;
+        }
+        if let Some(rect) = rs.as_cell_rect() {
+            return Some(extract_cell_rect(&rect));
         }
         let common = rs.common_ancestor();
         let common_depth = common.path().len();
@@ -137,6 +140,44 @@ fn node_to_fragment(node: NodeRef<'_>) -> Fragment {
         node: node.node().to_plain(),
         modifiers: node.modifiers().cloned().collect(),
         children: node.children().map(node_to_fragment).collect(),
+    }
+}
+
+fn extract_cell_rect(rect: &CellRect<'_>) -> Slice {
+    let table = rect.table;
+    let mut rows: Vec<Fragment> = Vec::new();
+    for r in rect.rows.clone() {
+        let Some(row) = table.children().nth(r) else {
+            continue;
+        };
+        let mut cells: Vec<Fragment> = Vec::new();
+        for c in rect.cols.clone() {
+            if let Some(cell) = row.children().nth(c) {
+                cells.push(node_to_fragment(cell));
+            }
+        }
+        if cells.is_empty() {
+            continue;
+        }
+        rows.push(Fragment {
+            node: row.node().to_plain(),
+            modifiers: row.modifiers().cloned().collect(),
+            children: cells,
+        });
+    }
+    let table_frag = Fragment {
+        node: table.node().to_plain(),
+        modifiers: table.modifiers().cloned().collect(),
+        children: rows,
+    };
+    Slice {
+        fragment: Fragment {
+            node: PlainNode::Root(PlainRootNode::default()),
+            modifiers: vec![],
+            children: vec![table_frag],
+        },
+        open_start: 0,
+        open_end: 0,
     }
 }
 
@@ -292,5 +333,83 @@ mod tests {
     fn from_payload_text_only() {
         let parsed = Slice::from_payload(None, "hello\n\nworld");
         assert_eq!(parsed.fragment.children.len(), 2);
+    }
+
+    #[test]
+    fn extract_cell_rect_full_table_keeps_structure() {
+        let (state, _tbl, _, c00, _, _, _, c11) = state! {
+            doc { root { tbl: table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
+        let state = State {
+            selection: Some(sel),
+            ..state
+        };
+        let slice = Slice::extract(&state).expect("cell-rect must extract");
+        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
+        assert_eq!(slice.fragment.children.len(), 1);
+        let table = &slice.fragment.children[0];
+        assert!(matches!(table.node, PlainNode::Table(_)));
+        assert_eq!(table.children.len(), 2);
+        for row in &table.children {
+            assert!(matches!(row.node, PlainNode::TableRow(_)));
+            assert_eq!(row.children.len(), 2);
+            for cell in &row.children {
+                assert!(matches!(cell.node, PlainNode::TableCell(_)));
+            }
+        }
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+    }
+
+    #[test]
+    fn extract_cell_rect_partial_carves_subtable() {
+        let (state, _, c00, c01, _) = state! {
+            doc { root { table { tr0: table_row {
+                c00: table_cell { paragraph { text("A") } }
+                c01: table_cell { paragraph { text("B") } }
+                c02: table_cell { paragraph { text("C") } }
+            } } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&state.doc, c00, c01).unwrap();
+        let state = State {
+            selection: Some(sel),
+            ..state
+        };
+        let slice = Slice::extract(&state).unwrap();
+        let table = &slice.fragment.children[0];
+        assert_eq!(table.children.len(), 1);
+        assert_eq!(table.children[0].children.len(), 2);
+    }
+
+    #[test]
+    fn extract_cell_rect_single_cell_emits_1x1_table() {
+        let (state, _, c00, _) = state! {
+            doc { root { table { tr0: table_row {
+                c00: table_cell { paragraph { text("only") } }
+                c01: table_cell { paragraph { text("nope") } }
+            } } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&state.doc, c00, c00).unwrap();
+        let state = State {
+            selection: Some(sel),
+            ..state
+        };
+        let slice = Slice::extract(&state).unwrap();
+        let table = &slice.fragment.children[0];
+        assert_eq!(table.children.len(), 1);
+        assert_eq!(table.children[0].children.len(), 1);
     }
 }

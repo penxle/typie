@@ -563,7 +563,7 @@ fn is_block_level_leaf(node: &Node) -> bool {
 }
 
 /// Walk into a node to find the first valid text-level position.
-fn find_first_text_position(doc: &Doc, node_id: NodeId) -> Option<Position> {
+pub(crate) fn find_first_text_position(doc: &Doc, node_id: NodeId) -> Option<Position> {
     let node_ref = doc.node(node_id)?;
     let node = node_ref.node();
 
