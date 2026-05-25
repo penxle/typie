@@ -38,7 +38,7 @@ internal class ToolbarPagerState {
   var settledPageKey by mutableStateOf(EditorToolbarPageKey.Main)
   var recentManualPageKeys by mutableStateOf(listOf(EditorToolbarPageKey.Main))
   var previousPageKeys by mutableStateOf<List<EditorToolbarPageKey>?>(null)
-  var capturedAutoReturnPageKey by mutableStateOf<EditorToolbarPageKey?>(null)
+  var lastAppliedAutoTargetKey by mutableStateOf<Any?>(null)
 
   fun recordManualPageKey(pageKey: EditorToolbarPageKey) {
     recentManualPageKeys = listOf(pageKey) + recentManualPageKeys.filterNot { it == pageKey }

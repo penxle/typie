@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
@@ -451,6 +452,126 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Test
+  fun manualNavigationAwayFromAutoTargetSurvivesToolbarRecompose() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Image))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val visible = mutableStateOf(true)
+    lateinit var pagerState: ToolbarPagerState
+    setContent {
+      val textScrollState = rememberScrollState()
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        pageKeys = pageKeys.value,
+        autoTargetPageKey = autoTarget.value,
+        autoTargetRevision = autoTargetRevision.value,
+        visible = visible.value,
+        pagerState = pagerState,
+      )
+    }
+    waitForIdle()
+    assertPageActive(MainPageTag)
+
+    autoTarget.value = EditorToolbarPageKey.Image
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(ImagePageTag)
+
+    swipeToolbarRight(distanceFraction = 0.7f)
+    assertPageActive(MainPageTag)
+    assertEquals(EditorToolbarPageKey.Main, pagerState.settledPageKey)
+
+    visible.value = false
+    waitForIdle()
+    visible.value = true
+    waitForIdle()
+
+    assertPageActive(MainPageTag)
+    assertEquals(EditorToolbarPageKey.Main, pagerState.settledPageKey)
+  }
+
+  @Test
+  fun manualIndicatorNavigationBackToAutoTargetStaysOnTarget() = runComposeUiTest {
+    val pageKeys = mutableStateOf(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Image))
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    lateinit var pagerState: ToolbarPagerState
+    setContent {
+      val textScrollState = rememberScrollState()
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        pageKeys = pageKeys.value,
+        autoTargetPageKey = autoTarget.value,
+        autoTargetRevision = autoTargetRevision.value,
+        pagerState = pagerState,
+      )
+    }
+    waitForIdle()
+
+    autoTarget.value = EditorToolbarPageKey.Image
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(ImagePageTag)
+
+    swipeToolbarRight(distanceFraction = 0.7f)
+    assertPageActive(MainPageTag)
+
+    mainClock.autoAdvance = false
+    pagerState.indicatorPulse++
+    mainClock.advanceTimeByFrame()
+    tapToolbarIndicatorPage(pageIndex = 1, pageCount = 2)
+    mainClock.autoAdvance = true
+    waitForIdle()
+
+    assertPageActive(ImagePageTag)
+    assertEquals(EditorToolbarPageKey.Image, pagerState.settledPageKey)
+  }
+
+  @Test
+  fun manualIndicatorNavigationBackToAutoTargetWithTextPageStaysOnTarget() = runComposeUiTest {
+    val pageKeys = mutableStateOf(DefaultPageKeys)
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    lateinit var pagerState: ToolbarPagerState
+    setContent {
+      val textScrollState = rememberScrollState()
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        pageKeys = pageKeys.value,
+        autoTargetPageKey = autoTarget.value,
+        autoTargetRevision = autoTargetRevision.value,
+        pagerState = pagerState,
+      )
+    }
+    waitForIdle()
+
+    autoTarget.value = EditorToolbarPageKey.Image
+    autoTargetRevision.value++
+    waitForIdle()
+    assertPageActive(ImagePageTag)
+
+    swipeToolbarRight(distanceFraction = 0.7f)
+    assertPageActive(TextPageTag)
+    swipeToolbarRight(distanceFraction = 4.9f, durationMillis = 500)
+    assertPageActive(TextPageTag)
+    swipeToolbarRight(distanceFraction = 0.82f)
+    assertPageActive(MainPageTag)
+
+    mainClock.autoAdvance = false
+    pagerState.indicatorPulse++
+    mainClock.advanceTimeByFrame()
+    tapToolbarIndicatorPage(pageIndex = 2, pageCount = 3)
+    mainClock.autoAdvance = true
+    waitForIdle()
+
+    assertPageActive(ImagePageTag)
+    assertEquals(EditorToolbarPageKey.Image, pagerState.settledPageKey)
+  }
+
+  @Test
   fun disappearingCurrentPageMovesToMain() = runComposeUiTest {
     val pageKeys = mutableStateOf(DefaultPageKeys)
     val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
@@ -837,7 +958,7 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Test
-  fun clearedAutoTargetRestoresRecentManualTextAfterAutoPageSettlesAgain() = runComposeUiTest {
+  fun clearedAutoTargetUsesLatestExistingManualPageAfterAutoPageSettlesAgain() = runComposeUiTest {
     val pageKeys =
       mutableStateOf(
         listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
@@ -859,7 +980,7 @@ class EditorToolbarPagesDesktopTest {
     autoTargetRevision.value++
     waitForIdle()
 
-    assertPageActive(TextPageTag)
+    assertPageActive(FoldPageTag)
   }
 
   @Test
@@ -1144,6 +1265,18 @@ class EditorToolbarPagesDesktopTest {
     waitForIdle()
   }
 
+  private fun ComposeUiTest.tapToolbarIndicatorPage(pageIndex: Int, pageCount: Int) {
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val itemPx = ToolbarIndicatorItemSize.toPx()
+      val gapPx = ToolbarIndicatorItemGap.toPx()
+      val paddingPx = ToolbarIndicatorPadding.toPx()
+      val indicatorWidth = paddingPx * 2 + itemPx * pageCount + gapPx * (pageCount - 1)
+      val indicatorLeft = (width - indicatorWidth) / 2f
+      val x = indicatorLeft + paddingPx + itemPx / 2f + (itemPx + gapPx) * pageIndex
+      click(Offset(x = x, y = ToolbarIndicatorHeight.toPx() / 2f))
+    }
+  }
+
   private fun ComposeUiTest.dragToolbarWithTinyReverseMotion() {
     onNodeWithTag(ToolbarTag).performTouchInput {
       val start = Offset(x = width * 0.82f, y = height - 16f)
@@ -1250,7 +1383,7 @@ class EditorToolbarPagesDesktopTest {
             commandScope = commandScope,
             pagerState = pagerState,
             autoTargetPageKey = autoTargetPageKey,
-            autoTargetRevision = autoTargetRevision,
+            autoTargetKey = autoTargetRevision,
             editorFocused = true,
             activeBottomPanel = null,
             fixedAction = ToolbarFixedAction.DismissInput,

@@ -195,7 +195,7 @@ internal fun EditorToolbarHost(
           commandScope = commandScope,
           pagerState = pagerState,
           autoTargetPageKey = toolbarContext.autoTargetPageKey,
-          autoTargetRevision = editorState.version,
+          autoTargetKey = toolbarContext.autoTargetKey,
           editorFocused = editorFocused,
           activeBottomPanel = activeBottomPanel,
           fixedAction = fixedAction,

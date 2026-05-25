@@ -9,10 +9,16 @@ import co.typie.editor.ffi.Tri
 internal data class EditorToolbarContext(
   val pageKeys: List<EditorToolbarPageKey>,
   val autoTargetPageKey: EditorToolbarPageKey?,
+  val autoTargetKey: EditorToolbarAutoTargetKey? = null,
   val selectedNode: PlainNode? = null,
   val selectedNodeId: String? = null,
   val listMode: EditorToolbarListMode? = null,
   val tableMode: EditorToolbarTableMode? = null,
+)
+
+internal data class EditorToolbarAutoTargetKey(
+  val pageKey: EditorToolbarPageKey,
+  val selectedNodeId: String?,
 )
 
 internal enum class EditorToolbarListMode {
@@ -81,6 +87,10 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
   return EditorToolbarContext(
     pageKeys = pageKeys,
     autoTargetPageKey = selectedPageKey,
+    autoTargetKey =
+      selectedPageKey?.let { pageKey ->
+        EditorToolbarAutoTargetKey(pageKey = pageKey, selectedNodeId = selectedBlock.id)
+      },
     selectedNode = selectedBlock?.node,
     selectedNodeId = selectedBlock?.id,
     listMode = listMode,

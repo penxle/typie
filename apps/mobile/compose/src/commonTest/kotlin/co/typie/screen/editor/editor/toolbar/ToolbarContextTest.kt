@@ -67,6 +67,10 @@ class ToolbarContextTest {
 
     assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Image), context.pageKeys)
     assertEquals(EditorToolbarPageKey.Image, context.autoTargetPageKey)
+    assertEquals(
+      EditorToolbarAutoTargetKey(pageKey = EditorToolbarPageKey.Image, selectedNodeId = "image"),
+      context.autoTargetKey,
+    )
     assertEquals("image", context.selectedNodeId)
   }
 
@@ -86,6 +90,10 @@ class ToolbarContextTest {
 
     assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Table), context.pageKeys)
     assertEquals(EditorToolbarPageKey.Table, context.autoTargetPageKey)
+    assertEquals(
+      EditorToolbarAutoTargetKey(pageKey = EditorToolbarPageKey.Table, selectedNodeId = "table"),
+      context.autoTargetKey,
+    )
     assertEquals(EditorToolbarTableMode.Selected, context.tableMode)
   }
 

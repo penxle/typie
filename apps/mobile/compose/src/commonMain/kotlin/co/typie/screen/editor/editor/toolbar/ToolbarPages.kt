@@ -2,6 +2,7 @@ package co.typie.screen.editor.editor.toolbar
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.Orientation
@@ -106,7 +107,7 @@ internal fun EditorToolbarPages(
   commandScope: CoroutineScope,
   pagerState: ToolbarPagerState = rememberToolbarPagerState(),
   autoTargetPageKey: EditorToolbarPageKey? = null,
-  autoTargetRevision: Long = 0L,
+  autoTargetKey: Any? = autoTargetPageKey,
   editorFocused: Boolean,
   activeBottomPanel: EditorToolbarBottomPanelKey?,
   fixedAction: ToolbarFixedAction,
@@ -133,6 +134,7 @@ internal fun EditorToolbarPages(
         ToolbarPagerMetrics(pageDistance = pageDistance, scrollRanges = pageScrollRanges)
       }
     val validAutoTargetPageKey = autoTargetPageKey?.takeIf { target -> target in pageKeys }
+    val validAutoTargetKey = validAutoTargetPageKey?.let { autoTargetKey ?: it }
     val pageKeysChangedInFrame =
       pagerState.previousPageKeys?.let { previousPageKeys -> previousPageKeys != pageKeys } == true
     val retainedPageIndex = pages.indexOfFirst { page -> page.key == pagerState.settledPageKey }
@@ -366,7 +368,10 @@ internal fun EditorToolbarPages(
     fun navigateToPageIndex(pageIndex: Int) {
       scope.launch {
         val targetPageIndex = pageIndex.coerceIn(0, lastPageIndex)
-        if (pages[targetPageIndex].key != pagerState.settledPageKey) {
+        val targetPageKey = pages[targetPageIndex].key
+        scrollableState.scroll(MutatePriority.PreventUserInput) {}
+        pagerState.recordManualPageKey(targetPageKey)
+        if (targetPageKey != pagerState.settledPageKey) {
           onEditorInputRequest()
         }
         pagerState.activeHardStop = null
@@ -377,8 +382,7 @@ internal fun EditorToolbarPages(
             fromPageIndex = currentPageIndex,
           )
         animateScrollPositionTo(targetPosition = targetPosition)
-        pagerState.settledPageKey = pages[targetPageIndex].key
-        pagerState.recordManualPageKey(pages[targetPageIndex].key)
+        pagerState.settledPageKey = targetPageKey
       }
     }
 
@@ -394,19 +398,19 @@ internal fun EditorToolbarPages(
         pageMetrics.snapPosition(pagerState.scrollPosition, velocity, pagerState.activeHardStop)
       val snapPage = pageMetrics.pageIndexForPosition(snapPosition)
       val snapPageKey = pages.getOrNull(snapPage)?.key ?: EditorToolbarPageKey.Main
+      pagerState.recordManualPageKey(snapPageKey)
       if (snapPageKey != pagerState.settledPageKey) {
         onEditorInputRequest()
       }
       animateScrollPositionTo(targetPosition = snapPosition, initialVelocity = -velocity)
       pagerState.settledPageKey = snapPageKey
-      pagerState.recordManualPageKey(pagerState.settledPageKey)
       pagerState.activeHardStop = null
       if (pagerState.hardStopVisualOffset.value != 0f) {
         pagerState.hardStopVisualOffset.animateTo(0f, ToolbarHardStopOverscrollSpring)
       }
     }
 
-    LaunchedEffect(pageKeys, validAutoTargetPageKey, autoTargetRevision, pageMetrics) {
+    LaunchedEffect(pageKeys, validAutoTargetPageKey, validAutoTargetKey, pageMetrics) {
       val previousPageKeys = pagerState.previousPageKeys
       val initialized = previousPageKeys != null
       val pageKeysChanged = previousPageKeys != null && previousPageKeys != pageKeys
@@ -414,15 +418,8 @@ internal fun EditorToolbarPages(
       if (pageKeysChanged) {
         pagerState.indicatorPulse++
       }
-      val previousAutoReturnPageKey = pagerState.capturedAutoReturnPageKey
-      val policyAutoReturnPageKey =
-        if (validAutoTargetPageKey == null) {
-          previousAutoReturnPageKey
-        } else {
-          null
-        }
-      if (validAutoTargetPageKey != null && previousAutoReturnPageKey == null) {
-        pagerState.capturedAutoReturnPageKey = pagerState.recentManualPageKeys.firstOrNull()
+      val pendingAutoTargetPageKey = validAutoTargetPageKey.takeIf {
+        validAutoTargetKey != null && pagerState.lastAppliedAutoTargetKey != validAutoTargetKey
       }
       snapshotFlow {
           scrollableState.isScrollInProgress ||
@@ -431,8 +428,7 @@ internal fun EditorToolbarPages(
         }
         .first { inProgress -> !inProgress }
       val targetPageKey =
-        validAutoTargetPageKey
-          ?: policyAutoReturnPageKey?.takeIf { target -> target in pageKeys }
+        pendingAutoTargetPageKey
           ?: pagerState.recentManualPageKeys.firstOrNull { key -> key in pageKeys }
           ?: EditorToolbarPageKey.Main
       moveToPageKey(
@@ -440,14 +436,24 @@ internal fun EditorToolbarPages(
         animate = initialized && targetPageKey != pagerState.settledPageKey,
         resetInternalScroll = targetPageKey != pagerState.settledPageKey,
       )
-      if (validAutoTargetPageKey == null && previousAutoReturnPageKey != null) {
-        pagerState.capturedAutoReturnPageKey = null
+      if (pendingAutoTargetPageKey != null) {
+        pagerState.lastAppliedAutoTargetKey = validAutoTargetKey
+      }
+      if (validAutoTargetKey == null) {
+        pagerState.lastAppliedAutoTargetKey = null
       }
     }
 
     val defaultFlingBehavior = ScrollableDefaults.flingBehavior()
     val flingBehavior =
-      remember(pageMetrics, pagerState.activeHardStop, onEditorInputRequest, defaultFlingBehavior) {
+      remember(
+        pageMetrics,
+        pagerState.activeHardStop,
+        validAutoTargetPageKey,
+        validAutoTargetKey,
+        onEditorInputRequest,
+        defaultFlingBehavior,
+      ) {
         object : FlingBehavior {
           override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
             val remainingVelocity =

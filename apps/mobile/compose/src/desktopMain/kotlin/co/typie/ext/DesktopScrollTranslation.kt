@@ -5,7 +5,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.awt.ComposeWindow
+import java.awt.AWTEvent
 import java.awt.Component
+import java.awt.Toolkit
+import java.awt.event.AWTEventListener
 import java.awt.event.InputEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -71,6 +74,13 @@ private class DragToScrollHandler(
   private var lastWheelXOnScreen = 0
   private var lastWheelYOnScreen = 0
   private var lastWheelModifiers = 0
+  private var flingGeneration = 0L
+
+  private val awtEventListener = AWTEventListener { event ->
+    if (event is MouseEvent && event.id == MouseEvent.MOUSE_PRESSED && event.isInWindow()) {
+      stopFling()
+    }
+  }
 
   private val mouseListener =
     object : MouseAdapter() {
@@ -146,7 +156,12 @@ private class DragToScrollHandler(
             delta,
           )
         val target = e.component
-        SwingUtilities.invokeLater { target.dispatchEvent(wheelEvent) }
+        val generation = flingGeneration
+        SwingUtilities.invokeLater {
+          if (generation == flingGeneration) {
+            target.dispatchEvent(wheelEvent)
+          }
+        }
       }
     }
 
@@ -176,8 +191,13 @@ private class DragToScrollHandler(
     }
 
     stopFling()
+    val generation = ++flingGeneration
     val timer =
-      Timer(FLING_FRAME_MS) {
+      Timer(FLING_FRAME_MS) { event ->
+        if (generation != flingGeneration) {
+          (event.source as? Timer)?.stop()
+          return@Timer
+        }
         delta *= FLING_DECAY
         if (abs(delta) < FLING_MIN_DELTA) {
           stopFling()
@@ -208,11 +228,16 @@ private class DragToScrollHandler(
   }
 
   private fun stopFling() {
+    flingGeneration++
     flingTimer?.stop()
     flingTimer = null
   }
 
+  private fun MouseEvent.isInWindow(): Boolean =
+    component == window || SwingUtilities.getWindowAncestor(component) == window
+
   fun install() {
+    Toolkit.getDefaultToolkit().addAWTEventListener(awtEventListener, AWTEvent.MOUSE_EVENT_MASK)
     window.addMouseListener(mouseListener)
     window.addMouseMotionListener(motionListener)
   }
@@ -221,5 +246,6 @@ private class DragToScrollHandler(
     stopFling()
     window.removeMouseListener(mouseListener)
     window.removeMouseMotionListener(motionListener)
+    Toolkit.getDefaultToolkit().removeAWTEventListener(awtEventListener)
   }
 }
