@@ -1,4 +1,4 @@
-FROM node:25-slim AS builder
+FROM node:26-slim AS builder
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -31,7 +31,7 @@ FROM builder AS prod-deps
 COPY out/json/ .
 RUN pnpm install --frozen-lockfile --prod
 
-FROM node:25-slim AS runtime
+FROM node:26-slim AS runtime
 WORKDIR /app
 
 ENV LD_LIBRARY_PATH="/app/apps/api/lib"
