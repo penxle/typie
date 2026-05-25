@@ -2,6 +2,9 @@
 use hashbrown::HashMap;
 use std::sync::Mutex;
 
+use editor_macros::ffi;
+use serde::{Deserialize, Serialize};
+
 #[cfg(not(feature = "wasm-server"))]
 use crate::platform::{PlatformHandle, SurfaceHandle};
 use crate::prelude::*;
@@ -16,6 +19,18 @@ struct EditorInner {
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct Editor {
     inner: Mutex<EditorInner>,
+}
+
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CharacterCounts {
+    pub doc_with_whitespace: u32,
+    pub doc_without_whitespace: u32,
+    pub doc_without_whitespace_and_punctuation: u32,
+    pub selection_with_whitespace: u32,
+    pub selection_without_whitespace: u32,
+    pub selection_without_whitespace_and_punctuation: u32,
 }
 
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
@@ -98,6 +113,22 @@ impl Editor {
 
     pub fn block_state(&self) -> EditorResult<Option<Complex<editor_core::BlockState>>> {
         self.with_inner(|inner| Ok(inner.editor.block_state().into_ffi()?))
+    }
+
+    pub fn character_counts(&self) -> EditorResult<Complex<CharacterCounts>> {
+        self.with_inner(|inner| {
+            let (doc, sel) = inner.editor.character_counts();
+            Ok(CharacterCounts {
+                doc_with_whitespace: doc.with_whitespace,
+                doc_without_whitespace: doc.without_whitespace,
+                doc_without_whitespace_and_punctuation: doc.without_whitespace_and_punctuation,
+                selection_with_whitespace: sel.with_whitespace,
+                selection_without_whitespace: sel.without_whitespace,
+                selection_without_whitespace_and_punctuation: sel
+                    .without_whitespace_and_punctuation,
+            }
+            .into_ffi()?)
+        })
     }
 
     pub fn interactive_hit_test(

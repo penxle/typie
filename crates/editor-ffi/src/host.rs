@@ -71,10 +71,10 @@ impl EditorHost {
 
         init_logger();
 
-        let segmenters = Arc::new(editor_resource::TextSegmenters::from_icu_data(&icu_data)?);
+        let icu = editor_resource::IcuResources::from_icu_data(&icu_data)?;
 
         Ok(into_owned(Self {
-            resource: Arc::new(Mutex::new(editor_resource::Resource::new(segmenters))),
+            resource: Arc::new(Mutex::new(editor_resource::Resource::new(icu))),
         }))
     }
 

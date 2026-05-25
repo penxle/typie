@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use icu_properties::CodePointMapData;
+use icu_properties::props::GeneralCategory;
 use icu_provider::buf::AsDeserializingBufferProvider;
 use icu_provider_blob::BlobDataProvider;
 use icu_segmenter::options::{SentenceBreakOptions, WordBreakOptions};
@@ -12,7 +16,12 @@ pub struct TextSegmenters {
     pub grapheme: GraphemeClusterSegmenter,
 }
 
-impl TextSegmenters {
+pub struct IcuResources {
+    pub segmenters: Arc<TextSegmenters>,
+    pub general_category: Arc<CodePointMapData<GeneralCategory>>,
+}
+
+impl IcuResources {
     pub fn from_icu_data(data: &[u8]) -> Result<Self, ResourceError> {
         let data = decompress_zstd(data)?;
 
@@ -21,13 +30,23 @@ impl TextSegmenters {
                 .map_err(|e| ResourceError::IcuProvider(e.to_string()))?;
         let dp = provider.as_deserializing();
 
-        Ok(Self {
+        let segmenters = Arc::new(TextSegmenters {
             word: WordSegmenter::try_new_dictionary_unstable(&dp, WordBreakOptions::default())
                 .map_err(|e| ResourceError::IcuSegmenter(e.to_string()))?,
             sentence: SentenceSegmenter::try_new_unstable(&dp, SentenceBreakOptions::default())
                 .map_err(|e| ResourceError::IcuSegmenter(e.to_string()))?,
             grapheme: GraphemeClusterSegmenter::try_new_unstable(&dp)
                 .map_err(|e| ResourceError::IcuSegmenter(e.to_string()))?,
+        });
+
+        let general_category = Arc::new(
+            CodePointMapData::<GeneralCategory>::try_new_unstable(&dp)
+                .map_err(|e| ResourceError::IcuProperty(e.to_string()))?,
+        );
+
+        Ok(Self {
+            segmenters,
+            general_category,
         })
     }
 }

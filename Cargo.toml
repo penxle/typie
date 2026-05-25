@@ -27,6 +27,9 @@ heck = "0.5"
 hex = "0.4"
 html5ever = "0.27"
 itertools = "0.14"
+icu_properties = { version = "2", default-features = false, features = [
+  "serde",
+] }
 icu_provider = { version = "2", default-features = false, features = [
   "serde",
   "sync",

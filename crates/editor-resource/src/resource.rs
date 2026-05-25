@@ -1,10 +1,13 @@
 use parley::{FontContext, LayoutContext};
 use std::sync::Arc;
 
+use icu_properties::CodePointMapData;
+use icu_properties::props::GeneralCategory;
+
 use crate::brush::TextBrush;
 use crate::error::ResourceError;
 use crate::font::{FontFamily, FontRegistry, PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT};
-use crate::segmentation::TextSegmenters;
+use crate::segmentation::{IcuResources, TextSegmenters};
 use crate::text_replacement::{RawTextReplacementRule, TextReplacementRule, compile_rules};
 
 const PLACEHOLDER_TTF: &[u8] = include_bytes!("../assets/placeholder.ttf");
@@ -14,17 +17,19 @@ pub struct Resource {
     pub font_context: FontContext,
     pub layout_context: LayoutContext<TextBrush>,
     pub segmenters: Arc<TextSegmenters>,
+    pub general_category: Arc<CodePointMapData<GeneralCategory>>,
     pub text_replacement_rules: Vec<TextReplacementRule>,
     pub auto_surround_enabled: bool,
 }
 
 impl Resource {
-    pub fn new(segmenters: Arc<TextSegmenters>) -> Self {
+    pub fn new(icu: IcuResources) -> Self {
         let mut resource = Self {
             font_registry: FontRegistry::new(),
             font_context: FontContext::new(),
             layout_context: LayoutContext::new(),
-            segmenters,
+            segmenters: icu.segmenters,
+            general_category: icu.general_category,
             text_replacement_rules: Vec::new(),
             auto_surround_enabled: true,
         };
@@ -100,7 +105,13 @@ impl Resource {
 #[cfg(any(test, feature = "test-utils"))]
 impl Resource {
     pub fn new_test() -> Self {
-        Self::new(Arc::new(TextSegmenters::new_test()))
+        let segmenters = Arc::new(TextSegmenters::new_test());
+        let general_category =
+            Arc::new(CodePointMapData::<GeneralCategory>::new().static_to_owned());
+        Self::new(IcuResources {
+            segmenters,
+            general_category,
+        })
     }
 }
 

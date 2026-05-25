@@ -1,8 +1,9 @@
+use editor_clipboard::Slice;
 use editor_common::{Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{DocOp, ModifierState, Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
-use editor_resource::Resource;
+use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
     DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
     State,
@@ -164,6 +165,18 @@ impl Editor {
 
     pub fn block_state(&self) -> Option<BlockState> {
         crate::block_state::resolve_block_state(&self.state)
+    }
+
+    pub fn character_counts(&self) -> (CharacterCount, CharacterCount) {
+        let doc_text = self.state.doc.extract_text();
+        let selection_text = Slice::extract(&self.state)
+            .map(|s| s.to_text())
+            .unwrap_or_default();
+
+        let resource = self.resource.lock().unwrap();
+        let doc = count_text(&doc_text, &resource.general_category);
+        let selection = count_text(&selection_text, &resource.general_category);
+        (doc, selection)
     }
 
     pub fn interactive_hit_test(
@@ -1538,6 +1551,38 @@ mod tests {
         let bs = editor.block_state().unwrap();
         assert_eq!(bs.ancestors.len(), 2);
         assert!(bs.nodes.is_empty());
+    }
+
+    #[test]
+    fn character_counts_empty_doc_is_all_zero() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("") } } }
+            selection: (t1, 0)
+        };
+        let editor = Editor::new_test(state);
+        let (doc, sel) = editor.character_counts();
+        assert_eq!(doc.with_whitespace, 0);
+        assert_eq!(doc.without_whitespace, 0);
+        assert_eq!(doc.without_whitespace_and_punctuation, 0);
+        assert_eq!(sel.with_whitespace, 0);
+        assert_eq!(sel.without_whitespace, 0);
+        assert_eq!(sel.without_whitespace_and_punctuation, 0);
+    }
+
+    #[test]
+    fn character_counts_single_block_no_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        let editor = Editor::new_test(state);
+        let (doc, sel) = editor.character_counts();
+        assert_eq!(doc.with_whitespace, 5);
+        assert_eq!(doc.without_whitespace, 5);
+        assert_eq!(doc.without_whitespace_and_punctuation, 5);
+        assert_eq!(sel.with_whitespace, 0);
+        assert_eq!(sel.without_whitespace, 0);
+        assert_eq!(sel.without_whitespace_and_punctuation, 0);
     }
 
     #[test]

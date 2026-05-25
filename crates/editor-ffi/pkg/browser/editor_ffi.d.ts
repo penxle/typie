@@ -236,6 +236,15 @@ export interface BlockState {
     nodes: Block[];
 }
 
+export interface CharacterCounts {
+    doc_with_whitespace: number;
+    doc_without_whitespace: number;
+    doc_without_whitespace_and_punctuation: number;
+    selection_with_whitespace: number;
+    selection_without_whitespace: number;
+    selection_without_whitespace_and_punctuation: number;
+}
+
 export interface ClipboardPayload {
     html: string;
     text: string;
@@ -632,6 +641,7 @@ declare class Editor {
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
     block_state(): BlockState | undefined;
     can(message: Message): boolean;
+    character_counts(): CharacterCounts;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;

@@ -1,6 +1,7 @@
 editor_macros::preamble!();
 
 mod brush;
+mod character_count;
 mod error;
 mod font;
 mod resource;
@@ -9,6 +10,7 @@ mod text_replacement;
 mod zstd;
 
 pub use brush::*;
+pub use character_count::*;
 pub use error::*;
 pub use font::*;
 pub use resource::*;

@@ -9,6 +9,9 @@ pub enum ResourceError {
     #[error("failed to create segmenter: {0}")]
     IcuSegmenter(String),
 
+    #[error("failed to load ICU property data: {0}")]
+    IcuProperty(String),
+
     #[error("unknown font: {0}")]
     UnknownFont(String),
 

@@ -246,6 +246,15 @@ export interface BuiltFont {
     chunks: Uint8Array[];
 }
 
+export interface CharacterCounts {
+    doc_with_whitespace: number;
+    doc_without_whitespace: number;
+    doc_without_whitespace_and_punctuation: number;
+    selection_with_whitespace: number;
+    selection_without_whitespace: number;
+    selection_without_whitespace_and_punctuation: number;
+}
+
 export interface ChunkCodepoints {
     chunks: number[][];
 }
@@ -658,6 +667,7 @@ declare class Editor {
     [Symbol.dispose](): void;
     block_state(): BlockState | undefined;
     can(message: Message): boolean;
+    character_counts(): CharacterCounts;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;

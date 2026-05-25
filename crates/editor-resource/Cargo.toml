@@ -4,7 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-test-utils = ["icu_segmenter/compiled_data", "icu_segmenter/auto"]
+test-utils = [
+  "icu_properties/compiled_data",
+  "icu_segmenter/auto",
+  "icu_segmenter/compiled_data",
+]
 uniffi = ["dep:uniffi", "editor-common/uniffi", "editor-model/uniffi"]
 wasm = [
   "dep:tsify",
@@ -20,6 +24,7 @@ editor-model = { path = "../editor-model" }
 fancy-regex.workspace = true
 fontique.workspace = true
 hashbrown.workspace = true
+icu_properties.workspace = true
 icu_provider.workspace = true
 icu_provider_blob.workspace = true
 icu_segmenter = { workspace = true, features = ["serde"] }
