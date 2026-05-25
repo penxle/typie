@@ -333,7 +333,12 @@ internal class EditorInputNode(
   }
 
   override fun onFocusEvent(focusState: FocusState) {
-    focused = focusState.isFocused
+    val nextFocused = focusState.isFocused
+    if (focused == nextFocused) {
+      return
+    }
+
+    focused = nextFocused
     syncTextInputSession()
   }
 
