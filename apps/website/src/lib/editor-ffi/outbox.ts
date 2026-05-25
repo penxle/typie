@@ -24,16 +24,10 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-function idbRequest<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.addEventListener('error', () => reject(request.error));
-    request.addEventListener('success', () => resolve(request.result));
-  });
-}
-
 export class Outbox {
   #documentId: string;
   #db: IDBDatabase | null = null;
+  #destroyed = false;
 
   constructor(documentId: string) {
     this.#documentId = documentId;
@@ -43,27 +37,38 @@ export class Outbox {
     return (this.#db ??= await openDatabase());
   }
 
+  #request<T>(request: IDBRequest<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      request.addEventListener('error', () => reject(request.error));
+      request.addEventListener('success', () => resolve(request.result));
+    });
+  }
+
   async save(id: string, bundle: Uint8Array): Promise<void> {
+    if (this.#destroyed) return;
     const db = await this.#ensureDb();
     const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-    await idbRequest(store.put({ id, documentId: this.#documentId, bundle, createdAt: Date.now() } satisfies StoredEntry));
+    await this.#request(store.put({ id, documentId: this.#documentId, bundle, createdAt: Date.now() } satisfies StoredEntry));
   }
 
   async delete(id: string): Promise<void> {
+    if (this.#destroyed) return;
     const db = await this.#ensureDb();
     const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-    await idbRequest(store.delete(id));
+    await this.#request(store.delete(id));
   }
 
   async loadAll(): Promise<{ id: string; bundle: Uint8Array }[]> {
+    if (this.#destroyed) return [];
     const db = await this.#ensureDb();
     const store = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME);
     const index = store.index('documentId');
-    const results = (await idbRequest(index.getAll(this.#documentId))) as StoredEntry[];
+    const results = (await this.#request(index.getAll(this.#documentId))) as StoredEntry[];
     return results.toSorted((a, b) => a.createdAt - b.createdAt).map(({ id, bundle }) => ({ id, bundle }));
   }
 
   destroy(): void {
+    this.#destroyed = true;
     this.#db?.close();
     this.#db = null;
   }

@@ -4,12 +4,12 @@
   import { onDestroy, untrack } from 'svelte';
   import EditorComponent from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { Outbox } from '$lib/editor-ffi/outbox';
   import { graphql } from '$mearie';
   import { DebugBus } from './@debug/debug-bus.svelte';
   import DebugPanel from './@debug/DebugPanel.svelte';
   import BottomToolbar from './BottomToolbar.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
-  import { Outbox } from './sync/outbox';
   import { Pusher } from './sync/pusher.svelte';
   import TopToolbar from './TopToolbar.svelte';
   import type { DocumentEditorV2_document$key } from '$mearie';
@@ -187,10 +187,22 @@
       lastConfirmedHeads = Uint8Array.fromBase64(result.pushDocumentChangesets.heads);
     };
 
-    // 재진입 시 outbox에 남은 bundle 재전송
+    // 재진입 시 outbox에 남은 bundle을 에디터에 적용 후 재전송
     void (async () => {
-      for (const { id, bundle } of await outbox.loadAll()) {
-        await pushFn(bundle);
+      const pending = await outbox.loadAll();
+      if (pending.length === 0) return;
+
+      for (const { bundle } of pending) {
+        editor.receiveRemoteChangeset(bundle);
+      }
+
+      const baseHeads = initialHeads;
+      const replayBundle = editor.localChangesetsSince(baseHeads);
+      if (replayBundle.length > 0) {
+        await pushFn(replayBundle);
+      }
+
+      for (const { id } of pending) {
         await outbox.delete(id);
       }
     })();
