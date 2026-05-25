@@ -212,7 +212,7 @@ internal fun editorToolbarNodeInsertItems(
       },
       EditorToolbarNodeInsertItem(
         icon = Lucide.CornerDownLeft,
-        label = "강제 줄바꿈",
+        label = "문단 내 줄바꿈",
         message = Message.Insertion(InsertionOp.Break(Break.Line)),
       ),
     )

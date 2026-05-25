@@ -52,7 +52,7 @@
         { keys: [modKey, 'X'], description: '잘라내기' },
         { keys: [modKey, 'C'], description: '복사' },
         { keys: [modKey, 'V'], description: '붙여넣기' },
-        { keys: [modKey, 'A'], description: '문단 선택 (반복시 전체 선택)' },
+        { keys: [modKey, 'A'], description: '전체 선택' },
         { keys: [modKey, 'F'], description: '찾기, 바꾸기 열기' },
         { keys: [altKey, '↑'], description: '이전 문장 경계로 이동' },
         { keys: [altKey, '↓'], description: '다음 문장 경계로 이동' },
@@ -64,7 +64,7 @@
       title: '삽입',
       shortcuts: [
         { keys: ['Enter'], description: '문단 나누기' },
-        { keys: ['Shift', 'Enter'], description: '줄바꿈' },
+        { keys: ['Shift', 'Enter'], description: '문단 내 줄바꿈' },
         { keys: [modKey, 'Enter'], description: '페이지 나누기' },
         { keys: [['드래그 앤 드롭'], [modKey, 'V']], description: '이미지/파일 삽입' },
         { keys: ['--'], description: '긴 대시 (—)' },
