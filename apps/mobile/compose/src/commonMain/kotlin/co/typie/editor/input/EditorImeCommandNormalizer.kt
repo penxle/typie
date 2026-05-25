@@ -1,5 +1,3 @@
-// cspell:ignore DBFF DFFF
-
 package co.typie.editor.input
 
 import androidx.compose.ui.text.input.BackspaceCommand
@@ -7,7 +5,6 @@ import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
 import androidx.compose.ui.text.input.EditCommand
-import androidx.compose.ui.text.input.EditProcessor
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.MoveCursorCommand
 import androidx.compose.ui.text.input.SetComposingRegionCommand
@@ -58,22 +55,18 @@ internal object EditorImeCommandNormalizer {
   }
 
   private fun List<EditCommand>.resolveSelectionOnlyMessages(ime: Ime?): List<Message>? {
-    if (isEmpty() || any { !it.isSelectionOnly() }) {
-      return null
-    }
-    if (ime == null) {
-      return emptyList()
-    }
+    val target =
+      when (val projection = projectSelectionOnlyCommand(ime)) {
+        null -> return null
+        SelectionOnlyEditCommandProjection.MissingIme -> return emptyList()
+        is SelectionOnlyEditCommandProjection.Target -> projection.range
+      }
+    val selection = ime?.selection ?: return emptyList()
+    val start = target.start
+    val end = target.end
 
-    val processor = EditProcessor()
-    val oldValue = ime.toTextFieldValue()
-    processor.reset(oldValue, null)
-    val newValue = processor.apply(this)
-    val start = ime.windowStart + ime.text.codePointOffsetAtUtf16Index(newValue.selection.start)
-    val end = ime.windowStart + ime.text.codePointOffsetAtUtf16Index(newValue.selection.end)
-
-    return if (ime.selection.start == ime.selection.end && start == end) {
-      val delta = start - ime.selection.start
+    return if (selection.start == selection.end && start == end) {
+      val delta = start - selection.start
       if (delta == 0) {
         emptyList()
       } else {
@@ -104,21 +97,4 @@ internal object EditorImeCommandNormalizer {
       is MoveCursorCommand -> FlatImeOp.MoveCursor(amount)
       else -> null
     }
-
-  private fun EditCommand.isSelectionOnly(): Boolean =
-    this is SetSelectionCommand || this is MoveCursorCommand
-
-  private fun String.codePointOffsetAtUtf16Index(index: Int): Int {
-    var utf16Index = 0
-    var codePointOffset = 0
-    val target = index.coerceIn(0, length)
-    while (utf16Index < target) {
-      utf16Index += if (isHighSurrogateAt(utf16Index)) 2 else 1
-      codePointOffset += 1
-    }
-    return codePointOffset
-  }
-
-  private fun String.isHighSurrogateAt(index: Int): Boolean =
-    this[index] in '\uD800'..'\uDBFF' && index + 1 < length && this[index + 1] in '\uDC00'..'\uDFFF'
 }

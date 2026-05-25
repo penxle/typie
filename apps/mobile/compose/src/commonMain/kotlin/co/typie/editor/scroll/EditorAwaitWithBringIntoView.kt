@@ -2,6 +2,7 @@ package co.typie.editor.scroll
 
 import co.typie.editor.Editor
 import co.typie.editor.EditorScope
+import co.typie.editor.EditorState
 import co.typie.editor.ffi.Message
 
 internal interface EditorBringIntoViewAwaitScope : EditorScope {
@@ -19,11 +20,13 @@ internal interface EditorBringIntoViewCommitScope {
 internal fun Editor.syncWithBringIntoView(
   bringIntoViewRequests: EditorBringIntoViewRequests,
   block: EditorBringIntoViewSyncScope.() -> Unit,
-) {
+): EditorState? {
   val beforeCommitBlocks = mutableListOf<EditorBringIntoViewCommitScope.() -> Unit>()
+  var committedState: EditorState? = null
 
   sync(
     beforeCommit = { snapshot ->
+      committedState = snapshot
       val commitScope =
         object : EditorBringIntoViewCommitScope {
           override fun bringIntoView(target: EditorBringIntoViewTarget) {
@@ -48,16 +51,20 @@ internal fun Editor.syncWithBringIntoView(
 
     syncScope.block()
   }
+
+  return committedState
 }
 
 internal suspend fun Editor.awaitWithBringIntoView(
   bringIntoViewRequests: EditorBringIntoViewRequests,
   block: EditorBringIntoViewAwaitScope.() -> Unit,
-) {
+): EditorState? {
   val beforeCommitBlocks = mutableListOf<EditorBringIntoViewCommitScope.() -> Unit>()
+  var committedState: EditorState? = null
 
   await(
     beforeCommit = { snapshot ->
+      committedState = snapshot
       val commitScope =
         object : EditorBringIntoViewCommitScope {
           override fun bringIntoView(target: EditorBringIntoViewTarget) {
@@ -82,4 +89,6 @@ internal suspend fun Editor.awaitWithBringIntoView(
 
     awaitScope.block()
   }
+
+  return committedState
 }

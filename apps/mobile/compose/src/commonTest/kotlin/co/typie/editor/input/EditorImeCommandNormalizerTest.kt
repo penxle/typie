@@ -62,4 +62,25 @@ class EditorImeCommandNormalizerTest {
 
     assertEquals(listOf(Message.Selection(SelectionOp.SetFlat(start = 20, end = 22))), messages)
   }
+
+  @Test
+  fun `range selection command remains absolute selection in common normalizer`() {
+    val text = "abcdefghijklmnopqrst"
+
+    assertEquals(
+      listOf(Message.Selection(SelectionOp.SetFlat(start = 15, end = 18))),
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetSelectionCommand(15, 18)),
+        ime = Ime(text = text, windowStart = 0, selection = ImeRange(16, 18), composing = null),
+      ),
+    )
+
+    assertEquals(
+      listOf(Message.Selection(SelectionOp.SetFlat(start = 12, end = 18))),
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetSelectionCommand(12, 18)),
+        ime = Ime(text = text, windowStart = 0, selection = ImeRange(11, 18), composing = null),
+      ),
+    )
+  }
 }

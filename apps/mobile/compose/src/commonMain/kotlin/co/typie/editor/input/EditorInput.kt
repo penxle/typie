@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.Editor
+import co.typie.editor.EditorState
 import co.typie.editor.KeyBinding
 import co.typie.editor.createBindings
 import co.typie.editor.ffi.CompositionOp
@@ -201,20 +202,30 @@ internal class EditorInputNode(
   private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
     coroutineScope.launch {
       val messages = with(binding) { editor.action(clipboard) }
-      if (messages.isEmpty()) return@launch
-      editor.awaitWithBringIntoView(bringIntoViewRequests) {
-        messages.forEach(::enqueue)
-        beforeCommit { binding.bringIntoViewTarget?.let { target -> bringIntoView(target) } }
-      }
+      dispatchBindingMessages(
+        messages = messages,
+        bringIntoViewTarget = binding.bringIntoViewTarget,
+      )
+    }
+  }
+
+  private suspend fun dispatchBindingMessages(
+    messages: List<Message>,
+    bringIntoViewTarget: EditorBringIntoViewTarget?,
+  ): EditorState? {
+    if (messages.isEmpty()) return null
+    return editor.awaitWithBringIntoView(bringIntoViewRequests) {
+      messages.forEach(::enqueue)
+      beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
     }
   }
 
   private fun dispatchSync(
     messages: List<Message>,
     bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
-  ) {
-    if (messages.isEmpty()) return
-    editor.syncWithBringIntoView(bringIntoViewRequests) {
+  ): EditorState? {
+    if (messages.isEmpty()) return null
+    return editor.syncWithBringIntoView(bringIntoViewRequests) {
       messages.forEach(::enqueue)
       beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
     }
@@ -309,9 +320,15 @@ internal class EditorInputNode(
     }
     return platformInputBridge.onPreKeyEvent(
       event = event,
-      selection = editor.ime?.selection,
+      editorState = { editor.state },
       inputCoroutineScope = coroutineScope,
-      dispatch = { dispatchBinding(binding, PlatformModule.clipboard) },
+      bindingMessages = { with(binding) { editor.action(PlatformModule.clipboard) } },
+      commit = { messages ->
+        dispatchBindingMessages(
+          messages = messages,
+          bringIntoViewTarget = binding.bringIntoViewTarget,
+        )
+      },
     )
   }
 
@@ -343,11 +360,24 @@ internal class EditorInputNode(
                   editor = editor,
                   bringIntoViewRequests = bringIntoViewRequests,
                   onEditCommand = { commands ->
-                    dispatchSync(
-                      platformInputBridge.interceptImeMessages(
-                        EditorImeCommandNormalizer.normalize(commands = commands, ime = editor.ime)
+                    val preState = editor.state
+                    val messages =
+                      platformInputBridge.interceptEditCommands(
+                        commands = commands,
+                        state = preState,
                       )
-                    )
+                        ?: EditorImeCommandNormalizer.normalize(
+                          commands = commands,
+                          ime = preState.ime,
+                        )
+                    val postState = dispatchSync(messages)
+                    if (postState != null) {
+                      platformInputBridge.onImeMessagesCommitted(
+                        messages = messages,
+                        preState = preState,
+                        postState = postState,
+                      )
+                    }
                   },
                   focusedRectInRoot = { uiState.cursorRectInRoot(editor.cursor) },
                   textFieldRectInRoot = uiState::editorRectInRoot,
