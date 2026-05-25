@@ -17,8 +17,8 @@ import co.typie.domain.bootstrap.BootstrapState
 import co.typie.serialization.EnumSerializer
 import co.typie.storage.Preference
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.LocalHazeStyle
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.LocalHazeBlurStyle
 import kotlinx.serialization.Serializable
 
 @Serializable(with = ThemeMode.Serializer::class)
@@ -182,7 +182,7 @@ fun AppTheme(content: @Composable () -> Unit) {
     LocalAppColors provides if (isDark) DarkColors else LightColors,
     LocalAppShadows provides if (isDark) DarkAppShadows else LightAppShadows,
     LocalThemeMode provides if (isDark) ResolvedThemeMode.Dark else ResolvedThemeMode.Light,
-    LocalHazeStyle provides HazeStyle(blurRadius = 20.dp, noiseFactor = 0f, tints = listOf()),
+    LocalHazeBlurStyle provides HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
   ) {
     content()
   }

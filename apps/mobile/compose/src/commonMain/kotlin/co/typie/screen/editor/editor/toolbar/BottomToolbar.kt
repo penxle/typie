@@ -15,6 +15,7 @@ import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarTools
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
+import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
 
 @Composable
@@ -36,8 +37,10 @@ internal fun BottomToolbar(
         .shadow(AppTheme.shadows.sm, ToolbarBottomPanelShape)
         .clip(ToolbarBottomPanelShape)
         .hazeEffect(hazeState) {
-          backgroundColor = surfaceColor
-          blurRadius = ToolbarBackdropBlurRadius
+          blurEffect {
+            backgroundColor = surfaceColor
+            blurRadius = ToolbarBackdropBlurRadius
+          }
         }
         .background(surfaceColor.copy(alpha = BottomToolbarSurfaceAlpha), ToolbarBottomPanelShape)
         .border(

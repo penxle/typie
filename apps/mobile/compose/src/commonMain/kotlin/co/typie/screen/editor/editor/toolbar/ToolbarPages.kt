@@ -54,6 +54,7 @@ import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
+import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -537,8 +538,10 @@ internal fun EditorToolbarPages(
             .pressScale(ToolbarCapsulePressedScale)
             .clip(ToolbarCapsuleShape)
             .hazeEffect(hazeState) {
-              backgroundColor = toolbarSurfaceColor
-              blurRadius = ToolbarBackdropBlurRadius
+              blurEffect {
+                backgroundColor = toolbarSurfaceColor
+                blurRadius = ToolbarBackdropBlurRadius
+              }
             }
             .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
       ) {

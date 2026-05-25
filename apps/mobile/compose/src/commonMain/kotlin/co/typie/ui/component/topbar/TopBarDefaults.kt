@@ -15,7 +15,7 @@ import co.typie.ext.statusBars
 import co.typie.ui.component.SmootherstepEasing
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import dev.chrisbanes.haze.HazeProgressive
+import dev.chrisbanes.haze.blur.HazeProgressive
 
 object TopBarDefaults {
   val Height: Dp = 48.dp

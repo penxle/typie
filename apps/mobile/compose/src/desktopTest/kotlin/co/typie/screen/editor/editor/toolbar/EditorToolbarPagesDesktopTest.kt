@@ -38,8 +38,8 @@ import co.typie.ui.theme.LocalAppColors
 import co.typie.ui.theme.LocalAppShadows
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ResolvedThemeMode
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.LocalHazeStyle
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.LocalHazeBlurStyle
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -1403,7 +1403,7 @@ class EditorToolbarPagesDesktopTest {
       LocalAppColors provides LightColors,
       LocalAppShadows provides LightAppShadows,
       LocalThemeMode provides ResolvedThemeMode.Light,
-      LocalHazeStyle provides HazeStyle(blurRadius = 20.dp, noiseFactor = 0f, tints = listOf()),
+      LocalHazeBlurStyle provides HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
       content = content,
     )
   }

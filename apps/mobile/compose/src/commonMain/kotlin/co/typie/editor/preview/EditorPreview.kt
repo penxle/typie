@@ -64,6 +64,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
@@ -184,8 +185,10 @@ internal fun EditorPreview(
               Modifier.graphicsLayer { alpha = hintAlpha.value }
                 .clip(hintShape)
                 .hazeEffect(hintHazeState) {
-                  backgroundColor = colors.surfaceInset
-                  blurRadius = 6.dp
+                  blurEffect {
+                    backgroundColor = colors.surfaceInset
+                    blurRadius = 6.dp
+                  }
                 }
                 .background(colors.surfaceInset.copy(alpha = 0.36f), hintShape)
                 .padding(horizontal = 10.dp, vertical = 5.dp)

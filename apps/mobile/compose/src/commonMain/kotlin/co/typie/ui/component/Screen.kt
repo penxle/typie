@@ -44,6 +44,7 @@ import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 
@@ -130,9 +131,11 @@ fun Screen(
       Column(
         modifier =
           topBarOverlayModifier.hazeEffect(hazeState) {
-            backgroundColor = background
-            blurRadius = TopBarDefaults.BlurRadius
-            progressive = TopBarDefaults.hazeProgressive()
+            blurEffect {
+              backgroundColor = background
+              blurRadius = TopBarDefaults.BlurRadius
+              progressive = TopBarDefaults.hazeProgressive()
+            }
           }
       ) {
         Spacer(Modifier.fillMaxWidth().height(TopBarDefaults.topPadding() + TopBarDefaults.Height))

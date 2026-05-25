@@ -20,7 +20,7 @@ detekt = "2.0.0-alpha.3"
 firebase = "34.13.0"
 google-services = "4.4.4"
 googleid = "1.2.0"
-haze = "1.7.2"
+haze = "2.0.0-alpha02"
 jna = "5.18.1"
 kakao = "2.23.2"
 kermit = "2.1.0"
@@ -59,6 +59,7 @@ firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "fir
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 kakao-user = { module = "com.kakao.sdk:v2-user", version.ref = "kakao" }
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }

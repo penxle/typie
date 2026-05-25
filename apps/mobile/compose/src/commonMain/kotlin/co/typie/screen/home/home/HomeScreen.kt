@@ -105,7 +105,6 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.AppTypography.title
 import co.typie.ui.theme.PaperlogyFontFamily
 import co.typie.ui.theme.shadow
-import dev.chrisbanes.haze.HazeLogger.enabled
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt

@@ -200,6 +200,7 @@ kotlin {
     implementation(libs.apollo.normalized.cache)
     implementation(libs.ksafe)
     implementation(libs.haze)
+    implementation(libs.haze.blur)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
