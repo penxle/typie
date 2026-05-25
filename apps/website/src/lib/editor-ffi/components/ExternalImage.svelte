@@ -168,6 +168,7 @@
     if (!canEdit || stage === 'ready') return;
 
     event.preventDefault();
+    event.stopPropagation();
 
     const file = getFirstImageFile(event.dataTransfer?.files ?? []);
     if (!file) return;
