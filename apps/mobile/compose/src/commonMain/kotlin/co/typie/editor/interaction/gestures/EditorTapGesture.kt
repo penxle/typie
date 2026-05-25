@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
@@ -28,6 +29,7 @@ internal class EditorTapGesture(
   private var movedPastTapSlop = false
   private var tapDispatched = false
   private var ignoringUntilAllPointersUp = false
+  private var activeInputModifiers = InputModifiers()
   private var lastTapTimeMillis: Long? = null
   private var lastTapPosition: Offset? = null
   private var contextMenuVisibleAtPointerDown = false
@@ -44,6 +46,9 @@ internal class EditorTapGesture(
   val activePosition: Offset?
     get() = if (activePointerId == null) null else downPosition
 
+  val inputModifiersForActivePointer: InputModifiers
+    get() = activeInputModifiers
+
   val canDispatchTapTimer: Boolean
     get() =
       activePointerId != null && !movedPastTapSlop && !tapDispatched && !ignoringUntilAllPointersUp
@@ -56,9 +61,14 @@ internal class EditorTapGesture(
     pressedPointerIds += pointerId
   }
 
-  fun startActivePointer(pointerId: Long, position: Offset) {
+  fun startActivePointer(
+    pointerId: Long,
+    position: Offset,
+    inputModifiers: InputModifiers = InputModifiers(),
+  ) {
     activePointerId = pointerId
     downPosition = position
+    activeInputModifiers = inputModifiers
     movedPastTapSlop = false
     tapDispatched = false
   }
@@ -142,6 +152,7 @@ internal class EditorTapGesture(
   private fun clearActivePointer() {
     activePointerId = null
     downPosition = Offset.Zero
+    activeInputModifiers = InputModifiers()
     movedPastTapSlop = false
     tapDispatched = false
   }
@@ -187,6 +198,7 @@ internal fun EditorTapGesture.handlePointerDown(
   position: Offset,
   nowMillis: Long,
   tapEnabled: Boolean,
+  inputModifiers: InputModifiers,
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ): Boolean {
@@ -194,7 +206,7 @@ internal fun EditorTapGesture.handlePointerDown(
     return false
   }
 
-  startActivePointer(pointerId = pointerId, position = position)
+  startActivePointer(pointerId = pointerId, position = position, inputModifiers = inputModifiers)
   captureContextMenuStateAtPointerDown(context.uiState.contextMenu.visible)
   context.uiState.contextMenu.hide()
   if (nextTapCount(position = position, nowMillis = nowMillis) == 2) {
@@ -204,6 +216,7 @@ internal fun EditorTapGesture.handlePointerDown(
       position = position,
       nowMillis = nowMillis,
       clickCount = 2,
+      inputModifiers = inputModifiers,
       doubleTapDrag = doubleTapDrag,
       context = context,
     ) {
@@ -238,6 +251,7 @@ internal fun EditorTapGesture.handlePointerUp(
 ): Boolean {
   val canFinishTap = !context.mode.isViewportZooming && !doubleTapDrag.dragging
   val shouldConsumeTap = shouldConsumePointerUp(pointerId = pointerId, canFinish = canFinishTap)
+  val inputModifiers = inputModifiersForActivePointer
   val clickCount =
     onPointerUp(
       pointerId = pointerId,
@@ -253,6 +267,7 @@ internal fun EditorTapGesture.handlePointerUp(
       position = position,
       nowMillis = nowMillis,
       clickCount = it,
+      inputModifiers = inputModifiers,
       doubleTapDrag = doubleTapDrag,
       context = context,
       beforeLaunch = {},
@@ -267,6 +282,7 @@ internal fun EditorTapGesture.handleTapTimer(
   context: EditorGestureContext,
 ) {
   val position = activePosition ?: return
+  val inputModifiers = inputModifiersForActivePointer
   if (!canDispatchTapTimer) {
     return
   }
@@ -291,6 +307,7 @@ internal fun EditorTapGesture.handleTapTimer(
     position = position,
     nowMillis = nowMillis,
     clickCount = clickCount,
+    inputModifiers = inputModifiers,
     doubleTapDrag = doubleTapDrag,
     context = context,
     beforeLaunch = {},
@@ -301,6 +318,7 @@ private fun EditorTapGesture.dispatchTap(
   position: Offset,
   nowMillis: Long,
   clickCount: Int,
+  inputModifiers: InputModifiers,
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
   beforeLaunch: () -> Unit,
@@ -328,6 +346,7 @@ private fun EditorTapGesture.dispatchTap(
     editor = editor,
     point = point,
     clickCount = clickCount,
+    inputModifiers = inputModifiers,
     beforeCommit = { snapshot ->
       if (clickCount == 1) {
         when {

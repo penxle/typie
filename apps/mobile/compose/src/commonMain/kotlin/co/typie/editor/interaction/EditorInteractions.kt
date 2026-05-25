@@ -5,9 +5,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.isAltPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.unit.IntSize
+import co.typie.editor.ffi.InputModifiers
 
 private const val EditorTapSlopDp = 8f
 
@@ -90,6 +95,7 @@ private class EditorInteractionsNode(
             position = tapPosition ?: pointerPosition,
             nowMillis = change.uptimeMillis,
             tapEnabled = tapPosition != null,
+            inputModifiers = pointerEvent.inputModifiers(),
           )
         ) {
           change.consume()
@@ -157,4 +163,14 @@ private class EditorInteractionsNode(
     cancelInteraction()
     super.onDetach()
   }
+}
+
+private fun PointerEvent.inputModifiers(): InputModifiers {
+  val modifiers = keyboardModifiers
+  return InputModifiers(
+    shift = modifiers.isShiftPressed,
+    ctrl = modifiers.isCtrlPressed,
+    alt = modifiers.isAltPressed,
+    meta = modifiers.isMetaPressed,
+  )
 }

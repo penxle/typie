@@ -9,6 +9,7 @@ import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
@@ -254,6 +255,49 @@ class EditorInteractionControllerTest {
       assertEquals(
         listOf<Message>(
           Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 1)),
+          Message.Pointer(EditorPointerEvent.Up),
+        ),
+        fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `single tap dispatch preserves pointer input modifiers`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(
+        pointerId = 1L,
+        position = start,
+        nowMillis = 0L,
+        inputModifiers = InputModifiers(shift = true),
+      )
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(
+          Message.Pointer(
+            EditorPointerEvent.Down(
+              page = 0,
+              x = 10f,
+              y = 20f,
+              count = 1,
+              modifiers = InputModifiers(shift = true),
+            )
+          ),
           Message.Pointer(EditorPointerEvent.Up),
         ),
         fake.enqueued,

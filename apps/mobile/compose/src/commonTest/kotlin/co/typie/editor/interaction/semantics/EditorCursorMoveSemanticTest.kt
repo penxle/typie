@@ -5,6 +5,7 @@ import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.ffi.Rect
@@ -66,6 +67,38 @@ class EditorCursorMoveSemanticTest {
       val expectedMessages: List<Message> =
         listOf(
           Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 1)),
+          Message.Pointer(EditorPointerEvent.Up),
+        )
+      assertEquals(expectedMessages, fake.enqueued)
+    }
+
+  @Test
+  fun `primary click dispatch preserves pointer input modifiers`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
+
+      assertTrue(
+        semantic.dispatchPrimaryClick(
+          editor = editor,
+          point = PagePoint(page = 0, x = 10f, y = 20f),
+          clickCount = 1,
+          inputModifiers = InputModifiers(shift = true),
+        )
+      )
+
+      val expectedMessages: List<Message> =
+        listOf(
+          Message.Pointer(
+            EditorPointerEvent.Down(
+              page = 0,
+              x = 10f,
+              y = 20f,
+              count = 1,
+              modifiers = InputModifiers(shift = true),
+            )
+          ),
           Message.Pointer(EditorPointerEvent.Up),
         )
       assertEquals(expectedMessages, fake.enqueued)

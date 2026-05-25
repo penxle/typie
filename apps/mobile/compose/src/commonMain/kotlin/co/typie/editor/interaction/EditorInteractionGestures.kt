@@ -1,6 +1,7 @@
 package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
+import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.gestures.EditorDndGesture
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorLongPressGesture
@@ -48,6 +49,7 @@ internal class EditorInteractionGestures(
     position: Offset,
     nowMillis: Long,
     tapEnabled: Boolean,
+    inputModifiers: InputModifiers,
     context: EditorGestureContext,
   ): Boolean {
     tap.addPressedPointer(pointerId)
@@ -85,6 +87,7 @@ internal class EditorInteractionGestures(
         position = position,
         nowMillis = nowMillis,
         tapEnabled = tapEnabled,
+        inputModifiers = inputModifiers,
         doubleTapDrag = doubleTapDrag,
         context = context,
       )

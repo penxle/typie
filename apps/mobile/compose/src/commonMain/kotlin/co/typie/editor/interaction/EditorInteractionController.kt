@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.gestures.EditorSelectionHandleGesture
 import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
@@ -78,12 +79,14 @@ internal class EditorInteractionController(
     position: Offset,
     nowMillis: Long,
     tapEnabled: Boolean = true,
+    inputModifiers: InputModifiers = InputModifiers(),
   ): Boolean =
     gestures.handlePointerDown(
       pointerId = pointerId,
       position = position,
       nowMillis = nowMillis,
       tapEnabled = tapEnabled,
+      inputModifiers = inputModifiers,
       context = gestureContext,
     )
 
