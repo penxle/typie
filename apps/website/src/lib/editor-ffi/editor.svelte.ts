@@ -47,9 +47,11 @@ function ensureWasmInitialized(): Promise<void> {
   })());
 }
 
-class EditorContext {
+export class EditorContext {
   editor = $state<Editor>();
   fileAssets = $state(new SvelteMap<string, FileAsset>());
+  pendingImageDrops: File[] = [];
+  pendingFileDrops: File[] = [];
 }
 
 const [getEditorContext, setEditorContext] = createContext<EditorContext>();

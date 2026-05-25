@@ -39,12 +39,21 @@
 
     const picker = document.createElement('input');
     picker.type = 'file';
+    picker.multiple = true;
 
     picker.addEventListener('change', () => {
-      const file = picker.files?.[0];
-      if (!file) return;
+      const files = [...(picker.files ?? [])];
+      if (files.length === 0) return;
 
-      void processFile(file);
+      void processFile(files[0]);
+
+      for (const file of files.slice(1)) {
+        ctx.pendingFileDrops.push(file);
+        ctx.editor?.enqueue({
+          type: 'insertion',
+          op: { type: 'fragment', fragment: { node: { type: 'file', id: undefined } } },
+        });
+      }
     });
 
     picker.click();
@@ -69,6 +78,12 @@
       Toast.error(`${file.name} 파일 업로드에 실패했습니다.`);
     }
   };
+
+  $effect(() => {
+    if (stage !== 'empty') return;
+    const file = ctx.pendingFileDrops.shift();
+    if (file) void processFile(file);
+  });
 
   const handleDownload = () => {
     if (!asset) return;
