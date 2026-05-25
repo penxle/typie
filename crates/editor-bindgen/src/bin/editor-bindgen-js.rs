@@ -44,20 +44,23 @@ fn parse_js(src: &str) -> ParsedJs {
         .position(|l| l.starts_with("import source "))
         .unwrap_or_else(|| fail("`import source` not found. Is this `--target module` output?"));
 
-    let init_block = &lines[import_idx..];
-    if !init_block
+    let instance_idx = lines
         .iter()
-        .any(|l| l.contains("new WebAssembly.Instance("))
-    {
-        fail("`new WebAssembly.Instance(...)` not found in init block.");
+        .position(|l| l.contains("new WebAssembly.Instance("))
+        .unwrap_or_else(|| fail("`new WebAssembly.Instance(...)` not found."));
+
+    if instance_idx <= import_idx {
+        fail("Unexpected layout: `new WebAssembly.Instance(...)` must come after `import source`.");
     }
 
-    let has_start = init_block.iter().any(|l| l.contains("__wbindgen_start()"));
+    let has_start = lines[instance_idx..]
+        .iter()
+        .any(|l| l.contains("__wbindgen_start()"));
 
     let mut export_names: Vec<String> = Vec::new();
     let mut body_lines: Vec<String> = Vec::new();
 
-    for line in &lines[..import_idx] {
+    for line in &lines[import_idx + 1..instance_idx] {
         if line.contains("@ts-self-types") {
             continue;
         }
