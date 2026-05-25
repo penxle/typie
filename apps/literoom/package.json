@@ -10,11 +10,11 @@
     "lint:typecheck": "tsc"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1038.0",
+    "@aws-sdk/client-s3": "^3.1053.0",
     "@typie/tsconfig": "workspace:*",
     "execa": "^9.6.1",
     "sharp": "^0.34.5",
-    "tsdown": "^0.21.10",
+    "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }
 }

@@ -1,27 +1,28 @@
 {
   "name": "@typie/bmo",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
     "lint:eslint": "eslint --max-warnings 0 ."
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.121",
-    "@aws-sdk/client-dynamodb": "^3.1038.0",
-    "@aws-sdk/client-lambda": "^3.1038.0",
-    "@aws-sdk/client-s3": "^3.1038.0",
-    "@aws-sdk/client-ssm": "^3.1038.0",
-    "@aws-sdk/lib-dynamodb": "^3.1038.0",
-    "@slack/web-api": "^7.15.1",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@aws-sdk/client-dynamodb": "^3.1053.0",
+    "@aws-sdk/client-lambda": "^3.1053.0",
+    "@aws-sdk/client-s3": "^3.1053.0",
+    "@aws-sdk/client-ssm": "^3.1053.0",
+    "@aws-sdk/lib-dynamodb": "^3.1053.0",
+    "@slack/web-api": "^7.16.0",
     "dedent": "^1.7.2",
     "remark": "^15.0.1",
     "remark-gfm": "^4.0.1",
     "ts-pattern": "^5.9.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/mdast": "^4.0.4",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.1",
     "typescript": "^6.0.3"
   }
 }
