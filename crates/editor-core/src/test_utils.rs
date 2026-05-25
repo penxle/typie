@@ -1,6 +1,6 @@
 use editor_common::Size;
 use editor_model::NodeId;
-use editor_renderer::ThemeVariant;
+use editor_resource::ThemeVariant;
 use editor_state::{Composition, PendingModifiers, Selection};
 use editor_view::Viewport;
 use hashbrown::HashMap;
@@ -50,10 +50,8 @@ pub fn assert_probe_predicts_apply(state: editor_state::State, msg: crate::messa
     assert_probe_predicts_apply_with_setup(|| Editor::new_test(state.clone()), msg);
 }
 
-pub fn assert_probe_predicts_apply_with_setup<F>(
-    mut build_editor: F,
-    msg: crate::message::Message,
-) where
+pub fn assert_probe_predicts_apply_with_setup<F>(mut build_editor: F, msg: crate::message::Message)
+where
     F: FnMut() -> Editor,
 {
     let mut probed = build_editor();

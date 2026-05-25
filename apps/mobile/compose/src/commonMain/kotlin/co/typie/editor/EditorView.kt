@@ -17,6 +17,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import co.typie.editor.EditorRegistry
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.external.EditorExternalElementOverlay
@@ -95,7 +96,12 @@ internal fun EditorView(
     val editor = runtime.editor ?: return@Box
     val focusManager = LocalFocusManager.current
     LaunchedEffect(editor, themeVariant) {
-      editor.enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
+      val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
+      if (changed) {
+        for (e in EditorRegistry.snapshot()) {
+          e.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+        }
+      }
     }
     SideEffect { editor.focusManager = focusManager }
     DisposableEffect(editor, uiState) {

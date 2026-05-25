@@ -90,3 +90,4 @@ objc2-metal.workspace = true
 
 [dev-dependencies]
 editor-core = { path = "../editor-core", features = ["test-utils"] }
+editor-resource = { path = "../editor-resource", features = ["test-utils"] }

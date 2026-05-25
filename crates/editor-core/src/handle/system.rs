@@ -21,10 +21,8 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             Ok(())
         }
 
-        SystemEvent::SetThemeVariant { variant } => {
-            if editor.set_theme_variant(variant) {
-                editor.push_event(EditorEvent::RenderInvalidated);
-            }
+        SystemEvent::ThemeVariantChanged => {
+            editor.push_event(EditorEvent::RenderInvalidated);
             Ok(())
         }
 
@@ -53,12 +51,10 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::state;
-    use editor_renderer::ThemeVariant;
-
     use super::*;
     use crate::event::{EditorEvent, FontData};
     use crate::state_field::StateField;
+    use editor_macros::state;
 
     fn test_config_single_chunk(
         family: &str,
@@ -147,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn set_theme_variant_invalidates_render_when_changed() {
+    fn theme_variant_changed_invalidates_render() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -159,33 +155,10 @@ mod tests {
 
         let mut editor = Editor::new_test(state);
         let events = editor.apply(Message::System {
-            event: SystemEvent::SetThemeVariant {
-                variant: ThemeVariant::DarkBlack,
-            },
+            event: SystemEvent::ThemeVariantChanged,
         });
 
         assert_eq!(events, vec![EditorEvent::RenderInvalidated]);
-    }
-
-    #[test]
-    fn set_theme_variant_ignores_current_variant() {
-        let (state, ..) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("A") }
-                }
-            }
-            selection: (t1, 0)
-        };
-
-        let mut editor = Editor::new_test(state);
-        let events = editor.apply(Message::System {
-            event: SystemEvent::SetThemeVariant {
-                variant: ThemeVariant::LightWhite,
-            },
-        });
-
-        assert!(events.is_empty());
     }
 
     #[test]
@@ -1309,40 +1282,6 @@ mod tests {
         let probed = editor
             .can(Message::System {
                 event: SystemEvent::SetFocused { focused: true },
-            })
-            .unwrap();
-        assert!(probed);
-    }
-
-    #[test]
-    fn probe_set_theme_variant_same() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
-        };
-        let mut editor = Editor::new_test(state);
-        let probed = editor
-            .can(Message::System {
-                event: SystemEvent::SetThemeVariant {
-                    variant: ThemeVariant::LightWhite,
-                },
-            })
-            .unwrap();
-        assert!(!probed);
-    }
-
-    #[test]
-    fn probe_set_theme_variant_different() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
-        };
-        let mut editor = Editor::new_test(state);
-        let probed = editor
-            .can(Message::System {
-                event: SystemEvent::SetThemeVariant {
-                    variant: ThemeVariant::DarkBlack,
-                },
             })
             .unwrap();
         assert!(probed);

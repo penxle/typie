@@ -1,6 +1,6 @@
 use editor_common::Rect;
 use editor_model::{Doc, Modifier, Node, NodeId, TableBorderStyle};
-use editor_resource::Resource;
+use editor_resource::{Resource, Theme};
 use editor_view::glyph_run::RubyAnnotation;
 use editor_view::style::{BoxStyle, DecorationData};
 use editor_view::{Edges, LineMetrics, PageRect, PageVisitor, TableLayoutInfo};
@@ -9,8 +9,6 @@ use std::sync::{Arc, Mutex};
 use crate::glyph::{Content, GlyphCache, ScaleContext};
 use crate::icons::ICONS;
 use crate::sink::RenderSink;
-use crate::theme::Theme;
-use crate::theme_data::ThemeVariant;
 use crate::types::{
     Color, CornerRadii, IconData, IconElement, Image, Path, PathElement, Stroke, StrokeCap,
     StrokeJoin, Transform,
@@ -380,41 +378,27 @@ fn selection_mark_color(theme: &Theme, focused: bool) -> Color {
 }
 
 pub struct Renderer {
-    pub(crate) theme: Theme,
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) scale_ctx: ScaleContext,
     pub(crate) glyph_cache: GlyphCache,
 }
 
 impl Renderer {
-    pub fn new(variant: ThemeVariant, resource: Arc<Mutex<Resource>>) -> Self {
+    pub fn new(resource: Arc<Mutex<Resource>>) -> Self {
         Self {
-            theme: Theme::new(variant),
             resource,
             scale_ctx: ScaleContext::new(),
             glyph_cache: GlyphCache::new(),
         }
     }
 
-    pub fn theme_variant(&self) -> ThemeVariant {
-        self.theme.variant()
-    }
-
-    pub fn would_set_theme_variant(&self, variant: ThemeVariant) -> bool {
-        self.theme.variant() != variant
-    }
-
-    pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
-        self.theme.set_variant(variant)
-    }
-
-    fn resolve_mark(&self, data: &MarkData) -> MarkStyle {
+    fn resolve_mark(&self, data: &MarkData, theme: &Theme) -> MarkStyle {
         match data {
             MarkData::Selection { focused } => MarkStyle {
-                color: selection_mark_color(&self.theme, *focused),
+                color: selection_mark_color(theme, *focused),
             },
             MarkData::Composition => MarkStyle {
-                color: self.theme.color("ui.text.default"),
+                color: theme.color("ui.text.default"),
             },
         }
     }
@@ -426,13 +410,14 @@ impl Renderer {
         layer: MarkLayer,
         page_idx: usize,
         scale_factor: f32,
+        theme: &Theme,
     ) {
         let transform = Transform::scale(scale_factor);
         for mark in marks {
             if mark.data.layer() != layer {
                 continue;
             }
-            let style = self.resolve_mark(&mark.data);
+            let style = self.resolve_mark(&mark.data, theme);
             for rect in &mark.rects {
                 if rect.page_idx != page_idx {
                     continue;
@@ -451,6 +436,8 @@ impl Renderer {
         scale_factor: f32,
         marks: &[Mark],
     ) {
+        let theme = self.resource.lock().unwrap().theme;
+
         view.visit_page(
             page_idx,
             &mut self.page_visitor(
@@ -461,7 +448,14 @@ impl Renderer {
             ),
         );
 
-        self.draw_marks(sink, marks, MarkLayer::BelowContent, page_idx, scale_factor);
+        self.draw_marks(
+            sink,
+            marks,
+            MarkLayer::BelowContent,
+            page_idx,
+            scale_factor,
+            &theme,
+        );
 
         view.visit_page(
             page_idx,
@@ -473,7 +467,14 @@ impl Renderer {
             ),
         );
 
-        self.draw_marks(sink, marks, MarkLayer::AboveContent, page_idx, scale_factor);
+        self.draw_marks(
+            sink,
+            marks,
+            MarkLayer::AboveContent,
+            page_idx,
+            scale_factor,
+            &theme,
+        );
     }
 
     pub fn page_visitor<'a>(
@@ -483,6 +484,7 @@ impl Renderer {
         scale_factor: f32,
         active: LayerSet,
     ) -> RenderVisitor<'a> {
+        let theme = self.resource.lock().unwrap().theme;
         RenderVisitor {
             renderer: self,
             sink,
@@ -491,6 +493,7 @@ impl Renderer {
             root_transform: Transform::scale(scale_factor),
             box_stack: Vec::new(),
             active,
+            theme,
         }
     }
 }
@@ -511,6 +514,7 @@ pub struct RenderVisitor<'a> {
     root_transform: Transform,
     box_stack: Vec<BoxFrame>,
     active: LayerSet,
+    theme: Theme,
 }
 
 impl RenderVisitor<'_> {
@@ -608,7 +612,7 @@ impl<'a> RenderVisitor<'a> {
         use editor_view::glyph_run::GraphemeSpan;
 
         for ann in rubies {
-            let color = self.renderer.theme.color(&ann.color);
+            let color = self.theme.color(&ann.color);
 
             let adapter = editor_view::glyph_run::GlyphRun {
                 family_id: ann.family_id,
@@ -772,7 +776,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             match &node {
                 Some(Node::Callout(callout)) => {
                     let token = callout_token(*callout.variant.get());
-                    let color = self.renderer.theme.color_with_alpha(token, 8);
+                    let color = self.theme.color_with_alpha(token, 8);
                     let radii = CornerRadii::from_edges(CALLOUT_BORDER_RADIUS, &edges);
                     let path = Path::rrect(inner_rect, radii);
                     self.sink.fill_path(&path, color, t);
@@ -796,7 +800,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     } else {
                         "ui.blockquote.message-received"
                     };
-                    let color = self.renderer.theme.color(token);
+                    let color = self.theme.color(token);
 
                     let radii =
                         message_bubble_radii(MESSAGE_BORDER_RADIUS, &edges, is_sent, has_tail);
@@ -830,7 +834,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                         bottom_left: bottom,
                         bottom_right: bottom,
                     };
-                    let color = self.renderer.theme.color("ui.surface.muted");
+                    let color = self.theme.color("ui.surface.muted");
                     let path = Path::rrect(inner_rect, radii);
                     self.sink.fill_path(&path, color, t);
                 }
@@ -843,7 +847,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     });
                     if let Some(ref color_value) = color_value {
                         if color_value != "none" {
-                            let color = self.renderer.theme.color(&format!("bg.{color_value}"));
+                            let color = self.theme.color(&format!("bg.{color_value}"));
                             let path = Path::rect(inner_rect);
                             self.sink.fill_path(&path, color, t);
                         }
@@ -876,7 +880,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             .translate(frame.local_rect.x, frame.local_rect.y);
 
         if let Some(Node::Fold(_)) = &frame.node {
-            let border_color = self.renderer.theme.color("ui.border.default");
+            let border_color = self.theme.color("ui.border.default");
             let stroke = Stroke::new(FOLD_BORDER_WIDTH);
             let mb = FOLD_BORDER_WIDTH / 2.0;
             let inner_radius = (FOLD_BORDER_RADIUS - mb).max(0.0);
@@ -902,7 +906,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         if let Some(Node::Callout(callout)) = &frame.node {
             let token = callout_token(*callout.variant.get());
-            let border_color = self.renderer.theme.color(token);
+            let border_color = self.theme.color(token);
             let stroke = Stroke::new(CALLOUT_BORDER_WIDTH);
             let mb = CALLOUT_BORDER_WIDTH / 2.0;
             let inner_radius = (CALLOUT_BORDER_RADIUS - mb).max(0.0);
@@ -934,7 +938,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             let border_style = *table.border_style.get();
             if border_style != TableBorderStyle::None {
                 if let Some(ref info) = frame.table_info {
-                    let border_color = self.renderer.theme.color("ui.border.default");
+                    let border_color = self.theme.color("ui.border.default");
                     draw_table_grid(
                         self.sink,
                         border_style,
@@ -951,10 +955,8 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         let b = &frame.border;
         let border_color = match &frame.node {
-            Some(Node::Blockquote(_) | Node::FoldTitle(_)) => {
-                self.renderer.theme.color("ui.border.default")
-            }
-            _ => self.renderer.theme.color("ui.border"),
+            Some(Node::Blockquote(_) | Node::FoldTitle(_)) => self.theme.color("ui.border.default"),
+            _ => self.theme.color("ui.border"),
         };
 
         if frame.edges.left && b.left > 0.0 {
@@ -1013,14 +1015,14 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         for run in glyph_runs {
             if let Some(ref bg_token) = run.background_color {
-                let bg_color = self.renderer.theme.color(bg_token);
+                let bg_color = self.theme.color(bg_token);
                 let run_rect = Rect::from_xywh(run.x, 0.0, run.width, local_rect.height);
                 self.sink.fill_rect(run_rect, bg_color, t);
             }
         }
 
         for run in glyph_runs {
-            let color = self.renderer.theme.color(&run.color);
+            let color = self.theme.color(&run.color);
             self.render_glyph_runs(std::slice::from_ref(run), color, t);
         }
 
@@ -1028,7 +1030,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             if !run.decoration.underline && !run.decoration.strikethrough {
                 continue;
             }
-            let color = self.renderer.theme.color(&run.color);
+            let color = self.theme.color(&run.color);
             if run.decoration.underline {
                 self.sink
                     .fill_rect(underline_rect(metrics, run.x, run.width), color, t);
@@ -1054,7 +1056,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         match node.map(|n| n.node()) {
             Some(Node::HorizontalRule(hr)) => {
-                let color = self.renderer.theme.color("ui.text.default");
+                let color = self.theme.color("ui.text.default");
                 let w = inner_rect.width;
                 let h = inner_rect.height;
                 let cx = w / 2.0;
@@ -1207,10 +1209,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     editor_model::CalloutVariant::Warning => "lucide/circle-alert",
                     editor_model::CalloutVariant::Danger => "lucide/triangle-alert",
                 };
-                let color = self
-                    .renderer
-                    .theme
-                    .color(callout_token(*callout.variant.get()));
+                let color = self.theme.color(callout_token(*callout.variant.get()));
                 if let Some(icon) = ICONS.resolve(icon_name) {
                     self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
                 }
@@ -1219,7 +1218,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             (Some(Node::Blockquote(bq)), _)
                 if *bq.variant.get() == editor_model::BlockquoteVariant::LeftQuote =>
             {
-                let color = self.renderer.theme.color("ui.text.muted");
+                let color = self.theme.color("ui.text.muted");
                 if let Some(icon) = ICONS.resolve("typie/blockquote-quote") {
                     self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
                 }
@@ -1228,7 +1227,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             (Some(Node::Blockquote(bq)), _)
                 if *bq.variant.get() == editor_model::BlockquoteVariant::LeftLine =>
             {
-                let color = self.renderer.theme.color("ui.border.default");
+                let color = self.theme.color("ui.border.default");
                 self.sink.fill_rect(inner_rect, color, t);
             }
 
@@ -1239,14 +1238,14 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 } else {
                     "lucide/chevron-down"
                 };
-                let color = self.renderer.theme.color("text.gray");
+                let color = self.theme.color("text.gray");
                 if let Some(icon) = ICONS.resolve(icon_name) {
                     self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
                 }
             }
 
             (Some(Node::ListItem(_)), DecorationData::Glyphs(glyph_runs)) => {
-                let color = self.renderer.theme.color("ui.text.default");
+                let color = self.theme.color("ui.text.default");
                 let total_width: f32 = glyph_runs.iter().map(|r| r.width).sum();
                 let x_offset = inner_rect.width - total_width;
                 let offset_t = t.translate(x_offset, 0.0);
@@ -1255,7 +1254,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
             (Some(Node::ListItem(_)), DecorationData::Bullet) => {
                 // Bullets center on the line box; ordered markers align to baseline (set in measure).
-                let color = self.renderer.theme.color("ui.text.default");
+                let color = self.theme.color("ui.text.default");
                 let r = inner_rect.height * BULLET_RADIUS_RATIO;
                 let cx = inner_rect.width - r;
                 let cy = inner_rect.height / 2.0;
@@ -1269,31 +1268,9 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 }
 
 #[cfg(test)]
-mod tests_would {
-    use super::*;
-    use std::sync::{Arc, Mutex};
-
-    fn renderer() -> Renderer {
-        let resource = Arc::new(Mutex::new(editor_resource::Resource::new_test()));
-        Renderer::new(ThemeVariant::LightWhite, resource)
-    }
-
-    #[test]
-    fn would_set_theme_variant_false_for_same() {
-        let r = renderer();
-        assert!(!r.would_set_theme_variant(ThemeVariant::LightWhite));
-    }
-
-    #[test]
-    fn would_set_theme_variant_true_for_different() {
-        let r = renderer();
-        assert!(r.would_set_theme_variant(ThemeVariant::DarkBlack));
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
+    use editor_resource::ThemeVariant;
 
     #[test]
     fn circle_path_has_four_curves_and_close() {
@@ -1553,7 +1530,7 @@ mod tests {
             .expect("test font must be registered");
 
         let doc = editor_model::Doc::empty();
-        let mut renderer = Renderer::new(ThemeVariant::LightWhite, Arc::new(Mutex::new(resource)));
+        let mut renderer = Renderer::new(Arc::new(Mutex::new(resource)));
 
         let mut sink = CountingSink::default();
         let mut v =
@@ -1630,11 +1607,13 @@ mod tests {
             }
         };
 
-        let mut renderer = Renderer::new(
-            ThemeVariant::LightWhite,
-            Arc::new(Mutex::new(Resource::new_test())),
-        );
-        let muted = renderer.theme.color("ui.surface.muted");
+        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
+        let muted = renderer
+            .resource
+            .lock()
+            .unwrap()
+            .theme
+            .color("ui.surface.muted");
 
         let icon_rect = Rect::from_xywh(12.0, 8.0, 20.0, 20.0);
         let style = BoxStyle {
@@ -1751,10 +1730,7 @@ mod tests {
             row_inner_heights: vec![30.0, 30.0],
         };
 
-        let mut renderer = Renderer::new(
-            ThemeVariant::LightWhite,
-            Arc::new(Mutex::new(Resource::new_test())),
-        );
+        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
         let mut sink = FillCounter::default();
         {
             let mut v =
@@ -1826,10 +1802,7 @@ mod tests {
             row_inner_heights: vec![30.0],
         };
 
-        let mut renderer = Renderer::new(
-            ThemeVariant::LightWhite,
-            Arc::new(Mutex::new(Resource::new_test())),
-        );
+        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
         let mut sink = FillCounter::default();
         {
             let mut v =
@@ -1913,10 +1886,7 @@ mod tests {
             monolithic: false,
         };
 
-        let mut renderer = Renderer::new(
-            ThemeVariant::LightWhite,
-            Arc::new(Mutex::new(Resource::new_test())),
-        );
+        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
         let mut sink = FillCounter::default();
         {
             let mut v =
@@ -2024,10 +1994,7 @@ mod tests {
         let mut solid_sink = FillCounter::default();
         let mut dashed_sink = FillCounter::default();
 
-        let mut renderer = Renderer::new(
-            ThemeVariant::LightWhite,
-            Arc::new(Mutex::new(Resource::new_test())),
-        );
+        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
 
         {
             let mut v = renderer.page_visitor(

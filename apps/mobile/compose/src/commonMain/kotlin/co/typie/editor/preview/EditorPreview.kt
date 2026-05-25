@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
+import co.typie.editor.EditorRegistry
 import co.typie.editor.EditorZoomController
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorDocumentLayoutSpec
@@ -57,6 +58,7 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
+import co.typie.platform.PlatformModule
 import co.typie.ext.clickable
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
@@ -266,8 +268,13 @@ private fun EditorPreviewContent(
         }
       runtime.attach(nextEditor)
     } else {
+      val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
+      if (changed) {
+        for (e in EditorRegistry.snapshot()) {
+          e.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+        }
+      }
       activeEditor.await {
-        enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
         enqueue(
           Message.System(
             SystemEvent.Resize(

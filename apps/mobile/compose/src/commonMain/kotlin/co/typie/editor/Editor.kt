@@ -486,8 +486,9 @@ internal constructor(
             createdEditor = editor
 
             editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
+            PlatformModule.editorHost.setThemeVariant(themeVariant)
             editor.awaitOrThrow {
-              enqueue(Message.System(SystemEvent.SetThemeVariant(themeVariant)))
+              enqueue(Message.System(SystemEvent.ThemeVariantChanged))
               enqueue(Message.System(SystemEvent.Initialize))
             }
             editor

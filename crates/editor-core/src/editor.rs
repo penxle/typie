@@ -2,7 +2,9 @@ use editor_clipboard::Slice;
 use editor_common::{Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{DocOp, ModifierState, Node, NodeId};
-use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
+use editor_renderer::{Mark, MarkData, RenderSink, Renderer};
+#[cfg(any(test, feature = "test-utils"))]
+use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
     DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
@@ -123,7 +125,7 @@ impl Editor {
             state,
             view: View::new(viewport, Arc::clone(&resource)),
             history: History::new(Duration::from_millis(300)),
-            renderer: Renderer::new(ThemeVariant::LightWhite, Arc::clone(&resource)),
+            renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             drag_anchor: None,
             focused: false,
@@ -560,15 +562,6 @@ impl Editor {
         }
     }
 
-    pub fn set_theme_variant(&mut self, variant: ThemeVariant) -> bool {
-        let would_change = self.renderer.would_set_theme_variant(variant);
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-            return would_change;
-        }
-        self.renderer.set_theme_variant(variant)
-    }
-
     pub(crate) fn resize_view(&mut self, viewport: Viewport) -> bool {
         let would_change = self.view.would_resize(viewport, &self.state.doc);
         if let Mode::Probe { ref mut changed } = self.mode {
@@ -888,7 +881,7 @@ impl Editor {
             state,
             view: View::new_test(),
             history: History::new(Duration::from_millis(300)),
-            renderer: Renderer::new(ThemeVariant::LightWhite, Arc::clone(&resource)),
+            renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             drag_anchor: None,
             focused: false,
@@ -918,8 +911,9 @@ impl Editor {
         self.history.redos_len()
     }
 
-    pub fn theme_variant(&self) -> ThemeVariant {
-        self.renderer.theme_variant()
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) fn theme_variant(&self) -> ThemeVariant {
+        self.resource.lock().unwrap().theme.variant()
     }
 }
 

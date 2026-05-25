@@ -60,7 +60,7 @@ impl RenderSink for CpuSink {
 
     fn fill_rect(&mut self, rect: Rect, color: Color, transform: Transform) {
         self.ctx.set_transform(transform.into());
-        self.ctx.set_paint(peniko::color::AlphaColor::from(color));
+        self.ctx.set_paint(crate::types::to_peniko(color));
         let r = kurbo::Rect::new(
             rect.x as f64,
             rect.y as f64,
@@ -72,13 +72,13 @@ impl RenderSink for CpuSink {
 
     fn fill_path(&mut self, path: &Path, color: Color, transform: Transform) {
         self.ctx.set_transform(transform.into());
-        self.ctx.set_paint(peniko::color::AlphaColor::from(color));
+        self.ctx.set_paint(crate::types::to_peniko(color));
         self.ctx.fill_path(&kurbo::BezPath::from(path));
     }
 
     fn stroke_path(&mut self, path: &Path, color: Color, stroke: &Stroke, transform: Transform) {
         self.ctx.set_transform(transform.into());
-        self.ctx.set_paint(peniko::color::AlphaColor::from(color));
+        self.ctx.set_paint(crate::types::to_peniko(color));
         let mut ks = kurbo::Stroke::new(stroke.width as f64);
         ks.start_cap = stroke.cap.into();
         ks.end_cap = stroke.cap.into();

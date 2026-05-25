@@ -1,36 +1,10 @@
 use editor_common::Rect;
 use editor_view::Edges;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Color {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-}
+pub use editor_common::Color;
 
-impl Color {
-    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
-    }
-
-    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
-        Self { r, g, b, a: 255 }
-    }
-
-    pub const fn with_alpha(self, a: u8) -> Self {
-        Self { a, ..self }
-    }
-
-    pub const TRANSPARENT: Self = Self::new(0, 0, 0, 0);
-    pub const BLACK: Self = Self::rgb(0, 0, 0);
-    pub const WHITE: Self = Self::rgb(255, 255, 255);
-}
-
-impl From<Color> for peniko::color::AlphaColor<peniko::color::Srgb> {
-    fn from(c: Color) -> Self {
-        Self::from_rgba8(c.r, c.g, c.b, c.a)
-    }
+pub fn to_peniko(c: Color) -> peniko::color::AlphaColor<peniko::color::Srgb> {
+    peniko::color::AlphaColor::from_rgba8(c.r, c.g, c.b, c.a)
 }
 
 #[derive(Debug, Clone, Copy)]

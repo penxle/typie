@@ -91,9 +91,7 @@ fn build_corpus() -> Vec<Message> {
             event: SystemEvent::SetFocused { focused: true },
         },
         Message::System {
-            event: SystemEvent::SetThemeVariant {
-                variant: editor_renderer::ThemeVariant::DarkBlack,
-            },
+            event: SystemEvent::ThemeVariantChanged,
         },
         Message::System {
             event: SystemEvent::Resize {

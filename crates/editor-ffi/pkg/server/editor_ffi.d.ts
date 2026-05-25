@@ -640,7 +640,7 @@ export type SelectionOp = { type: "set"; selection: Selection } | { type: "unset
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "ime" | "modifiers" | "block";
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "set_theme_variant"; variant: ThemeVariant } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
@@ -708,6 +708,7 @@ declare class EditorHost {
     set_auto_surround_enabled(enabled: boolean): void;
     set_fonts(families: FontFamily[]): void;
     set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
+    set_theme_variant(variant: ThemeVariant): boolean;
 }
 
 declare class EditorServer {

@@ -9,10 +9,13 @@ use crate::error::ResourceError;
 use crate::font::{FontFamily, FontRegistry, PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT};
 use crate::segmentation::{IcuResources, TextSegmenters};
 use crate::text_replacement::{RawTextReplacementRule, TextReplacementRule, compile_rules};
+use crate::theme::Theme;
+use crate::theme_data::ThemeVariant;
 
 const PLACEHOLDER_TTF: &[u8] = include_bytes!("../assets/placeholder.ttf");
 
 pub struct Resource {
+    pub theme: Theme,
     pub font_registry: FontRegistry,
     pub font_context: FontContext,
     pub layout_context: LayoutContext<TextBrush>,
@@ -25,6 +28,7 @@ pub struct Resource {
 impl Resource {
     pub fn new(icu: IcuResources) -> Self {
         let mut resource = Self {
+            theme: Theme::new(ThemeVariant::LightWhite),
             font_registry: FontRegistry::new(),
             font_context: FontContext::new(),
             layout_context: LayoutContext::new(),
@@ -123,6 +127,19 @@ mod tests {
     fn set_fonts_accepts_empty() {
         let mut resource = Resource::new_test();
         resource.set_fonts(vec![]);
+    }
+
+    #[test]
+    fn new_initializes_with_light_white_theme() {
+        let resource = Resource::new_test();
+        assert_eq!(resource.theme.variant(), ThemeVariant::LightWhite);
+    }
+
+    #[test]
+    fn theme_set_variant_mutates() {
+        let mut resource = Resource::new_test();
+        assert!(resource.theme.set_variant(ThemeVariant::DarkBlack));
+        assert_eq!(resource.theme.variant(), ThemeVariant::DarkBlack);
     }
 
     #[test]

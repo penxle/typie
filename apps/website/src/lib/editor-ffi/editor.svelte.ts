@@ -5,7 +5,7 @@ import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
-import { register, unregister } from './registry';
+import { register, snapshot, unregister } from './registry';
 import type {
   BlockState,
   ClipboardPayload,
@@ -161,7 +161,8 @@ export class Editor {
       });
     });
 
-    self.enqueue({ type: 'system', event: { type: 'set_theme_variant', variant: themeVariant } });
+    wasm.set_theme_variant(themeVariant);
+    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
     self.enqueue({ type: 'system', event: { type: 'initialize' } });
 
     return self;
@@ -458,7 +459,15 @@ export class Editor {
   }
 
   setThemeVariant(variant: ThemeVariant): void {
-    this.enqueue({ type: 'system', event: { type: 'set_theme_variant', variant } });
+    Editor.setThemeVariant(variant);
+  }
+
+  static setThemeVariant(variant: ThemeVariant): void {
+    const changed = wasm.set_theme_variant(variant);
+    if (!changed) return;
+    for (const editor of snapshot()) {
+      editor.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
+    }
   }
 
   currentHeads(): Uint8Array {

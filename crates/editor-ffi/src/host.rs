@@ -184,6 +184,13 @@ impl EditorHost {
             Ok(())
         })
     }
+
+    pub fn set_theme_variant(
+        &self,
+        variant: Complex<editor_resource::ThemeVariant>,
+    ) -> EditorResult<bool> {
+        self.with_resource(|resource| Ok(resource.theme.set_variant(variant.from_ffi()?)))
+    }
 }
 
 impl EditorHost {
@@ -193,6 +200,38 @@ impl EditorHost {
     {
         let mut resource = self.resource.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut resource)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn make_host() -> EditorHost {
+        EditorHost {
+            resource: Arc::new(Mutex::new(editor_resource::Resource::new_test())),
+        }
+    }
+
+    #[test]
+    fn set_theme_variant_returns_true_on_change() {
+        let host = make_host();
+        let result = host
+            .set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
+            .unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn set_theme_variant_returns_false_for_same_variant() {
+        let host = make_host();
+        host.set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
+            .unwrap();
+        let result = host
+            .set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
+            .unwrap();
+        assert!(!result);
     }
 }
 

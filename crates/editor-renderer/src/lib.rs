@@ -6,13 +6,9 @@ pub mod icon_data;
 pub mod icons;
 pub mod renderer;
 pub mod sink;
-pub mod theme;
-pub mod theme_data;
 pub mod types;
 
 pub use backend::RenderBackend;
 pub use renderer::{Mark, MarkData, MarkRect, Renderer};
 pub use sink::RenderSink;
-pub use theme::Theme;
-pub use theme_data::ThemeVariant;
 pub use types::*;
