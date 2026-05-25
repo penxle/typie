@@ -906,19 +906,19 @@ impl Editor {
         self.tick().unwrap()
     }
 
-    pub(crate) fn is_focused(&self) -> bool {
+    pub fn is_focused(&self) -> bool {
         self.focused
     }
 
-    pub(crate) fn history_undos_len(&self) -> usize {
+    pub fn history_undos_len(&self) -> usize {
         self.history.undos_len()
     }
 
-    pub(crate) fn history_redos_len(&self) -> usize {
+    pub fn history_redos_len(&self) -> usize {
         self.history.redos_len()
     }
 
-    pub(crate) fn theme_variant(&self) -> ThemeVariant {
+    pub fn theme_variant(&self) -> ThemeVariant {
         self.renderer.theme_variant()
     }
 }

@@ -6,6 +6,7 @@ use crate::types::{Color, Image, Path, Stroke, Transform};
 
 pub struct CpuSink {
     ctx: vello_cpu::RenderContext,
+    resources: vello_cpu::Resources,
     width: u16,
     height: u16,
 }
@@ -14,6 +15,7 @@ impl CpuSink {
     pub fn new(width: u16, height: u16) -> Self {
         Self {
             ctx: Self::create_context(width, height),
+            resources: vello_cpu::Resources::new(),
             width,
             height,
         }
@@ -40,6 +42,7 @@ impl CpuSink {
     pub fn flush_to(&mut self, dst: &mut [u8]) {
         self.ctx.flush();
         self.ctx.render_to_buffer(
+            &mut self.resources,
             dst,
             self.width,
             self.height,

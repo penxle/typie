@@ -55,7 +55,7 @@ impl<'a> NodeRef<'a> {
         self.doc.node(parent_id)
     }
 
-    pub fn children(&self) -> impl Iterator<Item = NodeRef<'a>> + 'a {
+    pub fn children(&self) -> impl Iterator<Item = NodeRef<'a>> + use<'a> {
         let doc = self.doc;
         self.entry()
             .children

@@ -101,7 +101,7 @@ mod tests {
     fn cell_text(doc: &editor_model::Doc, id: NodeId) -> String {
         fn walk(node: editor_model::NodeRef<'_>, out: &mut String) {
             match node.node() {
-                Node::Text(t) => out.push_str(&t.text),
+                Node::Text(t) => out.push_str(&t.text.to_string()),
                 _ => {
                     for c in node.children() {
                         walk(c, out);

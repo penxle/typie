@@ -382,7 +382,7 @@ mod tests {
                     let mut out = String::new();
                     fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
                         if let editor_model::Node::Text(t) = n.node() {
-                            out.push_str(&t.text);
+                            out.push_str(&t.text.to_string());
                         }
                         for c in n.children() {
                             walk(c, out);
@@ -457,7 +457,7 @@ mod tests {
             let mut out = String::new();
             fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
                 if let editor_model::Node::Text(t) = n.node() {
-                    out.push_str(&t.text);
+                    out.push_str(&t.text.to_string());
                 }
                 for c in n.children() {
                     walk(c, out);
@@ -542,7 +542,7 @@ mod tests {
             let mut out = String::new();
             fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
                 if let editor_model::Node::Text(t) = n.node() {
-                    out.push_str(&t.text);
+                    out.push_str(&t.text.to_string());
                 }
                 for c in n.children() {
                     walk(c, out);
@@ -590,7 +590,7 @@ mod tests {
         fn cell_text(doc: &editor_model::Doc, id: editor_model::NodeId) -> String {
             fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
                 if let editor_model::Node::Text(t) = n.node() {
-                    out.push_str(&t.text);
+                    out.push_str(&t.text.to_string());
                 }
                 for c in n.children() {
                     walk(c, out);

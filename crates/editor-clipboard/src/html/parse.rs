@@ -8,7 +8,7 @@ use editor_model::{
     PlainTableRowNode, PlainTextNode,
 };
 use html5ever::tendril::TendrilSink;
-use html5ever::{ParseOpts, QualName, namespace_url, ns};
+use html5ever::{ParseOpts, QualName, ns};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
 pub fn from_html(html: &str) -> Slice {
@@ -33,6 +33,7 @@ pub fn from_html(html: &str) -> Slice {
         opts,
         QualName::new(None, ns!(html), "body".into()),
         vec![],
+        false,
     )
     .one(input);
 

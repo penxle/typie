@@ -134,7 +134,7 @@ fn find_table_fragment(frag: &Fragment) -> Option<&Fragment> {
 mod tests {
     use editor_clipboard::Slice;
     use editor_macros::state;
-    use editor_model::Node;
+    use editor_model::{Node, NodeId};
     use editor_state::cell_rect_selection;
 
     use super::*;
@@ -155,7 +155,7 @@ mod tests {
     fn cell_text(doc: &editor_model::Doc, id: NodeId) -> String {
         fn walk(node: editor_model::NodeRef<'_>, out: &mut String) {
             match node.node() {
-                Node::Text(t) => out.push_str(&t.text),
+                Node::Text(t) => out.push_str(&t.text.to_string()),
                 _ => {
                     for c in node.children() {
                         walk(c, out);

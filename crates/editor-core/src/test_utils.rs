@@ -8,7 +8,7 @@ use hashbrown::HashMap;
 use crate::editor::Editor;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct EditorSnapshot {
+pub struct EditorSnapshot {
     doc: editor_model::Doc,
     selection: Option<Selection>,
     pending_modifiers: PendingModifiers,
@@ -25,7 +25,7 @@ pub(crate) struct EditorSnapshot {
 }
 
 impl EditorSnapshot {
-    pub(crate) fn capture(editor: &Editor) -> Self {
+    pub fn capture(editor: &Editor) -> Self {
         let view_state = editor.view().view_state();
         let page_sizes: Vec<Size> = editor.view().pages().iter().map(|p| p.size).collect();
         Self {
@@ -46,14 +46,11 @@ impl EditorSnapshot {
     }
 }
 
-pub(crate) fn assert_probe_predicts_apply(
-    state: editor_state::State,
-    msg: crate::message::Message,
-) {
+pub fn assert_probe_predicts_apply(state: editor_state::State, msg: crate::message::Message) {
     assert_probe_predicts_apply_with_setup(|| Editor::new_test(state.clone()), msg);
 }
 
-pub(crate) fn assert_probe_predicts_apply_with_setup<F>(
+pub fn assert_probe_predicts_apply_with_setup<F>(
     mut build_editor: F,
     msg: crate::message::Message,
 ) where
@@ -77,7 +74,7 @@ pub(crate) fn assert_probe_predicts_apply_with_setup<F>(
     );
 }
 
-pub(crate) fn assert_probe_is_safe(state: editor_state::State, msg: crate::message::Message) {
+pub fn assert_probe_is_safe(state: editor_state::State, msg: crate::message::Message) {
     let mut editor = Editor::new_test(state);
     let before = EditorSnapshot::capture(&editor);
     let _ = editor.can(msg);
