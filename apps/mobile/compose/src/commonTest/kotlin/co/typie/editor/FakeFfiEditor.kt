@@ -19,10 +19,12 @@ import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.Tri
 
 internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
+  var canProvider: (Message) -> Boolean = { false },
   var cursorProvider: () -> CursorMetrics? = { null },
   var selectionProvider: () -> Selection = { EmptySelection },
   var rootAttrsProvider: () -> PlainRootNode = { EmptyRootAttrs },
@@ -47,6 +49,8 @@ internal class FakeFfiEditor(
   override fun enqueue(message: Message) {
     enqueued += message
   }
+
+  override fun can(message: Message): Boolean = canProvider(message)
 
   override fun tick(): List<EditorEvent> {
     tickCount += 1
@@ -82,6 +86,8 @@ internal class FakeFfiEditor(
   override fun pageSizes(): List<Size> = pageSizesProvider()
 
   override fun externalElements(): List<ExternalElement> = externalElementsProvider()
+
+  override fun tableOverlays(): List<TableOverlay> = emptyList()
 
   override fun ime(beforeLimit: Int, afterLimit: Int): Ime = imeProvider(beforeLimit, afterLimit)
 

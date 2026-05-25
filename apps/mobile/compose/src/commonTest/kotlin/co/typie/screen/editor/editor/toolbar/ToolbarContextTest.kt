@@ -134,7 +134,7 @@ class ToolbarContextTest {
               ancestors =
                 listOf(
                   block("paragraph", PlainNode.Paragraph),
-                  block("cell", PlainNode.TableCell(colWidth = null)),
+                  block("cell", PlainNode.TableCell(colWidth = null, backgroundColor = null)),
                   block("row", PlainNode.TableRow),
                   block("table", PlainNode.Table()),
                   block("root", rootNode()),

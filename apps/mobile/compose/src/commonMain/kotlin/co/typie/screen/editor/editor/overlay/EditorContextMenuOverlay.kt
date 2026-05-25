@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.ext.clickable
@@ -65,6 +66,7 @@ internal fun EditorSelectionContextMenuOverlay(
   overlaySize: Size,
   visibleArea: EditorVisibleArea,
   showCopyCutActions: Boolean,
+  availableExpansionUnits: Set<SelectionExpansionUnit>,
   onCopy: () -> Unit,
   onCut: () -> Unit,
   onPaste: () -> Unit,
@@ -79,11 +81,12 @@ internal fun EditorSelectionContextMenuOverlay(
   var page by remember { mutableStateOf(EditorContextMenuPage.Primary) }
   val expansionItems =
     listOf(
-      EditorContextMenuExpansionItem("단어", onExpandWord),
-      EditorContextMenuExpansionItem("문장", onExpandSentence),
-      EditorContextMenuExpansionItem("문단", onExpandParagraph),
-      EditorContextMenuExpansionItem("전체", onSelectAll),
-    )
+        EditorContextMenuExpansionItem("단어", SelectionExpansionUnit.Word, onExpandWord),
+        EditorContextMenuExpansionItem("문장", SelectionExpansionUnit.Sentence, onExpandSentence),
+        EditorContextMenuExpansionItem("문단", SelectionExpansionUnit.Paragraph, onExpandParagraph),
+        EditorContextMenuExpansionItem("전체", SelectionExpansionUnit.All, onSelectAll),
+      )
+      .filter { it.unit in availableExpansionUnits }
 
   EditorContextMenuLayout(anchor = anchor, overlaySize = overlaySize, visibleArea = visibleArea) {
     AnimatedVisibility(
@@ -153,10 +156,12 @@ internal fun EditorSelectionContextMenuOverlay(
                 EditorContextMenuItem(label = "잘라내기", onClick = onCut.withDismiss(onDismiss))
               }
               EditorContextMenuItem(label = "붙여넣기", onClick = onPaste.withDismiss(onDismiss))
-              EditorContextMenuItem(
-                label = "선택 확장",
-                onClick = { page = EditorContextMenuPage.Expansion },
-              )
+              if (availableExpansionUnits.isNotEmpty()) {
+                EditorContextMenuItem(
+                  label = "선택 확장",
+                  onClick = { page = EditorContextMenuPage.Expansion },
+                )
+              }
             }
             EditorContextMenuPage.Expansion -> {
               EditorContextMenuBackItem(onClick = { page = EditorContextMenuPage.Primary })
@@ -177,7 +182,11 @@ internal fun EditorSelectionContextMenuOverlay(
   }
 }
 
-private data class EditorContextMenuExpansionItem(val label: String, val onClick: () -> Unit)
+private data class EditorContextMenuExpansionItem(
+  val label: String,
+  val unit: SelectionExpansionUnit,
+  val onClick: () -> Unit,
+)
 
 private fun (() -> Unit).withDismiss(onDismiss: () -> Unit): () -> Unit = {
   this()

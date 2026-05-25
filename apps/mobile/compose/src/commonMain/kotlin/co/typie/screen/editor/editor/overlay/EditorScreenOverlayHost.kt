@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -17,8 +18,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import co.typie.editor.Editor
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ext.unclippedBoundsInRoot
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.SelectionExpansionUnit
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -127,32 +132,50 @@ internal fun EditorScreenOverlayHost(
               density = density.density,
             )
           if (anchor != null) {
-            val actions =
-              rememberEditorContextMenuActions(
-                editor = editor,
-                bringIntoViewRequests = bringIntoViewRequests,
-                contextMenu = contextMenu,
-              )
+            val availableExpansionUnits = rememberAvailableExpansionUnits(editor)
+            if (availableExpansionUnits != null) {
+              val actions =
+                rememberEditorContextMenuActions(
+                  editor = editor,
+                  bringIntoViewRequests = bringIntoViewRequests,
+                  contextMenu = contextMenu,
+                  availableExpansionUnits = availableExpansionUnits,
+                )
 
-            EditorSelectionContextMenuOverlay(
-              anchor = anchor,
-              overlaySize = overlayBounds.size,
-              visibleArea = visibleArea,
-              showCopyCutActions = actions.showCopyCutActions,
-              onCopy = actions.onCopy,
-              onCut = actions.onCut,
-              onPaste = actions.onPaste,
-              onExpandWord = actions.onExpandWord,
-              onExpandSentence = actions.onExpandSentence,
-              onExpandParagraph = actions.onExpandParagraph,
-              onSelectAll = actions.onSelectAll,
-              onDismiss = actions.onDismiss,
-            )
+              EditorSelectionContextMenuOverlay(
+                anchor = anchor,
+                overlaySize = overlayBounds.size,
+                visibleArea = visibleArea,
+                showCopyCutActions = actions.showCopyCutActions,
+                availableExpansionUnits = actions.availableExpansionUnits,
+                onCopy = actions.onCopy,
+                onCut = actions.onCut,
+                onPaste = actions.onPaste,
+                onExpandWord = actions.onExpandWord,
+                onExpandSentence = actions.onExpandSentence,
+                onExpandParagraph = actions.onExpandParagraph,
+                onSelectAll = actions.onSelectAll,
+                onDismiss = actions.onDismiss,
+              )
+            }
           }
         }
       }
     }
   }
+}
+
+@Composable
+private fun rememberAvailableExpansionUnits(editor: Editor): Set<SelectionExpansionUnit>? {
+  var units by
+    remember(editor, editor.state.selection) { mutableStateOf<Set<SelectionExpansionUnit>?>(null) }
+  LaunchedEffect(editor, editor.state.version) {
+    units =
+      SelectionExpansionUnit.entries
+        .filter { unit -> editor.can(Message.Selection(SelectionOp.Expand(unit))) }
+        .toSet()
+  }
+  return units
 }
 
 @Composable

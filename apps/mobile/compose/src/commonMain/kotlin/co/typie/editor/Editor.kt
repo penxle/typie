@@ -201,6 +201,19 @@ internal constructor(
     scheduleTick()
   }
 
+  suspend fun can(message: Message): Boolean =
+    withSuspendFailureNotification(defaultValue = { false }) {
+      withContext(dispatcher) {
+        mutex.withLock {
+          if (disposed.load()) {
+            false
+          } else {
+            inner.can(message)
+          }
+        }
+      }
+    }
+
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
     scope.launch(dispatcher) {

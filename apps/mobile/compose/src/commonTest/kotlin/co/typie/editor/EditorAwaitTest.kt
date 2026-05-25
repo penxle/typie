@@ -4,6 +4,8 @@ import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Rect
+import co.typie.editor.ffi.SelectionExpansionUnit
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import kotlin.test.AfterTest
@@ -156,6 +158,42 @@ class EditorAwaitTest {
       assertEquals(1, fake.tickCount)
       assertEquals(fakeCursor, editor.cursor)
       assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun can_probes_inner_editor_on_demand() =
+    runTest(dispatcher) {
+      val message: Message = Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.Word))
+      val probed = mutableListOf<Message>()
+      val fake =
+        FakeFfiEditor(
+          canProvider = { message ->
+            probed += message
+            true
+          }
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      assertTrue(editor.can(message))
+      assertEquals(listOf(message), probed)
+    }
+
+  @Test
+  fun sync_does_not_probe_can_availability() =
+    runTest(dispatcher) {
+      var canCalls = 0
+      val fake =
+        FakeFfiEditor(
+          canProvider = {
+            canCalls += 1
+            true
+          }
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.sync { enqueue(sampleMessage) }
+
+      assertEquals(0, canCalls)
     }
 
   @Test

@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 
 internal data class EditorContextMenuActions(
   val showCopyCutActions: Boolean,
+  val availableExpansionUnits: Set<SelectionExpansionUnit>,
   val onCopy: () -> Unit,
   val onCut: () -> Unit,
   val onPaste: () -> Unit,
@@ -33,10 +34,18 @@ internal fun rememberEditorContextMenuActions(
   editor: Editor,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   contextMenu: EditorContextMenuState,
+  availableExpansionUnits: Set<SelectionExpansionUnit>,
   clipboard: Clipboard = PlatformModule.clipboard,
 ): EditorContextMenuActions {
   val selection = editor.selection
-  return remember(editor, selection, bringIntoViewRequests, contextMenu, clipboard) {
+  return remember(
+    editor,
+    selection,
+    availableExpansionUnits,
+    bringIntoViewRequests,
+    contextMenu,
+    clipboard,
+  ) {
     val expandSelection =
       { unit: SelectionExpansionUnit, bringIntoViewTarget: EditorBringIntoViewTarget? ->
         contextMenu.requestShowAfterSelectionCommit()
@@ -54,6 +63,7 @@ internal fun rememberEditorContextMenuActions(
 
     EditorContextMenuActions(
       showCopyCutActions = !selection.isCollapsed(),
+      availableExpansionUnits = availableExpansionUnits,
       onCopy = {
         editor.scope.launch {
           editor.copySelection()?.let { clipboard.copyRichText(html = it.html, text = it.text) }
