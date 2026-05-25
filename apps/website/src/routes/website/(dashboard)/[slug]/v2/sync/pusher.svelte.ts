@@ -23,12 +23,18 @@ function isPermanent(err: unknown): boolean {
   return false;
 }
 
+type Outbox = {
+  save(id: string, bundle: Uint8Array): Promise<void>;
+  delete(id: string): Promise<void>;
+};
+
 type PusherOpts = {
   editor: Editor;
   documentId: string;
   clientId: string;
   initialServerHeads: Uint8Array;
   pushFn: (changesets: Uint8Array) => Promise<void>;
+  outbox: Outbox;
   onEvent?: (event: PusherEvent) => void;
 };
 
@@ -97,6 +103,9 @@ export class Pusher {
     const bundle = this.opts.editor.localChangesetsSince(before);
     if (bundle.length === 0) return;
 
+    const entryId = crypto.randomUUID();
+    await this.opts.outbox.save(entryId, bundle);
+
     const snapshot = this.opts.editor.currentHeads();
     this.clearTimers();
     this.inflight = true;
@@ -112,6 +121,8 @@ export class Pusher {
       this.handleFailure(err);
       return;
     }
+
+    await this.opts.outbox.delete(entryId);
 
     if (this.stopped) return;
 

@@ -9,6 +9,7 @@
   import DebugPanel from './@debug/DebugPanel.svelte';
   import BottomToolbar from './BottomToolbar.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
+  import { Outbox } from './sync/outbox';
   import { Pusher } from './sync/pusher.svelte';
   import TopToolbar from './TopToolbar.svelte';
   import type { DocumentEditorV2_document$key } from '$mearie';
@@ -74,6 +75,7 @@
   const bus = new DebugBus();
   const clientId = crypto.randomUUID();
   let pusher = $state<Pusher | null>(null);
+
   let debugOpen = $state(true);
   let settingsOpen = $state(false);
 
@@ -172,21 +174,34 @@
     const initialHeads = editor.currentHeads();
     lastConfirmedHeads = initialHeads;
 
+    const outbox = new Outbox(document.data.id);
+
+    const pushFn = async (changesets: Uint8Array) => {
+      const result = await pushDocumentChangesets({
+        input: {
+          documentId: document.data.id,
+          clientId,
+          changesets: changesets.toBase64(),
+        },
+      });
+      lastConfirmedHeads = Uint8Array.fromBase64(result.pushDocumentChangesets.heads);
+    };
+
+    // 재진입 시 outbox에 남은 bundle 재전송
+    void (async () => {
+      for (const { id, bundle } of await outbox.loadAll()) {
+        await pushFn(bundle);
+        await outbox.delete(id);
+      }
+    })();
+
     const ps = new Pusher({
       editor,
       documentId: document.data.id,
       clientId,
       initialServerHeads: initialHeads,
-      pushFn: async (changesets) => {
-        const result = await pushDocumentChangesets({
-          input: {
-            documentId: document.data.id,
-            clientId,
-            changesets: changesets.toBase64(),
-          },
-        });
-        lastConfirmedHeads = Uint8Array.fromBase64(result.pushDocumentChangesets.heads);
-      },
+      pushFn,
+      outbox,
       onEvent: (e) => bus.emit(e),
     });
     pusher = ps;
@@ -214,6 +229,7 @@
       clearInterval(pollIntervalId);
       offStateChanged();
       ps.stop();
+      outbox.destroy();
       pusher = null;
     };
   });
