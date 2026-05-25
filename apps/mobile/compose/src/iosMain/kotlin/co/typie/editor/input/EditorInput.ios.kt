@@ -3,6 +3,7 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
@@ -61,6 +62,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     override val focusedRectInRoot: () -> Rect? = focusedRectInRoot
 
     override val textLayoutResult: () -> TextLayoutResult? = { null }
+
+    @ExperimentalComposeUiApi
+    override val unclippedTextOffsetInRoot: () -> Offset? = { null }
 
     // Workaround for Compose iOS 1.10.3: startInputMethod only uses textFieldRectInRoot
     // to position the hidden UIKit text input view, while IntermediateTextInputUIView

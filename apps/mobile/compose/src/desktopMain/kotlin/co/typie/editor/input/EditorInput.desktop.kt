@@ -1,6 +1,7 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
@@ -61,6 +62,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     override val textFieldRectInRoot: () -> Rect? = textFieldRectInRoot
 
     override val textClippingRectInRoot: () -> Rect? = textClippingRectInRoot
+
+    @ExperimentalComposeUiApi
+    override val unclippedTextOffsetInRoot: () -> Offset? = { null }
 
     override val state: TextEditorState =
       object : TextEditorState {
