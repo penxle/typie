@@ -13,6 +13,7 @@ import co.typie.editor.ffi.ClipboardOp
 import co.typie.editor.ffi.DeletionOp
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.HistoryOp
+import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
@@ -171,7 +172,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.Enter,
       setOf(KeyModifier.Shift),
-      action = { listOf(Message.Insertion(InsertionOp.Break(Break.Line))) },
+      action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Enter, InputModifiers(shift = true)))) },
     ),
     KeyBinding(
       ComposeKey.Enter,

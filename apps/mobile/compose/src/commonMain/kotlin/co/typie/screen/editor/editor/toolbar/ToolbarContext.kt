@@ -1,11 +1,10 @@
 package co.typie.screen.editor.editor.toolbar
 
 import co.typie.editor.EditorState
+import co.typie.editor.ext.isSingleSlotRange
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainNode
-import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Tri
-import kotlin.math.abs
 
 internal data class EditorToolbarContext(
   val pageKeys: List<EditorToolbarPageKey>,
@@ -31,7 +30,7 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
   val blockState = state.blockState
   val hasTextPage = state.modifierState?.hasInlineTextModifier() == true
   val selectedBlock =
-    if (selection?.isSingleBlockRange() == true) {
+    if (selection.isSingleSlotRange()) {
       blockState?.nodes?.firstOrNull { it.node.selectedToolbarPageKey() != null }
     } else {
       null
@@ -104,9 +103,6 @@ private fun ModifierState.hasInlineTextModifier(): Boolean =
     ruby.isPresent()
 
 private fun Tri<*>.isPresent(): Boolean = this !is Tri.Absent
-
-private fun Selection.isSingleBlockRange(): Boolean =
-  anchor.nodeId == head.nodeId && abs(anchor.offset - head.offset) == 1
 
 private fun PlainNode.selectedToolbarPageKey(): EditorToolbarPageKey? =
   when (this) {

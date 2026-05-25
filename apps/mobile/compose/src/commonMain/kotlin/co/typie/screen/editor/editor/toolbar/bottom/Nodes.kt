@@ -29,12 +29,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.editor.ext.isSingleSlotRange
 import co.typie.editor.ffi.Break
 import co.typie.editor.ffi.Fragment
+import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.InsertionOp
+import co.typie.editor.ffi.Key
+import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
@@ -59,6 +64,11 @@ internal fun BottomToolbarNodes(onEditorInputRequest: () -> Unit, modifier: Modi
   val scope = rememberCoroutineScope()
   val editor = runtime.editor
   val showPageBreak = editor?.rootAttrs?.layoutMode is LayoutMode.Paginated
+  val hasUnitSelection =
+    isEditorToolbarUnitSelection(
+      selection = editor?.selection,
+      hasSelectedBlock = editor?.blockState?.nodes?.isNotEmpty() == true,
+    )
   val gridFogInsets = remember { PaddingValues(vertical = NodeInsertPanelPadding) }
 
   LazyVerticalGrid(
@@ -72,7 +82,13 @@ internal fun BottomToolbarNodes(onEditorInputRequest: () -> Unit, modifier: Modi
     horizontalArrangement = Arrangement.spacedBy(6.dp),
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    items(editorToolbarNodeInsertItems(showPageBreak = showPageBreak), key = { it.label }) { item ->
+    items(
+      editorToolbarNodeInsertItems(
+        showPageBreak = showPageBreak,
+        hasUnitSelection = hasUnitSelection,
+      ),
+      key = { it.label },
+    ) { item ->
       NodeInsertTile(
         item = item,
         modifier = Modifier.fillMaxWidth(),
@@ -149,11 +165,12 @@ private fun NodeInsertTile(
 internal data class EditorToolbarNodeInsertItem(
   val icon: IconData,
   val label: String,
-  val message: Message.Insertion,
+  val message: Message,
 )
 
 internal fun editorToolbarNodeInsertItems(
-  showPageBreak: Boolean
+  showPageBreak: Boolean,
+  hasUnitSelection: Boolean,
 ): List<EditorToolbarNodeInsertItem> =
   listOf(
       EditorToolbarNodeInsertItem(
@@ -211,15 +228,20 @@ internal fun editorToolbarNodeInsertItems(
         null
       },
       EditorToolbarNodeInsertItem(
-        icon = Lucide.CornerDownLeft,
-        label = "문단 내 줄바꿈",
-        message = Message.Insertion(InsertionOp.Break(Break.Line)),
+        icon = if (hasUnitSelection) Lucide.CornerLeftUp else Lucide.CornerDownLeft,
+        label = if (hasUnitSelection) "위에 문단 넣기" else "문단 내 줄바꿈",
+        message = Message.Key(KeyEvent(Key.Enter, InputModifiers(shift = true))),
       ),
     )
     .filterNotNull()
 
 private fun fragmentInsertion(node: PlainNode): Message.Insertion =
   Message.Insertion(InsertionOp.Fragment(Fragment(node = node)))
+
+internal fun isEditorToolbarUnitSelection(
+  selection: Selection?,
+  hasSelectedBlock: Boolean,
+): Boolean = selection.isSingleSlotRange() && hasSelectedBlock
 
 private val NodeInsertPanelPadding = 16.dp
 private val NodeInsertTileShape =
