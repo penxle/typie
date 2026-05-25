@@ -60,6 +60,9 @@ mod surround_selection;
 mod toggle_bold;
 mod toggle_modifier;
 mod try_text_replacement;
+mod unwrap_blockquote;
+mod unwrap_callout;
+mod unwrap_fold;
 
 pub use auto_surround::auto_surround;
 pub use clear_all_modifiers::clear_all_modifiers;
@@ -123,3 +126,6 @@ pub use surround_selection::surround_selection;
 pub use toggle_bold::toggle_bold;
 pub use toggle_modifier::toggle_modifier;
 pub use try_text_replacement::try_text_replacement;
+pub use unwrap_blockquote::unwrap_blockquote;
+pub use unwrap_callout::unwrap_callout;
+pub use unwrap_fold::unwrap_fold;

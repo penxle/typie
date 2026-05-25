@@ -9,6 +9,7 @@ mod range;
 mod selection;
 mod table;
 mod tree;
+mod unwrap;
 
 pub(crate) use deletion::*;
 pub(crate) use insertion::*;
@@ -21,3 +22,4 @@ pub(crate) use range::*;
 pub(crate) use selection::*;
 pub(crate) use table::*;
 pub(crate) use tree::*;
+pub(crate) use unwrap::*;
