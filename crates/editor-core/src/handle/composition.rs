@@ -272,6 +272,142 @@ struct FlatImeState {
     comp: Option<(usize, usize)>,
 }
 
+struct FlatImeReduction {
+    state: FlatImeState,
+    text_change: Option<FlatImeTextChange>,
+}
+
+#[derive(Debug, Clone)]
+struct FlatImeTextChange {
+    replace_start: usize,
+    replace_end: usize,
+    insert: Vec<char>,
+}
+
+impl FlatImeTextChange {
+    fn collapsed_at(pos: usize) -> Self {
+        Self {
+            replace_start: pos,
+            replace_end: pos,
+            insert: Vec::new(),
+        }
+    }
+
+    fn without_reinserted_boundary_tokens(mut self, initial: &[char]) -> Self {
+        while self.replace_start < self.replace_end {
+            let Some(&inserted) = self.insert.first() else {
+                break;
+            };
+            let deleted = initial[self.replace_start];
+            if !is_token(deleted) || deleted != inserted {
+                break;
+            }
+
+            self.replace_start += 1;
+            self.insert.remove(0);
+        }
+
+        while self.replace_start < self.replace_end {
+            let Some(&inserted) = self.insert.last() else {
+                break;
+            };
+            let deleted = initial[self.replace_end - 1];
+            if !is_token(deleted) || deleted != inserted {
+                break;
+            }
+
+            self.replace_end -= 1;
+            self.insert.pop();
+        }
+
+        self
+    }
+
+    fn inserts_token(&self) -> bool {
+        self.insert.iter().any(|c| is_token(*c))
+    }
+
+    fn deleted_from<'a>(&self, initial: &'a [char]) -> &'a [char] {
+        &initial[self.replace_start..self.replace_end]
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FlatImeAnchoredChangeTracker {
+    // Korean IMEs often update a composing syllable by deleting old composing
+    // text and inserting the new one. Keep adjacent edits anchored to the
+    // original range so repeated text does not make the edit origin ambiguous.
+    replace_start: usize,
+    replace_end: usize,
+    current_start: usize,
+    current_end: usize,
+    insert: Vec<char>,
+}
+
+impl FlatImeAnchoredChangeTracker {
+    fn new(change: FlatImeTextChange, text_after: &[char]) -> Self {
+        let current_start = change.replace_start;
+        let current_end = change.replace_start + change.insert.len();
+        let insert = text_after[current_start..current_end].to_vec();
+        Self {
+            replace_start: change.replace_start,
+            replace_end: change.replace_end,
+            current_start,
+            current_end,
+            insert,
+        }
+    }
+
+    fn absorb(&mut self, change: FlatImeTextChange, text_after: &[char]) -> bool {
+        if change.replace_end < self.current_start || change.replace_start > self.current_end {
+            return false;
+        }
+
+        let replace_start = self.original_boundary(change.replace_start, false);
+        let replace_end = self.original_boundary(change.replace_end, true);
+        let current_start = self.current_start.min(change.replace_start);
+        let old_current_end = self.current_end.max(change.replace_end);
+        let removed_len = change.replace_end - change.replace_start;
+        let inserted_len = change.insert.len();
+        let Some(current_end) = old_current_end
+            .checked_add(inserted_len)
+            .and_then(|len| len.checked_sub(removed_len))
+        else {
+            return false;
+        };
+        if current_end > text_after.len() {
+            return false;
+        }
+
+        self.replace_start = self.replace_start.min(replace_start);
+        self.replace_end = self.replace_end.max(replace_end);
+        self.current_start = current_start;
+        self.current_end = current_end;
+        self.insert = text_after[self.current_start..self.current_end].to_vec();
+        true
+    }
+
+    fn original_boundary(&self, current_pos: usize, end_bias: bool) -> usize {
+        if current_pos < self.current_start {
+            current_pos
+        } else if current_pos > self.current_end {
+            self.replace_end + (current_pos - self.current_end)
+        } else if end_bias {
+            self.replace_end
+        } else {
+            self.replace_start
+        }
+    }
+
+    fn into_text_change(self) -> FlatImeTextChange {
+        FlatImeTextChange {
+            replace_start: self.replace_start,
+            replace_end: self.replace_end,
+            insert: self.insert,
+        }
+    }
+}
+
 impl FlatImeState {
     fn from_editor(editor: &Editor) -> Option<Self> {
         let state = editor.state();
@@ -293,37 +429,53 @@ impl FlatImeState {
         })
     }
 
-    fn apply(&mut self, op: &FlatImeOp) {
+    fn apply(&mut self, op: &FlatImeOp) -> Option<FlatImeTextChange> {
         match op {
             FlatImeOp::SetSelection { start, end } => {
                 self.sel_start = (*start).min(self.text.len());
                 self.sel_end = (*end).min(self.text.len());
+                None
             }
             FlatImeOp::ReplaceSelection { text } => {
                 let chars: Vec<char> = text.chars().collect();
                 let start = self.sel_start.min(self.text.len());
                 let end = self.sel_end.min(self.text.len());
-                self.text.splice(start..end, chars.iter().copied());
                 let new_pos = start + chars.len();
+                self.text.splice(start..end, chars.iter().copied());
                 self.sel_start = new_pos;
                 self.sel_end = new_pos;
                 self.comp = None;
+                Some(FlatImeTextChange {
+                    replace_start: start,
+                    replace_end: end,
+                    insert: chars,
+                })
             }
             FlatImeOp::Compose { text } => {
                 let chars: Vec<char> = text.chars().collect();
                 let (start, end) = self.comp.unwrap_or((self.sel_start, self.sel_end));
                 let start = start.min(self.text.len());
                 let end = end.min(self.text.len());
-                self.text.splice(start..end, chars.iter().copied());
                 let new_end = start + chars.len();
+                self.text.splice(start..end, chars.iter().copied());
                 self.sel_start = new_end;
                 self.sel_end = new_end;
                 self.comp = Some((start, new_end));
+                Some(FlatImeTextChange {
+                    replace_start: start,
+                    replace_end: end,
+                    insert: chars,
+                })
             }
             FlatImeOp::DeleteSurrounding { before, after } => {
                 let cursor = self.sel_start.min(self.text.len());
                 let del_start = cursor.saturating_sub(*before);
                 let del_end = (cursor + after).min(self.text.len());
+                let change = (del_start < del_end).then_some(FlatImeTextChange {
+                    replace_start: del_start,
+                    replace_end: del_end,
+                    insert: Vec::new(),
+                });
                 if del_end > cursor {
                     self.text.splice(cursor..del_end, std::iter::empty());
                 }
@@ -332,6 +484,7 @@ impl FlatImeState {
                 }
                 self.sel_start = del_start;
                 self.sel_end = del_start;
+                change
             }
             FlatImeOp::DeleteSurroundingUtf16 { before, after } => {
                 let cursor = self.sel_start.min(self.text.len());
@@ -340,6 +493,11 @@ impl FlatImeState {
                 let after_chars = utf16_units_to_chars(self.text[cursor..].iter().copied(), *after);
                 let del_start = cursor - before_chars;
                 let del_end = cursor + after_chars;
+                let change = (del_start < del_end).then_some(FlatImeTextChange {
+                    replace_start: del_start,
+                    replace_end: del_end,
+                    insert: Vec::new(),
+                });
                 if del_end > cursor {
                     self.text.splice(cursor..del_end, std::iter::empty());
                 }
@@ -348,12 +506,15 @@ impl FlatImeState {
                 }
                 self.sel_start = del_start;
                 self.sel_end = del_start;
+                change
             }
             FlatImeOp::SetComposition { start, end } => {
                 self.comp = Some((*start, *end));
+                None
             }
             FlatImeOp::ClearComposition => {
                 self.comp = None;
+                None
             }
             FlatImeOp::MoveCursor { delta } => {
                 let pos = if *delta >= 0 {
@@ -364,28 +525,63 @@ impl FlatImeState {
                 .min(self.text.len());
                 self.sel_start = pos;
                 self.sel_end = pos;
+                None
             }
         }
     }
 
+    #[cfg(test)]
     fn reduce(mut self, ops: &[FlatImeOp]) -> Self {
         for op in ops {
-            self.apply(op);
+            let _ = self.apply(op);
         }
         self
     }
-}
 
-fn common_prefix_len(a: &[char], b: &[char]) -> usize {
-    a.iter().zip(b.iter()).take_while(|(x, y)| x == y).count()
-}
+    fn reduce_flat_ime_ops(mut self, ops: &[FlatImeOp]) -> FlatImeReduction {
+        let initial_text = self.text.clone();
+        let initial_sel_start = self.sel_start;
+        let mut anchored_change: Option<FlatImeAnchoredChangeTracker> = None;
+        let mut can_track_anchored_change = true;
 
-fn common_suffix_len(a: &[char], b: &[char]) -> usize {
-    a.iter()
-        .rev()
-        .zip(b.iter().rev())
-        .take_while(|(x, y)| x == y)
-        .count()
+        for op in ops {
+            if let Some(change) = self.apply(op) {
+                if !can_track_anchored_change {
+                    continue;
+                }
+
+                match &mut anchored_change {
+                    Some(tracker) => {
+                        can_track_anchored_change = tracker.absorb(change, &self.text);
+                    }
+                    None => {
+                        anchored_change =
+                            Some(FlatImeAnchoredChangeTracker::new(change, &self.text));
+                    }
+                }
+            }
+        }
+
+        let text_change = if can_track_anchored_change {
+            anchored_change.map(FlatImeAnchoredChangeTracker::into_text_change)
+        } else {
+            None
+        };
+        let text_change = match text_change {
+            Some(change) => Some(change.without_reinserted_boundary_tokens(&initial_text)),
+            None if initial_text == self.text => {
+                Some(FlatImeTextChange::collapsed_at(initial_sel_start))
+            }
+            // A batch with disjoint text edits cannot be represented as one safe
+            // flat replacement. Ignore it instead of widening the edited range.
+            None => None,
+        };
+
+        FlatImeReduction {
+            state: self,
+            text_change,
+        }
+    }
 }
 
 fn count_opens(chars: &[char]) -> usize {
@@ -488,9 +684,12 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
         None => return Ok(()),
     };
 
-    let result = initial.clone().reduce(&ops);
+    let reduced = initial.clone().reduce_flat_ime_ops(&ops);
+    if reduced.text_change.is_none() {
+        return Ok(());
+    }
 
-    let (initial, result) = if initial.text != result.text
+    let (initial, reduced) = if initial.text != reduced.state.text
         && editor
             .state
             .selection
@@ -508,43 +707,48 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
             Some(s) => s,
             None => return Ok(()),
         };
-        let result = initial.clone().reduce(&ops);
-        (initial, result)
+        let reduced = initial.clone().reduce_flat_ime_ops(&ops);
+        (initial, reduced)
     } else {
-        (initial, result)
+        (initial, reduced)
     };
 
-    let prefix = common_prefix_len(&initial.text, &result.text);
-    let suffix = common_suffix_len(&initial.text[prefix..], &result.text[prefix..]);
-
-    let del = &initial.text[prefix..initial.text.len() - suffix];
-    let ins = &result.text[prefix..result.text.len() - suffix];
+    let result = reduced.state;
+    let Some(text_change) = reduced.text_change else {
+        return Ok(());
+    };
+    let del = text_change.deleted_from(&initial.text);
 
     let del_opens = count_opens(del);
     let del_closes = count_closes(del);
-    let ins_opens = count_opens(ins);
-    let ins_closes = count_closes(ins);
+    let ins_opens = count_opens(&text_change.insert);
+    let ins_closes = count_closes(&text_change.insert);
 
     let tokens_increased = ins_opens > del_opens || ins_closes > del_closes;
     if tokens_increased {
         return Ok(());
     }
 
-    if ins.iter().any(|c| is_token(*c)) {
+    if text_change.inserts_token() {
         return Ok(());
     }
 
-    let del_end = initial.text.len() - suffix;
-    let delta = analyze_delta(&initial.text, prefix, del_end, ins, initial.sel_start);
+    let delta = analyze_delta(
+        &initial.text,
+        text_change.replace_start,
+        text_change.replace_end,
+        &text_change.insert,
+        initial.sel_start,
+    );
     let should_insert_after_unit_selection = !delta.ins_text.is_empty()
-        && prefix == initial.sel_start
-        && del_end == initial.sel_end
+        && text_change.replace_start == initial.sel_start
+        && text_change.replace_end == initial.sel_end
         && editor
             .state()
             .selection
             .as_ref()
             .is_some_and(|selection| selection.is_unit_node_selection(&editor.state().doc));
-    let has_text_delta = !del.is_empty() || !ins.is_empty();
+    let has_text_delta = !del.is_empty() || !text_change.insert.is_empty();
 
     if should_insert_after_unit_selection || (delta.start_tokens == 0 && delta.end_tokens == 0) {
         if has_text_delta || result.comp.is_some() || editor.state().composition.is_some() {
@@ -572,7 +776,7 @@ fn handle_flat_ime(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), Edito
                 }
 
                 let composition_text_start = should_insert_after_unit_selection
-                    .then_some(prefix)
+                    .then_some(text_change.replace_start)
                     .or(delta.composition_text_start);
                 let composition = match (result.comp, composition_text_start) {
                     (Some((start, end)), Some(text_start)) => {
@@ -1509,23 +1713,190 @@ mod tests {
         Editor::new_test_with_resource(s, resource)
     }
 
+    fn apply_flat_ime_ops(s: editor_state::State, ops: Vec<FlatImeOp>) -> Editor {
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat { ops },
+        });
+        editor
+    }
+
     #[test]
     fn flat_ime_text_replacement() {
         let (s, ..) = state! {
             doc { root { paragraph { t1: text("hello") } } }
             selection: (t1, 5)
         };
-        let mut editor = editor_with_resource(s);
-        editor.apply(Message::Composition {
-            op: CompositionOp::Flat {
-                ops: vec![FlatImeOp::ReplaceSelection { text: "!".into() }],
-            },
-        });
+        let editor = apply_flat_ime_ops(s, vec![FlatImeOp::ReplaceSelection { text: "!".into() }]);
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("hello!") } } }
             selection: (t1, 6)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_repeated_text_insertion_uses_cursor_position() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("aaaa") } } }
+            selection: (t1, 0)
+        };
+        let editor = apply_flat_ime_ops(s, vec![FlatImeOp::ReplaceSelection { text: "a".into() }]);
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("aaaaa") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_repeated_text_middle_insertion_uses_cursor_position() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("aaaa") } } }
+            selection: (t1, 2)
+        };
+        let editor = apply_flat_ime_ops(s, vec![FlatImeOp::ReplaceSelection { text: "a".into() }]);
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("aaaaa") } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_disjoint_text_edits_are_ignored() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("abcdef") } } }
+            selection: (t1, 0)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::SetSelection { start: 2, end: 3 },
+                FlatImeOp::ReplaceSelection { text: "B".into() },
+                FlatImeOp::SetSelection { start: 5, end: 6 },
+                FlatImeOp::ReplaceSelection { text: "E".into() },
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("abcdef") } } }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_disjoint_text_edits_at_gap_cursor_do_not_materialize() {
+        let (s, ..) = state! {
+            doc { r: root { image paragraph { text("abcdef") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = editor_with_resource(s);
+        let flat_text = editor
+            .state()
+            .doc
+            .flat_text(0..editor.state().doc.flat_size());
+        let text_start = flat_text
+            .find("abcdef")
+            .map(|idx| flat_text[..idx].chars().count())
+            .unwrap();
+
+        editor.apply(Message::Composition {
+            op: CompositionOp::Flat {
+                ops: vec![
+                    FlatImeOp::SetSelection {
+                        start: text_start + 1,
+                        end: text_start + 2,
+                    },
+                    FlatImeOp::ReplaceSelection { text: "B".into() },
+                    FlatImeOp::SetSelection {
+                        start: text_start + 4,
+                        end: text_start + 5,
+                    },
+                    FlatImeOp::ReplaceSelection { text: "E".into() },
+                ],
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { r: root { image paragraph { text("abcdef") } } }
+            selection: (r, 0, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_repeated_composition_middle_insertion_uses_cursor_position() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("ㅁㅁㅁㅁ") } } }
+            selection: (t1, 2)
+        };
+        let editor = apply_flat_ime_ops(s, vec![FlatImeOp::Compose { text: "ㅁ".into() }]);
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅁㅁㅁㅁㅁ") } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 3, end: 4 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_repeated_composition_recomposition_uses_replaced_range() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("ㅁㅁㅁㅁ") } } }
+            selection: (t1, 2)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::DeleteSurrounding {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::Compose {
+                    text: "ㅁㅁ".into(),
+                },
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅁㅁㅁㅁㅁ") } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 4 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_repeated_composition_recomposition_commit_keeps_cursor_position() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("ㅁㅁㅁㅁ") } } }
+            selection: (t1, 2)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::DeleteSurrounding {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::Compose {
+                    text: "ㅁㅁ".into(),
+                },
+                FlatImeOp::ClearComposition,
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅁㅁㅁㅁㅁ") } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]
