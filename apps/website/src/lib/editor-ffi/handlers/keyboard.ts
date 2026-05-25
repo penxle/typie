@@ -17,6 +17,9 @@ const word: KeyBindingModifier[] = isMac ? ['alt'] : ['ctrl'];
 const wordShift: KeyBindingModifier[] = isMac ? ['shift', 'alt'] : ['shift', 'ctrl'];
 const macOnly = () => isMac;
 
+// NOTE: Plain Backspace, Delete, and Enter also arrive through beforeinput in input.ts
+// as deleteContentBackward, deleteContentForward, insertParagraph, or insertLineBreak.
+// These bindings own the hardware-key path; beforeinput remains the browser input fallback.
 const bindings: KeyBinding[] = [
   { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, false)) },
   { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, true)) },
@@ -58,6 +61,12 @@ const bindings: KeyBinding[] = [
     modifiers: ['shift'],
     action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, true)),
   },
+  { key: 'ArrowUp', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'backward' }, false)) },
+  {
+    key: 'ArrowUp',
+    modifiers: ['shift', 'alt'],
+    action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'backward' }, true)),
+  },
   {
     key: 'ArrowUp',
     modifiers: ['mod'],
@@ -76,6 +85,12 @@ const bindings: KeyBinding[] = [
     key: 'ArrowDown',
     modifiers: ['shift'],
     action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, true)),
+  },
+  { key: 'ArrowDown', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'forward' }, false)) },
+  {
+    key: 'ArrowDown',
+    modifiers: ['shift', 'alt'],
+    action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'forward' }, true)),
   },
   {
     key: 'ArrowDown',
@@ -152,6 +167,7 @@ const bindings: KeyBinding[] = [
     action: (ed) => ed.enqueue(del({ type: 'line', direction: 'backward', axis: 'horizontal' })),
   },
 
+  { key: 'Delete', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'delete' } }) },
   { key: 'Delete', modifiers: word, action: (ed) => ed.enqueue(del({ type: 'word', direction: 'forward' })) },
   {
     key: 'Delete',
