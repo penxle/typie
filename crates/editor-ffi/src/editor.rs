@@ -572,6 +572,17 @@ mod tests {
     }
 
     #[test]
+    fn ffi_external_elements_lists_image_when_selection_is_none() {
+        let (initial, ..) = state! {
+            doc { root { image paragraph { text("hi") } } }
+            selection: none
+        };
+        let editor = make_ffi_editor(initial);
+        let result = editor.external_elements().expect("ffi call returns Ok");
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
     fn ffi_selection_hit_test_returns_false_for_no_selection_state() {
         let (initial, ..) = state! {
             doc { root { paragraph { t1: text("hello") } } }

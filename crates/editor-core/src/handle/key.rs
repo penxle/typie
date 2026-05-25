@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use editor_commands::{self as commands};
+use editor_state::Selection;
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
@@ -94,7 +95,21 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             (Key::Tab, _) => {
                 commands::sink_list_item(tr)?;
             }
-            (Key::Escape, _) => {}
+            (Key::Escape, _) => {
+                if let Some(current) = tr.selection() {
+                    let collapsed = Selection::collapsed(current.head);
+                    let normalized = collapsed.normalize(&tr.state().doc).unwrap_or(collapsed);
+                    // Unit selections re-normalize to the direction-flipped form;
+                    // an anchor/head swap brackets the same content.
+                    let unchanged = normalized == current
+                        || (normalized.anchor == current.head && normalized.head == current.anchor);
+                    if unchanged {
+                        tr.set_selection(None)?;
+                    } else {
+                        tr.set_selection(Some(collapsed))?;
+                    }
+                }
+            }
         }
         Ok(())
     })
@@ -1142,5 +1157,58 @@ mod tests {
             selection: (t, 0)
         };
         assert_doc_eq!(editor.state().doc, expected.doc);
+    }
+
+    #[test]
+    fn escape_collapses_text_range_to_head() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 1) -> (t, 4)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Escape));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 4)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn escape_on_collapsed_caret_clears_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Escape));
+        assert!(editor.state().selection.is_none());
+    }
+
+    #[test]
+    fn escape_on_unit_node_selection_clears_selection() {
+        let (state, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                image
+                paragraph { text("b") }
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Escape));
+        assert!(editor.state().selection.is_none());
+    }
+
+    #[test]
+    fn escape_when_selection_is_none_is_noop() {
+        let (state, ..) = state! {
+            doc { root { paragraph { text("hello") } } }
+            selection: none
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Escape));
+        assert_state_eq!(editor.state(), &initial);
     }
 }

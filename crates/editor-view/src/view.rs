@@ -382,9 +382,6 @@ impl View {
         doc: &Doc,
         selection: Option<&Selection>,
     ) -> Vec<ExternalElement> {
-        let Some(selection) = selection else {
-            return Vec::new();
-        };
         let Some(ref result) = self.layout else {
             return Vec::new();
         };

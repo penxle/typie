@@ -32,9 +32,9 @@ pub(crate) fn external_elements(
     tree: &LayoutTree,
     pages: &[LayoutPage],
     doc: &Doc,
-    selection: &Selection,
+    selection: Option<&Selection>,
 ) -> Vec<ExternalElement> {
-    let selection = selection.resolve(doc);
+    let selection = selection.and_then(|s| s.resolve(doc));
     let mut elements = Vec::new();
     for (page_idx, page) in pages.iter().enumerate() {
         collect_from_node(

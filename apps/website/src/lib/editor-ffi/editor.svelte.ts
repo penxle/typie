@@ -517,6 +517,10 @@ export class Editor {
 
     if (fields.includes('selection')) {
       this.#selection = this.#wasm.selection();
+      // null selection is the unfocused state; release DOM focus so OS caret and IME follow.
+      if (this.#selection === undefined) {
+        this.inputEl?.blur();
+      }
     }
 
     if (fields.includes('page_sizes')) {
