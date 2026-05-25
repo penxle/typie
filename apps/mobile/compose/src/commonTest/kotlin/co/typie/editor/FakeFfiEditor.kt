@@ -1,6 +1,7 @@
 package co.typie.editor
 
 import co.typie.editor.ffi.BlockState
+import co.typie.editor.ffi.CharacterCounts
 import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
@@ -33,6 +34,7 @@ internal class FakeFfiEditor(
   var blockStateProvider: () -> BlockState = {
     BlockState(ancestors = emptyList(), nodes = emptyList())
   },
+  var characterCountsProvider: () -> CharacterCounts = { EmptyCharacterCounts },
   var pageSizesProvider: () -> List<Size> = { emptyList() },
   var externalElementsProvider: () -> List<ExternalElement> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
@@ -68,6 +70,8 @@ internal class FakeFfiEditor(
   override fun modifierState(): ModifierState = modifierStateProvider()
 
   override fun blockState(): BlockState = blockStateProvider()
+
+  override fun characterCounts(): CharacterCounts = characterCountsProvider()
 
   override fun copySelection(): ClipboardPayload? = null
 
@@ -127,6 +131,15 @@ internal class FakeFfiEditor(
     val EmptySelection = Selection(anchor = EmptyPosition, head = EmptyPosition)
     val EmptyRootAttrs = PlainRootNode(layoutMode = LayoutMode.Continuous(maxWidth = 0))
     val EmptyIme = Ime(text = "", windowStart = 0, selection = ImeRange(0, 0), composing = null)
+    val EmptyCharacterCounts =
+      CharacterCounts(
+        docWithWhitespace = 0,
+        docWithoutWhitespace = 0,
+        docWithoutWhitespaceAndPunctuation = 0,
+        selectionWithWhitespace = 0,
+        selectionWithoutWhitespace = 0,
+        selectionWithoutWhitespaceAndPunctuation = 0,
+      )
     val EmptyModifierState =
       ModifierState(
         bold = Tri.Absent,
