@@ -3,6 +3,7 @@ editor_macros::preamble!();
 pub mod glyph_run;
 pub mod style;
 
+mod dnd;
 mod external;
 pub(crate) mod measure;
 pub(crate) mod paginate;
@@ -20,6 +21,7 @@ pub struct TableLayoutInfo {
     pub row_inner_heights: Vec<f32>,
 }
 
+pub use dnd::*;
 pub use external::*;
 pub use page::*;
 pub use query::*;

@@ -1,6 +1,7 @@
 pub(crate) mod common;
 pub(crate) mod composition;
 pub(crate) mod cursor;
+pub(crate) mod dnd;
 pub(crate) mod grapheme;
 pub(crate) mod hit_test;
 pub(crate) mod interactive;
@@ -14,7 +15,8 @@ mod visit;
 pub use composition::CompositionRect;
 pub use cursor::CursorMetrics;
 pub(crate) use cursor::cursor_metrics;
-pub(crate) use hit_test::{closest_hit_test, closest_hit_test_extending, exact_hit_test};
+pub(crate) use dnd::drop_target_at;
+pub(crate) use hit_test::HitTester;
 pub use interactive::InteractiveHit;
 pub(crate) use interactive::interactive_hit_test;
 pub(crate) use navigation::resolve_movement;

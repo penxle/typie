@@ -211,15 +211,26 @@ impl View {
     pub fn hit_test(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
         let result = self.layout.as_ref()?;
         let page = result.pages.get(page_idx)?;
-        query::exact_hit_test(&result.tree, page, x, y)
-            .or_else(|| query::closest_hit_test(&result.tree, page, x, y))
+        let hit = query::HitTester::for_page(&result.tree, page, x, y);
+        hit.exact_selection().or_else(|| hit.closest_selection())
     }
 
     pub fn hit_test_extending(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
         let result = self.layout.as_ref()?;
         let page = result.pages.get(page_idx)?;
-        query::exact_hit_test(&result.tree, page, x, y)
-            .or_else(|| query::closest_hit_test_extending(&result.tree, page, x, y))
+        query::HitTester::for_page(&result.tree, page, x, y).hit_extending_selection()
+    }
+
+    pub fn drop_target_at(
+        &self,
+        doc: &Doc,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        source: Option<&Selection>,
+    ) -> Option<crate::DropTarget> {
+        let result = self.layout.as_ref()?;
+        query::drop_target_at(&result.tree, &result.pages, doc, page_idx, x, y, source)
     }
 
     pub fn interactive_hit_test(

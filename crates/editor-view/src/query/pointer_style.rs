@@ -3,8 +3,9 @@ use editor_model::{Doc, Node};
 use serde::{Deserialize, Serialize};
 
 use crate::page::LayoutPage;
-use crate::paginate::{LayoutContent, LayoutNode, LayoutTree};
+use crate::paginate::{LayoutContent, LayoutTree};
 
+use super::hit_test::{HitTarget, HitTester, box_path_at};
 use super::interactive::{InteractiveHit, interactive_hit_test};
 
 #[ffi]
@@ -39,18 +40,29 @@ pub(crate) fn pointer_style_at(
         };
     }
 
-    let abs_y = page_y + page.y_start;
-    style_at_node(&tree.root, doc, x, abs_y).unwrap_or(PointerStyle::Text)
-}
-
-fn style_at_node(node: &LayoutNode, doc: &Doc, x: f32, y: f32) -> Option<PointerStyle> {
-    if !node.rect.contains(x, y) {
-        return None;
+    let hit = HitTester::for_page(tree, page, x, page_y);
+    if let Some(target) = hit.exact_target() {
+        return match target {
+            HitTarget::TextLine { .. } => PointerStyle::Text,
+            HitTarget::Atom { atom, .. } => atom_pointer_style(doc, atom.node_id),
+        };
     }
 
-    match &node.content {
-        LayoutContent::Line(_) => Some(PointerStyle::Text),
-        LayoutContent::Atom(a) => doc.node(a.node_id).map(|node| match node.node() {
+    for node in box_path_at(tree, page, x, page_y).into_iter().rev() {
+        let LayoutContent::Box(b) = &node.content else {
+            continue;
+        };
+        if let Some(node) = doc.node(b.node_id) {
+            return box_pointer_style(node.node());
+        }
+    }
+
+    PointerStyle::Text
+}
+
+fn atom_pointer_style(doc: &Doc, id: editor_model::NodeId) -> PointerStyle {
+    doc.node(id)
+        .map(|node| match node.node() {
             Node::Image(_)
             | Node::File(_)
             | Node::Embed(_)
@@ -58,17 +70,8 @@ fn style_at_node(node: &LayoutNode, doc: &Doc, x: f32, y: f32) -> Option<Pointer
             | Node::HorizontalRule(_)
             | Node::PageBreak(_) => PointerStyle::Default,
             _ => PointerStyle::Text,
-        }),
-        LayoutContent::Box(b) => b
-            .children
-            .iter()
-            .find_map(|child| style_at_node(child, doc, x, y))
-            .or_else(|| {
-                doc.node(b.node_id)
-                    .map(|node| box_pointer_style(node.node()))
-            }),
-        LayoutContent::Spacing(_) => None,
-    }
+        })
+        .unwrap_or(PointerStyle::Text)
 }
 
 fn box_pointer_style(node: &Node) -> PointerStyle {
