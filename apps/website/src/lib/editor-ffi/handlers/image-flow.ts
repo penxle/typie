@@ -44,6 +44,9 @@ export const getFirstImageFile = (files: Iterable<File>): File | undefined => {
   return [...files].find((file) => file.type.startsWith('image/'));
 };
 
+export const resolveImageSrc = (asset?: ImageAsset, inflight?: { url: string; width: number; height: number }): string | undefined =>
+  asset?.url ?? inflight?.url;
+
 export const calculateImageWidth = (boundsWidth: number, proportion: number, originalWidth: number): number => {
   const proportionalWidth = (boundsWidth * proportion) / 100;
   return originalWidth <= 0 ? proportionalWidth : Math.min(originalWidth, proportionalWidth);

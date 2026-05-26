@@ -6,6 +6,7 @@ import {
   createSetImageAttrsMessage,
   getFirstImageFile,
   processImageUpload,
+  resolveImageSrc,
 } from './image-flow';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { ImageAsset } from '../types';
@@ -41,6 +42,23 @@ const createDeps = () => {
     focus,
   };
 };
+
+describe('이미지 표시 여부 결정', () => {
+  const inflight = { url: 'blob:preview', width: 320, height: 240 };
+  const asset = createAsset();
+
+  it('업로드 중에는 inflight 미리보기 이미지를 표시한다', () => {
+    expect(resolveImageSrc(undefined, inflight)).toBe('blob:preview');
+  });
+
+  it('업로드가 완료되면 inflight 대신 asset 이미지를 표시한다', () => {
+    expect(resolveImageSrc(asset, inflight)).toBe(asset.url);
+  });
+
+  it('이미지가 없으면 표시하지 않는다', () => {
+    expect(resolveImageSrc()).toBeUndefined();
+  });
+});
 
 describe('v2 image flow messages', () => {
   it('creates a v2 node attrs message for uploaded image id and rounded proportion', () => {
@@ -86,11 +104,10 @@ describe('v2 image drop filtering', () => {
 describe('v2 image upload processing', () => {
   it('stores inflight preview, persists uploaded image id, and cleans up object url', async () => {
     const { deps, messages, inflight, assets, focus } = createDeps();
-    const file = createFile('image.png', 'image/png');
     const revokeObjectUrl = vi.fn();
 
     const result = await processImageUpload({
-      file,
+      file: createFile('image.png', 'image/png'),
       nodeId: 'node-1',
       getProportion: () => 100,
       ...deps,
@@ -110,11 +127,10 @@ describe('v2 image upload processing', () => {
 
   it('cleans up preview and leaves node as empty placeholder when upload fails', async () => {
     const { deps, messages, inflight, focus } = createDeps();
-    const file = createFile('image.png', 'image/png');
     const revokeObjectUrl = vi.fn();
 
     const result = await processImageUpload({
-      file,
+      file: createFile('image.png', 'image/png'),
       nodeId: 'node-1',
       getProportion: () => 100,
       ...deps,

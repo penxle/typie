@@ -19,6 +19,7 @@
     deriveImageStage,
     getFirstImageFile,
     processImageUpload,
+    resolveImageSrc,
   } from '../handlers/image-flow';
   import { getImageDimensions, uploadImageFile } from '../handlers/upload';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
@@ -46,7 +47,7 @@
   const inflight = $derived(ctx.editor?.inflightImages.get(element.node_id));
   const stage = $derived(deriveImageStage({ imageId, inflight, asset }));
 
-  const imageSrc = $derived(asset?.url ?? inflight?.url);
+  const imageSrc = $derived(resolveImageSrc(asset, inflight));
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
   const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
@@ -284,7 +285,7 @@
     ondropcapture={handleDrop}
     role="group"
   >
-    {#if stage === 'ready' && imageSrc}
+    {#if imageSrc}
       <Img
         style={css.raw({ width: 'full', borderRadius: '4px' }, !canEdit && { cursor: 'zoom-in' })}
         alt="본문 이미지"
@@ -299,7 +300,7 @@
           }
         }}
         onpointerdown={(event) => {
-          event.stopPropagation();
+          if (!canEdit) event.stopPropagation();
         }}
         placeholder={asset?.placeholder}
         progressive
@@ -310,7 +311,13 @@
         url={imageSrc}
       />
 
-      {#if canEdit}
+      {#if stage === 'uploading'}
+        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50' })}>
+          <RingSpinner style={css.raw({ size: '24px', color: 'text.disabled' })} />
+        </div>
+      {/if}
+
+      {#if canEdit && stage === 'ready'}
         <div class={flex({ position: 'absolute', top: '10px', right: '10px', gap: '6px', zIndex: '10' })}>
           <button
             class={center({
@@ -419,16 +426,14 @@
       >
         <div class={flex({ align: 'center', gap: '12px', paddingX: '14px', paddingY: '12px', fontSize: '14px', color: 'text.disabled' })}>
           <Icon icon={ImageIcon} size={20} />
-          {#if stage === 'uploading'}
-            이미지를 업로드하는 중...
-          {:else if stage === 'resolving'}
+          {#if stage === 'resolving'}
             이미지를 불러오는 중...
           {:else}
             이미지
           {/if}
         </div>
 
-        {#if stage === 'uploading' || stage === 'resolving'}
+        {#if stage === 'resolving'}
           <div class={css({ marginRight: '14px' })}>
             <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
           </div>
