@@ -181,11 +181,7 @@ fn build_modifier_rules() -> Vec<ModifierParseRule> {
             let Some(w) = parse_font_weight(v) else {
                 return vec![];
             };
-            let mut out = vec![Modifier::FontWeight { value: w }];
-            if w >= 600 {
-                out.push(Modifier::Bold);
-            }
-            out
+            vec![Modifier::FontWeight { value: w }]
         },
     });
     rules.push(ModifierParseRule {

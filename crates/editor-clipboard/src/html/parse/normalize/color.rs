@@ -135,7 +135,10 @@ mod tests {
     #[test]
     fn bg_pure_red_snaps_to_yellow() {
         let r = Resource::new_test();
-        assert_eq!(bg_color_key("rgb(255, 0, 0)", &r).as_deref(), Some("yellow"));
+        assert_eq!(
+            bg_color_key("rgb(255, 0, 0)", &r).as_deref(),
+            Some("yellow")
+        );
     }
 
     #[test]
@@ -153,7 +156,10 @@ mod tests {
     #[test]
     fn bg_rgba_zero_alpha_returns_none_value() {
         let r = Resource::new_test();
-        assert_eq!(bg_color_key("rgba(255, 0, 0, 0)", &r).as_deref(), Some("none"));
+        assert_eq!(
+            bg_color_key("rgba(255, 0, 0, 0)", &r).as_deref(),
+            Some("none")
+        );
     }
 
     #[test]

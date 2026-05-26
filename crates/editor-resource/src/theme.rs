@@ -47,9 +47,9 @@ impl Theme {
     }
 
     pub fn bg_paste_palette(&self) -> impl Iterator<Item = (&'static str, Color)> + '_ {
-        self.colors.entries().filter_map(|(token, color)| {
-            token.strip_prefix("bg.").map(|suffix| (suffix, *color))
-        })
+        self.colors
+            .entries()
+            .filter_map(|(token, color)| token.strip_prefix("bg.").map(|suffix| (suffix, *color)))
     }
 }
 
@@ -108,11 +108,26 @@ mod tests {
     fn text_paste_palette_excludes_bright_and_ui_prefix() {
         let theme = Theme::new(ThemeVariant::LightWhite);
         let keys: Vec<&str> = theme.text_paste_palette().map(|(k, _)| k).collect();
-        assert!(keys.contains(&"red"), "shared palette key 'red' must be present");
-        assert!(keys.contains(&"black"), "variant palette key 'black' must be present");
-        assert!(keys.contains(&"white"), "variant palette key 'white' must be present");
-        assert!(!keys.contains(&"bright"), "'bright' must be excluded from paste palette");
-        assert!(!keys.iter().any(|k| k.starts_with("ui.")), "ui.* tokens must not appear");
+        assert!(
+            keys.contains(&"red"),
+            "shared palette key 'red' must be present"
+        );
+        assert!(
+            keys.contains(&"black"),
+            "variant palette key 'black' must be present"
+        );
+        assert!(
+            keys.contains(&"white"),
+            "variant palette key 'white' must be present"
+        );
+        assert!(
+            !keys.contains(&"bright"),
+            "'bright' must be excluded from paste palette"
+        );
+        assert!(
+            !keys.iter().any(|k| k.starts_with("ui.")),
+            "ui.* tokens must not appear"
+        );
     }
 
     #[test]
@@ -120,7 +135,10 @@ mod tests {
         let theme = Theme::new(ThemeVariant::LightWhite);
         let keys: Vec<&str> = theme.bg_paste_palette().map(|(k, _)| k).collect();
         for expected in ["gray", "red", "orange", "yellow", "green", "blue", "purple"] {
-            assert!(keys.contains(&expected), "bg palette must include '{expected}'");
+            assert!(
+                keys.contains(&expected),
+                "bg palette must include '{expected}'"
+            );
         }
         assert!(!keys.contains(&"none"));
     }
@@ -130,9 +148,15 @@ mod tests {
         let theme = Theme::new(ThemeVariant::DarkBlack);
         let palette: Vec<(&str, Color)> = theme.text_paste_palette().collect();
         let white = palette.iter().find(|(k, _)| *k == "white").map(|(_, c)| *c);
-        assert!(white.is_some(), "'white' key must be in dark variant palette");
+        assert!(
+            white.is_some(),
+            "'white' key must be in dark variant palette"
+        );
         let w = white.unwrap();
-        assert!(w.r < 0x40 && w.g < 0x40 && w.b < 0x40,
-            "dark variant 'white' palette entry should be dark, got {:?}", w);
+        assert!(
+            w.r < 0x40 && w.g < 0x40 && w.b < 0x40,
+            "dark variant 'white' palette entry should be dark, got {:?}",
+            w
+        );
     }
 }

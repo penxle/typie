@@ -1,5 +1,5 @@
 use editor_model::{Modifier, ModifierType, NodeId, NodeRef};
-use editor_resource::{Resource, match_weight};
+use editor_resource::{Resource, find_bold_target, find_unbold_target};
 use editor_state::{PendingModifier, PendingModifiers, Position, resolve_effective_modifiers_at};
 use editor_transaction::Transaction;
 
@@ -48,54 +48,6 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     compact_and_restore_selection(tr, &node_ids)?;
 
     Ok(true)
-}
-
-/// Selects bold target weight from available weights.
-/// Returns None if no heavier weight exists (use faux bold).
-fn find_bold_target(current_weight: u16, available_weights: &[u16]) -> Option<u16> {
-    let candidates: Vec<u16> = available_weights
-        .iter()
-        .copied()
-        .filter(|&w| w > current_weight)
-        .collect();
-
-    if candidates.is_empty() {
-        return None;
-    }
-
-    let bold_candidates: Vec<u16> = candidates.iter().copied().filter(|&w| w >= 700).collect();
-
-    let pool = if bold_candidates.is_empty() {
-        &candidates
-    } else {
-        &bold_candidates
-    };
-
-    nearest_in(pool, 700)
-}
-
-/// Selects unbold target weight from available weights.
-/// Falls back to 400 if no lighter weight exists.
-fn find_unbold_target(current_weight: u16, available_weights: &[u16]) -> u16 {
-    let candidates: Vec<u16> = available_weights
-        .iter()
-        .copied()
-        .filter(|&w| w < current_weight)
-        .collect();
-
-    if candidates.is_empty() {
-        return 400;
-    }
-
-    nearest_in(&candidates, 400).unwrap_or(400)
-}
-
-/// Pick the weight nearest to `target` using CSS Fonts Level 4 section 5.2 matching.
-fn nearest_in(weights: &[u16], target: u16) -> Option<u16> {
-    let mut sorted = weights.to_vec();
-    sorted.sort_unstable();
-    sorted.dedup();
-    match_weight(&sorted, target)
 }
 
 fn is_node_bold(node: &NodeRef) -> bool {
@@ -359,62 +311,6 @@ mod tests {
         let mut tr = editor_transaction::Transaction::new(&initial);
         let result = toggle_bold(&mut tr, &resource);
         assert!(matches!(result, Ok(false)));
-    }
-
-    #[test]
-    fn bold_target_prefers_700_when_available() {
-        assert_eq!(
-            find_bold_target(400, &[100, 300, 400, 500, 700, 900]),
-            Some(700)
-        );
-    }
-
-    #[test]
-    fn bold_target_picks_nearest_bold_candidate() {
-        assert_eq!(find_bold_target(400, &[400, 800, 900]), Some(800));
-    }
-
-    #[test]
-    fn bold_target_uses_heavier_even_below_700() {
-        assert_eq!(find_bold_target(400, &[400, 500]), Some(500));
-    }
-
-    #[test]
-    fn bold_target_none_when_no_heavier() {
-        assert_eq!(find_bold_target(900, &[400, 700, 900]), None);
-    }
-
-    #[test]
-    fn bold_target_none_when_already_heaviest() {
-        assert_eq!(find_bold_target(400, &[400]), None);
-    }
-
-    #[test]
-    fn bold_target_from_300() {
-        assert_eq!(find_bold_target(300, &[100, 300, 400, 700]), Some(700));
-    }
-
-    #[test]
-    fn unbold_target_prefers_400() {
-        assert_eq!(
-            find_unbold_target(700, &[100, 300, 400, 500, 700, 900]),
-            400
-        );
-    }
-
-    #[test]
-    fn unbold_target_picks_nearest_to_400() {
-        assert_eq!(find_unbold_target(700, &[100, 300, 700]), 300);
-    }
-
-    #[test]
-    fn unbold_target_defaults_to_400_when_no_lighter() {
-        assert_eq!(find_unbold_target(100, &[100, 700]), 400);
-    }
-
-    #[test]
-    fn unbold_target_from_900() {
-        assert_eq!(find_unbold_target(900, &[400, 700, 900]), 400);
     }
 
     fn make_resource(families: impl IntoIterator<Item = (&'static str, Vec<u16>)>) -> Resource {

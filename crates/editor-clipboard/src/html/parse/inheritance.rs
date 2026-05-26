@@ -31,10 +31,17 @@ pub fn is_block_level(ty: ModifierType) -> bool {
     )
 }
 
-pub fn merge_with_inheritance(parent: &[Modifier], this: Vec<Modifier>) -> Vec<Modifier> {
+pub fn merge_with_inheritance(
+    parent: &[Modifier],
+    this: Vec<Modifier>,
+    child_declared_font_weight: bool,
+) -> Vec<Modifier> {
     let mut out = this;
     for m in parent {
         if !is_inheritable(m.as_type()) {
+            continue;
+        }
+        if matches!(m, Modifier::Bold) && child_declared_font_weight {
             continue;
         }
         if !out.iter().any(|c| c.as_type() == m.as_type()) {
@@ -78,14 +85,14 @@ mod tests {
         let t = vec![Modifier::TextColor {
             value: "blue".into(),
         }];
-        let m = merge_with_inheritance(&p, t);
+        let m = merge_with_inheritance(&p, t, false);
         assert_eq!(m.len(), 1);
         assert!(matches!(&m[0], Modifier::TextColor { value } if value == "blue"));
     }
     #[test]
     fn parent_fills_gap() {
         let p = vec![Modifier::FontSize { value: 1600 }];
-        let m = merge_with_inheritance(&p, vec![]);
+        let m = merge_with_inheritance(&p, vec![], false);
         assert!(matches!(m[0], Modifier::FontSize { value: 1600 }));
     }
     #[test]
@@ -93,7 +100,7 @@ mod tests {
         let p = vec![Modifier::Link {
             href: "https://a.com".into(),
         }];
-        let m = merge_with_inheritance(&p, vec![]);
+        let m = merge_with_inheritance(&p, vec![], false);
         assert_eq!(m.len(), 1);
     }
     #[test]
@@ -108,6 +115,40 @@ mod tests {
         assert_eq!(inline.len(), 1);
         assert_eq!(block.len(), 1);
     }
+    #[test]
+    fn child_declared_font_weight_suppresses_parent_bold() {
+        let parent = vec![Modifier::Bold];
+        let child = vec![Modifier::FontWeight { value: 500 }];
+        let m = merge_with_inheritance(&parent, child, true);
+        assert!(
+            m.iter()
+                .any(|x| matches!(x, Modifier::FontWeight { value: 500 }))
+        );
+        assert!(
+            !m.iter().any(|x| matches!(x, Modifier::Bold)),
+            "child's declared font-weight must suppress inherited Bold"
+        );
+    }
+
+    #[test]
+    fn child_declared_font_weight_suppresses_parent_bold_even_if_resolved_empty() {
+        let parent = vec![Modifier::Bold];
+        let child: Vec<Modifier> = vec![];
+        let m = merge_with_inheritance(&parent, child, true);
+        assert!(
+            !m.iter().any(|x| matches!(x, Modifier::Bold)),
+            "raw declaration must suppress Bold even if resolved modifier was dropped"
+        );
+    }
+
+    #[test]
+    fn child_without_font_weight_keeps_parent_bold() {
+        let parent = vec![Modifier::Bold];
+        let child = vec![Modifier::Italic];
+        let m = merge_with_inheritance(&parent, child, false);
+        assert!(m.iter().any(|x| matches!(x, Modifier::Bold)));
+    }
+
     #[test]
     fn pending_inner_wins() {
         let p = vec![Modifier::Alignment {

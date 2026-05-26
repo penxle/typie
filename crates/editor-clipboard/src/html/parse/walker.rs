@@ -2,6 +2,9 @@ use crate::html::parse::inheritance::{
     merge_pending_block, merge_with_inheritance, split_modifiers,
 };
 use crate::html::parse::normalize::normalize_modifier;
+use crate::html::parse::resolve_weight::{
+    compute_relative_weight, effective_inherited_weight, resolve_font_weight,
+};
 use crate::html::parse::rules::{
     compute_modifiers_for_element, modifier_parse_rules, node_parse_rules, try_parse_node,
 };
@@ -37,20 +40,34 @@ pub fn walk<'a>(
                     effective.push(d);
                 }
             }
+            let parent_weight = effective_inherited_weight(inline_mods);
+            for d in &mut effective {
+                if d.property == "font-weight" {
+                    let v = d.value.trim().to_lowercase();
+                    if v == "bolder" || v == "lighter" {
+                        d.value = compute_relative_weight(&v, parent_weight).to_string();
+                    }
+                }
+            }
             let decls_kv: Vec<(String, String)> = effective
                 .into_iter()
                 .map(|d| (d.property, d.value))
                 .collect();
 
             let raw = compute_modifiers_for_element(&elem, &decls_kv, modifier_parse_rules());
-            let all: Vec<Modifier> = raw
+            let normalized: Vec<Modifier> = raw
                 .into_iter()
                 .filter_map(|m| normalize_modifier(m, resource))
                 .collect();
+            let child_declared_font_weight = normalized
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { .. }));
+            let all = resolve_font_weight(normalized, inline_mods, resource);
 
             let (inline_part, block_part) = split_modifiers(all);
 
-            let new_inline = merge_with_inheritance(inline_mods, inline_part);
+            let new_inline =
+                merge_with_inheritance(inline_mods, inline_part, child_declared_font_weight);
             let new_pending = merge_pending_block(pending_block, block_part);
 
             if let Some(plain_node) = try_parse_node(&elem, node_parse_rules()) {

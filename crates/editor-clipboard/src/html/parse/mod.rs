@@ -1,5 +1,6 @@
 pub mod inheritance;
 pub mod normalize;
+pub mod resolve_weight;
 pub mod rules;
 pub mod schema_normalize;
 pub mod shorthand;
@@ -183,7 +184,10 @@ mod tests {
         let slice = Slice::from_html(html, &Resource::new_test());
         let text_frag = &slice.fragment.children[0].children[0];
         let mods: Vec<_> = text_frag.modifiers.iter().collect();
-        assert!(mods.iter().any(|m| matches!(m, Modifier::Bold)));
+        assert!(
+            mods.iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
+        );
         assert!(mods.iter().any(|m| matches!(m, Modifier::Underline)));
         assert!(
             mods.iter()
@@ -201,7 +205,16 @@ mod tests {
             .iter()
             .filter(|m| matches!(m, Modifier::Bold))
             .count();
-        assert_eq!(bold_count, 1, "Bold modifier should appear exactly once");
+        let fw_count = text_frag
+            .modifiers
+            .iter()
+            .filter(|m| matches!(m, Modifier::FontWeight { value: 700 }))
+            .count();
+        assert_eq!(
+            bold_count, 0,
+            "inherited Bold suppressed by child's raw font-weight"
+        );
+        assert_eq!(fw_count, 1, "FontWeight{{700}} preserved exactly once");
     }
 
     #[test]
@@ -244,26 +257,93 @@ mod tests {
     }
 
     #[test]
-    fn parse_font_weight_still_added_when_no_structural_bold() {
-        let html = r#"<p><span style="font-weight:700">x</span></p>"#;
-        let slice = Slice::from_html(html, &Resource::new_test());
+    fn font_weight_700_with_registered_700_uses_font_weight_only() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:700">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
         let text_frag = &slice.fragment.children[0].children[0];
         assert!(
             text_frag
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::Bold))
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 })),
+            "FontWeight{{700}} must be present"
         );
+        assert!(
+            !text_frag
+                .modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::Bold)),
+            "no synthetic Bold when family has 700"
+        );
+    }
+
+    #[test]
+    fn font_weight_700_without_heavier_registered_uses_synthetic_bold() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h_p400".into(),
+                chunks: vec![],
+            }],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:700">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let text_frag = &slice.fragment.children[0].children[0];
         assert!(
             text_frag
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
+                .any(|m| matches!(m, Modifier::Bold)),
+            "synthetic Bold when family lacks 700"
+        );
+        assert!(
+            !text_frag
+                .modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { .. })),
+            "no FontWeight when synthetic Bold is used"
         );
     }
 
     #[test]
     fn roundtrip_bold_with_font_weight_does_not_accumulate() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
         let original = Slice {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
@@ -274,6 +354,9 @@ mod tests {
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode { text: "x".into() }))
                             .with_modifiers(vec![
+                                Modifier::FontFamily {
+                                    value: "Pretendard".into(),
+                                },
                                 Modifier::Bold,
                                 Modifier::FontWeight { value: 700 },
                             ]),
@@ -286,7 +369,6 @@ mod tests {
         let html = original.to_html();
         let meta_end = html.find('>').expect("meta tag closes") + 1;
         let body_only = &html[meta_end..];
-        let resource = Resource::new_test();
         let parsed = Slice::from_html(body_only, &resource);
         let text_frag = &parsed.fragment.children[0].children[0];
         let bold_count = text_frag
@@ -294,9 +376,52 @@ mod tests {
             .iter()
             .filter(|m| matches!(m, Modifier::Bold))
             .count();
-        assert_eq!(
-            bold_count, 1,
-            "Bold should not duplicate after fallback roundtrip"
+        let fw_700 = text_frag
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, Modifier::FontWeight { value: 700 }));
+        assert_eq!(bold_count, 0, "no synthetic Bold when 700 is registered");
+        assert!(fw_700, "FontWeight{{700}} preserved through roundtrip");
+    }
+
+    #[test]
+    fn font_shorthand_in_style_attribute_round_trip() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Arial".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_a400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_a700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font:italic bold 16px Arial">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(t.modifiers.iter().any(|m| matches!(m, Modifier::Italic)));
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
+        );
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1200 })),
+            "16px → 12pt × 100"
+        );
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontFamily { value } if value == "Arial"))
         );
     }
 
@@ -317,7 +442,10 @@ mod tests {
 
     #[test]
     fn inline_block_style_inherits() {
-        let s = Slice::from_html(r#"<div style="color:red"><p>x</p></div>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<div style="color:red"><p>x</p></div>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             t.modifiers
@@ -328,7 +456,10 @@ mod tests {
 
     #[test]
     fn inner_wins_color_e2e() {
-        let s = Slice::from_html(r#"<div style="color:red"><p style="color:blue">x</p></div>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<div style="color:red"><p style="color:blue">x</p></div>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             t.modifiers
@@ -344,7 +475,10 @@ mod tests {
 
     #[test]
     fn background_shorthand_inherits() {
-        let s = Slice::from_html(r#"<div style="background:yellow"><p>x</p></div>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<div style="background:yellow"><p>x</p></div>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             t.modifiers
@@ -355,8 +489,10 @@ mod tests {
 
     #[test]
     fn stylesheet_class_inherits() {
-        let s =
-            Slice::from_html(r#"<style>.a { color: red; }</style><div class="a"><p>x</p></div>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<style>.a { color: red; }</style><div class="a"><p>x</p></div>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             t.modifiers
@@ -367,7 +503,10 @@ mod tests {
 
     #[test]
     fn inline_overrides_stylesheet() {
-        let s = Slice::from_html(r#"<style>p { color: red; }</style><p style="color:blue">x</p>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<style>p { color: red; }</style><p style="color:blue">x</p>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             t.modifiers
@@ -392,7 +531,10 @@ mod tests {
 
     #[test]
     fn link_nested_inherits() {
-        let s = Slice::from_html(r#"<a href="https://a.com"><span>nested</span></a>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<a href="https://a.com"><span>nested</span></a>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             t.modifiers
@@ -403,7 +545,10 @@ mod tests {
 
     #[test]
     fn link_does_not_leak_to_sibling() {
-        let s = Slice::from_html(r#"<p><a href="https://a.com">a</a><span>b</span></p>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<p><a href="https://a.com">a</a><span>b</span></p>"#,
+            &Resource::new_test(),
+        );
         let p = &s.fragment.children[0];
         let mut ta: Option<&Fragment> = None;
         let mut tb: Option<&Fragment> = None;
@@ -440,7 +585,10 @@ mod tests {
 
     #[test]
     fn alignment_lands_on_block() {
-        let s = Slice::from_html(r#"<div style="text-align:center"><p>x</p></div>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<div style="text-align:center"><p>x</p></div>"#,
+            &Resource::new_test(),
+        );
         fn find_block<'a>(f: &'a Fragment) -> Option<&'a Fragment> {
             if matches!(f.node, PlainNode::Paragraph(_)) {
                 return Some(f);
@@ -469,7 +617,10 @@ mod tests {
 
     #[test]
     fn important_ignored_inline() {
-        let s = Slice::from_html(r#"<p style="color:red !important">x</p>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<p style="color:red !important">x</p>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             !t.modifiers
@@ -480,7 +631,10 @@ mod tests {
 
     #[test]
     fn important_ignored_stylesheet() {
-        let s = Slice::from_html(r#"<style>p { color: red !important; }</style><p>x</p>"#, &Resource::new_test());
+        let s = Slice::from_html(
+            r#"<style>p { color: red !important; }</style><p>x</p>"#,
+            &Resource::new_test(),
+        );
         let t = find_text(&s.fragment).unwrap();
         assert!(
             !t.modifiers
@@ -514,8 +668,9 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::TextColor { value } if value == "red")),
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::TextColor { value } if value == "red")),
             "Word-style red rgb(192,0,0) must snap to 'red' palette key"
         );
     }
@@ -528,8 +683,9 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::FontFamily { value } if value == "Pretendard")),
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontFamily { value } if value == "Pretendard")),
             "fallback list must produce first registered family"
         );
     }
@@ -541,21 +697,40 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            !t.modifiers.iter().any(|m| matches!(m, Modifier::FontFamily { .. })),
+            !t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontFamily { .. })),
             "unregistered family must be dropped"
         );
     }
 
     #[test]
     fn paste_arbitrary_weight_snaps_to_nearest_hundred() {
-        let resource = Resource::new_test();
-        let html = r#"<p><span style="font-weight:350">x</span></p>"#;
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:350">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::FontWeight { value: 400 })),
-            "350 must snap to 400 (round-half-up)"
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 })),
+            "350 must snap to 400 (round-half-up) and match family weight 400"
         );
     }
 
@@ -566,8 +741,9 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::FontSize { value: 1200 })),
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1200 })),
             "16px must convert to 1200 (12pt × 100)"
         );
     }
@@ -579,8 +755,9 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::FontSize { value: 1800 })),
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1800 })),
             "1.5rem must convert to 1800 (18pt × 100)"
         );
     }
@@ -613,8 +790,9 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::BackgroundColor { value } if value == "none")),
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::BackgroundColor { value } if value == "none")),
             "transparent background must become 'none' palette value"
         );
     }
@@ -626,8 +804,9 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::LetterSpacing { value: 0 })),
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::LetterSpacing { value: 0 })),
             "letter-spacing:normal must become 0 (not dropped, per spec)"
         );
     }
@@ -639,9 +818,449 @@ mod tests {
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice.fragment).unwrap();
         assert!(
-            t.modifiers.iter().any(|m|
-                matches!(m, Modifier::LetterSpacing { value: 5 })),
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::LetterSpacing { value: 5 })),
             "0.07em (= 7) must snap to nearest palette value 5"
+        );
+    }
+
+    #[test]
+    fn strong_with_registered_700_uses_font_weight_only() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard"><strong>x</strong></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        let bold_count = t
+            .modifiers
+            .iter()
+            .filter(|m| matches!(m, Modifier::Bold))
+            .count();
+        let fw_700 = t
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, Modifier::FontWeight { value: 700 }));
+        assert_eq!(
+            bold_count, 0,
+            "Bold must not be emitted when family has 700"
+        );
+        assert!(fw_700, "FontWeight{{700}} must be emitted");
+    }
+
+    #[test]
+    fn strong_without_heavier_weight_uses_synthetic_bold() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h_p400".into(),
+                chunks: vec![],
+            }],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard"><strong>x</strong></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        let bold_count = t
+            .modifiers
+            .iter()
+            .filter(|m| matches!(m, Modifier::Bold))
+            .count();
+        let has_fw = t
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, Modifier::FontWeight { .. }));
+        assert_eq!(
+            bold_count, 1,
+            "synthetic Bold required when no heavier weight"
+        );
+        assert!(
+            !has_fw,
+            "no FontWeight modifier when synthetic Bold is used"
+        );
+    }
+
+    #[test]
+    fn strong_without_registered_family_keeps_bold() {
+        let resource = Resource::new_test();
+        let html = r#"<p><strong>x</strong></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(t.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
+        assert!(
+            !t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { .. }))
+        );
+    }
+
+    #[test]
+    fn font_weight_800_snaps_to_700_when_700_registered() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:800">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 })),
+            "800 + [400,700] → match_weight returns 700 (heavier preferred above 500)"
+        );
+    }
+
+    #[test]
+    fn font_weight_900_not_downgraded_when_900_registered() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 900,
+                    hash: "h_p900".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:900">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 900 })),
+            "900 must not be downgraded to 700"
+        );
+    }
+
+    #[test]
+    fn font_weight_600_snaps_to_700_when_only_400_and_700_registered() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:600">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 })),
+            "600 with [400,700] → match_weight returns 700 (heavier preferred above 500)"
+        );
+    }
+
+    #[test]
+    fn font_weight_300_snaps_to_400_when_no_lighter_registered() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:300">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 })),
+            "300 with [400,700] → match_weight returns 400 (closest lighter not present, falls back to 400)"
+        );
+    }
+
+    #[test]
+    fn font_weight_800_unknown_family_preserves_value() {
+        let resource = Resource::new_test();
+        let html = r#"<p><span style="font-family:Calibri;font-weight:800">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 800 })),
+            "value must be preserved when family is unknown"
+        );
+        assert!(
+            !t.modifiers.iter().any(|m| matches!(m, Modifier::Bold)),
+            "no Bold added (이중 굵음 방지)"
+        );
+    }
+
+    #[test]
+    fn font_weight_300_unknown_family_preserves_value() {
+        let resource = Resource::new_test();
+        let html = r#"<p><span style="font-family:Calibri;font-weight:300">x</span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 300 })),
+            "value must be preserved when family is unknown"
+        );
+        assert!(!t.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
+    }
+
+    #[test]
+    fn font_weight_normal_reset_under_synth_bold_parent() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h_p400".into(),
+                chunks: vec![],
+            }],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard"><strong><span style="font-weight:normal">x</span></strong></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 })),
+            "child's normal (400) must be applied"
+        );
+        assert!(
+            !t.modifiers.iter().any(|m| matches!(m, Modifier::Bold)),
+            "parent's synth Bold must be suppressed by child's declared font-weight"
+        );
+    }
+
+    #[test]
+    fn font_weight_normal_reset_with_unregistered_child_family_suppresses_parent_bold() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h_p400".into(),
+                chunks: vec![],
+            }],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard"><strong><span style="font-family:Calibri;font-weight:normal">x</span></strong></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 })),
+            "child's normal preserved (Calibri drop → fallback to inherited Pretendard)"
+        );
+        assert!(
+            !t.modifiers.iter().any(|m| matches!(m, Modifier::Bold)),
+            "parent's synth Bold must be suppressed by child's raw font-weight declaration"
+        );
+    }
+
+    #[test]
+    fn inline_font_weight_overrides_strong_tag() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard"><strong style="font-weight:400">x</strong></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 }))
+        );
+        assert!(!t.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
+    }
+
+    #[test]
+    fn font_weight_bolder_resolved_against_parent_400() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard"><span style="font-weight:bolder">x</span></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 })),
+            "bolder against parent 400 must resolve to FontWeight{{700}}"
+        );
+    }
+
+    #[test]
+    fn font_weight_lighter_resolved_against_parent_700() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::User,
+            weights: vec![
+                FontWeight {
+                    value: 300,
+                    hash: "h_p300".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 400,
+                    hash: "h_p400".into(),
+                    chunks: vec![],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h_p700".into(),
+                    chunks: vec![],
+                },
+            ],
+        }]);
+        let html = r#"<p><span style="font-family:Pretendard;font-weight:700"><span style="font-weight:lighter">x</span></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 })),
+            "lighter against parent 700 must resolve to FontWeight{{400}}"
+        );
+    }
+
+    #[test]
+    fn font_weight_bolder_against_synthetic_bold_parent() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![
+            FontFamily {
+                name: "OnlyLight".into(),
+                source: FontFamilySource::User,
+                weights: vec![FontWeight {
+                    value: 400,
+                    hash: "h_l400".into(),
+                    chunks: vec![],
+                }],
+            },
+            FontFamily {
+                name: "Heavy".into(),
+                source: FontFamilySource::User,
+                weights: vec![
+                    FontWeight {
+                        value: 400,
+                        hash: "h_h400".into(),
+                        chunks: vec![],
+                    },
+                    FontWeight {
+                        value: 700,
+                        hash: "h_h700".into(),
+                        chunks: vec![],
+                    },
+                    FontWeight {
+                        value: 900,
+                        hash: "h_h900".into(),
+                        chunks: vec![],
+                    },
+                ],
+            },
+        ]);
+        let html = r#"<p><span style="font-family:OnlyLight"><strong><span style="font-family:Heavy;font-weight:bolder">x</span></strong></span></p>"#;
+        let slice = Slice::from_html(html, &resource);
+        let t = find_text(&slice.fragment).unwrap();
+        assert!(
+            t.modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight { value: 900 })),
+            "bolder against synthetic Bold parent (effective 700) must resolve to 900"
         );
     }
 }
