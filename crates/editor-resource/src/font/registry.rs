@@ -119,6 +119,13 @@ impl FontRegistry {
         self.families.contains_key(family)
     }
 
+    pub fn has_family_ci(&self, name: &str) -> Option<&str> {
+        self.families
+            .keys()
+            .find(|k| k.eq_ignore_ascii_case(name))
+            .map(|s| s.as_str())
+    }
+
     pub fn weights(&self, family: &str) -> Option<&[u16]> {
         self.families.get(family).map(|w| w.as_slice())
     }
@@ -406,6 +413,16 @@ mod tests {
         let reg = make_registry_with_family("Pretendard", &[400, 700]);
         assert!(reg.has_family("Pretendard"));
         assert!(!reg.has_family("Unknown"));
+    }
+
+    #[test]
+    fn has_family_ci_returns_registered_name() {
+        let reg = make_registry_with_family("Pretendard", &[400]);
+        assert_eq!(reg.has_family_ci("Pretendard"), Some("Pretendard"));
+        assert_eq!(reg.has_family_ci("pretendard"), Some("Pretendard"));
+        assert_eq!(reg.has_family_ci("PRETENDARD"), Some("Pretendard"));
+        assert_eq!(reg.has_family_ci("PreTenDard"), Some("Pretendard"));
+        assert_eq!(reg.has_family_ci("Unknown"), None);
     }
 
     #[test]

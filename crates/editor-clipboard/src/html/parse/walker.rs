@@ -1,11 +1,13 @@
 use crate::html::parse::inheritance::{
     merge_pending_block, merge_with_inheritance, split_modifiers,
 };
+use crate::html::parse::normalize::normalize_modifier;
 use crate::html::parse::rules::{
     compute_modifiers_for_element, modifier_parse_rules, node_parse_rules, try_parse_node,
 };
 use crate::html::parse::stylesheet::{ComputedStylesheet, Declaration, parse_inline_style};
 use editor_model::{Fragment, Modifier, PlainNode, PlainTextNode};
+use editor_resource::Resource;
 use scraper::{ElementRef, Node as ScraperNode};
 
 pub fn walk<'a>(
@@ -14,6 +16,7 @@ pub fn walk<'a>(
     inline_mods: &[Modifier],
     pending_block: &[Modifier],
     sheet: &ComputedStylesheet,
+    resource: &Resource,
 ) {
     match node.value() {
         ScraperNode::Element(elem_data) => {
@@ -39,7 +42,11 @@ pub fn walk<'a>(
                 .map(|d| (d.property, d.value))
                 .collect();
 
-            let all = compute_modifiers_for_element(&elem, &decls_kv, modifier_parse_rules());
+            let raw = compute_modifiers_for_element(&elem, &decls_kv, modifier_parse_rules());
+            let all: Vec<Modifier> = raw
+                .into_iter()
+                .filter_map(|m| normalize_modifier(m, resource))
+                .collect();
 
             let (inline_part, block_part) = split_modifiers(all);
 
@@ -57,7 +64,7 @@ pub fn walk<'a>(
                     _ => {
                         let mut kids = vec![];
                         for c in elem.children() {
-                            walk(c, &mut kids, &new_inline, &[], sheet);
+                            walk(c, &mut kids, &new_inline, &[], sheet, resource);
                         }
                         out.push(Fragment {
                             node: plain_node,
@@ -70,7 +77,7 @@ pub fn walk<'a>(
             }
 
             for c in node.children() {
-                walk(c, out, &new_inline, &new_pending, sheet);
+                walk(c, out, &new_inline, &new_pending, sheet, resource);
             }
         }
         ScraperNode::Text(text) => {

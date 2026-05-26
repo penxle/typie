@@ -1,4 +1,5 @@
 use editor_model::{Fragment, Node, NodeRef, PlainNode, PlainRootNode, PlainTextNode};
+use editor_resource::Resource;
 use editor_state::{CellRect, ResolvedSelection, State, is_prefix_of};
 use serde::{Deserialize, Serialize};
 
@@ -61,13 +62,13 @@ impl Slice {
         html_serialize::to_html(self)
     }
 
-    pub fn from_html(html: &str) -> Slice {
-        html_parse::from_html(html)
+    pub fn from_html(html: &str, resource: &Resource) -> Slice {
+        html_parse::from_html(html, resource)
     }
 
-    pub fn from_payload(html: Option<&str>, text: &str) -> Slice {
+    pub fn from_payload(html: Option<&str>, text: &str, resource: &Resource) -> Slice {
         match html {
-            Some(h) if !h.is_empty() => Self::from_html(h),
+            Some(h) if !h.is_empty() => Self::from_html(h, resource),
             _ => Self::from_text(text),
         }
     }
@@ -185,6 +186,7 @@ fn extract_cell_rect(rect: &CellRect<'_>) -> Slice {
 mod tests {
     use super::*;
     use editor_macros::state;
+    use editor_resource::Resource;
 
     #[test]
     fn extract_collapsed_returns_none() {
@@ -325,13 +327,14 @@ mod tests {
         assert!(!payload.html.is_empty());
         assert!(!payload.text.is_empty());
 
-        let parsed = Slice::from_payload(Some(&payload.html), &payload.text);
+        let resource = Resource::new_test();
+        let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &resource);
         assert_eq!(parsed, original);
     }
 
     #[test]
     fn from_payload_text_only() {
-        let parsed = Slice::from_payload(None, "hello\n\nworld");
+        let parsed = Slice::from_payload(None, "hello\n\nworld", &Resource::new_test());
         assert_eq!(parsed.fragment.children.len(), 2);
     }
 

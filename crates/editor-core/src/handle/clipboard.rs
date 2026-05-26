@@ -15,7 +15,10 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
             Ok(())
         }),
         ClipboardOp::Paste { html, text } => {
-            let slice = Slice::from_payload(html.as_deref(), &text);
+            let slice = {
+                let resource = editor.resource.lock().unwrap();
+                Slice::from_payload(html.as_deref(), &text, &resource)
+            };
             let is_html_paste = html.as_deref().is_some_and(|h| !h.is_empty());
             let plain_text = is_html_paste.then(|| text.clone());
             editor.transact(|tr| {
