@@ -70,6 +70,12 @@
   });
 
   $effect(() => {
+    if (stage !== 'empty') return;
+    const file = ctx.pendingImageDrops.shift();
+    if (file) void processFile(file);
+  });
+
+  $effect(() => {
     if (stage !== 'ready') {
       enlarged = false;
     }
@@ -118,14 +124,24 @@
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = 'image/*';
+    picker.multiple = true;
 
     picker.addEventListener('change', () => {
-      const file = picker.files?.[0];
-      if (!file) {
+      const files = [...(picker.files ?? [])];
+      if (files.length === 0) {
         deleteNode();
         return;
       }
-      void processFile(file);
+
+      void processFile(files[0]);
+
+      for (const file of files.slice(1)) {
+        ctx.pendingImageDrops.push(file);
+        ctx.editor?.enqueue({
+          type: 'insertion',
+          op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
+        });
+      }
     });
 
     picker.addEventListener('cancel', () => {
@@ -152,6 +168,7 @@
     if (!canEdit || stage === 'ready') return;
 
     event.preventDefault();
+    event.stopPropagation();
 
     const file = getFirstImageFile(event.dataTransfer?.files ?? []);
     if (!file) return;

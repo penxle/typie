@@ -10,6 +10,7 @@
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handleContextMenu } from '../handlers/contextmenu';
+  import { handleDragOver, handleDrop } from '../handlers/drop';
   import { handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import Caret from './Caret.svelte';
   import CaretPositioned from './CaretPositioned.svelte';
@@ -120,6 +121,8 @@
     };
   }}
   oncontextmenu={handle(ctx.editor, handleContextMenu)}
+  ondragover={(event) => handleDragOver(ctx, event)}
+  ondrop={(event) => handleDrop(ctx, event)}
   onfocusin={() => ctx.editor?.focus()}
   onfocusout={() => {
     if (!window.document.hasFocus()) return;
