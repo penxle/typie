@@ -16,7 +16,6 @@ import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
-import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
@@ -63,8 +62,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val textClippingRectInRoot: () -> Rect? = textClippingRectInRoot
 
-    @ExperimentalComposeUiApi
-    override val unclippedTextOffsetInRoot: () -> Offset? = { null }
+    @ExperimentalComposeUiApi override val unclippedTextOffsetInRoot: () -> Offset? = { null }
 
     override val state: TextEditorState =
       object : TextEditorState {
@@ -115,7 +113,7 @@ internal class EditorDesktopTextEditingBatch : TextEditingScope {
       messages += Message.Key(KeyEvent(Key.Enter))
     } else {
       ops += FlatImeOp.Compose(text.toString())
-      ops += FlatImeOp.ClearComposition
+      ops += FlatImeOp.CommitAsIs
     }
   }
 
@@ -140,7 +138,7 @@ internal class EditorDesktopTextEditingBatch : TextEditingScope {
 
   private fun flushOps() {
     if (ops.isEmpty()) return
-    messages += Message.Composition(CompositionOp.Flat(ops.toList()))
+    messages += Message.TextInput(ops.toList())
     ops.clear()
   }
 }

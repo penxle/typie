@@ -16,12 +16,12 @@ export type DomComposingReplacement = {
   text: string;
 };
 
-export const flatImeMessage = (ops: FlatImeOp[]): Message[] => {
+export const textInputMessage = (ops: FlatImeOp[]): Message[] => {
   if (ops.length === 0) {
     return [];
   }
 
-  return [{ type: 'composition', op: { type: 'flat', ops } }];
+  return [{ type: 'text_input', ops }];
 };
 
 export const readDomInputDiff = (context: ImeContext, nextText: string): DomInputDiff | null => {

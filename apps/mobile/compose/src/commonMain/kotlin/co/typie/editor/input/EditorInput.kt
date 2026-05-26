@@ -21,7 +21,6 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.KeyBinding
 import co.typie.editor.createBindings
-import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
@@ -250,24 +249,16 @@ internal class EditorInputNode(
         if (text == "\n") {
           dispatch(listOf(Message.Insertion(InsertionOp.Text(text))))
         } else {
-          dispatch(
-            listOf(
-              Message.Composition(
-                CompositionOp.Flat(listOf(FlatImeOp.Compose(text), FlatImeOp.ClearComposition))
-              )
-            )
-          )
+          dispatch(listOf(Message.TextInput(listOf(FlatImeOp.Compose(text), FlatImeOp.CommitAsIs))))
         }
       }
 
       override fun setComposingText(text: String) {
-        dispatch(listOf(Message.Composition(CompositionOp.Flat(listOf(FlatImeOp.Compose(text))))))
+        dispatch(listOf(Message.TextInput(listOf(FlatImeOp.Compose(text)))))
       }
 
       override fun finishComposition() {
-        dispatch(
-          listOf(Message.Composition(CompositionOp.Flat(listOf(FlatImeOp.ClearComposition))))
-        )
+        dispatch(listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))))
       }
 
       override fun pressKey(key: TextInputKey): Boolean {

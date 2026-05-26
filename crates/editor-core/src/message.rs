@@ -211,28 +211,6 @@ pub enum ClipboardOp {
 }
 
 #[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum CompositionOp {
-    Update {
-        text: String,
-        replace_length: Option<usize>,
-    },
-    SetRegion {
-        start: usize,
-        end: usize,
-    },
-    Commit {
-        text: String,
-    },
-    CommitAsIs,
-    Cancel,
-    Flat {
-        ops: Vec<FlatImeOp>,
-    },
-}
-
-#[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NavigationOp {
@@ -288,6 +266,7 @@ pub enum FlatImeOp {
     DeleteSurroundingUtf16 { before: usize, after: usize },
     SetComposition { start: usize, end: usize },
     ClearComposition,
+    CommitAsIs,
     MoveCursor { delta: i32 },
 }
 
@@ -322,8 +301,8 @@ pub enum Message {
     Clipboard {
         op: ClipboardOp,
     },
-    Composition {
-        op: CompositionOp,
+    TextInput {
+        ops: Vec<FlatImeOp>,
     },
     Navigation {
         op: NavigationOp,

@@ -920,11 +920,11 @@ mod tests {
             .resolve(&state.doc)
             .unwrap()
             .to_flat();
-        editor.apply(Message::Composition {
-            op: CompositionOp::SetRegion {
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::SetComposition {
                 start: head_flat,
                 end: head_flat,
-            },
+            }],
         });
 
         let before = editor.state().clone();

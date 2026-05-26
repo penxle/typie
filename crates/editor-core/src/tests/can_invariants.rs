@@ -68,13 +68,8 @@ fn build_corpus() -> Vec<Message> {
                 text: String::new(),
             },
         },
-        Message::Composition {
-            op: CompositionOp::Commit {
-                text: String::new(),
-            },
-        },
-        Message::Composition {
-            op: CompositionOp::Cancel,
+        Message::TextInput {
+            ops: vec![FlatImeOp::CommitAsIs],
         },
         Message::View {
             op: ViewOp::ToggleFold {
@@ -160,7 +155,7 @@ fn message_variants_are_enumerated() {
         | Message::Node { .. }
         | Message::View { .. }
         | Message::Clipboard { .. }
-        | Message::Composition { .. }
+        | Message::TextInput { .. }
         | Message::Navigation { .. }
         | Message::History { .. }
         | Message::System { .. }

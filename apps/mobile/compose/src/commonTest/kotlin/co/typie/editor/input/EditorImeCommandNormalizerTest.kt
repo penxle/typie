@@ -2,7 +2,6 @@ package co.typie.editor.input
 
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
-import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Ime
@@ -22,10 +21,7 @@ class EditorImeCommandNormalizerTest {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("a", 1)), ime = null)
 
-    assertEquals(
-      listOf(Message.Composition(CompositionOp.Flat(listOf(FlatImeOp.ReplaceSelection("a"))))),
-      messages,
-    )
+    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a")))), messages)
   }
 
   @Test

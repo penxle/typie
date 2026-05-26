@@ -433,11 +433,10 @@ fn replacement_skipped_during_active_composition() {
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
-    editor.apply(Message::Composition {
-        op: CompositionOp::Update {
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose {
             text: PLAIN_PATTERN.into(),
-            replace_length: None,
-        },
+        }],
     });
 
     let flat = flat_text(&editor);
@@ -465,14 +464,13 @@ fn replacement_fires_on_commit_as_is() {
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     // CommitAsIs is the path the web host takes on `compositionend`.
-    editor.apply(Message::Composition {
-        op: CompositionOp::Update {
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose {
             text: PLAIN_PATTERN.into(),
-            replace_length: None,
-        },
+        }],
     });
-    editor.apply(Message::Composition {
-        op: CompositionOp::CommitAsIs,
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::CommitAsIs],
     });
 
     let flat = flat_text(&editor);
@@ -488,6 +486,31 @@ fn replacement_fires_on_commit_as_is() {
 }
 
 #[test]
+fn flat_text_input_message_commits_preedit() {
+    let (s, ..) = state! {
+        doc { root { paragraph { t1: text("") } } }
+        selection: (t1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+
+    let message: Message = serde_json::from_value(serde_json::json!({
+        "type": "text_input",
+        "ops": [
+            { "type": "compose", "text": PLAIN_PATTERN },
+            { "type": "commit_as_is" }
+        ]
+    }))
+    .expect("flat text input message should deserialize");
+    editor.apply(message);
+
+    let flat = flat_text(&editor);
+    assert!(flat.contains(PLAIN_SUBSTITUTE));
+    assert!(!flat.contains(PLAIN_PATTERN));
+    assert!(editor.state().composition.is_none());
+}
+
+#[test]
 fn replacement_fires_on_explicit_commit() {
     let (s, ..) = state! {
         doc { root { paragraph { t1: text("") } } }
@@ -496,10 +519,13 @@ fn replacement_fires_on_explicit_commit() {
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
-    editor.apply(Message::Composition {
-        op: CompositionOp::Commit {
-            text: PLAIN_PATTERN.into(),
-        },
+    editor.apply(Message::TextInput {
+        ops: vec![
+            FlatImeOp::ReplaceSelection {
+                text: PLAIN_PATTERN.into(),
+            },
+            FlatImeOp::CommitAsIs,
+        ],
     });
 
     let flat = flat_text(&editor);
@@ -517,17 +543,15 @@ fn update_then_update_keeps_composition_intact() {
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     let partial = &PLAIN_PATTERN[..PLAIN_PATTERN.len() - 1];
-    editor.apply(Message::Composition {
-        op: CompositionOp::Update {
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose {
             text: partial.into(),
-            replace_length: None,
-        },
+        }],
     });
-    editor.apply(Message::Composition {
-        op: CompositionOp::Update {
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose {
             text: PLAIN_PATTERN.into(),
-            replace_length: None,
-        },
+        }],
     });
 
     let flat = flat_text(&editor);

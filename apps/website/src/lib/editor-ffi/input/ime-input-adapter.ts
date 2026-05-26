@@ -8,7 +8,7 @@ import {
   updateContextFromInputElement,
   utf16SelectionToFlatRange,
 } from './ime-context';
-import { flatImeMessage, normalizeLineBreakBeforeInput, readDomComposingReplacement, readDomInputDiff } from './ime-normalizer';
+import { normalizeLineBreakBeforeInput, readDomComposingReplacement, readDomInputDiff, textInputMessage } from './ime-normalizer';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { ImeContext, ImeRange } from './ime-context';
 
@@ -108,7 +108,7 @@ export class ImeInputAdapter {
       const text = this.#pendingCompositionText ?? replacement.text;
       this.#pendingCompositionText = null;
       const composing = { start: replacement.targetStart, end: replacement.targetStart + codePointLength(text) };
-      const messages = flatImeMessage([
+      const messages = textInputMessage([
         { type: 'set_composition', start: replacement.targetStart, end: replacement.targetEnd },
         { type: 'compose', text },
       ]);
@@ -134,7 +134,7 @@ export class ImeInputAdapter {
       isCollapsedRange(intent.replacementCandidate)
         ? intent.replacementCandidate
         : { start: diff.start, end: diff.end };
-    const messages = flatImeMessage([
+    const messages = textInputMessage([
       { type: 'set_selection', start: replacement.start, end: replacement.end },
       { type: 'replace_selection', text: diff.insertedText },
     ]);
@@ -165,7 +165,7 @@ export class ImeInputAdapter {
       };
     }
     if (hadComposition) {
-      const messages: Message[] = [{ type: 'composition', op: { type: 'commit_as_is' } }];
+      const messages: Message[] = [{ type: 'text_input', ops: [{ type: 'commit_as_is' }] }];
       this.#deps.enqueue(messages);
       this.#setCommitPending();
       return;

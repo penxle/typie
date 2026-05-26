@@ -1,5 +1,4 @@
 mod clipboard;
-mod composition;
 mod deletion;
 mod history;
 mod insertion;
@@ -11,10 +10,10 @@ mod pointer;
 mod remote;
 mod selection;
 mod system;
+mod text_input;
 mod view;
 
 pub use clipboard::handle_clipboard_op;
-pub use composition::handle_composition_op;
 pub use deletion::handle_deletion_op;
 pub use history::handle_history_op;
 pub use insertion::handle_insertion_op;
@@ -26,4 +25,5 @@ pub use pointer::handle_pointer_event;
 pub use remote::handle_remote;
 pub use selection::handle_selection_op;
 pub use system::handle_system_event;
+pub use text_input::handle_flat_ime_ops;
 pub use view::handle_view_op;

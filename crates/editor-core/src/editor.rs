@@ -447,7 +447,7 @@ impl Editor {
             Message::Node { op } => handle::handle_node_op(self, op)?,
             Message::View { op } => handle::handle_view_op(self, op)?,
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
-            Message::Composition { op } => handle::handle_composition_op(self, op)?,
+            Message::TextInput { ops } => handle::handle_flat_ime_ops(self, ops)?,
             Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
             Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,

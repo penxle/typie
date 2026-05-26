@@ -1,6 +1,5 @@
 package co.typie.editor.input
 
-import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
@@ -17,11 +16,7 @@ class EditorDesktopTextEditingBatchTest {
     batch.setComposingText("하", 1)
 
     assertEquals(
-      listOf(
-        Message.Composition(
-          CompositionOp.Flat(listOf(FlatImeOp.DeleteSurrounding(1, 0), FlatImeOp.Compose("하")))
-        )
-      ),
+      listOf(Message.TextInput(listOf(FlatImeOp.DeleteSurrounding(1, 0), FlatImeOp.Compose("하")))),
       batch.drainMessages(),
     )
   }
@@ -34,26 +29,19 @@ class EditorDesktopTextEditingBatchTest {
     batch.commitText("\n", 1)
 
     assertEquals(
-      listOf(
-        Message.Composition(CompositionOp.Flat(listOf(FlatImeOp.Compose("ㅎ")))),
-        Message.Key(KeyEvent(Key.Enter)),
-      ),
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("ㅎ"))), Message.Key(KeyEvent(Key.Enter))),
       batch.drainMessages(),
     )
   }
 
   @Test
-  fun `text commit uses composition replacement and clears composition`() {
+  fun `text commit uses composition replacement and commits composition`() {
     val batch = EditorDesktopTextEditingBatch()
 
     batch.commitText("하", 1)
 
     assertEquals(
-      listOf(
-        Message.Composition(
-          CompositionOp.Flat(listOf(FlatImeOp.Compose("하"), FlatImeOp.ClearComposition))
-        )
-      ),
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("하"), FlatImeOp.CommitAsIs))),
       batch.drainMessages(),
     )
   }

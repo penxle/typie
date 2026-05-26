@@ -25,14 +25,11 @@ describe('ImeInputAdapter', () => {
 
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 20, end: 20 },
-            { type: 'replace_selection', text: 'a' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 20, end: 20 },
+          { type: 'replace_selection', text: 'a' },
+        ],
       },
     ]);
   });
@@ -62,14 +59,11 @@ describe('ImeInputAdapter', () => {
 
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 53, end: 53 },
-            { type: 'replace_selection', text: 'e' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 53, end: 53 },
+          { type: 'replace_selection', text: 'e' },
+        ],
       },
     ]);
   });
@@ -113,14 +107,11 @@ describe('ImeInputAdapter', () => {
     expect(input.selectionStart).toBe(5);
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 94, end: 94 },
-            { type: 'replace_selection', text: 'e' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 94, end: 94 },
+          { type: 'replace_selection', text: 'e' },
+        ],
       },
     ]);
   });
@@ -155,14 +146,11 @@ describe('ImeInputAdapter', () => {
     expect(input.selectionEnd).toBe(3);
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 2, end: 2 },
-            { type: 'replace_selection', text: 'è' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 2, end: 2 },
+          { type: 'replace_selection', text: 'è' },
+        ],
       },
     ]);
   });
@@ -192,14 +180,11 @@ describe('ImeInputAdapter', () => {
     expect(input.value).toBe('\u2028èt\u2029');
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 1, end: 2 },
-            { type: 'replace_selection', text: 'è' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 1, end: 2 },
+          { type: 'replace_selection', text: 'è' },
+        ],
       },
     ]);
   });
@@ -233,14 +218,11 @@ describe('ImeInputAdapter', () => {
     expect(input.value).toBe(`\u2028${spaces}eè\u2029`);
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: windowStart + eEnd, end: windowStart + eEnd },
-            { type: 'replace_selection', text: 'è' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: windowStart + eEnd, end: windowStart + eEnd },
+          { type: 'replace_selection', text: 'è' },
+        ],
       },
     ]);
   });
@@ -268,14 +250,11 @@ describe('ImeInputAdapter', () => {
 
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 43, end: 43 },
-            { type: 'replace_selection', text: 'è' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 43, end: 43 },
+          { type: 'replace_selection', text: 'è' },
+        ],
       },
     ]);
   });
@@ -305,14 +284,11 @@ describe('ImeInputAdapter', () => {
 
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 7, end: 7 },
-            { type: 'replace_selection', text: 'a' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 7, end: 7 },
+          { type: 'replace_selection', text: 'a' },
+        ],
       },
     ]);
   });
@@ -336,14 +312,11 @@ describe('ImeInputAdapter', () => {
     expect(messages).toEqual([
       { type: 'key', event: { key: 'enter' } },
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_selection', start: 20, end: 20 },
-            { type: 'replace_selection', text: 'a' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 20, end: 20 },
+          { type: 'replace_selection', text: 'a' },
+        ],
       },
     ]);
   });
@@ -383,26 +356,20 @@ describe('ImeInputAdapter', () => {
 
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_composition', start: 20, end: 20 },
-            { type: 'compose', text: 'か' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 20, end: 20 },
+          { type: 'compose', text: 'か' },
+        ],
       },
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_composition', start: 20, end: 21 },
-            { type: 'compose', text: 'かな' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 20, end: 21 },
+          { type: 'compose', text: 'かな' },
+        ],
       },
-      { type: 'composition', op: { type: 'commit_as_is' } },
+      { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
     ]);
   });
 
@@ -435,24 +402,18 @@ describe('ImeInputAdapter', () => {
     expect(input.value).toBe('\u2028하\u2029');
     expect(messages).toEqual([
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_composition', start: 1, end: 1 },
-            { type: 'compose', text: 'ㅎ' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 1 },
+          { type: 'compose', text: 'ㅎ' },
+        ],
       },
       {
-        type: 'composition',
-        op: {
-          type: 'flat',
-          ops: [
-            { type: 'set_composition', start: 1, end: 2 },
-            { type: 'compose', text: '하' },
-          ],
-        },
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 2 },
+          { type: 'compose', text: '하' },
+        ],
       },
     ]);
   });

@@ -548,8 +548,6 @@ export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
 export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "repaste_as_text" } | { type: "cut" };
 
-export type CompositionOp = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" } | { type: "flat"; ops: FlatImeOp[] };
-
 export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
 
 export type Direction = "forward" | "backward";
@@ -564,7 +562,7 @@ export type ExternalElementData = { type: "image"; id: string | undefined; propo
 
 export type FileNodeAttr = { type: "id" } & string | undefined;
 
-export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "move_cursor"; delta: number };
+export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "commit_as_is" } | { type: "move_cursor"; delta: number };
 
 export type FoldContentNodeAttr = void;
 
@@ -600,7 +598,7 @@ export type LayoutMode = { type: "paginated"; page_width: number; page_height: n
 
 export type ListItemNodeAttr = void;
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "composition"; op: CompositionOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
+export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 

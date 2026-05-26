@@ -17,7 +17,6 @@ import android.view.inputmethod.TextAttribute
 import android.view.inputmethod.TextSnapshot
 import androidx.annotation.RequiresApi
 import co.typie.editor.Editor
-import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
@@ -240,7 +239,7 @@ private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
 
   private fun flushOpsToPendingMessages() {
     if (pendingOps.isEmpty()) return
-    pendingMessages.add(Message.Composition(CompositionOp.Flat(pendingOps.toList())))
+    pendingMessages.add(Message.TextInput(pendingOps.toList()))
     pendingOps.clear()
   }
 }
