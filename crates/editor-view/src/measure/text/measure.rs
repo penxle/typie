@@ -216,7 +216,10 @@ fn measure_segment(
                     let extra_top = if ruby_annotations.is_empty() {
                         0.0
                     } else {
-                        max_ruby_ascent + max_ruby_descent + super::ruby::RUBY_GAP
+                        let required_top =
+                            max_ruby_ascent + max_ruby_descent + super::ruby::RUBY_GAP;
+                        let available_top = (line.baseline - line.ascent).max(0.0);
+                        (required_top - available_top).max(0.0)
                     };
 
                     let new_ascent = line.ascent + extra_top;
@@ -284,6 +287,7 @@ fn measure_segment(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::glyph_run::RubyAnnotation;
     use crate::measure::Measurer;
     use crate::view_state::{PendingStyle, ViewState};
     use editor_macros::doc;
@@ -301,6 +305,54 @@ mod tests {
             MeasuredContent::Box(b) => b.children[0].height,
             _ => panic!("expected box"),
         }
+    }
+
+    struct FirstLineMetrics {
+        height: f32,
+        baseline: f32,
+        ascent: f32,
+        ruby: Option<RubyAnnotation>,
+    }
+
+    fn measure_first_line(
+        measurer: &mut Measurer,
+        doc: &editor_model::Doc,
+        p: editor_model::NodeId,
+        vs: &ViewState,
+    ) -> FirstLineMetrics {
+        let m = measurer.measure(doc, p, 400.0, vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected box");
+        };
+        let child = &b.children[0];
+        let height = child.height;
+        let MeasuredContent::Line(l) = &child.content else {
+            panic!("expected line");
+        };
+        FirstLineMetrics {
+            height,
+            baseline: l.baseline,
+            ascent: l.ascent,
+            ruby: l.ruby_annotations.first().cloned(),
+        }
+    }
+
+    fn assert_ruby_inside_line(ann: &RubyAnnotation, line_height: f32) {
+        let top = ann.baseline_y - ann.ascent;
+        let bottom = ann.baseline_y + ann.descent;
+        assert!(
+            top >= -0.1,
+            "ruby top must be inside line box (top={}, baseline_y={}, ascent={})",
+            top,
+            ann.baseline_y,
+            ann.ascent
+        );
+        assert!(
+            bottom <= line_height + 0.1,
+            "ruby bottom must be inside line box (bottom={}, line_height={})",
+            bottom,
+            line_height
+        );
     }
 
     #[test]
@@ -621,9 +673,144 @@ mod tests {
     }
 
     #[test]
+    fn line_height_absorbs_ruby_when_sufficient() {
+        let (d_plain, p_plain) = doc! {
+            root {
+                p: paragraph [line_height(500)] { text("ABCD") }
+            }
+        };
+        let (d_ruby, p_ruby) = doc! {
+            root {
+                p: paragraph [line_height(500)] {
+                    text("ABCD") [ruby(text: "xy".to_string())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+
+        let plain = measure_first_line(&mut measurer, &d_plain, p_plain, &vs);
+        measurer.clear_cache();
+        let ruby = measure_first_line(&mut measurer, &d_ruby, p_ruby, &vs);
+
+        let ann = ruby.ruby.as_ref().expect("ruby annotation must exist");
+        let required_top = ann.ascent + ann.descent + crate::measure::text::ruby::RUBY_GAP;
+        let available_top = (plain.baseline - plain.ascent).max(0.0);
+
+        assert!(
+            available_top >= required_top,
+            "test precondition violated: line-height(500) must provide enough half-leading \
+             to fully absorb ruby (available_top={}, required_top={}). \
+             Retune the line_height value for the current test font.",
+            available_top,
+            required_top
+        );
+
+        assert!(
+            (ruby.height - plain.height).abs() < 0.1,
+            "fully absorbed ruby line height must equal plain line height \
+             (plain={}, ruby={})",
+            plain.height,
+            ruby.height
+        );
+        assert_ruby_inside_line(ann, ruby.height);
+    }
+
+    #[test]
+    fn line_height_grows_partially_when_ruby_partially_fits() {
+        let (d_plain, p_plain) = doc! {
+            root {
+                p: paragraph [line_height(180)] { text("ABCD") }
+            }
+        };
+        let (d_ruby, p_ruby) = doc! {
+            root {
+                p: paragraph [line_height(180)] {
+                    text("ABCD") [ruby(text: "xy".to_string())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+
+        let plain = measure_first_line(&mut measurer, &d_plain, p_plain, &vs);
+        measurer.clear_cache();
+        let ruby = measure_first_line(&mut measurer, &d_ruby, p_ruby, &vs);
+
+        let ann = ruby.ruby.as_ref().expect("ruby annotation must exist");
+        let required_top = ann.ascent + ann.descent + crate::measure::text::ruby::RUBY_GAP;
+        let available_top = (plain.baseline - plain.ascent).max(0.0);
+
+        assert!(
+            available_top > 0.1 && available_top < required_top - 0.1,
+            "test precondition violated: line-height(180) must produce a partial-fit \
+             (0 < available_top < required_top). available_top={}, required_top={}. \
+             Retune the line_height value for the current test font.",
+            available_top,
+            required_top
+        );
+
+        let expected_diff = required_top - available_top;
+        let diff = ruby.height - plain.height;
+        assert!(
+            (diff - expected_diff).abs() < 0.1,
+            "line height growth must equal exact shortfall \
+             (diff={}, expected={}, required_top={}, available_top={})",
+            diff,
+            expected_diff,
+            required_top,
+            available_top
+        );
+        assert_ruby_inside_line(ann, ruby.height);
+    }
+
+    #[test]
+    fn line_height_grows_fully_when_no_leading() {
+        let (d_plain, p_plain) = doc! {
+            root {
+                p: paragraph [line_height(100)] { text("ABCD") }
+            }
+        };
+        let (d_ruby, p_ruby) = doc! {
+            root {
+                p: paragraph [line_height(100)] {
+                    text("ABCD") [ruby(text: "xy".to_string())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+
+        let plain = measure_first_line(&mut measurer, &d_plain, p_plain, &vs);
+        measurer.clear_cache();
+        let ruby = measure_first_line(&mut measurer, &d_ruby, p_ruby, &vs);
+
+        let ann = ruby.ruby.as_ref().expect("ruby annotation must exist");
+        let required_top = ann.ascent + ann.descent + crate::measure::text::ruby::RUBY_GAP;
+        let available_top = (plain.baseline - plain.ascent).max(0.0);
+
+        assert!(
+            available_top <= 0.1,
+            "test precondition violated: line-height(100) must produce ~zero half-leading. \
+             available_top={}. Retune the line_height value for the current test font.",
+            available_top
+        );
+
+        let diff = ruby.height - plain.height;
+        assert!(
+            (diff - required_top).abs() < 0.1,
+            "line height must grow by full required_top when no leading is available \
+             (diff={}, required_top={})",
+            diff,
+            required_top
+        );
+        assert_ruby_inside_line(ann, ruby.height);
+    }
+
+    #[test]
     fn line_height_grows_when_ruby_added() {
-        let (d1, p1) = doc! { root { p1: paragraph { text("ABCD") } } };
-        let (d2, p2) = doc! {
+        let (d_plain, p_plain) = doc! { root { p1: paragraph { text("ABCD") } } };
+        let (d_ruby, p_ruby) = doc! {
             root {
                 p2: paragraph { text("ABCD") [ruby(text: "xy".to_string())] }
             }
@@ -631,38 +818,69 @@ mod tests {
         let mut measurer = Measurer::new_test();
         let vs = ViewState::new();
 
-        let m1 = measurer.measure(&d1, p1, 400.0, &vs);
+        let plain = measure_first_line(&mut measurer, &d_plain, p_plain, &vs);
         measurer.clear_cache();
-        let m2 = measurer.measure(&d2, p2, 400.0, &vs);
+        let ruby = measure_first_line(&mut measurer, &d_ruby, p_ruby, &vs);
 
-        let height1 = match &m1.content {
-            MeasuredContent::Box(b) => b.children[0].height,
-            _ => panic!(),
-        };
-        let height2 = match &m2.content {
-            MeasuredContent::Box(b) => b.children[0].height,
-            _ => panic!(),
-        };
-        let line2 = match &m2.content {
-            MeasuredContent::Box(b) => match &b.children[0].content {
-                MeasuredContent::Line(l) => l,
-                _ => panic!(),
-            },
-            _ => panic!(),
-        };
-        assert_eq!(line2.ruby_annotations.len(), 1);
-        let ann = &line2.ruby_annotations[0];
+        let ann = ruby.ruby.as_ref().expect("ruby annotation must exist");
+        let required_top = ann.ascent + ann.descent + crate::measure::text::ruby::RUBY_GAP;
+        let available_top = (plain.baseline - plain.ascent).max(0.0);
+        let expected_extra = (required_top - available_top).max(0.0);
+        let diff = ruby.height - plain.height;
 
-        let diff = height2 - height1;
-        let expected = ann.ascent + ann.descent + crate::measure::text::ruby::RUBY_GAP;
         assert!(
-            (diff - expected).abs() < 0.1,
-            "line height increase must equal ruby ascent + ruby descent + RUBY_GAP (diff={}, expected={}, plain_h={}, ruby_h={})",
-            diff,
-            expected,
-            height1,
-            height2
+            available_top < required_top,
+            "test precondition violated: default line-height must be in the partial-fit bucket \
+             (available_top={}, required_top={})",
+            available_top,
+            required_top
         );
+
+        assert!(
+            (diff - expected_extra).abs() < 0.1,
+            "line height increase must equal shortfall = max(0, required_top - available_top) \
+             (diff={}, expected={}, required_top={}, available_top={}, plain_h={}, ruby_h={})",
+            diff,
+            expected_extra,
+            required_top,
+            available_top,
+            plain.height,
+            ruby.height
+        );
+        assert_ruby_inside_line(ann, ruby.height);
+    }
+
+    #[test]
+    fn list_item_ruby_stays_inside_line() {
+        let (doc, li1) = doc! {
+            root {
+                bullet_list {
+                    li1: list_item {
+                        paragraph [line_height(300)] {
+                            text("ABCD") [ruby(text: "xy".to_string())]
+                        }
+                    }
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let result = measurer.measure(&doc, li1, 300.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &result.content else {
+            panic!("expected list-item box");
+        };
+        fn find_first_line(node: &MeasuredNode) -> Option<(&MeasuredLine, f32)> {
+            match &node.content {
+                MeasuredContent::Line(l) => Some((l, node.height)),
+                MeasuredContent::Box(b) => b.children.iter().find_map(|c| find_first_line(c)),
+                _ => None,
+            }
+        }
+        let (line, line_height) =
+            find_first_line(&b.children[0]).expect("list-item must contain a measured line");
+        assert_eq!(line.ruby_annotations.len(), 1);
+        let ann = &line.ruby_annotations[0];
+
+        assert_ruby_inside_line(ann, line_height);
     }
 
     #[test]
