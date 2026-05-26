@@ -17,7 +17,7 @@ const word: KeyBindingModifier[] = isMac ? ['alt'] : ['ctrl'];
 const wordShift: KeyBindingModifier[] = isMac ? ['shift', 'alt'] : ['shift', 'ctrl'];
 const macOnly = () => isMac;
 
-// NOTE: Plain Backspace, Delete, and Enter also arrive through beforeinput in input.ts
+// NOTE: Plain Backspace, Delete, and Enter also arrive through beforeinput in Input.svelte
 // as deleteContentBackward, deleteContentForward, insertParagraph, or insertLineBreak.
 // These bindings own the hardware-key path; beforeinput remains the browser input fallback.
 const bindings: KeyBinding[] = [

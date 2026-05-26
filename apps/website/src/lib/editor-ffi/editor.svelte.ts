@@ -13,6 +13,7 @@ import type {
   Editor as WasmEditor,
   EditorEvent,
   ExternalElement,
+  Ime,
   InteractiveHit,
   Message,
   Modifier,
@@ -372,6 +373,10 @@ export class Editor {
 
   selectionEndpoints(): SelectionEndpoints | undefined {
     return this.#wasm.selection_endpoints();
+  }
+
+  ime(beforeLimit: number, afterLimit: number): Ime {
+    return this.#wasm.ime(beforeLimit, afterLimit);
   }
 
   selectionHitTest(page: number, x: number, y: number): boolean {
