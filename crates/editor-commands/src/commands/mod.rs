@@ -20,6 +20,7 @@ mod insert_page_break_into_prev_paragraph;
 mod insert_paragraph_after_unit_selection;
 mod insert_paragraph_before_unit_selection;
 mod insert_slice;
+mod insert_slice_at;
 mod insert_table_axis;
 mod insert_text;
 mod join_paragraph_backward;
@@ -86,6 +87,7 @@ pub use insert_page_break_into_prev_paragraph::insert_page_break_into_prev_parag
 pub use insert_paragraph_after_unit_selection::insert_paragraph_after_unit_selection;
 pub use insert_paragraph_before_unit_selection::insert_paragraph_before_unit_selection;
 pub use insert_slice::insert_slice;
+pub use insert_slice_at::insert_slice_at;
 pub use insert_table_axis::insert_table_axis;
 pub use insert_text::insert_text;
 pub use join_paragraph_backward::join_paragraph_backward;
