@@ -22,10 +22,14 @@ env_logger = "0.11"
 fancy-regex = "0.18"
 fontique = { version = "0.9", default-features = false }
 getrandom = { version = "0.4", features = ["wasm_js"] }
+cssparser = "0.37"
+ego-tree = "0.11"
 hashbrown = "0.17"
 heck = "0.5"
 hex = "0.4"
 html5ever = "0.39"
+scraper = "0.27"
+selectors = "0.38"
 itertools = "0.14"
 icu_properties = { version = "2", default-features = false, features = [
   "serde",

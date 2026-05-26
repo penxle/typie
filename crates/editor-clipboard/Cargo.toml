@@ -24,8 +24,10 @@ editor-common = { path = "../editor-common" }
 editor-resource = { path = "../editor-resource" }
 editor-macros = { path = "../editor-macros" }
 base64 = { workspace = true }
-html5ever = { workspace = true }
-markup5ever_rcdom = { workspace = true }
+cssparser = { workspace = true }
+ego-tree = { workspace = true }
+scraper = { workspace = true }
+selectors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tsify = { workspace = true, optional = true }
