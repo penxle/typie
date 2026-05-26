@@ -2,6 +2,7 @@ import { createContext, tick, untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
+import { IS_MAC } from './constants';
 import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
@@ -15,6 +16,7 @@ import type {
   ExternalElement,
   Ime,
   InteractiveHit,
+  LinkRect,
   Message,
   Modifier,
   ModifierState,
@@ -83,6 +85,7 @@ export class Editor {
   #pageSizes = $state<Size[]>([]);
   #externalElements = $state<ExternalElement[]>([]);
   #tableOverlays = $state<TableOverlay[]>([]);
+  #linkRects = $state<LinkRect[]>([]);
   #rootAttrs = $state<PlainRootNode>();
   #modifierState = $state<ModifierState | undefined>();
   #rootModifiers = $state<Modifier[]>();
@@ -93,6 +96,9 @@ export class Editor {
   #pointerStyle = $state<PointerStyle>('default');
   #lastPointerClient: { x: number; y: number } | null = null;
   #pointerStyleDomRefreshQueued = false;
+
+  #linkHover = $state<{ link: LinkRect; page: number; clientX: number; clientY: number } | undefined>();
+  #modifierHeld = $state(false);
 
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
@@ -162,6 +168,24 @@ export class Editor {
           el.removeEventListener('blur', onBlur);
         };
       });
+
+      $effect(() => {
+        const isHeld = (e: KeyboardEvent) => (IS_MAC ? e.metaKey : e.ctrlKey);
+        const onKey = (e: KeyboardEvent) => {
+          self.#modifierHeld = isHeld(e);
+        };
+        const onBlur = () => {
+          self.#modifierHeld = false;
+        };
+        window.addEventListener('keydown', onKey);
+        window.addEventListener('keyup', onKey);
+        window.addEventListener('blur', onBlur);
+        return () => {
+          window.removeEventListener('keydown', onKey);
+          window.removeEventListener('keyup', onKey);
+          window.removeEventListener('blur', onBlur);
+        };
+      });
     });
 
     wasm.set_theme_variant(themeVariant);
@@ -195,6 +219,10 @@ export class Editor {
 
   get tableOverlays() {
     return this.#tableOverlays;
+  }
+
+  get linkRects() {
+    return this.#linkRects;
   }
 
   get rootAttrs() {
@@ -318,6 +346,21 @@ export class Editor {
     return this.#pointerStyle;
   }
 
+  get linkHover() {
+    return this.#linkHover;
+  }
+
+  get modifierHeld() {
+    return this.#modifierHeld;
+  }
+
+  linkHitTestAtClient(clientX: number, clientY: number): { link: LinkRect; page: number } | undefined {
+    const local = this.clientToLocal(clientX, clientY);
+    if (!local) return undefined;
+    const link = this.#wasm.link_hit_test(local.page, local.x, local.y);
+    return link ? { link, page: local.page } : undefined;
+  }
+
   localToOffset(page: number, x: number, y: number) {
     const el = this.pageEls[page];
     if (!el) {
@@ -401,7 +444,20 @@ export class Editor {
     }
 
     const local = this.clientToLocal(pointer.x, pointer.y);
-    this.#pointerStyle = local ? this.#wasm.pointer_style(local.page, local.x, local.y, this.readOnly) : 'default';
+    if (local) {
+      this.#pointerStyle = this.#wasm.pointer_style(local.page, local.x, local.y, this.readOnly);
+      const link = this.#wasm.link_hit_test(local.page, local.x, local.y);
+      this.#linkHover = link ? { link, page: local.page, clientX: pointer.x, clientY: pointer.y } : undefined;
+    } else {
+      this.#pointerStyle = 'default';
+      this.#linkHover = undefined;
+    }
+  }
+
+  clearLinkHover(): void {
+    this.#lastPointerClient = null;
+    this.#pointerStyle = 'default';
+    this.#linkHover = undefined;
   }
 
   refreshPointerStyleAfterDomUpdate(): void {
@@ -549,6 +605,10 @@ export class Editor {
 
     if (fields.includes('table_overlays')) {
       this.#tableOverlays = this.#wasm.table_overlays();
+    }
+
+    if (fields.includes('link_rects')) {
+      this.#linkRects = this.#wasm.link_rects();
     }
 
     if (fields.includes('root_attrs')) {

@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
   import ExternalElement from './ExternalElement.svelte';
+  import LinkOverlay from './LinkOverlay.svelte';
   import TableOverlay from './TableOverlay.svelte';
 
   type Props = {
@@ -80,4 +81,6 @@
   {#each tableOverlays as overlay (overlay.table_id)}
     <TableOverlay {overlay} />
   {/each}
+
+  <LinkOverlay {page} />
 </div>

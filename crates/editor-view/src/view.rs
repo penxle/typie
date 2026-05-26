@@ -245,6 +245,39 @@ impl View {
         crate::query::interactive_hit_test(&result.tree, page, doc, x, y)
     }
 
+    pub fn page_link_rects(&self, doc: &Doc, page_idx: usize) -> Vec<crate::query::LinkRect> {
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+        let Some(page) = result.pages.get(page_idx) else {
+            return Vec::new();
+        };
+        query::page_link_rects(&result.tree, page, page_idx, doc)
+    }
+
+    pub fn link_rects(&self, doc: &Doc) -> Vec<crate::query::LinkRect> {
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for (idx, page) in result.pages.iter().enumerate() {
+            out.extend(query::page_link_rects(&result.tree, page, idx, doc));
+        }
+        out
+    }
+
+    pub fn link_hit_test(
+        &self,
+        doc: &Doc,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> Option<crate::query::LinkRect> {
+        let result = self.layout.as_ref()?;
+        let page = result.pages.get(page_idx)?;
+        query::link_hit_test(&result.tree, page, page_idx, doc, x, y)
+    }
+
     pub fn pointer_style_at(
         &self,
         doc: &Doc,

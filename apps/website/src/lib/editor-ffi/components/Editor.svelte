@@ -17,6 +17,7 @@
   import ContextMenu from './ContextMenu.svelte';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
+  import LinkTooltip from './LinkTooltip.svelte';
   import Page from './Page.svelte';
   import Scrollbar from './Scrollbar.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -61,6 +62,13 @@
 
   const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
 
+  const cursor = $derived.by(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
+    if (editor.linkHover && (editor.readOnly || editor.modifierHeld)) return 'pointer';
+    return editor.pointerStyle;
+  });
+
   const init = async (width: number, height: number) => {
     status = 'initializing';
     try {
@@ -95,7 +103,7 @@
 
 <div
   style:--page-gap={isPaginated ? `${PAGE_GAP}px` : undefined}
-  style:cursor={ctx.editor?.pointerStyle}
+  style:cursor
   class={css(
     {
       position: 'relative',
@@ -130,6 +138,7 @@
   }}
   onpointercancel={handle(ctx.editor, handlePointerCancel)}
   onpointerdown={handle(ctx.editor, handlePointerDown)}
+  onpointerleave={() => ctx.editor?.clearLinkHover()}
   onpointermove={handle(ctx.editor, handlePointerMove)}
   onpointerup={handle(ctx.editor, handlePointerUp)}
   onscroll={() => ctx.editor?.refreshPointerStyle()}
@@ -153,5 +162,7 @@
     <Scrollbar />
 
     <ContextMenu />
+
+    <LinkTooltip />
   {/if}
 </div>

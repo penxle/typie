@@ -45,11 +45,23 @@ fn resolve_synthesis(doc: &Doc, node_id: NodeId) -> Synthesis {
     }
 }
 
+const LINK_COLOR: &str = "text.blue";
+
+fn has_link_modifier(node_ref: &NodeRef<'_>) -> bool {
+    node_ref
+        .modifiers()
+        .any(|m| matches!(m, Modifier::Link { .. }))
+}
+
 fn resolve_decoration(doc: &Doc, node_id: NodeId) -> TextDecoration {
     doc.node(node_id)
-        .map(|node_ref| TextDecoration {
-            underline: resolve_inherited(&node_ref, ModifierType::Underline).is_some(),
-            strikethrough: resolve_inherited(&node_ref, ModifierType::Strikethrough).is_some(),
+        .map(|node_ref| {
+            let underline = has_link_modifier(&node_ref)
+                || resolve_inherited(&node_ref, ModifierType::Underline).is_some();
+            TextDecoration {
+                underline,
+                strikethrough: resolve_inherited(&node_ref, ModifierType::Strikethrough).is_some(),
+            }
         })
         .unwrap_or_default()
 }
@@ -73,7 +85,19 @@ fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
 }
 
 fn resolve_text_color(node_ref: &NodeRef<'_>) -> String {
-    for ancestor in node_ref.ancestors() {
+    let mut ancestors = node_ref.ancestors();
+    if let Some(self_node) = ancestors.next() {
+        if let Some(Modifier::TextColor { value }) = self_node
+            .modifiers()
+            .find(|m| matches!(m, Modifier::TextColor { .. }))
+        {
+            return format!("text.{value}");
+        }
+        if has_link_modifier(&self_node) {
+            return LINK_COLOR.to_string();
+        }
+    }
+    for ancestor in ancestors {
         if let Some(Modifier::TextColor { value }) = ancestor
             .modifiers()
             .find(|m| matches!(m, Modifier::TextColor { .. }))
@@ -439,6 +463,77 @@ mod tests {
         let d = resolve_decoration(&doc, t1);
         assert!(!d.underline);
         assert!(d.strikethrough);
+    }
+
+    #[test]
+    fn link_modifier_underlines_text() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("hello") [link(href: "https://example.com".into())]
+                }
+            }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(d.underline);
+    }
+
+    #[test]
+    fn link_modifier_uses_link_color() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("hello") [link(href: "https://example.com".into())]
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, LINK_COLOR);
+    }
+
+    #[test]
+    fn explicit_text_color_overrides_link_color() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("hello") [
+                        link(href: "https://example.com".into()),
+                        text_color("red".to_string())
+                    ]
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, "text.red");
+    }
+
+    #[test]
+    fn link_color_overrides_inherited_text_color() {
+        let (doc, t1) = doc! {
+            root [text_color("red".to_string())] {
+                paragraph {
+                    t1: text("hello") [link(href: "https://example.com".into())]
+                }
+            }
+        };
+        let (color, _) = resolve_text_colors(&doc, t1);
+        assert_eq!(color, LINK_COLOR);
+    }
+
+    #[test]
+    fn link_underline_combines_with_explicit_underline() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("hello") [
+                        link(href: "https://example.com".into()),
+                        underline
+                    ]
+                }
+            }
+        };
+        let d = resolve_decoration(&doc, t1);
+        assert!(d.underline);
     }
 
     #[test]

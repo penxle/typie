@@ -307,6 +307,38 @@ mod tests {
         }
     }
 
+    fn first_glyph_run(
+        measurer: &mut Measurer,
+        doc: &editor_model::Doc,
+        p: editor_model::NodeId,
+        vs: &ViewState,
+    ) -> crate::glyph_run::GlyphRun {
+        let m = measurer.measure(doc, p, 400.0, vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected box");
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!("expected line");
+        };
+        l.glyph_runs.first().cloned().expect("expected glyph run")
+    }
+
+    #[test]
+    fn link_modifier_produces_blue_underlined_glyph_run() {
+        let (doc, p1) = doc! {
+            root {
+                p1: paragraph {
+                    text("hello") [link(href: "https://example.com".into())]
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let run = first_glyph_run(&mut measurer, &doc, p1, &vs);
+        assert_eq!(run.color, "text.blue");
+        assert!(run.decoration.underline);
+    }
+
     struct FirstLineMetrics {
         height: f32,
         baseline: f32,

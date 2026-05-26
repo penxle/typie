@@ -351,6 +351,13 @@ export interface LineHeightValue {
     value: number;
 }
 
+export interface LinkRect {
+    node_id: NodeId;
+    page_idx: number;
+    href: string;
+    rects: Rect[];
+}
+
 export interface LinkValue {
     href: string;
 }
@@ -636,7 +643,7 @@ export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
 export type SelectionOp = { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
 
-export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "ime" | "modifiers" | "block";
+export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -676,8 +683,11 @@ declare class Editor {
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;
+    link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
+    link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
     modifier_state(): ModifierState | undefined;
+    page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
     receive_remote_changeset(payload: Uint8Array): void;

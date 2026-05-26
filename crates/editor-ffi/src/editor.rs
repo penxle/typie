@@ -145,6 +145,23 @@ impl Editor {
         })
     }
 
+    pub fn page_link_rects(&self, page: u32) -> EditorResult<Vec<Complex<editor_view::LinkRect>>> {
+        self.with_inner(|inner| Ok(inner.editor.page_link_rects(page as usize).into_ffi()?))
+    }
+
+    pub fn link_rects(&self) -> EditorResult<Vec<Complex<editor_view::LinkRect>>> {
+        self.with_inner(|inner| Ok(inner.editor.link_rects().into_ffi()?))
+    }
+
+    pub fn link_hit_test(
+        &self,
+        page: u32,
+        x: f32,
+        y: f32,
+    ) -> EditorResult<Option<Complex<editor_view::LinkRect>>> {
+        self.with_inner(|inner| Ok(inner.editor.link_hit_test(page as usize, x, y).into_ffi()?))
+    }
+
     pub fn selection_endpoints(
         &self,
     ) -> EditorResult<Option<Complex<editor_view::SelectionEndpoints>>> {

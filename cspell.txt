@@ -114,6 +114,7 @@ napi
 natgw
 ngram
 noeviction
+noopener
 noreferrer
 nori
 noto

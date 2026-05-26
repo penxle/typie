@@ -4,6 +4,7 @@
   import { onDestroy, untrack } from 'svelte';
   import EditorComponent from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { graphql } from '$mearie';
   import { DebugBus } from './@debug/debug-bus.svelte';
   import DebugPanel from './@debug/DebugPanel.svelte';
@@ -216,6 +217,12 @@
       ps.stop();
       pusher = null;
     };
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
+    return registerLinkContextMenu(editor);
   });
 
   $effect(() => {

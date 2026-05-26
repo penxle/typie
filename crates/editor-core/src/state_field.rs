@@ -15,6 +15,7 @@ pub enum StateField {
     PageSizes,
     ExternalElements,
     TableOverlays,
+    LinkRects,
     Ime,
     Modifiers,
     Block,

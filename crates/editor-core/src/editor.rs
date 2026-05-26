@@ -191,6 +191,18 @@ impl Editor {
             .interactive_hit_test(&self.state.doc, page_idx, x, y)
     }
 
+    pub fn page_link_rects(&self, page_idx: usize) -> Vec<editor_view::LinkRect> {
+        self.view.page_link_rects(&self.state.doc, page_idx)
+    }
+
+    pub fn link_rects(&self) -> Vec<editor_view::LinkRect> {
+        self.view.link_rects(&self.state.doc)
+    }
+
+    pub fn link_hit_test(&self, page_idx: usize, x: f32, y: f32) -> Option<editor_view::LinkRect> {
+        self.view.link_hit_test(&self.state.doc, page_idx, x, y)
+    }
+
     pub fn selection_endpoints(&self) -> Option<editor_view::SelectionEndpoints> {
         let resolved = self.state.selection.as_ref()?.resolve(&self.state.doc)?;
         self.view.selection_endpoints(&resolved)
@@ -331,12 +343,14 @@ impl Editor {
             fields.insert(StateField::PageSizes);
             fields.insert(StateField::ExternalElements);
             fields.insert(StateField::TableOverlays);
+            fields.insert(StateField::LinkRects);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if !ops.is_empty() {
             fields.insert(StateField::Doc);
             fields.insert(StateField::TableOverlays);
+            fields.insert(StateField::LinkRects);
             fields.insert(StateField::Ime);
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
