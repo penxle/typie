@@ -1483,6 +1483,70 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  checkSpellingDocumentV2: t.withAuth({ session: true }).fieldWithInput({
+    type: [
+      builder.simpleObject('DocumentSpellingErrorV2', {
+        fields: (t) => ({
+          id: t.string(),
+          start: t.int(),
+          end: t.int(),
+          context: t.string(),
+          corrections: t.stringList(),
+          explanation: t.string(),
+        }),
+      }),
+    ],
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      text: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({ siteId: Entities.siteId, availability: Entities.availability })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      if (document.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: document.siteId,
+        });
+      }
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
+      const { text } = input;
+      if (!text.trim()) {
+        return [];
+      }
+
+      const errors = await spellcheck.check(text, ctx.c.req.raw.signal);
+
+      const utf16ToCodepoint = (utf16Index: number): number => {
+        let i = 0;
+        let count = 0;
+        while (i < utf16Index) {
+          const cp = text.codePointAt(i);
+          if (cp === undefined) break;
+          i += cp > 0xff_ff ? 2 : 1;
+          count++;
+        }
+        return count;
+      };
+
+      return errors.map((error) => ({
+        id: nanoid(),
+        start: utf16ToCodepoint(error.start),
+        end: utf16ToCodepoint(error.end),
+        context: error.context,
+        corrections: error.corrections,
+        explanation: error.explanation,
+      }));
+    },
+  }),
+
   unlockDocumentView: t.fieldWithInput({
     type: DocumentView,
     input: {

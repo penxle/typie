@@ -3,6 +3,7 @@ import { PromptId } from '@typie/lib/const';
 import { eq } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { Repeater } from 'graphql-yoga';
+import { nanoid } from 'nanoid';
 import OpenAI from 'openai';
 import { dbr, Prompts } from '#/db/index.ts';
 import { env } from '#/env.ts';
@@ -444,6 +445,35 @@ const DocumentLiteraryFeedbackResult = builder.simpleObject('DocumentLiteraryFee
   }),
 });
 
+const DocumentLiteraryFeedbackResultV2 = builder.simpleObject('DocumentLiteraryFeedbackResultV2', {
+  fields: (t) => ({
+    id: t.string(),
+    start: t.int(),
+    end: t.int(),
+    startText: t.string(),
+    endText: t.string(),
+    feedback: t.string(),
+    category: t.string({ nullable: true }),
+  }),
+});
+
+type DocumentAnalysisPayloadV2 =
+  | {
+      type: 'feedback';
+      data: {
+        id: string;
+        start: number;
+        end: number;
+        startText: string;
+        endText: string;
+        feedback: string;
+        category: string | null;
+      };
+    }
+  | { type: 'progress'; data: { current: number; total: number; phase: AnalysisPhase } }
+  | { type: 'complete' }
+  | { type: 'error' };
+
 type DocumentAnalysisPayload =
   | {
       type: 'feedback';
@@ -676,6 +706,174 @@ builder.subscriptionFields((t) => ({
       });
     },
     resolve: (payload: DocumentAnalysisPayload) => {
+      return {
+        type: payload.type,
+        feedback: payload.type === 'feedback' ? payload.data : null,
+        progress: payload.type === 'progress' ? payload.data : null,
+      };
+    },
+  }),
+  literaryAnalysisDocumentStreamV2: t.withAuth({ session: true }).field({
+    type: builder.simpleObject('DocumentLiteraryAnalysisPayloadV2', {
+      fields: (t) => ({
+        type: t.string(),
+        feedback: t.field({ type: DocumentLiteraryFeedbackResultV2, nullable: true }),
+        progress: t.field({ type: LiteraryAnalysisProgress, nullable: true }),
+      }),
+    }),
+    args: {
+      text: t.arg.string(),
+    },
+    subscribe: async (_, args, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
+      const text = args.text;
+
+      return new Repeater<DocumentAnalysisPayloadV2>(async (push, stop) => {
+        const abortController = new AbortController();
+        const signal = abortController.signal;
+
+        ctx.c.req.raw.signal.addEventListener('abort', () => {
+          abortController.abort();
+          stop();
+        });
+
+        if (!text.trim()) {
+          push({ type: 'complete' });
+          stop();
+          return;
+        }
+
+        const chunks = createChunks(text);
+
+        const utf16ToCodepoint = (utf16Index: number): number => {
+          let i = 0;
+          let count = 0;
+          while (i < utf16Index) {
+            const cp = text.codePointAt(i);
+            if (cp === undefined) break;
+            i += cp > 0xff_ff ? 2 : 1;
+            count++;
+          }
+          return count;
+        };
+
+        const findRange = (startText: string, endText: string, searchStart: number) => {
+          const exactFind = (needle: string, from: number): Match | null => {
+            const idx = text.indexOf(needle, from);
+            return idx === -1 ? null : { index: idx, length: needle.length };
+          };
+
+          const tryFinders = (find: (needle: string, from: number) => Match | null) => {
+            const start = find(startText, searchStart);
+            if (!start) return null;
+            const endFrom = startText === endText ? start.index : start.index + start.length;
+            const end = find(endText, endFrom);
+            if (!end) return null;
+            return { rangeStart: start.index, rangeEnd: end.index + end.length };
+          };
+
+          const range = tryFinders(exactFind) ?? tryFinders((n, from) => fuzzyFindMatch(text, n, from));
+          if (!range) {
+            Sentry.captureMessage('literary feedback range match failed', {
+              level: 'warning',
+              extra: { startText, endText, searchStart },
+            });
+            return null;
+          }
+          return range;
+        };
+
+        try {
+          const [summarizePrompt, metaPrompt, analyzePrompt] = await Promise.all([
+            loadPrompt(PromptId.SUMMARIZE),
+            loadPrompt(PromptId.META),
+            loadPrompt(PromptId.ANALYZE),
+          ]);
+          const summaryTool = buildSummaryTool(summarizePrompt.toolDescriptions as ToolDescriptions);
+          const metaTool = buildMetaTool(metaPrompt.toolDescriptions as ToolDescriptions);
+          const feedbackTool = buildFeedbackTool(analyzePrompt.toolDescriptions as ToolDescriptions);
+
+          const summaries: SummaryStructured[] = [];
+          let summarizedCount = 0;
+          await Promise.all(
+            chunks.map(async (chunk, index) => {
+              signal.throwIfAborted();
+              summaries[index] = await runTool<SummaryStructured>(summarizePrompt, summaryTool, chunk.text, signal);
+              summarizedCount++;
+              push({
+                type: 'progress',
+                data: { current: summarizedCount, total: chunks.length, phase: 'summarizing' },
+              });
+            }),
+          );
+
+          push({ type: 'progress', data: { current: 0, total: 1, phase: 'meta' } });
+          signal.throwIfAborted();
+          const meta = await analyzeGlobal(metaPrompt, metaTool, summaries, signal);
+          push({ type: 'progress', data: { current: 1, total: 1, phase: 'meta' } });
+
+          let analyzedCount = 0;
+          push({
+            type: 'progress',
+            data: { current: 0, total: chunks.length, phase: 'analyzing' },
+          });
+          await Promise.all(
+            chunks.map(async (chunk, i) => {
+              signal.throwIfAborted();
+              const precedingNarrative = i > 0 ? (summaries[i - 1].narrative ?? '') : '';
+              const followingNarrative = i < chunks.length - 1 ? (summaries[i + 1].narrative ?? '') : '';
+
+              await analyzeChunkWithContext(
+                analyzePrompt,
+                feedbackTool,
+                {
+                  meta,
+                  precedingNarrative,
+                  followingNarrative,
+                  currentText: chunk.text,
+                },
+                (feedback) => {
+                  const range = findRange(feedback.start, feedback.end, chunk.start);
+                  if (!range) return;
+
+                  push({
+                    type: 'feedback',
+                    data: {
+                      id: nanoid(),
+                      start: utf16ToCodepoint(range.rangeStart),
+                      end: utf16ToCodepoint(range.rangeEnd),
+                      startText: feedback.start,
+                      endText: feedback.end,
+                      feedback: feedback.feedback,
+                      category: feedback.category ?? null,
+                    },
+                  });
+                },
+                signal,
+              );
+
+              analyzedCount++;
+              push({
+                type: 'progress',
+                data: { current: analyzedCount, total: chunks.length, phase: 'analyzing' },
+              });
+            }),
+          );
+
+          push({ type: 'complete' });
+        } catch (err) {
+          if (!signal.aborted) {
+            Sentry.captureException(err);
+            console.error(err);
+            push({ type: 'error' });
+          }
+        }
+
+        stop();
+      });
+    },
+    resolve: (payload: DocumentAnalysisPayloadV2) => {
       return {
         type: payload.type,
         feedback: payload.type === 'feedback' ? payload.data : null,

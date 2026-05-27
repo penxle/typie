@@ -66,6 +66,11 @@ input CheckSpellingDocumentInput {
   text: String!
 }
 
+input CheckSpellingDocumentV2Input {
+  documentId: ID!
+  text: String!
+}
+
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -264,6 +269,12 @@ type DocumentLiteraryAnalysisPayload {
   type: String!
 }
 
+type DocumentLiteraryAnalysisPayloadV2 {
+  feedback: DocumentLiteraryFeedbackResultV2
+  progress: LiteraryAnalysisProgress
+  type: String!
+}
+
 type DocumentLiteraryFeedbackResult {
   category: String
   endOffset: Int!
@@ -271,6 +282,16 @@ type DocumentLiteraryFeedbackResult {
   feedback: String!
   nodeId: String!
   startOffset: Int!
+  startText: String!
+}
+
+type DocumentLiteraryFeedbackResultV2 {
+  category: String
+  end: Int!
+  endText: String!
+  feedback: String!
+  id: String!
+  start: Int!
   startText: String!
 }
 
@@ -288,6 +309,15 @@ type DocumentSpellingError {
   id: String!
   nodeId: String!
   startOffset: Int!
+}
+
+type DocumentSpellingErrorV2 {
+  context: String!
+  corrections: [String!]!
+  end: Int!
+  explanation: String!
+  id: String!
+  start: Int!
 }
 
 type DocumentState {
@@ -726,6 +756,7 @@ type Mutation {
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
+  checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
@@ -1283,6 +1314,7 @@ type Subscription {
   documentChangesetsUpdated(clientId: String!, documentId: ID!, heads: Binary!): DocumentChangesetsUpdatedEvent!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
+  literaryAnalysisDocumentStreamV2(text: String!): DocumentLiteraryAnalysisPayloadV2!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
   userUsageUpdateStream(userId: ID!): User!
