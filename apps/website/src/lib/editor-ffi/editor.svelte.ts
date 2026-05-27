@@ -491,6 +491,21 @@ export class Editor {
     this.#scheduleTick();
   }
 
+  flush(): void {
+    if (this.#rafId !== null) {
+      cancelAnimationFrame(this.#rafId);
+      this.#rafId = null;
+    }
+    if (!this.#queued) {
+      return;
+    }
+    this.#queued = false;
+    const events = this.#wasm.tick();
+    for (const event of events) {
+      this.#emit(event);
+    }
+  }
+
   #scheduleTick(): void {
     if (!this.#queued) {
       this.#queued = true;

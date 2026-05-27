@@ -103,6 +103,11 @@ pub enum PointerEvent {
         #[serde(default)]
         modifiers: InputModifiers,
     },
+    SecondaryDown {
+        page: usize,
+        x: f32,
+        y: f32,
+    },
     Move {
         page: usize,
         x: f32,

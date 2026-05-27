@@ -111,6 +111,29 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             );
         }
 
+        PointerEvent::SecondaryDown { page, x, y } => {
+            let Some(hit) = editor.view.hit_test(page, x, y) else {
+                return Ok(());
+            };
+
+            let next_selection = match editor.state.selection {
+                Some(selection)
+                    if !selection.is_collapsed() && editor.selection_hit_test(page, x, y) =>
+                {
+                    None
+                }
+                _ => Some(hit),
+            };
+
+            if let Some(selection) = next_selection {
+                editor.clear_preferred_x();
+                editor.transact(|tr| {
+                    tr.set_selection(Some(selection))?;
+                    Ok(())
+                })?;
+            }
+        }
+
         PointerEvent::Move { page, x, y } => {
             let Some(armed) = editor.drag_anchor() else {
                 return Ok(());
@@ -235,6 +258,111 @@ mod tests {
         });
 
         assert_eq!(editor.state().selection, before);
+    }
+
+    #[test]
+    fn secondary_down_inside_range_keeps_selection() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let caret = editor
+            .view
+            .cursor_metrics(&editor.state.doc, &editor_state::Position::new(t, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::SecondaryDown {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                editor_state::Position::new(t, 0),
+                editor_state::Position::new(t, 5),
+            ))
+        );
+    }
+
+    #[test]
+    fn secondary_down_outside_range_collapses_to_hit_position() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let caret = editor
+            .view
+            .cursor_metrics(&editor.state.doc, &editor_state::Position::new(t, 8))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::SecondaryDown {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(editor_state::Position::new(t, 8)))
+        );
+    }
+
+    #[test]
+    fn secondary_down_outside_node_selection_selects_hit_node() {
+        use editor_state::{Affinity, Position};
+
+        let (state, r1, i0, i1) = state! {
+            doc { r1: root { i0: image i1: image paragraph {} } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let mut editor = Editor::new_test(state);
+        for id in [i0, i1] {
+            editor
+                .view
+                .set_external_height(&editor.state.doc, id, 100.0);
+        }
+        editor.view.layout(&editor.state.doc);
+
+        let elements = editor
+            .view
+            .external_elements(&editor.state.doc, editor.state().selection.as_ref());
+        let second_image = &elements[1];
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::SecondaryDown {
+                page: second_image.page_idx,
+                x: second_image.bounds.x + second_image.bounds.width / 2.0,
+                y: second_image.bounds.y + second_image.bounds.height / 2.0,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: r1,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r1,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
     }
 
     #[test]
