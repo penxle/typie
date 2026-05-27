@@ -532,11 +532,11 @@ export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movem
 
 export type Direction = "forward" | "backward";
 
+export type DndDropPayload = { type: "internal_selection" } | { type: "text"; text: string; html: string | undefined } | { type: "files"; image_count: number; file_count: number };
+
 export type DndOp = { type: "start"; page: number; x: number; y: number } | { type: "enter"; payload: DndPayloadKind } | { type: "over"; page: number; x: number; y: number; payload: DndPayloadKind; modifiers?: InputModifiers } | { type: "leave" } | { type: "drop"; page: number; x: number; y: number; payload: DndDropPayload; modifiers?: InputModifiers } | { type: "end" };
 
 export type DndPayloadKind = "internal_selection" | "text" | "html" | "image_files" | "files" | "mixed_files";
-
-export type DndDropPayload = { type: "internal_selection" } | { type: "text"; text: string; html: string | undefined } | { type: "files"; image_count: number; file_count: number };
 
 export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
 
