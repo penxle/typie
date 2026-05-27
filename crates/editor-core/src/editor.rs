@@ -417,6 +417,59 @@ impl Editor {
         Ok(std::mem::take(&mut self.pending_events))
     }
 
+    #[cfg(test)]
+    pub(crate) fn tracked_decoration_marks_for_test(&self) -> Vec<Mark> {
+        let mut marks = Vec::new();
+        self.collect_tracked_decoration_marks(&mut marks);
+        marks
+    }
+
+    fn collect_tracked_decoration_marks(&self, marks: &mut Vec<Mark>) {
+        let view_state = self.view.view_state();
+        if view_state.tracked_decoration_groups.is_empty() {
+            return;
+        }
+        for range in self.tracked_ranges.iter() {
+            let Some(group) = view_state.group_decoration(&range.group) else {
+                continue;
+            };
+            if !group.enabled {
+                continue;
+            }
+            if range.explicitly_invalid {
+                continue;
+            }
+            let sel = range.selection.thaw(&self.state.doc);
+            if sel.is_collapsed() {
+                continue;
+            }
+            let Some(resolved) = sel.resolve(&self.state.doc) else {
+                continue;
+            };
+            let rects: Vec<PageRect> = self
+                .view
+                .selection_rects(&resolved)
+                .iter()
+                .map(|r| r.without_meta())
+                .collect();
+            if rects.is_empty() {
+                continue;
+            }
+            if let Some(theme_key) = group.style.background.clone() {
+                marks.push(Mark {
+                    data: MarkData::TrackedBackground { theme_key },
+                    rects: rects.clone(),
+                });
+            }
+            if let Some(underline) = group.style.underline.clone() {
+                marks.push(Mark {
+                    data: MarkData::TrackedUnderline { underline },
+                    rects,
+                });
+            }
+        }
+    }
+
     fn selection_mark_rects(&self) -> Option<Vec<PageRect>> {
         let resolved = self.state.selection.as_ref()?.resolve(&self.state.doc)?;
         if resolved.is_collapsed() {
@@ -472,6 +525,8 @@ impl Editor {
                 rects: vec![target.indicator.rect()],
             });
         }
+
+        self.collect_tracked_decoration_marks(&mut marks);
 
         self.renderer.render_page(
             sink,

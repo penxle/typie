@@ -1,4 +1,4 @@
-pub use editor_common::{Axis, Direction, Movement};
+pub use editor_common::{Axis, DecorationStyle, Direction, Movement};
 use editor_macros::ffi;
 use editor_model::{Fragment, Modifier, ModifierType, NodeId, PlainNode, TableBorderStyle};
 use editor_state::Selection;
@@ -356,6 +356,14 @@ pub enum TrackedRangeOp {
     },
     Invalidate {
         id: String,
+    },
+    SetGroupDecoration {
+        group: String,
+        style: DecorationStyle,
+        enabled: bool,
+    },
+    RemoveGroupDecoration {
+        group: String,
     },
 }
 

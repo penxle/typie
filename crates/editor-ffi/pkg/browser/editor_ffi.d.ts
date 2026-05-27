@@ -256,6 +256,11 @@ export interface CursorMetrics {
     line: Rect;
 }
 
+export interface DecorationStyle {
+    background: string | undefined;
+    underline: Underline | undefined;
+}
+
 export interface ExternalElement {
     page_idx: number;
     node_id: NodeId;
@@ -511,6 +516,12 @@ export interface TransactionMeta {
     history: HistoryMeta;
 }
 
+export interface Underline {
+    color: string;
+    style: UnderlineStyle;
+    thickness: number;
+}
+
 export interface Viewport {
     width: number;
     height: number;
@@ -651,9 +662,11 @@ export type TextNodeAttr = void;
 
 export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
 
-export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "remove"; id: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string };
+export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "remove"; id: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean } | { type: "remove_group_decoration"; group: string };
 
 export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
+
+export type UnderlineStyle = "solid" | "dashed" | "wavy";
 
 export type ViewOp = { type: "toggle_fold"; id: NodeId } | { type: "scroll_into_view"; target: ScrollTarget };
 

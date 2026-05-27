@@ -129,6 +129,21 @@ fn build_corpus() -> Vec<Message> {
                 id: "missing".into(),
             },
         },
+        Message::TrackedRange {
+            op: TrackedRangeOp::SetGroupDecoration {
+                group: "missing".into(),
+                style: editor_common::DecorationStyle {
+                    background: Some("selection".into()),
+                    underline: None,
+                },
+                enabled: true,
+            },
+        },
+        Message::TrackedRange {
+            op: TrackedRangeOp::RemoveGroupDecoration {
+                group: "missing".into(),
+            },
+        },
     ]
 }
 

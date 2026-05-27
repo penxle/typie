@@ -2,7 +2,7 @@ use editor_common::Size;
 use editor_model::NodeId;
 use editor_resource::ThemeVariant;
 use editor_state::{Composition, PendingModifiers, Selection};
-use editor_view::Viewport;
+use editor_view::{GroupDecoration, Viewport};
 use hashbrown::HashMap;
 
 use crate::editor::Editor;
@@ -24,6 +24,7 @@ pub struct EditorSnapshot {
     theme_variant: ThemeVariant,
     page_sizes: Vec<Size>,
     tracked_ranges: TrackedRangeRegistry,
+    tracked_decoration_groups: HashMap<String, GroupDecoration>,
 }
 
 impl EditorSnapshot {
@@ -45,6 +46,7 @@ impl EditorSnapshot {
             theme_variant: editor.theme_variant(),
             page_sizes,
             tracked_ranges: editor.tracked_ranges().clone(),
+            tracked_decoration_groups: view_state.tracked_decoration_groups.clone(),
         }
     }
 }

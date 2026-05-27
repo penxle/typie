@@ -14,7 +14,7 @@ use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
 use crate::query::{CursorMetrics, PointerStyle, SelectionEndpoints, SelectionRect};
-use crate::view_state::{GapPhantom, PendingStyle, ViewState};
+use crate::view_state::{GapPhantom, GroupDecoration, PendingStyle, ViewState};
 use crate::viewport::Viewport;
 
 const CONTINUOUS_MARGIN_X: f32 = 20.0;
@@ -510,6 +510,29 @@ impl View {
 
     pub fn clear_preferred_x(&mut self) {
         self.view_state.preferred_x = None;
+    }
+
+    pub fn set_group_decoration(&mut self, group: String, decoration: GroupDecoration) {
+        self.view_state
+            .tracked_decoration_groups
+            .insert(group, decoration);
+    }
+
+    pub fn remove_group_decoration(&mut self, group: &str) -> bool {
+        self.view_state
+            .tracked_decoration_groups
+            .remove(group)
+            .is_some()
+    }
+
+    pub fn would_set_group_decoration(&self, group: &str, decoration: &GroupDecoration) -> bool {
+        self.view_state.tracked_decoration_groups.get(group) != Some(decoration)
+    }
+
+    pub fn would_remove_group_decoration(&self, group: &str) -> bool {
+        self.view_state
+            .tracked_decoration_groups
+            .contains_key(group)
     }
 
     pub fn preferred_x(&self) -> Option<f32> {

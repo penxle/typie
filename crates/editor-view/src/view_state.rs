@@ -1,3 +1,4 @@
+use editor_common::DecorationStyle;
 use editor_model::NodeId;
 use editor_state::PendingModifiers;
 use hashbrown::HashMap;
@@ -19,6 +20,12 @@ pub struct GapPhantom {
     pub index: usize,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroupDecoration {
+    pub style: DecorationStyle,
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ViewState {
     pub fold_states: HashMap<NodeId, bool>,
@@ -26,6 +33,7 @@ pub struct ViewState {
     pub preferred_x: Option<f32>,
     pub pending_style: Option<PendingStyle>,
     pub gap_phantom: Option<GapPhantom>,
+    pub tracked_decoration_groups: HashMap<String, GroupDecoration>,
 }
 
 impl ViewState {
@@ -39,6 +47,10 @@ impl ViewState {
 
     pub fn external_height(&self, node_id: NodeId) -> Option<f32> {
         self.external_heights.get(&node_id).copied()
+    }
+
+    pub fn group_decoration(&self, group: &str) -> Option<&GroupDecoration> {
+        self.tracked_decoration_groups.get(group)
     }
 }
 

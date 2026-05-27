@@ -1,4 +1,4 @@
-use editor_common::Rect;
+use editor_common::{Rect, Underline, UnderlineStyle};
 use editor_model::{Doc, Modifier, Node, NodeId, TableBorderStyle};
 use editor_resource::{Resource, Theme};
 use editor_view::glyph_run::RubyAnnotation;
@@ -342,13 +342,17 @@ pub enum MarkData {
     Selection { focused: bool },
     Composition,
     DropIndicator,
+    TrackedBackground { theme_key: String },
+    TrackedUnderline { underline: Underline },
 }
 
 impl MarkData {
     pub fn layer(&self) -> MarkLayer {
         match self {
-            Self::Selection { .. } => MarkLayer::BelowContent,
-            Self::Composition | Self::DropIndicator => MarkLayer::AboveContent,
+            Self::Selection { .. } | Self::TrackedBackground { .. } => MarkLayer::BelowContent,
+            Self::Composition | Self::DropIndicator | Self::TrackedUnderline { .. } => {
+                MarkLayer::AboveContent
+            }
         }
     }
 }
@@ -358,10 +362,6 @@ pub type MarkRect = PageRect<()>;
 pub struct Mark {
     pub data: MarkData,
     pub rects: Vec<MarkRect>,
-}
-
-struct MarkStyle {
-    color: Color,
 }
 
 const SELECTION_FOCUSED_ALPHA: u8 = 77;
@@ -376,6 +376,73 @@ fn selection_mark_color(theme: &Theme, focused: bool) -> Color {
             SELECTION_UNFOCUSED_ALPHA
         },
     )
+}
+
+const UNDERLINE_DASH: f32 = 6.0;
+const UNDERLINE_GAP: f32 = 4.0;
+const UNDERLINE_WAVE_PERIOD: f32 = 6.0;
+const UNDERLINE_WAVE_AMPLITUDE: f32 = 1.5;
+
+fn draw_underline(
+    sink: &mut dyn RenderSink,
+    rect: Rect,
+    underline: &Underline,
+    theme: &Theme,
+    transform: Transform,
+) {
+    let thickness = underline.thickness.max(0.0);
+    if thickness == 0.0 || rect.width <= 0.0 {
+        return;
+    }
+    let color = theme.color(&underline.color);
+    let y = rect.y + rect.height - thickness;
+    let bar = Rect::from_xywh(rect.x, y, rect.width, thickness);
+    match underline.style {
+        UnderlineStyle::Solid => sink.fill_rect(bar, color, transform),
+        UnderlineStyle::Dashed => {
+            let period = UNDERLINE_DASH + UNDERLINE_GAP;
+            let end_x = bar.x + bar.width;
+            let mut x = bar.x;
+            while x < end_x {
+                let w = UNDERLINE_DASH.min(end_x - x);
+                sink.fill_rect(Rect::from_xywh(x, bar.y, w, thickness), color, transform);
+                x += period;
+            }
+        }
+        UnderlineStyle::Wavy => {
+            let amplitude = UNDERLINE_WAVE_AMPLITUDE;
+            let period = UNDERLINE_WAVE_PERIOD;
+            let mid_y = rect.y + rect.height - amplitude;
+            let end_x = rect.x + rect.width;
+            let mut elements = Vec::new();
+            elements.push(PathElement::MoveTo {
+                x: rect.x,
+                y: mid_y,
+            });
+            let mut x = rect.x;
+            let mut up = true;
+            while x < end_x {
+                let next_x = (x + period * 0.5).min(end_x);
+                let cp_x = (x + next_x) * 0.5;
+                let cp_y = if up {
+                    mid_y - amplitude
+                } else {
+                    mid_y + amplitude
+                };
+                elements.push(PathElement::QuadTo {
+                    x1: cp_x,
+                    y1: cp_y,
+                    x: next_x,
+                    y: mid_y,
+                });
+                x = next_x;
+                up = !up;
+            }
+            let path = Path { elements };
+            let stroke = Stroke::new(thickness);
+            sink.stroke_path(&path, color, &stroke, transform);
+        }
+    }
 }
 
 pub struct Renderer {
@@ -393,17 +460,13 @@ impl Renderer {
         }
     }
 
-    fn resolve_mark(&self, data: &MarkData, theme: &Theme) -> MarkStyle {
+    fn resolve_mark_color(&self, data: &MarkData, theme: &Theme) -> Option<Color> {
         match data {
-            MarkData::Selection { focused } => MarkStyle {
-                color: selection_mark_color(theme, *focused),
-            },
-            MarkData::Composition => MarkStyle {
-                color: theme.color("ui.text.default"),
-            },
-            MarkData::DropIndicator => MarkStyle {
-                color: theme.color("selection"),
-            },
+            MarkData::Selection { focused } => Some(selection_mark_color(theme, *focused)),
+            MarkData::Composition => Some(theme.color("ui.text.default")),
+            MarkData::DropIndicator => Some(theme.color("selection")),
+            MarkData::TrackedBackground { theme_key } => Some(theme.color(theme_key)),
+            MarkData::TrackedUnderline { .. } => None,
         }
     }
 
@@ -421,12 +484,20 @@ impl Renderer {
             if mark.data.layer() != layer {
                 continue;
             }
-            let style = self.resolve_mark(&mark.data, theme);
             for rect in &mark.rects {
                 if rect.page_idx != page_idx {
                     continue;
                 }
-                sink.fill_rect(rect.rect, style.color, transform);
+                match &mark.data {
+                    MarkData::TrackedUnderline { underline } => {
+                        draw_underline(sink, rect.rect, underline, theme, transform);
+                    }
+                    _ => {
+                        if let Some(color) = self.resolve_mark_color(&mark.data, theme) {
+                            sink.fill_rect(rect.rect, color, transform);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1361,8 +1432,8 @@ mod tests {
 
         assert_eq!(
             renderer
-                .resolve_mark(&MarkData::DropIndicator, &theme)
-                .color,
+                .resolve_mark_color(&MarkData::DropIndicator, &theme)
+                .unwrap(),
             theme.color("selection")
         );
     }
