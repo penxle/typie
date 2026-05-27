@@ -22,6 +22,7 @@ import type {
   ModifierState,
   PlainRootNode,
   PointerStyle,
+  ScrollTarget,
   Selection,
   SelectionEndpoints,
   Size,
@@ -141,6 +142,7 @@ export class Editor {
 
     self.on('state_changed', self.#stateChangedHandler);
     self.on('font_data_missing', fontDataMissingHandler);
+    self.on('scroll', self.#scrollHandler);
 
     register(self);
 
@@ -646,6 +648,31 @@ export class Editor {
       this.refreshPointerStyle();
     }
   };
+
+  #scrollHandler: EditorEventListener<'scroll'> = (_, { rect: { page_idx, rect } }) => {
+    const pageEl = this.pageEls[page_idx];
+    const container = this.scrollContainerEl;
+    if (!pageEl || !container) return;
+
+    const top = pageEl.offsetTop + rect.y;
+    const bottom = top + rect.height;
+    const viewTop = container.scrollTop;
+    const viewBottom = viewTop + container.clientHeight;
+
+    let nextTop: number | null = null;
+    if (top < viewTop) {
+      nextTop = top;
+    } else if (bottom > viewBottom) {
+      nextTop = bottom - container.clientHeight;
+    }
+    if (nextTop !== null) {
+      container.scrollTo({ top: nextTop, behavior: 'smooth' });
+    }
+  };
+
+  scrollIntoView(target: ScrollTarget): void {
+    this.enqueue({ type: 'view', op: { type: 'scroll_into_view', target } });
+  }
 
   destroy(): void {
     this.#destroyed = true;

@@ -77,6 +77,18 @@ fn build_corpus() -> Vec<Message> {
                 id: editor_model::NodeId::ROOT,
             },
         },
+        Message::View {
+            op: ViewOp::ScrollIntoView {
+                target: ScrollTarget::TrackedItem {
+                    id: "missing".into(),
+                },
+            },
+        },
+        Message::View {
+            op: ViewOp::ScrollIntoView {
+                target: ScrollTarget::Selection,
+            },
+        },
         Message::Key {
             event: KeyEvent {
                 key: Key::Backspace,

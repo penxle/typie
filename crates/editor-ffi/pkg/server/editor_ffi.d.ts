@@ -574,7 +574,7 @@ export type DndOp = { type: "start"; page: number; x: number; y: number } | { ty
 
 export type DndPayloadKind = "internal_selection" | "text" | "html" | "image_files" | "files" | "mixed_files";
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "scroll"; rect: PageRect };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -654,6 +654,8 @@ export type PointerStyle = "default" | "text" | "pointer";
 
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
+export type ScrollTarget = { type: "tracked_item"; id: string } | { type: "selection" };
+
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
 export type SelectionOp = { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
@@ -680,7 +682,7 @@ export type TrackedRangeOp = { type: "add"; id: string; group: string; selection
 
 export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
 
-export type ViewOp = { type: "toggle_fold"; id: NodeId };
+export type ViewOp = { type: "toggle_fold"; id: NodeId } | { type: "scroll_into_view"; target: ScrollTarget };
 
 
 declare class Editor {
