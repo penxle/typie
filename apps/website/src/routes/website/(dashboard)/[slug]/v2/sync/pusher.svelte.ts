@@ -1,5 +1,7 @@
 import { isAggregatedError, isExchangeError, isGraphQLError } from '@mearie/svelte';
+import { IndexeddbChangesetOutbox } from './outbox';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
+import type { ChangesetOutboxRecord, ChangesetOutboxStore } from './outbox';
 import type { PusherEvent, PushStatus } from './types';
 
 const IDLE_MS = 500;
@@ -29,6 +31,7 @@ type PusherOpts = {
   clientId: string;
   initialServerHeads: Uint8Array;
   pushFn: (changesets: Uint8Array) => Promise<void>;
+  outbox?: ChangesetOutboxStore;
   onEvent?: (event: PusherEvent) => void;
 };
 
@@ -38,32 +41,48 @@ export class Pusher {
   lastSentHeads: Uint8Array;
 
   private readonly opts: PusherOpts;
+  private readonly outbox: ChangesetOutboxStore;
+  private readonly ownsOutbox: boolean;
   private inflight = false;
+  private capturePromise: Promise<void> | null = null;
+  private captureAgain = false;
+  private flushAfterInflight = false;
+  private readonly drainingRecordIds: string[] = [];
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  private readonly handleOnline = (): void => {
+    this.retryNow();
+  };
 
   constructor(opts: PusherOpts) {
     this.opts = opts;
+    this.ownsOutbox = opts.outbox === undefined;
+    this.outbox = opts.outbox ?? new IndexeddbChangesetOutbox();
     this.lastSentHeads = opts.initialServerHeads;
+    window.addEventListener('online', this.handleOnline);
+    void this.firePush();
   }
 
   schedule(): void {
     if (this.stopped) return;
-    if (this.inflight) return;
-    if (this.status === 'retrying' || this.status === 'error') return;
+    if (this.status === 'error') return;
+
+    void this.capturePendingLocalChangesets().catch((err) => {
+      console.warn('Pusher: failed to persist pending local changesets', err);
+    });
 
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
-      void this.firePush();
+      void this.flushScheduledChanges();
     }, IDLE_MS);
 
     if (!this.maxWaitTimer) {
       this.maxWaitTimer = setTimeout(() => {
         this.maxWaitTimer = null;
-        void this.firePush();
+        void this.flushScheduledChanges();
       }, MAX_WAIT_MS);
     }
   }
@@ -71,9 +90,27 @@ export class Pusher {
   stop(): void {
     this.stopped = true;
     this.clearTimers();
+    window.removeEventListener('online', this.handleOnline);
+    if (!this.inflight && !this.capturePromise) {
+      this.destroyOwnedOutbox();
+    }
+  }
+
+  private destroyOwnedOutbox(): void {
+    if (this.ownsOutbox) {
+      this.outbox.destroy();
+    }
   }
 
   private clearTimers(): void {
+    this.clearScheduleTimers();
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+  }
+
+  private clearScheduleTimers(): void {
     if (this.idleTimer) {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
@@ -82,10 +119,25 @@ export class Pusher {
       clearTimeout(this.maxWaitTimer);
       this.maxWaitTimer = null;
     }
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
+  }
+
+  private async flushScheduledChanges(): Promise<void> {
+    this.clearScheduleTimers();
+    try {
+      await this.capturePendingLocalChangesets();
+    } catch (err) {
+      this.opts.onEvent?.({ kind: 'push.error', message: String(err) });
+      this.handleFailure(err);
+      return;
     }
+    if (this.inflight) {
+      this.flushAfterInflight = true;
+      return;
+    }
+    if (this.status === 'retrying') {
+      return;
+    }
+    await this.firePush();
   }
 
   private async firePush(): Promise<void> {
@@ -93,34 +145,147 @@ export class Pusher {
     if (this.status === 'error') return;
     if (this.inflight) return;
 
-    const before = this.lastSentHeads;
-    const bundle = this.opts.editor.localChangesetsSince(before);
-    if (bundle.length === 0) return;
-
-    const snapshot = this.opts.editor.currentHeads();
     this.clearTimers();
     this.inflight = true;
     this.status = 'pushing';
-    this.opts.onEvent?.({ kind: 'push.fired', bytes: bundle.length });
     const startedAt = performance.now();
 
     try {
-      await this.opts.pushFn(bundle);
+      await this.capturePendingLocalChangesets();
+      if (this.stopped) return;
+
+      const records = await this.outbox.load(this.opts.documentId);
+      if (this.stopped) return;
+
+      const drainedCount = await this.drainOutbox(records);
+      if (this.stopped) return;
+
+      this.finishSuccess(startedAt, drainedCount > 0);
+      return;
     } catch (err) {
-      this.inflight = false;
+      if (this.stopped) return;
       this.opts.onEvent?.({ kind: 'push.error', message: String(err) });
       this.handleFailure(err);
       return;
+    } finally {
+      this.inflight = false;
+      if (this.stopped) {
+        this.destroyOwnedOutbox();
+      } else if (this.flushAfterInflight) {
+        this.flushAfterInflight = false;
+        void this.flushScheduledChanges();
+      }
+    }
+  }
+
+  private applyRecordsLocally(records: ChangesetOutboxRecord[]): void {
+    for (const record of records) {
+      try {
+        this.opts.editor.receiveRemoteChangeset(record.changesets);
+      } catch (err) {
+        console.warn('Pusher: failed to apply outbox changeset locally before resend', err);
+      }
+    }
+  }
+
+  private capturePendingLocalChangesets(): Promise<void> {
+    if (this.stopped) return Promise.resolve();
+    if (this.capturePromise) {
+      this.captureAgain = true;
+      return this.capturePromise;
     }
 
-    if (this.stopped) return;
+    this.capturePromise = this.runCapturePendingLocalChangesets();
+    return this.capturePromise;
+  }
 
-    this.lastSentHeads = snapshot;
+  private async runCapturePendingLocalChangesets(): Promise<void> {
+    try {
+      do {
+        this.captureAgain = false;
+        const records = await this.outbox.load(this.opts.documentId);
+
+        this.applyRecordsLocally(records);
+        await this.captureCurrentSnapshot(records);
+      } while (this.captureAgain && !this.stopped);
+    } finally {
+      this.capturePromise = null;
+      if (this.stopped) {
+        this.destroyOwnedOutbox();
+      }
+    }
+  }
+
+  private async captureCurrentSnapshot(records: ChangesetOutboxRecord[]): Promise<void> {
+    const compactableRecords = records.filter(
+      (record) => record.clientId === this.opts.clientId && !this.drainingRecordIds.includes(record.id),
+    );
+    const anchorRecord = compactableRecords.at(0);
+    const before = anchorRecord?.baseHeads ?? records.at(-1)?.snapshotHeads ?? this.lastSentHeads;
+    const snapshotHeads = new Uint8Array(this.opts.editor.currentHeads());
+    if (bytesEqual(before, snapshotHeads)) return;
+
+    const bundle = this.opts.editor.localChangesetsSince(before);
+    if (bundle.length === 0) return;
+
+    const record = {
+      id: anchorRecord?.id ?? crypto.randomUUID(),
+      documentId: this.opts.documentId,
+      clientId: this.opts.clientId,
+      baseHeads: new Uint8Array(before),
+      snapshotHeads,
+      changesets: new Uint8Array(bundle),
+      createdAt: anchorRecord?.createdAt ?? Date.now(),
+    };
+    if (compactableRecords.length === 0) {
+      await this.outbox.enqueue(record);
+      return;
+    }
+
+    await this.outbox.replace(
+      record,
+      compactableRecords.map((record) => record.id),
+    );
+  }
+
+  private async drainOutbox(records: ChangesetOutboxRecord[]): Promise<number> {
+    let drainedCount = 0;
+    for (const record of records) {
+      if (!this.drainingRecordIds.includes(record.id)) {
+        this.drainingRecordIds.push(record.id);
+      }
+    }
+    try {
+      for (const record of records) {
+        if (this.stopped) return drainedCount;
+        await this.pushRecord(record);
+        drainedCount += 1;
+      }
+    } finally {
+      for (const record of records) {
+        const index = this.drainingRecordIds.indexOf(record.id);
+        if (index !== -1) this.drainingRecordIds.splice(index, 1);
+      }
+    }
+    return drainedCount;
+  }
+
+  private async pushRecord(record: ChangesetOutboxRecord): Promise<void> {
+    this.opts.onEvent?.({ kind: 'push.fired', bytes: record.changesets.length });
+    await this.opts.pushFn(record.changesets);
+    await this.outbox.remove(record.id);
+    this.lastSentHeads = record.snapshotHeads;
+  }
+
+  private finishSuccess(startedAt: number, emitEvent: boolean): void {
+    if (this.stopped) return;
     this.inflight = false;
     this.status = 'idle';
     this.retryAttempt = 0;
-    this.opts.onEvent?.({ kind: 'push.success', durationMs: performance.now() - startedAt });
-    this.schedule();
+    if (emitEvent) {
+      this.opts.onEvent?.({ kind: 'push.success', durationMs: performance.now() - startedAt });
+      this.schedule();
+    }
   }
 
   private handleFailure(err: unknown): void {
@@ -138,4 +303,21 @@ export class Pusher {
       void this.firePush();
     }, delay);
   }
+
+  private retryNow(): void {
+    if (this.stopped) return;
+    if (this.inflight) return;
+    if (this.status === 'error') return;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.status = 'idle';
+    void this.firePush();
+  }
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((byte, index) => byte === b[index]);
 }
