@@ -39,6 +39,59 @@ pub struct KeyEvent {
 }
 
 #[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DndPayloadKind {
+    InternalSelection,
+    Text,
+    Html,
+    ImageFiles,
+    Files,
+    MixedFiles,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DndDropPayload {
+    InternalSelection,
+    Text { text: String, html: Option<String> },
+    Files { image_count: u32, file_count: u32 },
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DndOp {
+    Start {
+        page: usize,
+        x: f32,
+        y: f32,
+    },
+    Enter {
+        payload: DndPayloadKind,
+    },
+    Over {
+        page: usize,
+        x: f32,
+        y: f32,
+        payload: DndPayloadKind,
+        #[serde(default)]
+        modifiers: InputModifiers,
+    },
+    Leave,
+    Drop {
+        page: usize,
+        x: f32,
+        y: f32,
+        payload: DndDropPayload,
+        #[serde(default)]
+        modifiers: InputModifiers,
+    },
+    End,
+}
+
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PointerEvent {
@@ -303,6 +356,9 @@ pub enum Message {
     },
     TextInput {
         ops: Vec<FlatImeOp>,
+    },
+    Dnd {
+        op: DndOp,
     },
     Navigation {
         op: NavigationOp,

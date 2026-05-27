@@ -730,4 +730,39 @@ mod tests {
             "can() must not mutate observable state visible through inspect_state_as_macro",
         );
     }
+
+    #[test]
+    fn ffi_dnd_over_returns_events() {
+        use editor_core::{DndOp, DndPayloadKind, EditorEvent, InputModifiers, Message};
+
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 2)
+        };
+        let editor = make_ffi_editor(initial);
+        let cursor = editor
+            .cursor()
+            .expect("ffi call returns Ok")
+            .expect("collapsed cursor has metrics");
+
+        editor
+            .enqueue(Message::Dnd {
+                op: DndOp::Over {
+                    page: 0,
+                    x: cursor.caret.x,
+                    y: cursor.line.y + cursor.line.height * 0.5,
+                    payload: DndPayloadKind::Text,
+                    modifiers: InputModifiers::default(),
+                },
+            })
+            .expect("ffi enqueue returns Ok");
+        let events = editor.tick().expect("ffi tick returns Ok");
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
+            "immediate dnd over must return render invalidation events",
+        );
+    }
 }

@@ -71,6 +71,7 @@ fn build_corpus() -> Vec<Message> {
         Message::TextInput {
             ops: vec![FlatImeOp::CommitAsIs],
         },
+        Message::Dnd { op: DndOp::Leave },
         Message::View {
             op: ViewOp::ToggleFold {
                 id: editor_model::NodeId::ROOT,
@@ -156,6 +157,7 @@ fn message_variants_are_enumerated() {
         | Message::View { .. }
         | Message::Clipboard { .. }
         | Message::TextInput { .. }
+        | Message::Dnd { .. }
         | Message::Navigation { .. }
         | Message::History { .. }
         | Message::System { .. }

@@ -1,5 +1,6 @@
 mod clipboard;
 mod deletion;
+mod dnd;
 mod history;
 mod insertion;
 mod key;
@@ -15,6 +16,7 @@ mod view;
 
 pub use clipboard::handle_clipboard_op;
 pub use deletion::handle_deletion_op;
+pub use dnd::handle_dnd_op;
 pub use history::handle_history_op;
 pub use insertion::handle_insertion_op;
 pub use key::handle_key_event;

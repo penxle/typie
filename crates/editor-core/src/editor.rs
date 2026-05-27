@@ -74,7 +74,11 @@ pub struct Editor {
     pub(crate) history: History,
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
+
+    // interaction state
     drag_anchor: Option<Selection>,
+    dnd_drop_target: Option<editor_view::DropTarget>,
+
     focused: bool,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,
@@ -128,6 +132,7 @@ impl Editor {
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             drag_anchor: None,
+            dnd_drop_target: None,
             focused: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
@@ -440,6 +445,13 @@ impl Editor {
             });
         }
 
+        if let Some(target) = self.dnd_drop_target {
+            marks.push(Mark {
+                data: MarkData::DropIndicator,
+                rects: vec![target.indicator.rect()],
+            });
+        }
+
         self.renderer.render_page(
             sink,
             &self.state.doc,
@@ -462,6 +474,7 @@ impl Editor {
             Message::View { op } => handle::handle_view_op(self, op)?,
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
             Message::TextInput { ops } => handle::handle_flat_ime_ops(self, ops)?,
+            Message::Dnd { op } => handle::handle_dnd_op(self, op)?,
             Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
             Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,
@@ -513,6 +526,22 @@ impl Editor {
         if !self.pending_events.contains(&event) {
             self.pending_events.push(event);
         }
+    }
+
+    pub(crate) fn set_drop_target(&mut self, target: Option<editor_view::DropTarget>) {
+        let would_change = self.dnd_drop_target != target;
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+            return;
+        }
+        if would_change {
+            self.dnd_drop_target = target;
+            self.push_event(EditorEvent::RenderInvalidated);
+        }
+    }
+
+    pub(crate) fn drop_target(&self) -> Option<editor_view::DropTarget> {
+        self.dnd_drop_target
     }
 
     fn process_effects(&mut self, effects: HashSet<Effect>) {
@@ -898,6 +927,7 @@ impl Editor {
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             drag_anchor: None,
+            dnd_drop_target: None,
             focused: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
@@ -923,6 +953,11 @@ impl Editor {
 
     pub fn history_redos_len(&self) -> usize {
         self.history.redos_len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn drop_indicator_for_test(&self) -> Option<editor_view::DropIndicator> {
+        self.dnd_drop_target.map(|target| target.indicator)
     }
 
     #[cfg(any(test, feature = "test-utils"))]
@@ -2050,6 +2085,425 @@ mod tests {
         });
 
         assert!(!editor.cursor_hit_test(0, 10.0, 10.0));
+    }
+
+    #[test]
+    fn dnd_over_text_sets_drop_indicator_and_invalidates_render() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        let events = editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndPayloadKind::Text,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+        assert!(editor.drop_indicator_for_test().is_some());
+    }
+
+    #[test]
+    fn dnd_leave_clears_drop_indicator_and_invalidates_render() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 2))
+            .expect("cursor metrics")
+            .caret;
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndPayloadKind::Text,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let events = editor.apply(Message::Dnd { op: DndOp::Leave });
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+        assert!(editor.drop_indicator_for_test().is_none());
+    }
+
+    #[test]
+    fn drop_text_inserts_at_drop_target_not_current_selection() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndPayloadKind::Text,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndDropPayload::Text {
+                    text: "!".into(),
+                    html: None,
+                },
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("hello!") } } }
+            selection: (t, 5) -> (t, 6)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn drop_text_falls_back_to_plain_text_when_html_is_empty() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndPayloadKind::Html,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndDropPayload::Text {
+                    text: "plain".into(),
+                    html: Some("<style>p { color: red; }</style>".into()),
+                },
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("helloplain") } } }
+            selection: (t, 5) -> (t, 10)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn drop_files_inserts_placeholders_at_drop_target_not_current_selection() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndPayloadKind::MixedFiles,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndDropPayload::Files {
+                    image_count: 1,
+                    file_count: 1,
+                },
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let root = editor.state().doc.node(editor_model::NodeId::ROOT).unwrap();
+        let children: Vec<_> = root.children().map(|c| c.node().clone()).collect();
+        assert!(matches!(
+            children.first(),
+            Some(editor_model::Node::Paragraph(_))
+        ));
+        assert!(matches!(
+            children.get(1),
+            Some(editor_model::Node::Image(_))
+        ));
+        assert!(matches!(children.get(2), Some(editor_model::Node::File(_))));
+        assert!(
+            matches!(children.last(), Some(editor_model::Node::Paragraph(_))),
+            "root schema should keep a trailing paragraph after inserted file blocks",
+        );
+        let first_text = root
+            .children()
+            .next()
+            .and_then(|p| p.first_child())
+            .and_then(|n| match n.node() {
+                editor_model::Node::Text(t) => Some(t.text.to_string()),
+                _ => None,
+            });
+        assert_eq!(first_text.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn drop_text_at_block_position_before_image_keeps_image() {
+        let (initial, ..) = state! {
+            doc { root: root {
+                paragraph { text("before") }
+                image
+                paragraph { text("after") }
+            } }
+            selection: (root, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.set_drop_target(Some(editor_view::DropTarget {
+            position: Position::new(NodeId::ROOT, 1),
+            indicator: editor_view::DropIndicator::Block {
+                page_idx: 0,
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+            },
+        }));
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: 0.0,
+                y: 0.0,
+                payload: DndDropPayload::Text {
+                    text: "dropped".into(),
+                    html: None,
+                },
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let root = editor.state().doc.node(NodeId::ROOT).unwrap();
+        let children: Vec<_> = root.children().map(|c| c.node()).collect();
+        assert!(matches!(
+            children.as_slice(),
+            [
+                Node::Paragraph(_),
+                Node::Paragraph(_),
+                Node::Image(_),
+                Node::Paragraph(_),
+            ]
+        ));
+        let inserted = root.children().nth(1).unwrap();
+        let inserted_text = inserted.first_child().and_then(|n| match n.node() {
+            Node::Text(t) => Some(t.text.to_string()),
+            _ => None,
+        });
+        assert_eq!(inserted_text.as_deref(), Some("dropped"));
+    }
+
+    #[test]
+    fn drop_text_at_block_position_before_file_keeps_file() {
+        let (initial, ..) = state! {
+            doc { root: root {
+                paragraph { text("before") }
+                file
+                paragraph { text("after") }
+            } }
+            selection: (root, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.set_drop_target(Some(editor_view::DropTarget {
+            position: Position::new(NodeId::ROOT, 1),
+            indicator: editor_view::DropIndicator::Block {
+                page_idx: 0,
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+            },
+        }));
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: 0.0,
+                y: 0.0,
+                payload: DndDropPayload::Text {
+                    text: "dropped".into(),
+                    html: None,
+                },
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let root = editor.state().doc.node(NodeId::ROOT).unwrap();
+        let children: Vec<_> = root.children().map(|c| c.node()).collect();
+        assert!(matches!(
+            children.as_slice(),
+            [
+                Node::Paragraph(_),
+                Node::Paragraph(_),
+                Node::File(_),
+                Node::Paragraph(_),
+            ]
+        ));
+        let inserted = root.children().nth(1).unwrap();
+        let inserted_text = inserted.first_child().and_then(|n| match n.node() {
+            Node::Text(t) => Some(t.text.to_string()),
+            _ => None,
+        });
+        assert_eq!(inserted_text.as_deref(), Some("dropped"));
+    }
+
+    #[test]
+    fn internal_drop_move_remaps_target_after_deleting_source() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 11))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndPayloadKind::InternalSelection,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndDropPayload::InternalSelection,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text(" worldhello") } } }
+            selection: (t, 6) -> (t, 11)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn internal_drop_copy_preserves_source_selection_content() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 11))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndPayloadKind::InternalSelection,
+                modifiers: InputModifiers {
+                    alt: true,
+                    ..InputModifiers::default()
+                },
+            },
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndDropPayload::InternalSelection,
+                modifiers: InputModifiers {
+                    alt: true,
+                    ..InputModifiers::default()
+                },
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("hello worldhello") } } }
+            selection: (t, 11) -> (t, 16)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]

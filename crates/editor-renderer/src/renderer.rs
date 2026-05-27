@@ -341,13 +341,14 @@ pub enum MarkLayer {
 pub enum MarkData {
     Selection { focused: bool },
     Composition,
+    DropIndicator,
 }
 
 impl MarkData {
     pub fn layer(&self) -> MarkLayer {
         match self {
             Self::Selection { .. } => MarkLayer::BelowContent,
-            Self::Composition => MarkLayer::AboveContent,
+            Self::Composition | Self::DropIndicator => MarkLayer::AboveContent,
         }
     }
 }
@@ -399,6 +400,9 @@ impl Renderer {
             },
             MarkData::Composition => MarkStyle {
                 color: theme.color("ui.text.default"),
+            },
+            MarkData::DropIndicator => MarkStyle {
+                color: theme.color("selection"),
             },
         }
     }
@@ -1339,6 +1343,7 @@ mod tests {
     #[test]
     fn mark_data_layer_above_content() {
         assert_eq!(MarkData::Composition.layer(), MarkLayer::AboveContent);
+        assert_eq!(MarkData::DropIndicator.layer(), MarkLayer::AboveContent);
     }
 
     #[test]
@@ -1347,6 +1352,19 @@ mod tests {
 
         assert_eq!(selection_mark_color(&theme, true).a, 77);
         assert_eq!(selection_mark_color(&theme, false).a, 48);
+    }
+
+    #[test]
+    fn drop_indicator_mark_uses_selection_color() {
+        let renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
+        let theme = Theme::new(ThemeVariant::LightWhite);
+
+        assert_eq!(
+            renderer
+                .resolve_mark(&MarkData::DropIndicator, &theme)
+                .color,
+            theme.color("selection")
+        );
     }
 
     #[test]
