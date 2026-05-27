@@ -10,6 +10,7 @@ mod history;
 mod ime;
 mod message;
 mod state_field;
+mod tracked_range;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
@@ -29,3 +30,4 @@ pub use history::*;
 pub use ime::*;
 pub use message::*;
 pub use state_field::*;
+pub use tracked_range::*;

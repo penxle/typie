@@ -102,6 +102,21 @@ fn build_corpus() -> Vec<Message> {
         Message::System {
             event: SystemEvent::FontsChanged,
         },
+        Message::TrackedRange {
+            op: TrackedRangeOp::Remove {
+                id: "missing".into(),
+            },
+        },
+        Message::TrackedRange {
+            op: TrackedRangeOp::ClearGroup {
+                group: "missing".into(),
+            },
+        },
+        Message::TrackedRange {
+            op: TrackedRangeOp::Invalidate {
+                id: "missing".into(),
+            },
+        },
     ]
 }
 
@@ -161,6 +176,7 @@ fn message_variants_are_enumerated() {
         | Message::Navigation { .. }
         | Message::History { .. }
         | Message::System { .. }
+        | Message::TrackedRange { .. }
         | Message::Remote { .. } => {}
     }
 }

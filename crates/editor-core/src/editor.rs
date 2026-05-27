@@ -24,6 +24,7 @@ use crate::history::History;
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
+use crate::tracked_range::TrackedRangeRegistry;
 
 #[derive(Clone, Copy, Debug)]
 enum Mode {
@@ -74,6 +75,7 @@ pub struct Editor {
     pub(crate) history: History,
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
+    pub(crate) tracked_ranges: TrackedRangeRegistry,
 
     // interaction state
     drag_anchor: Option<Selection>,
@@ -131,6 +133,7 @@ impl Editor {
             history: History::new(Duration::from_millis(300)),
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
+            tracked_ranges: TrackedRangeRegistry::new(),
             drag_anchor: None,
             dnd_drop_target: None,
             focused: false,
@@ -145,6 +148,24 @@ impl Editor {
 
     pub fn state(&self) -> &State {
         &self.state
+    }
+
+    pub fn tracked_ranges(&self) -> &TrackedRangeRegistry {
+        &self.tracked_ranges
+    }
+
+    pub(crate) fn tracked_ranges_mut(&mut self) -> &mut TrackedRangeRegistry {
+        &mut self.tracked_ranges
+    }
+
+    pub(crate) fn is_probing(&self) -> bool {
+        matches!(self.mode, Mode::Probe { .. })
+    }
+
+    pub(crate) fn mark_probed_change(&mut self, would_change: bool) {
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= would_change;
+        }
     }
 
     pub fn receive_remote_changeset(&mut self, changeset: Changeset<DocOp>) {
@@ -478,6 +499,7 @@ impl Editor {
             Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
             Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,
+            Message::TrackedRange { op } => handle::handle_tracked_range_op(self, op)?,
             Message::Remote { changeset } => handle::handle_remote(self, changeset)?,
         }
         Ok(())
@@ -926,6 +948,7 @@ impl Editor {
             history: History::new(Duration::from_millis(300)),
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
+            tracked_ranges: TrackedRangeRegistry::new(),
             drag_anchor: None,
             dnd_drop_target: None,
             focused: false,

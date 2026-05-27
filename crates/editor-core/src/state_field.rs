@@ -19,4 +19,5 @@ pub enum StateField {
     Ime,
     Modifiers,
     Block,
+    TrackedRanges,
 }

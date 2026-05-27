@@ -33,6 +33,18 @@ pub struct CharacterCounts {
     pub selection_without_whitespace_and_punctuation: u32,
 }
 
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TrackedRangePublic {
+    pub id: String,
+    pub group: String,
+    pub anchor: editor_state::Position,
+    pub head: editor_state::Position,
+    pub metadata: String,
+    pub invalid: bool,
+}
+
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
 #[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 impl Editor {
@@ -291,6 +303,34 @@ impl Editor {
             let bytes = editor_crdt::wire::encode_dots(&heads)
                 .map_err(|e| FfiError::Serialization(e.to_string()))?;
             Ok(bytes)
+        })
+    }
+
+    pub fn tracked_ranges(
+        &self,
+        group: Option<String>,
+    ) -> EditorResult<Vec<Complex<TrackedRangePublic>>> {
+        self.with_inner(|inner| {
+            let doc = &inner.editor.state().doc;
+            let registry = inner.editor.tracked_ranges();
+            let ranges: Box<dyn Iterator<Item = &editor_core::TrackedRange>> = match &group {
+                Some(g) => Box::new(registry.iter_group(g)),
+                None => Box::new(registry.iter()),
+            };
+            let result: Vec<TrackedRangePublic> = ranges
+                .map(|r| {
+                    let sel = r.selection.thaw(doc);
+                    TrackedRangePublic {
+                        id: r.id.clone(),
+                        group: r.group.clone(),
+                        anchor: sel.anchor,
+                        head: sel.head,
+                        metadata: r.metadata.clone(),
+                        invalid: r.explicitly_invalid || sel.is_collapsed(),
+                    }
+                })
+                .collect();
+            Ok(result.into_ffi()?)
         })
     }
 }

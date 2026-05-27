@@ -525,6 +525,15 @@ export interface TextColorValue {
     value: string;
 }
 
+export interface TrackedRangePublic {
+    id: string;
+    group: string;
+    anchor: Position;
+    head: Position;
+    metadata: string;
+    invalid: boolean;
+}
+
 export interface TransactionMeta {
     history: HistoryMeta;
 }
@@ -611,7 +620,7 @@ export type LayoutMode = { type: "paginated"; page_width: number; page_height: n
 
 export type ListItemNodeAttr = void;
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "dnd"; op: DndOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent };
+export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "dnd"; op: DndOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent } | { type: "tracked_range"; op: TrackedRangeOp };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 
@@ -649,7 +658,7 @@ export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
 export type SelectionOp = { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
 
-export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block";
+export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -666,6 +675,8 @@ export type TableRowNodeAttr = void;
 export type TextNodeAttr = void;
 
 export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
+
+export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "remove"; id: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string };
 
 export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
 
@@ -705,6 +716,7 @@ declare class Editor {
     selection_hit_test(page: number, x: number, y: number): boolean;
     table_overlays(): TableOverlay[];
     tick(): EditorEvent[];
+    tracked_ranges(group?: string | null): TrackedRangePublic[];
 }
 
 declare class EditorHost {

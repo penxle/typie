@@ -6,6 +6,7 @@ use editor_view::Viewport;
 use hashbrown::HashMap;
 
 use crate::editor::Editor;
+use crate::tracked_range::TrackedRangeRegistry;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorSnapshot {
@@ -22,6 +23,7 @@ pub struct EditorSnapshot {
     focused: bool,
     theme_variant: ThemeVariant,
     page_sizes: Vec<Size>,
+    tracked_ranges: TrackedRangeRegistry,
 }
 
 impl EditorSnapshot {
@@ -42,6 +44,7 @@ impl EditorSnapshot {
             focused: editor.is_focused(),
             theme_variant: editor.theme_variant(),
             page_sizes,
+            tracked_ranges: editor.tracked_ranges().clone(),
         }
     }
 }

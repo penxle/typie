@@ -12,6 +12,7 @@ mod remote;
 mod selection;
 mod system;
 mod text_input;
+mod tracked_range;
 mod view;
 
 pub use clipboard::handle_clipboard_op;
@@ -28,4 +29,5 @@ pub use remote::handle_remote;
 pub use selection::handle_selection_op;
 pub use system::handle_system_event;
 pub use text_input::handle_flat_ime_ops;
+pub use tracked_range::handle_tracked_range_op;
 pub use view::handle_view_op;

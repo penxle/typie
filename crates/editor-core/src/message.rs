@@ -331,6 +331,28 @@ pub enum FlatImeOp {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+pub enum TrackedRangeOp {
+    Add {
+        id: String,
+        group: String,
+        selection: Selection,
+        #[serde(default)]
+        metadata: String,
+    },
+    Remove {
+        id: String,
+    },
+    ClearGroup {
+        group: String,
+    },
+    Invalidate {
+        id: String,
+    },
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
     Key {
         event: KeyEvent,
@@ -373,6 +395,9 @@ pub enum Message {
     },
     System {
         event: SystemEvent,
+    },
+    TrackedRange {
+        op: TrackedRangeOp,
     },
 
     #[ffi(skip)]
