@@ -15,6 +15,20 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
     match op {
         NavigationOp::Move { movement, extend } => {
             let Some(selection) = editor.state.selection else {
+                if !extend && let Movement::Document { .. } = movement {
+                    let probe_pos = Position {
+                        node_id: NodeId::ROOT,
+                        offset: 0,
+                        affinity: Affinity::Upstream,
+                    };
+                    if let Some(target) = editor.resolve_movement(&probe_pos, &movement) {
+                        editor.transact(|tr| {
+                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                            tr.set_selection(Some(target))?;
+                            Ok(())
+                        })?;
+                    }
+                }
                 return Ok(());
             };
 
@@ -60,16 +74,24 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 {
                     Some(GapCursor::LeadingUnit { .. }) => true,
                     Some(_) => false,
-                    None => editor
-                        .resolve_movement(
-                            &selection.head,
-                            &Movement::Document {
-                                direction: Direction::Backward,
-                            },
-                        )
-                        .is_some_and(|sel| sel.head == selection.head),
+                    None => {
+                        gap_cursor_selection_leading(&editor.state.doc).is_none()
+                            && editor
+                                .resolve_movement(
+                                    &selection.head,
+                                    &Movement::Document {
+                                        direction: Direction::Backward,
+                                    },
+                                )
+                                .is_some_and(|sel| sel.head == selection.head)
+                    }
                 };
                 if at_document_start {
+                    editor.transact(|tr| {
+                        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                        tr.set_selection(None)?;
+                        Ok(())
+                    })?;
                     editor.push_event(EditorEvent::CursorExitedDocumentStart);
                     return Ok(());
                 }
