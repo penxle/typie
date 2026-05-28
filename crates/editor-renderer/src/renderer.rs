@@ -1171,18 +1171,20 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         glyph_runs: &[editor_view::glyph_run::GlyphRun],
         ruby_annotations: &[RubyAnnotation],
     ) {
-        if !self.on(RenderLayer::Content) {
-            return;
-        }
-
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
 
-        for run in glyph_runs {
-            if let Some(ref bg_token) = run.background_color {
-                let bg_color = self.theme.color(bg_token);
-                let run_rect = Rect::from_xywh(run.x, 0.0, run.width, local_rect.height);
-                self.sink.fill_rect(run_rect, bg_color, t);
+        if self.on(RenderLayer::Background) {
+            for run in glyph_runs {
+                if let Some(ref bg_token) = run.background_color {
+                    let bg_color = self.theme.color(bg_token);
+                    let run_rect = Rect::from_xywh(run.x, 0.0, run.width, local_rect.height);
+                    self.sink.fill_rect(run_rect, bg_color, t);
+                }
             }
+        }
+
+        if !self.on(RenderLayer::Content) {
+            return;
         }
 
         for run in glyph_runs {
