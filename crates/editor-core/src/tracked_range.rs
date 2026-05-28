@@ -1,4 +1,5 @@
 use editor_state::StableSelection;
+use editor_view::PageRect;
 use hashbrown::{HashMap, HashSet};
 
 pub type TrackedRangeId = String;
@@ -10,6 +11,14 @@ pub struct TrackedRange {
     pub selection: StableSelection,
     pub metadata: String,
     pub explicitly_invalid: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrackedRangeHit {
+    pub id: TrackedRangeId,
+    pub group: String,
+    /// Range rects on the queried `page_idx` only (filtered by `Editor::tracked_ranges_at`).
+    pub rects: Vec<PageRect>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

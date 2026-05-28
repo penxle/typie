@@ -1,4 +1,5 @@
 use editor_crdt::Dot;
+use editor_macros::ffi;
 use editor_model::{Doc, Node, NodeId};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +12,7 @@ use crate::bind::Bind;
 /// `child_dot` is this node's dot in its parent's `children` RGA. For the
 /// root link, `child_dot` is unused (freeze writes `Dot::new(0, 0)`, thaw
 /// ignores).
+#[ffi]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ChainLink {
@@ -21,6 +23,7 @@ pub struct ChainLink {
 /// A CRDT-dot-anchored position. The chain is always root-to-leaf inclusive;
 /// `chain.last().node_id` is the host of the binding (text node for `Char`,
 /// container for `Child` and `ContainerStart`).
+#[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum StablePosition {

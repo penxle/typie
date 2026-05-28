@@ -38,6 +38,28 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 reg.add(new_range);
             });
         }
+        TrackedRangeOp::AddFrozen {
+            id,
+            group,
+            selection,
+            metadata,
+        } => {
+            let new_range = TrackedRange {
+                id: id.clone(),
+                group,
+                selection,
+                metadata,
+                explicitly_invalid: false,
+            };
+            let would_change = editor
+                .tracked_ranges()
+                .get(&id)
+                .map(|existing| existing != &new_range)
+                .unwrap_or(true);
+            commit_or_probe(editor, would_change, |reg| {
+                reg.add(new_range);
+            });
+        }
         TrackedRangeOp::Remove { id } => {
             let would_change = editor.tracked_ranges().contains(&id);
             commit_or_probe(editor, would_change, |reg| {
@@ -120,6 +142,17 @@ mod tests {
     use editor_macros::state;
 
     use crate::test_utils::assert_probe_predicts_apply;
+
+    fn add_frozen_op(id: &str, stable: editor_state::StableSelection) -> Message {
+        Message::TrackedRange {
+            op: TrackedRangeOp::AddFrozen {
+                id: id.into(),
+                group: "g1".into(),
+                selection: stable,
+                metadata: String::new(),
+            },
+        }
+    }
 
     fn add_op(id: &str, sel: editor_state::Selection) -> Message {
         Message::TrackedRange {
@@ -288,6 +321,94 @@ mod tests {
             })
             .unwrap();
         assert!(!probed);
+    }
+
+    #[test]
+    fn add_frozen_inserts_range_and_emits_events() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let sel = state.selection.unwrap();
+        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        let mut editor = Editor::new_test(state);
+        let events = editor.apply(add_frozen_op("a", stable));
+        assert!(editor.tracked_ranges().contains("a"));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EditorEvent::StateChanged { fields } if fields.contains(&StateField::TrackedRanges)
+        )));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
+            "AddFrozen must also emit RenderInvalidated (spec §5.3)"
+        );
+    }
+
+    #[test]
+    fn add_frozen_same_range_twice_is_idempotent() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let sel = state.selection.unwrap();
+        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        let mut editor = Editor::new_test(state);
+        editor.apply(add_frozen_op("a", stable.clone()));
+        let events = editor.apply(add_frozen_op("a", stable));
+        assert!(!events.iter().any(|e| matches!(
+            e,
+            EditorEvent::StateChanged { fields } if fields.contains(&StateField::TrackedRanges)
+        )));
+    }
+
+    #[test]
+    fn add_frozen_yields_same_registry_as_add() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let sel = state.selection.unwrap();
+        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+
+        let mut a = Editor::new_test(state.clone());
+        a.apply(add_op("r", sel));
+
+        let mut b = Editor::new_test(state);
+        b.apply(add_frozen_op("r", stable));
+
+        assert_eq!(a.tracked_ranges().get("r"), b.tracked_ranges().get("r"));
+    }
+
+    #[test]
+    fn probe_add_frozen_predicts_change() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let sel = state.selection.unwrap();
+        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        assert_probe_predicts_apply(state, add_frozen_op("a", stable));
+    }
+
+    #[test]
+    fn probe_add_frozen_same_id_same_content_predicts_no_change() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let sel = state.selection.unwrap();
+        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(add_frozen_op("a", stable.clone()));
+
+        let probed = editor.can(add_frozen_op("a", stable)).unwrap();
+        assert!(
+            !probed,
+            "AddFrozen with same id + same content must predict no change"
+        );
     }
 
     fn sample_style() -> DecorationStyle {

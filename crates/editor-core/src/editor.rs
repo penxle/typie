@@ -246,6 +246,67 @@ impl Editor {
         self.view.selection_hit_test(&resolved, page_idx, x, y)
     }
 
+    pub fn tracked_ranges_at(
+        &self,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        group: Option<&str>,
+    ) -> Vec<crate::tracked_range::TrackedRangeHit> {
+        use crate::tracked_range::{TrackedRange, TrackedRangeHit};
+        use editor_state::ResolvedPositionFlatExt;
+
+        let iter: Box<dyn Iterator<Item = &TrackedRange>> = match group {
+            Some(g) => Box::new(self.tracked_ranges.iter_group(g)),
+            None => Box::new(self.tracked_ranges.iter()),
+        };
+
+        let mut scored: Vec<(usize, String, TrackedRangeHit)> = Vec::new();
+        for range in iter {
+            if range.explicitly_invalid {
+                continue;
+            }
+            let sel = range.selection.thaw(&self.state.doc);
+            if sel.is_collapsed() {
+                continue;
+            }
+            let Some(resolved) = sel.resolve(&self.state.doc) else {
+                continue;
+            };
+            let rects: Vec<editor_view::SelectionRect> = self
+                .view
+                .selection_rects(&resolved)
+                .into_iter()
+                .filter(|pr| pr.page_idx == page_idx)
+                .collect();
+            if rects.is_empty() {
+                continue;
+            }
+            if !rects.iter().any(|pr| pr.rect.contains(x, y)) {
+                continue;
+            }
+
+            let a = resolved.anchor().to_flat();
+            let h = resolved.head().to_flat();
+            let chars = if a >= h { a - h } else { h - a };
+
+            let stripped: Vec<editor_view::PageRect> =
+                rects.into_iter().map(|pr| pr.without_meta()).collect();
+            scored.push((
+                chars,
+                range.id.clone(),
+                TrackedRangeHit {
+                    id: range.id.clone(),
+                    group: range.group.clone(),
+                    rects: stripped,
+                },
+            ));
+        }
+
+        scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+        scored.into_iter().map(|(_, _, hit)| hit).collect()
+    }
+
     pub fn cursor_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
         let Some(selection) = self.state.selection else {
             return false;

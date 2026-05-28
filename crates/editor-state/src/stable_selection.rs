@@ -1,3 +1,4 @@
+use editor_macros::ffi;
 use editor_model::Doc;
 use serde::{Deserialize, Serialize};
 
@@ -5,6 +6,7 @@ use crate::normalize::enclosing_unit_at_subtree_overlap;
 use crate::selection::Selection;
 use crate::stable_position::{StablePosition, freeze_position, thaw_position};
 
+#[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct StableSelection {

@@ -1,6 +1,13 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+ * A CRDT-dot-anchored position. The chain is always root-to-leaf inclusive;
+ * `chain.last().node_id` is the host of the binding (text node for `Char`,
+ * container for `Child` and `ContainerStart`).
+ */
+export type StablePosition = { kind: "char"; chain: ChainLink[]; char_dot: Dot; bind: Bind; affinity: Affinity } | { kind: "child"; chain: ChainLink[]; child_dot: Dot; bind: Bind; affinity: Affinity } | { kind: "container_start"; chain: ChainLink[]; affinity: Affinity };
+
+/**
  * A document position: the triple `(node_id, offset, affinity)`.
  *
  * `Position` is a plain value type (POD) with no automatic validation.
@@ -165,6 +172,18 @@ export interface Dot {
 }
 
 /**
+ * One link in the structural chain from root to the cursor's leaf node.
+ *
+ * `child_dot` is this node's dot in its parent's `children` RGA. For the
+ * root link, `child_dot` is unused (freeze writes `Dot::new(0, 0)`, thaw
+ * ignores).
+ */
+export interface ChainLink {
+    node_id: NodeId;
+    child_dot: Dot;
+}
+
+/**
  * One node in the op-DAG. `id` is the op's unique identifier (also reused as
  * the semantic identifier — RGA element id, OR-Set add token — by the
  * payload). `parents` are the op-DAG parents of this op (the heads of the
@@ -194,6 +213,11 @@ export interface Op<P> {
  *   `Downstream` → `child[offset]` (following).
  */
 export type Affinity = "downstream" | "upstream";
+
+/**
+ * Which side of a CRDT element the cursor sits on.
+ */
+export type Bind = "left" | "right";
 
 /**
  * chunk별 flat 정수 배열 `[start0, end0, start1, end1, ...]` (inclusive).
@@ -501,6 +525,11 @@ export interface Size {
     height: number;
 }
 
+export interface StableSelection {
+    anchor: StablePosition;
+    head: StablePosition;
+}
+
 export interface TableOverlay {
     table_id: NodeId;
     page_idx: number;
@@ -530,13 +559,19 @@ export interface TextColorValue {
     value: string;
 }
 
-export interface TrackedRangePublic {
+export interface TrackedRange {
     id: string;
     group: string;
     anchor: Position;
     head: Position;
     metadata: string;
     invalid: boolean;
+}
+
+export interface TrackedRangeHit {
+    id: string;
+    group: string;
+    rects: PageRect[];
 }
 
 export interface TransactionMeta {
@@ -689,7 +724,7 @@ export type TextNodeAttr = void;
 
 export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
 
-export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "remove"; id: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean } | { type: "remove_group_decoration"; group: string };
+export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean } | { type: "remove_group_decoration"; group: string };
 
 export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type: "mixed" };
 
@@ -711,6 +746,7 @@ declare class Editor {
     cursor_hit_test(page: number, x: number, y: number): boolean;
     enqueue(message: Message): void;
     external_elements(): ExternalElement[];
+    freeze_selection(selection: Selection): StableSelection;
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
@@ -731,7 +767,8 @@ declare class Editor {
     selection_hit_test(page: number, x: number, y: number): boolean;
     table_overlays(): TableOverlay[];
     tick(): EditorEvent[];
-    tracked_ranges(group?: string | null): TrackedRangePublic[];
+    tracked_ranges(group?: string | null): TrackedRange[];
+    tracked_ranges_at(page: number, x: number, y: number, group?: string | null): TrackedRangeHit[];
 }
 
 declare class EditorHost {

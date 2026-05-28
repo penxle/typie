@@ -161,3 +161,96 @@ fn groups_are_independent() {
     assert_eq!(editor.tracked_ranges().group_size("spellcheck"), 0);
     assert_eq!(editor.tracked_ranges().group_size("ai"), 1);
 }
+
+#[test]
+fn freeze_then_add_frozen_roundtrip_yields_same_registry_entry() {
+    let (state, _t1) = state! {
+        doc { root { paragraph { t1: text("hello") } } }
+        selection: (t1, 1) -> (t1, 4)
+    };
+    let sel = state.selection.unwrap();
+
+    let mut a = Editor::new_test(state.clone());
+    a.apply(add_message("r", "g", sel));
+    let from_add = a.tracked_ranges().get("r").unwrap().clone();
+
+    let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+    let json = serde_json::to_string(&stable).unwrap();
+    let restored: editor_state::StableSelection = serde_json::from_str(&json).unwrap();
+
+    let mut b = Editor::new_test(state);
+    b.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "g".into(),
+            selection: restored,
+            metadata: String::new(),
+        },
+    });
+    let from_addfrozen = b.tracked_ranges().get("r").unwrap().clone();
+
+    assert_eq!(from_add, from_addfrozen);
+}
+
+#[test]
+fn add_frozen_with_unresolvable_dots_marks_invalid_on_thaw() {
+    let (state_a, _t1) = state! {
+        doc { root { paragraph { t1: text("hello") } } }
+        selection: (t1, 1) -> (t1, 4)
+    };
+    let sel = state_a.selection.unwrap();
+    let stable = editor_state::StableSelection::freeze(&sel, &state_a.doc);
+
+    let (state_b, _) = state! {
+        doc { root { paragraph { t2: text("world") } } }
+        selection: (t2, 0)
+    };
+
+    let mut b = Editor::new_test(state_b);
+    b.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "g".into(),
+            selection: stable,
+            metadata: String::new(),
+        },
+    });
+    assert!(b.tracked_ranges().contains("r"));
+    assert!(is_collapsed_on_thaw(&b, "r"));
+}
+
+#[test]
+fn range_recovers_from_invalid_after_undo() {
+    let (state, t1) = state! {
+        doc { root { paragraph { t1: text("hello") } } }
+        selection: (t1, 1) -> (t1, 4)
+    };
+    let sel = state.selection.unwrap();
+    let mut editor = Editor::new_test(state);
+    editor.apply(add_message("r", "g", sel));
+    assert!(!is_collapsed_on_thaw(&editor, "r"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(t1, 1),
+                editor_state::Position::new(t1, 4),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert!(
+        is_collapsed_on_thaw(&editor, "r"),
+        "deleting covered text must collapse the range"
+    );
+
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+    assert!(
+        !is_collapsed_on_thaw(&editor, "r"),
+        "undo must restore range to valid"
+    );
+}

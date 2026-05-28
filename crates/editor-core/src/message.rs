@@ -348,6 +348,13 @@ pub enum TrackedRangeOp {
         #[serde(default)]
         metadata: String,
     },
+    AddFrozen {
+        id: String,
+        group: String,
+        selection: editor_state::StableSelection,
+        #[serde(default)]
+        metadata: String,
+    },
     Remove {
         id: String,
     },
