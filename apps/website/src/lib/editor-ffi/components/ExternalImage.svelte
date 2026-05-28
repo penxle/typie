@@ -12,7 +12,7 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '../editor.svelte';
   import {
-    calculateImageHeight,
+    calculateImageContainerSize,
     calculateImageWidth,
     createDeleteNodeMessage,
     createSetImageAttrsMessage,
@@ -51,7 +51,14 @@
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
   const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
-  const liveHeight = $derived(calculateImageHeight(liveWidth, originalWidth, originalHeight));
+  const containerSize = $derived(
+    calculateImageContainerSize({
+      boundsWidth: element.bounds.width,
+      proportion,
+      originalWidth,
+      originalHeight,
+    }),
+  );
   const canEdit = $derived(!ctx.editor?.readOnly);
 
   const { anchor, floating } = createFloatingActions({
@@ -278,8 +285,8 @@
 <ExternalElementWrapper {element} minHeight={stage === 'ready' ? undefined : '48px'}>
   <div
     bind:this={containerEl}
-    style:width={stage === 'ready' ? `${liveWidth}px` : '100%'}
-    style:height={stage === 'ready' ? `${liveHeight}px` : undefined}
+    style:width={containerSize.width}
+    style:height={containerSize.height}
     class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
     ondragovercapture={handleDragOver}
     ondropcapture={handleDrop}

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  calculateImageContainerSize,
   calculateImageHeight,
   calculateImageWidth,
   createDeleteNodeMessage,
@@ -160,5 +161,34 @@ describe('v2 image resize calculations', () => {
 
   it('does not render wider than the original image', () => {
     expect(calculateImageWidth(800, 100, 320)).toBe(320);
+  });
+
+  it('이미지 치수를 알게 된 뒤에는 업로드 중과 완료 후에 같은 폭 제한 정책을 사용한다', () => {
+    const uploading = calculateImageContainerSize({
+      boundsWidth: 800,
+      proportion: 100,
+      originalWidth: 320,
+      originalHeight: 240,
+    });
+    const ready = calculateImageContainerSize({
+      boundsWidth: 800,
+      proportion: 100,
+      originalWidth: 320,
+      originalHeight: 240,
+    });
+
+    expect(uploading).toEqual({ width: '320px', height: '240px' });
+    expect(ready).toEqual(uploading);
+  });
+
+  it('이미지 치수를 아직 모를 때만 전체 폭으로 폴백한다', () => {
+    expect(
+      calculateImageContainerSize({
+        boundsWidth: 800,
+        proportion: 100,
+        originalWidth: 0,
+        originalHeight: 0,
+      }),
+    ).toEqual({ width: '100%', height: undefined });
   });
 });
