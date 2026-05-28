@@ -112,6 +112,10 @@ pub fn selection_hit_test(
         return false;
     }
 
+    if selected_external_atom_hit_test(&tree.root, pages, selection, page_idx, x, y) {
+        return true;
+    }
+
     let rects: Vec<Rect> = selection_rects(tree, pages, selection)
         .into_iter()
         .filter(|r| r.page_idx == page_idx)
@@ -152,6 +156,62 @@ pub fn selection_hit_test(
     }
 
     false
+}
+
+fn selected_external_atom_hit_test(
+    node: &LayoutNode,
+    pages: &[LayoutPage],
+    selection: &editor_state::ResolvedSelection<'_>,
+    page_idx: usize,
+    x: f32,
+    y: f32,
+) -> bool {
+    let Some(page) = pages.get(page_idx) else {
+        return false;
+    };
+
+    selected_external_atom_hit_test_in_node(node, page, selection, x, y)
+}
+
+fn selected_external_atom_hit_test_in_node(
+    node: &LayoutNode,
+    page: &LayoutPage,
+    selection: &editor_state::ResolvedSelection<'_>,
+    x: f32,
+    y: f32,
+) -> bool {
+    let node_top = node.rect.y;
+    let node_bottom = node_top + node.rect.height;
+    if node_bottom <= page.y_start || node_top >= page.y_end {
+        return false;
+    }
+
+    match &node.content {
+        LayoutContent::Box(b) => b
+            .children
+            .iter()
+            .any(|child| selected_external_atom_hit_test_in_node(child, page, selection, x, y)),
+        LayoutContent::Atom(atom) => {
+            let doc = selection.doc();
+            let Some(node_ref) = doc.node(atom.node_id) else {
+                return false;
+            };
+            if !node_ref.spec().external || !selection.contains_subtree(&node_ref) {
+                return false;
+            }
+
+            let top = node_top.max(page.y_start);
+            let bottom = node_bottom.min(page.y_end);
+            Rect::from_xywh(
+                node.rect.x,
+                top - page.y_start,
+                node.rect.width,
+                bottom - top,
+            )
+            .contains(x, y)
+        }
+        LayoutContent::Line(_) | LayoutContent::Spacing(_) => false,
+    }
 }
 
 // Whether `node` (as returned by `find_line_at`) should be treated as the
@@ -541,6 +601,42 @@ mod tests {
             rects.is_empty(),
             "external atom must not emit a selection rect, got {:?}",
             rects
+        );
+    }
+
+    #[test]
+    fn selection_hit_test_includes_selected_external_atom_bounds() {
+        let (doc, img) = doc! {
+            root {
+                img: image
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(
+            Position::new(NodeId::ROOT, 0),
+            Position::new(NodeId::ROOT, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+        let rect = view
+            .external_elements(&doc, Some(&sel))
+            .into_iter()
+            .find(|element| element.node_id == img)
+            .expect("image external element")
+            .bounds;
+
+        assert!(
+            selection_hit_test(
+                tree,
+                pages,
+                &resolved,
+                0,
+                rect.x + rect.width * 0.5,
+                rect.y + rect.height * 0.5,
+            ),
+            "selected external atoms must be a hit target for native DnD admission"
         );
     }
 
