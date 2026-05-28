@@ -54,6 +54,14 @@ function ensureWasmInitialized(): Promise<void> {
 export class EditorContext {
   editor = $state<Editor>();
   fileAssets = $state(new SvelteMap<string, FileAsset>());
+  // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음
+  user = $state<unknown>();
+  paneFocused = $state(false);
+  documentId = $state<string | null>(null);
+  serverSnapshot = $state<Uint8Array | undefined>();
+  serverVersion = $state<string | null>(null);
+  serverGeneration = $state<number>(0);
+  resetKey = $state<number>(0);
   pendingImageDrops: File[] = [];
   pendingFileDrops: File[] = [];
 }

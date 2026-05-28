@@ -11,6 +11,7 @@
   import { fb } from '$lib/analytics';
   import { graphql } from '$mearie';
   import Document from '../Document.svelte';
+  import DocumentV2 from '../v2/Document.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
@@ -50,11 +51,15 @@
             ... on Document {
               id
               layoutMode
+              state {
+                __typename
+              }
             }
           }
         }
 
         ...Document_query
+        ...DocumentV2_query
       }
     `),
     () => ({ slug: pane.slug }),
@@ -148,7 +153,11 @@
   {#if query.data && entity}
     {#if entity?.state === EntityState.ACTIVE}
       {#if entity?.node.__typename === 'Document'}
-        <Document {focused} onReady={() => (editorReady = true)} query$key={query.data} slug={entity.slug} />
+        {#if entity.node.state}
+          <DocumentV2 {focused} onReady={() => (editorReady = true)} query$key={query.data} />
+        {:else}
+          <Document {focused} onReady={() => (editorReady = true)} query$key={query.data} slug={entity.slug} />
+        {/if}
       {/if}
     {:else}
       {@const name = '문서'}

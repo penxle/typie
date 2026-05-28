@@ -1,0 +1,125 @@
+<script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { tooltip } from '@typie/ui/actions';
+  import ToolbarIcon from './ToolbarIcon.svelte';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { TooltipParameter } from '@typie/ui/actions';
+  import type { Component } from 'svelte';
+
+  type Props = {
+    style?: SystemStyleObject;
+    size: 'large' | 'medium' | 'small';
+    icon: Component;
+    label: string;
+    keys?: TooltipParameter['keys'];
+    active?: boolean;
+    disabled?: boolean;
+    onclick?: () => void;
+  };
+
+  let { style, size, icon, label, keys, active = false, disabled = false, onclick }: Props = $props();
+</script>
+
+{#if size === 'large'}
+  <button
+    class={css(
+      {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'column',
+        gap: '4px',
+        borderRadius: '4px',
+        size: '48px',
+        color: 'text.subtle',
+        transition: 'common',
+        _enabled: {
+          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
+        },
+        _disabled: { opacity: '50' },
+        flexShrink: '0',
+      },
+      style,
+    )}
+    aria-pressed={active}
+    {disabled}
+    {onclick}
+    type="button"
+    use:tooltip={{
+      message: disabled ? '(준비중)' : undefined,
+      delay: 200,
+      arrow: false,
+    }}
+  >
+    <ToolbarIcon {icon} />
+    <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
+  </button>
+{:else if size === 'medium'}
+  <button
+    class={css(
+      {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: '4px',
+        size: '28px',
+        color: 'text.subtle',
+        transition: 'common',
+        _enabled: {
+          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
+        },
+        _disabled: { opacity: '50' },
+        flexShrink: '0',
+      },
+      style,
+    )}
+    aria-label={label}
+    aria-pressed={active}
+    {disabled}
+    {onclick}
+    type="button"
+    use:tooltip={{
+      message: disabled ? `${label} (준비중)` : label,
+      keys,
+      delay: 200,
+      arrow: false,
+    }}
+  >
+    <ToolbarIcon {icon} />
+  </button>
+{:else if size === 'small'}
+  <button
+    class={css(
+      {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: '4px',
+        size: '24px',
+        color: 'text.subtle',
+        _enabled: {
+          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
+        },
+        _disabled: { opacity: '50' },
+        flexShrink: '0',
+      },
+      style,
+    )}
+    aria-label={label}
+    aria-pressed={active}
+    {disabled}
+    {onclick}
+    type="button"
+    use:tooltip={{
+      message: disabled ? `${label} (준비중)` : label,
+      keys,
+      delay: 1000,
+      arrow: false,
+    }}
+  >
+    <ToolbarIcon {icon} />
+  </button>
+{/if}
