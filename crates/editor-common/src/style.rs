@@ -22,5 +22,9 @@ pub struct Underline {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct DecorationStyle {
     pub background: Option<String>,
+    #[serde(default)]
+    pub background_radius: Option<f32>,
+    #[serde(default)]
+    pub background_inset: Option<f32>,
     pub underline: Option<Underline>,
 }

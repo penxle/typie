@@ -10,6 +10,7 @@ mod history;
 mod ime;
 mod interaction;
 mod message;
+mod search;
 mod state_field;
 mod tracked_range;
 
@@ -30,5 +31,6 @@ pub use handle::*;
 pub use history::*;
 pub use ime::*;
 pub use message::*;
+pub use search::find_matches;
 pub use state_field::*;
 pub use tracked_range::*;

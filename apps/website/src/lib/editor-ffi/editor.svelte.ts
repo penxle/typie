@@ -65,6 +65,7 @@ export class EditorContext {
   resetKey = $state<number>(0);
   pendingImageDrops: File[] = [];
   pendingFileDrops: File[] = [];
+  findReplaceOpen = $state(false);
 }
 
 const [getEditorContext, setEditorContext] = createContext<EditorContext>();
@@ -111,6 +112,10 @@ export class Editor {
   #linkHover = $state<{ link: LinkRect; page: number; clientX: number; clientY: number } | undefined>();
   #modifierHeld = $state(false);
 
+  #searchQuery = $state('');
+  #searchMatches = $state<{ id: string; selection: Selection }[]>([]);
+  #searchActiveIdx = $state<number | undefined>();
+
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
 
@@ -153,6 +158,9 @@ export class Editor {
     self.on('state_changed', self.#stateChangedHandler);
     self.on('font_data_missing', fontDataMissingHandler);
     self.on('scroll', self.#scrollHandler);
+    self.on('tracked_range_replace_result', (_, { id, outcome }) => {
+      self.#handleReplaceResult(id, outcome);
+    });
 
     register(self);
 
@@ -207,6 +215,37 @@ export class Editor {
     wasm.set_theme_variant(themeVariant);
     self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
     self.enqueue({ type: 'system', event: { type: 'initialize' } });
+
+    self.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'search-match',
+        style: {
+          background: 'ui.search-match',
+          background_radius: 2,
+          background_inset: 2,
+          underline: undefined,
+        },
+        enabled: true,
+        z_index: 0,
+      },
+    });
+    self.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'search-match-active',
+        style: {
+          background: 'ui.search-match-active',
+          background_radius: 2,
+          background_inset: 2,
+          underline: undefined,
+        },
+        enabled: true,
+        z_index: 1,
+      },
+    });
 
     return self;
   }
@@ -608,6 +647,143 @@ export class Editor {
     return this.#wasm.copy_selection();
   }
 
+  get searchMatches(): { active: boolean }[] {
+    const matches = this.#searchMatches;
+    const active = this.#searchActiveIdx;
+    return matches.map((_, i) => ({ active: i === active }));
+  }
+
+  search(query: string, options?: { matchWholeWord?: boolean }): void {
+    const matchWholeWord = options?.matchWholeWord ?? false;
+    this.#searchQuery = query;
+
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match' } });
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
+
+    if (query.length === 0) {
+      this.#searchMatches = [];
+      this.#searchActiveIdx = undefined;
+      return;
+    }
+
+    const selections = this.#wasm.find_matches(query, { match_whole_word: matchWholeWord });
+    const matches = selections.map((selection, i) => ({ id: `search-match:${i}`, selection }));
+
+    for (const m of matches) {
+      this.enqueue({
+        type: 'tracked_range',
+        op: { type: 'add', id: m.id, group: 'search-match', selection: m.selection, metadata: '' },
+      });
+    }
+
+    this.#searchMatches = matches;
+    this.#searchActiveIdx = matches.length === 0 ? undefined : 0;
+    if (this.#searchActiveIdx !== undefined) {
+      this.#applyActiveMark();
+      this.#scrollToActiveMatch();
+    }
+  }
+
+  clearSearch(): void {
+    this.#searchQuery = '';
+    this.#searchMatches = [];
+    this.#searchActiveIdx = undefined;
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match' } });
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
+  }
+
+  findNext(): void {
+    this.#moveActive(1);
+  }
+
+  findPrevious(): void {
+    this.#moveActive(-1);
+  }
+
+  replace(replacement: string): void {
+    if (replacement.includes('\n') || replacement.includes('\r')) return;
+    if (this.#searchActiveIdx === undefined) return;
+    const match = this.#searchMatches[this.#searchActiveIdx];
+    if (!match) return;
+    this.enqueue({
+      type: 'tracked_range',
+      op: { type: 'replace_text', id: match.id, expected_text: this.#searchQuery, replacement },
+    });
+  }
+
+  replaceAll(replacement: string): void {
+    if (replacement.includes('\n') || replacement.includes('\r')) return;
+    const query = this.#searchQuery;
+    if (query.length === 0) return;
+    for (const m of this.#searchMatches) {
+      this.enqueue({
+        type: 'tracked_range',
+        op: { type: 'replace_text', id: m.id, expected_text: query, replacement },
+      });
+    }
+    this.#searchMatches = [];
+    this.#searchActiveIdx = undefined;
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match' } });
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
+  }
+
+  #moveActive(delta: number): void {
+    const len = this.#searchMatches.length;
+    if (len === 0) return;
+    const current = this.#searchActiveIdx ?? 0;
+    const next = (((current + delta) % len) + len) % len;
+    this.#searchActiveIdx = next;
+    this.#applyActiveMark();
+    this.#scrollToActiveMatch();
+  }
+
+  #applyActiveMark(): void {
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
+    const idx = this.#searchActiveIdx;
+    if (idx === undefined) return;
+    const match = this.#searchMatches[idx];
+    if (!match) return;
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'add',
+        id: `search-match-active:${match.id}`,
+        group: 'search-match-active',
+        selection: match.selection,
+        metadata: '',
+      },
+    });
+  }
+
+  #scrollToActiveMatch(): void {
+    const idx = this.#searchActiveIdx;
+    if (idx === undefined) return;
+    const match = this.#searchMatches[idx];
+    if (!match) return;
+    this.enqueue({ type: 'view', op: { type: 'scroll_into_view', target: { type: 'tracked_item', id: match.id } } });
+  }
+
+  #handleReplaceResult(id: string, outcome: string): void {
+    if (!id.startsWith('search-match:')) return;
+    if (outcome !== 'replaced') return;
+    const idx = this.#searchMatches.findIndex((m) => m.id === id);
+    if (idx === -1) return;
+    this.#searchMatches = this.#searchMatches.filter((_, i) => i !== idx);
+    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
+    this.enqueue({
+      type: 'tracked_range',
+      op: { type: 'remove', id: `search-match-active:${id}` },
+    });
+    const len = this.#searchMatches.length;
+    if (len === 0) {
+      this.#searchActiveIdx = undefined;
+    } else {
+      this.#searchActiveIdx = Math.min(idx, len - 1);
+      this.#applyActiveMark();
+      this.#scrollToActiveMatch();
+    }
+  }
+
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {
     const output = match(mode)
       .with('state', () => this.#wasm.inspect_state())
@@ -695,7 +871,9 @@ export class Editor {
     const container = this.scrollContainerEl;
     if (!pageEl || !container) return;
 
-    const top = pageEl.offsetTop + rect.y;
+    const pageRect = pageEl.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const top = pageRect.top - containerRect.top + container.scrollTop + rect.y;
     const bottom = top + rect.height;
     const viewTop = container.scrollTop;
     const viewBottom = viewTop + container.clientHeight;
@@ -707,7 +885,7 @@ export class Editor {
       nextTop = bottom - container.clientHeight;
     }
     if (nextTop !== null) {
-      container.scrollTo({ top: nextTop, behavior: 'smooth' });
+      container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
     }
   };
 

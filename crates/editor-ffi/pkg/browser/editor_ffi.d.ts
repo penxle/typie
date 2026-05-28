@@ -261,6 +261,8 @@ export interface CursorMetrics {
 
 export interface DecorationStyle {
     background: string | undefined;
+    background_radius?: number | undefined;
+    background_inset?: number | undefined;
     underline: Underline | undefined;
 }
 
@@ -465,6 +467,10 @@ export interface Rect {
 
 export interface RubyValue {
     text: string;
+}
+
+export interface SearchOptions {
+    match_whole_word?: boolean;
 }
 
 export interface SelectionEndpoints {
@@ -678,7 +684,7 @@ export type TextNodeAttr = void;
 
 export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
 
-export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean } | { type: "remove_group_decoration"; group: string } | { type: "replace_text"; id: string; expected_text?: string | undefined; replacement: string };
+export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean; z_index?: number } | { type: "remove_group_decoration"; group: string } | { type: "replace_text"; id: string; expected_text?: string | undefined; replacement: string };
 
 export type TrackedRangeReplaceOutcome = "replaced" | "unknown_id" | "invalid" | "text_mismatch" | "invalid_replacement";
 
@@ -705,6 +711,7 @@ declare class Editor {
     enqueue(message: Message): void;
     export_page_vector(page: number, scale_factor: number): Uint8Array;
     external_elements(): ExternalElement[];
+    find_matches(query: string, options?: SearchOptions | null): Selection[];
     freeze_selection(selection: Selection): StableSelection;
     ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;

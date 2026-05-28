@@ -34,7 +34,9 @@
     "bg.yellow": "#fef3c7",
     "bg.green": "#dff3e3",
     "bg.blue": "#e7f3f8",
-    "bg.purple": "#f0e7fe"
+    "bg.purple": "#f0e7fe",
+    "ui.search-match": "#ffff80",
+    "ui.search-match-active": "#ffd280"
   },
   "darkShared": {
     "ui.accent.brand.default": "#505ca4",
@@ -51,7 +53,9 @@
     "bg.yellow": "#4e3e1b",
     "bg.green": "#2c4331",
     "bg.blue": "#153b4f",
-    "bg.purple": "#3f2e50"
+    "bg.purple": "#3f2e50",
+    "ui.search-match": "#544a2e",
+    "ui.search-match-active": "#a06828"
   },
   "variants": {
     "light-white": {

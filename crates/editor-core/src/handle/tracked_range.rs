@@ -86,8 +86,13 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             group,
             style,
             enabled,
+            z_index,
         } => {
-            let decoration = GroupDecoration { style, enabled };
+            let decoration = GroupDecoration {
+                style,
+                enabled,
+                z_index,
+            };
             let would_change = editor.view.would_set_group_decoration(&group, &decoration);
             commit_view_or_probe(editor, would_change, |editor| {
                 editor.view.set_group_decoration(group, decoration);
@@ -483,6 +488,7 @@ mod tests {
         DecorationStyle {
             background: Some("selection".into()),
             underline: None,
+            ..Default::default()
         }
     }
 
@@ -492,6 +498,7 @@ mod tests {
                 group: group.into(),
                 style,
                 enabled,
+                z_index: 0,
             },
         }
     }

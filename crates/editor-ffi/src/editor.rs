@@ -333,6 +333,20 @@ impl Editor {
         })
     }
 
+    pub fn find_matches(
+        &self,
+        query: String,
+        options: Option<Complex<editor_core::SearchOptions>>,
+    ) -> EditorResult<Vec<Complex<editor_state::Selection>>> {
+        self.with_inner(|inner| {
+            let opts = match options {
+                Some(o) => o.from_ffi()?,
+                None => editor_core::SearchOptions::default(),
+            };
+            Ok(inner.editor.find_matches(&query, &opts).into_ffi()?)
+        })
+    }
+
     pub fn tracked_ranges(
         &self,
         group: Option<String>,

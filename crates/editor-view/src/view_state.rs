@@ -24,6 +24,7 @@ pub struct GapPhantom {
 pub struct GroupDecoration {
     pub style: DecorationStyle,
     pub enabled: bool,
+    pub z_index: i32,
 }
 
 #[derive(Debug, Clone, Default)]

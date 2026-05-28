@@ -135,8 +135,10 @@ fn build_corpus() -> Vec<Message> {
                 style: editor_common::DecorationStyle {
                     background: Some("selection".into()),
                     underline: None,
+                    ..Default::default()
                 },
                 enabled: true,
+                z_index: 0,
             },
         },
         Message::TrackedRange {

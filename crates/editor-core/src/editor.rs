@@ -162,6 +162,10 @@ impl Editor {
         &mut self.tracked_ranges
     }
 
+    pub fn find_matches(&self, query: &str, options: &SearchOptions) -> Vec<Selection> {
+        crate::search::find_matches(&self.state.doc, query, options)
+    }
+
     pub(crate) fn is_probing(&self) -> bool {
         matches!(self.mode, Mode::Probe { .. })
     }
@@ -494,6 +498,7 @@ impl Editor {
         if view_state.tracked_decoration_groups.is_empty() {
             return;
         }
+        let mut entries: Vec<(i32, &editor_view::GroupDecoration, Vec<PageRect>)> = Vec::new();
         for range in self.tracked_ranges.iter() {
             let Some(group) = view_state.group_decoration(&range.group) else {
                 continue;
@@ -520,9 +525,17 @@ impl Editor {
             if rects.is_empty() {
                 continue;
             }
+            entries.push((group.z_index, group, rects));
+        }
+        entries.sort_by_key(|(z, _, _)| *z);
+        for (_, group, rects) in entries {
             if let Some(theme_key) = group.style.background.clone() {
                 marks.push(Mark {
-                    data: MarkData::TrackedBackground { theme_key },
+                    data: MarkData::TrackedBackground {
+                        theme_key,
+                        border_radius: group.style.background_radius.unwrap_or(0.0),
+                        vertical_inset: group.style.background_inset.unwrap_or(0.0),
+                    },
                     rects: rects.clone(),
                 });
             }
@@ -551,6 +564,9 @@ impl Editor {
 
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
         let mut marks: Vec<Mark> = Vec::new();
+
+        // Push before selection so selection draws on top within BelowContent.
+        self.collect_tracked_decoration_marks(&mut marks);
 
         if let Some(rects) = self.selection_mark_rects() {
             marks.push(Mark {
@@ -585,8 +601,6 @@ impl Editor {
                 rects: vec![target.indicator.rect()],
             });
         }
-
-        self.collect_tracked_decoration_marks(&mut marks);
 
         self.renderer.render_page(
             sink,

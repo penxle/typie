@@ -369,11 +369,19 @@ pub enum MarkLayer {
 
 #[derive(Debug, Clone)]
 pub enum MarkData {
-    Selection { focused: bool },
+    Selection {
+        focused: bool,
+    },
     Composition,
     DropIndicator,
-    TrackedBackground { theme_key: String },
-    TrackedUnderline { underline: Underline },
+    TrackedBackground {
+        theme_key: String,
+        border_radius: f32,
+        vertical_inset: f32,
+    },
+    TrackedUnderline {
+        underline: Underline,
+    },
 }
 
 impl MarkData {
@@ -503,7 +511,7 @@ impl Renderer {
             MarkData::Selection { focused } => Some(selection_mark_color(theme, *focused)),
             MarkData::Composition => Some(theme.color("ui.text.default")),
             MarkData::DropIndicator => Some(theme.color("selection")),
-            MarkData::TrackedBackground { theme_key } => Some(theme.color(theme_key)),
+            MarkData::TrackedBackground { theme_key, .. } => Some(theme.color(theme_key)),
             MarkData::TrackedUnderline { .. } => None,
         }
     }
@@ -529,6 +537,37 @@ impl Renderer {
                 match &mark.data {
                     MarkData::TrackedUnderline { underline } => {
                         draw_underline(sink, rect.rect, underline, theme, transform);
+                    }
+                    MarkData::TrackedBackground {
+                        border_radius,
+                        vertical_inset,
+                        ..
+                    } => {
+                        if let Some(color) = self.resolve_mark_color(&mark.data, theme) {
+                            let inset = vertical_inset.max(0.0).min(rect.rect.height * 0.5);
+                            let r = Rect::from_xywh(
+                                rect.rect.x,
+                                rect.rect.y + inset,
+                                rect.rect.width,
+                                (rect.rect.height - inset * 2.0).max(0.0),
+                            );
+                            let radius = border_radius.max(0.0);
+                            if radius > 0.0 && r.height > 0.0 && r.width > 0.0 {
+                                let radius = radius.min(r.height * 0.5).min(r.width * 0.5);
+                                let path = Path::rrect(
+                                    r,
+                                    CornerRadii {
+                                        top_left: radius,
+                                        top_right: radius,
+                                        bottom_right: radius,
+                                        bottom_left: radius,
+                                    },
+                                );
+                                sink.fill_path(&path, color, transform);
+                            } else {
+                                sink.fill_rect(r, color, transform);
+                            }
+                        }
                     }
                     _ => {
                         if let Some(color) = self.resolve_mark_color(&mark.data, theme) {

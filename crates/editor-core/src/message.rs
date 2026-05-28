@@ -335,6 +335,14 @@ pub enum FlatImeOp {
 }
 
 #[ffi]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SearchOptions {
+    #[serde(default)]
+    pub match_whole_word: bool,
+}
+
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TrackedRangeOp {
@@ -365,6 +373,8 @@ pub enum TrackedRangeOp {
         group: String,
         style: DecorationStyle,
         enabled: bool,
+        #[serde(default)]
+        z_index: i32,
     },
     RemoveGroupDecoration {
         group: String,

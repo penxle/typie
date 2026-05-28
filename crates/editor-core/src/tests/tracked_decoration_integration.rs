@@ -23,6 +23,7 @@ fn set_group(group: &str, style: DecorationStyle, enabled: bool) -> Message {
             group: group.into(),
             style,
             enabled,
+            z_index: 0,
         },
     }
 }
@@ -31,6 +32,7 @@ fn background_only_style() -> DecorationStyle {
     DecorationStyle {
         background: Some("selection".into()),
         underline: None,
+        ..Default::default()
     }
 }
 
@@ -42,6 +44,7 @@ fn underline_only_style() -> DecorationStyle {
             style: UnderlineStyle::Dashed,
             thickness: 1.5,
         }),
+        ..Default::default()
     }
 }
 
@@ -53,6 +56,7 @@ fn both_style() -> DecorationStyle {
             style: UnderlineStyle::Solid,
             thickness: 1.0,
         }),
+        ..Default::default()
     }
 }
 

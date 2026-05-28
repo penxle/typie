@@ -168,8 +168,10 @@ fn hit_test_ignores_decoration_enabled_flag() {
             style: editor_common::DecorationStyle {
                 background: Some("selection".into()),
                 underline: None,
+                ..Default::default()
             },
             enabled: false,
+            z_index: 0,
         },
     });
 
