@@ -786,6 +786,7 @@ declare class EditorServer {
     get_font_metadata(data: Uint8Array): FontMetadata;
     heads(changeset_payloads: Uint8Array): Uint8Array;
     missing_for(all_changesets: Uint8Array, remote_heads_payload: Uint8Array): Uint8Array;
+    outline_text_to_svg(font_data: Uint8Array, text: string): string;
     /**
      * Returns the total ops count in a Changesets bundle. Used by push light validation.
      */
