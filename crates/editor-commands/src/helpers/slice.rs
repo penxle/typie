@@ -211,7 +211,7 @@ fn insert_inline_at_position(
     let Some(end) = tr.selection().map(|s| s.head) else {
         return Ok(None);
     };
-    Ok(Some(Selection::new(start, end)))
+    Ok(Some(normalized_selection(tr, start, end)))
 }
 
 fn insert_blocks_in_textblock_at_position(
@@ -220,15 +220,7 @@ fn insert_blocks_in_textblock_at_position(
     slice: &Slice,
 ) -> Result<Option<Selection>, CommandError> {
     tr.set_selection(Some(Selection::collapsed(position)))?;
-    let start = tr.selection().map(|s| s.head).unwrap_or(position);
-    let inserted = insert_blocks_in_textblock(tr, slice)?;
-    if !inserted {
-        return Ok(None);
-    }
-    let Some(end) = tr.selection().map(|s| s.head) else {
-        return Ok(None);
-    };
-    Ok(Some(Selection::new(start, end)))
+    insert_blocks_in_textblock(tr, slice)
 }
 
 fn insert_inline_fragments(tr: &mut Transaction, fragments: Vec<Fragment>) -> CommandResult {
@@ -309,7 +301,20 @@ fn textblock_insert_point(
     }
 }
 
-fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandResult {
+#[derive(Clone, Copy)]
+enum InsertedRangeEndpoint {
+    // Open slice edges merge into split textblocks and are represented by
+    // inline positions. Closed middle blocks are resolved after cleanup because
+    // removing empty split halves can shift their parent indices.
+    Position(Position),
+    BeforeBlock(NodeId),
+    AfterBlock(NodeId),
+}
+
+fn insert_blocks_in_textblock(
+    tr: &mut Transaction,
+    slice: &Slice,
+) -> Result<Option<Selection>, CommandError> {
     let head = tr
         .selection()
         .expect("entry caller guaranteed selection")
@@ -389,17 +394,27 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
     let merge_end = merge_end && middle_end >= middle_start;
 
     let mut last_caret: Option<Position> = None;
+    let mut inserted_start: Option<InsertedRangeEndpoint> = None;
+    let mut inserted_end: Option<InsertedRangeEndpoint> = None;
 
     if merge_start {
         let first = blocks[0];
         let inline = first.children.to_vec();
         position_caret_at_textblock_end(tr, textblock_id)?;
-        insert_inline_fragments(tr, inline)?;
-        last_caret = Some(
-            tr.selection()
-                .expect("selection preserved through mutations")
-                .head,
-        );
+        let start = tr
+            .selection()
+            .expect("selection preserved through mutations")
+            .head;
+        let inserted = insert_inline_fragments(tr, inline)?;
+        let end = tr
+            .selection()
+            .expect("selection preserved through mutations")
+            .head;
+        if inserted {
+            inserted_start.get_or_insert(InsertedRangeEndpoint::Position(start));
+            inserted_end = Some(InsertedRangeEndpoint::Position(end));
+        }
+        last_caret = Some(end);
     }
 
     for (insert_at, block) in
@@ -408,6 +423,8 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
         let subtree = (*block).clone().into_subtree();
         let inserted_id = subtree.id;
         tr.insert_subtree(container_id, insert_at, subtree)?;
+        inserted_start.get_or_insert(InsertedRangeEndpoint::BeforeBlock(inserted_id));
+        inserted_end = Some(InsertedRangeEndpoint::AfterBlock(inserted_id));
         last_caret = Some(position_at_end_of_block(tr, inserted_id));
     }
 
@@ -415,14 +432,22 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
         let last = blocks.last().unwrap();
         let inline = last.children.to_vec();
         position_caret_at_textblock_start(tr, p2_id)?;
-        insert_inline_fragments(tr, inline)?;
+        let start = tr
+            .selection()
+            .expect("selection preserved through mutations")
+            .head;
+        let inserted = insert_inline_fragments(tr, inline)?;
         // After inserting at the start of p2, the caret naturally lands between
         // the merged-in inline and p2's original inline content.
-        last_caret = Some(
-            tr.selection()
-                .expect("selection preserved through mutations")
-                .head,
-        );
+        let end = tr
+            .selection()
+            .expect("selection preserved through mutations")
+            .head;
+        if inserted {
+            inserted_start.get_or_insert(InsertedRangeEndpoint::Position(start));
+            inserted_end = Some(InsertedRangeEndpoint::Position(end));
+        }
+        last_caret = Some(end);
     }
 
     // Drop the split halves when they're empty AND the container's schema
@@ -469,9 +494,19 @@ fn insert_blocks_in_textblock(tr: &mut Transaction, slice: &Slice) -> CommandRes
             affinity: Affinity::Upstream,
         },
     };
+    let inserted_selection = inserted_start.zip(inserted_end).and_then(|(start, end)| {
+        let start = resolve_inserted_range_endpoint(tr, start)?;
+        let end = resolve_inserted_range_endpoint(tr, end)?;
+        Some(normalized_selection(tr, start, end))
+    });
     tr.set_selection(Some(Selection::collapsed(final_pos)))?;
 
-    Ok(true)
+    Ok(inserted_selection)
+}
+
+fn normalized_selection(tr: &Transaction, anchor: Position, head: Position) -> Selection {
+    let selection = Selection::new(anchor, head);
+    selection.normalize(&tr.doc()).unwrap_or(selection)
 }
 
 fn position_caret_at_textblock_end(
@@ -660,6 +695,31 @@ fn selection_over_inserted_blocks(
             affinity: Affinity::Upstream,
         },
     )
+}
+
+fn resolve_inserted_range_endpoint(
+    tr: &Transaction,
+    endpoint: InsertedRangeEndpoint,
+) -> Option<Position> {
+    match endpoint {
+        InsertedRangeEndpoint::Position(position) => Some(position),
+        InsertedRangeEndpoint::BeforeBlock(id) | InsertedRangeEndpoint::AfterBlock(id) => {
+            let doc = tr.doc();
+            let node = doc.node(id)?;
+            let parent = node.parent()?;
+            let index = node.index()?;
+            let (offset, affinity) = match endpoint {
+                InsertedRangeEndpoint::BeforeBlock(_) => (index, Affinity::Downstream),
+                InsertedRangeEndpoint::AfterBlock(_) => (index + 1, Affinity::Upstream),
+                InsertedRangeEndpoint::Position(_) => unreachable!(),
+            };
+            Some(Position {
+                node_id: parent.id(),
+                offset,
+                affinity,
+            })
+        }
+    }
 }
 
 fn same_textblock_type(slice_node: &PlainNode, doc_node_id: NodeId, tr: &Transaction) -> bool {

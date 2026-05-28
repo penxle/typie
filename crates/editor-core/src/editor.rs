@@ -1097,7 +1097,7 @@ mod tests {
         Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainDoc, PlainNode, PlainNodeEntry,
         PlainParagraphNode, PlainRootNode, PlainTextNode,
     };
-    use editor_state::{PendingModifier, PendingModifiers, Position, Selection, State};
+    use editor_state::{Affinity, PendingModifier, PendingModifiers, Position, Selection, State};
     use hashbrown::HashSet;
     use std::collections::BTreeMap;
 
@@ -2629,6 +2629,84 @@ mod tests {
         });
 
         editor_state::assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn drop_internal_image_into_text_middle_selects_inserted_range() {
+        let (initial, root, t) = state! {
+            doc { root: root {
+                image
+                paragraph { t: text("hello") }
+            } }
+            selection: (root, 0, >) -> (root, 1, <)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        let InteractionState::InternalDnd { drop_target, .. } = &mut editor.interaction else {
+            panic!("internal dnd should start from selected image");
+        };
+        *drop_target = Some(editor_view::DropTarget {
+            position: Position::new(t, 3),
+            indicator: editor_view::DropIndicator::Inline {
+                page_idx: 0,
+                x: 0.0,
+                y: 0.0,
+                height: 1.0,
+            },
+        });
+
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: 0.0,
+                y: 0.0,
+                payload: DndDropPayload::InternalSelection,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let root_node = editor.state().doc.node(root).expect("root exists");
+        let children: Vec<_> = root_node.children().map(|c| c.node()).collect();
+        assert!(matches!(
+            children.as_slice(),
+            [Node::Paragraph(_), Node::Image(_), Node::Paragraph(_)]
+        ));
+        let first_text = root_node
+            .children()
+            .next()
+            .and_then(|p| p.first_child())
+            .and_then(|n| match n.node() {
+                Node::Text(t) => Some(t.text.to_string()),
+                _ => None,
+            });
+        let last_text = root_node
+            .children()
+            .nth(2)
+            .and_then(|p| p.first_child())
+            .and_then(|n| match n.node() {
+                Node::Text(t) => Some(t.text.to_string()),
+                _ => None,
+            });
+        assert_eq!(first_text.as_deref(), Some("hel"));
+        assert_eq!(last_text.as_deref(), Some("lo"));
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: root,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: root,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
     }
 
     #[test]
