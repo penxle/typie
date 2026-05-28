@@ -372,9 +372,6 @@ enum TextRenderMode {
     VectorExport,
 }
 
-struct MarkStyle {
-    color: Color,
-}
 const SELECTION_FOCUSED_ALPHA: u8 = 77;
 const SELECTION_UNFOCUSED_ALPHA: u8 = 48;
 
