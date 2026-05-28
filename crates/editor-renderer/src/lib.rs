@@ -7,6 +7,7 @@ pub mod icons;
 pub mod renderer;
 pub mod sink;
 pub mod types;
+pub mod vector;
 
 pub use backend::RenderBackend;
 pub use renderer::{Mark, MarkData, MarkRect, Renderer};

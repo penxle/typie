@@ -361,6 +361,10 @@ impl Editor {
         })
     }
 
+    pub fn export_page_vector(&self, page: u32, scale_factor: f64) -> EditorResult<Vec<u8>> {
+        self.with_inner(|inner| Ok(inner.editor.export_page_vector(page, scale_factor as f32)))
+    }
+
     pub fn tracked_ranges_at(
         &self,
         page: u32,
@@ -964,6 +968,101 @@ mod tests {
         assert_eq!(
             hits[0].rects[0].page_idx, endpoints.from.page_idx,
             "rects must be page-local"
+        );
+    }
+
+    #[test]
+    fn ffi_export_page_vector_returns_nonempty_bytes() {
+        // export 결과가 비어있지 않은 바이너리여야 호스트가 파일로 저장할 수 있다.
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor
+            .export_page_vector(0, 1.0)
+            .expect("export_page_vector must return Ok");
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn ffi_export_page_vector_starts_with_magic() {
+        // TVE1(0x3156_4554) magic으로 시작해야 외부 변환기가 포맷을 식별할 수 있다.
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor
+            .export_page_vector(0, 1.0)
+            .expect("export_page_vector must return Ok");
+        let magic = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        assert_eq!(magic, 0x3156_4554u32);
+    }
+
+    fn op_count(bytes: &[u8]) -> u32 {
+        u32::from_le_bytes(bytes[12..16].try_into().unwrap())
+    }
+
+    #[test]
+    fn ffi_export_page_vector_has_valid_dimensions() {
+        // width/height가 양수여야 외부 변환기가 페이지 크기를 올바르게 재현할 수 있다.
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
+        let width = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let height = f32::from_le_bytes(bytes[8..12].try_into().unwrap());
+        assert!(width > 0.0 && height > 0.0);
+    }
+
+    #[test]
+    fn ffi_export_page_vector_shape_produces_ops() {
+        // horizontal_rule이 FillPath/StrokePath op으로 수집되어야 외부 변환기가 재현 가능하다.
+        let (initial, _t) = state! {
+            doc { root { paragraph { t: text("a") } horizontal_rule } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
+        assert!(
+            op_count(&bytes) > 0,
+            "horizontal_rule must produce at least one op"
+        );
+    }
+
+    #[test]
+    fn ffi_export_page_vector_table_border_produces_ops() {
+        // table border가 벡터 op으로 수집되어야 외부 변환기가 재현 가능하다.
+        let (initial, _t) = state! {
+            doc { root {
+                paragraph { t: text("a") }
+                table { table_row { table_cell { paragraph } table_cell { paragraph } } }
+            } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
+        assert!(
+            op_count(&bytes) > 0,
+            "table border must produce at least one op"
+        );
+    }
+
+    #[test]
+    fn ffi_export_page_vector_text_page_produces_valid_binary() {
+        // 텍스트 페이지도 글리프 outline 기반 벡터 op와 유효한 헤더를 포함한 바이너리를 반환해야 한다.
+        let (initial, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
+        assert!(
+            bytes.len() >= 16,
+            "must produce at least magic+dimensions+op_count"
         );
     }
 }

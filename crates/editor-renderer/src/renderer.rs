@@ -13,6 +13,8 @@ use crate::types::{
     Color, CornerRadii, IconData, IconElement, Image, Path, PathElement, Stroke, StrokeCap,
     StrokeJoin, Transform,
 };
+use crate::vector::codec::encode_vector_page;
+use crate::vector::export::VectorSink;
 
 fn bake_mask_to_premul_rgba(mask: &[u8], width: u32, height: u32, color: Color) -> Image {
     let color_r = color.r as u32;
@@ -364,6 +366,15 @@ pub struct Mark {
     pub rects: Vec<MarkRect>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextRenderMode {
+    Raster,
+    VectorExport,
+}
+
+struct MarkStyle {
+    color: Color,
+}
 const SELECTION_FOCUSED_ALPHA: u8 = 77;
 const SELECTION_UNFOCUSED_ALPHA: u8 = 48;
 
@@ -552,12 +563,76 @@ impl Renderer {
         );
     }
 
-    pub fn page_visitor<'a>(
+    pub fn export_page_vector(
+        &mut self,
+        doc: &Doc,
+        view: &editor_view::View,
+        page_idx: usize,
+        scale_factor: f32,
+    ) -> Vec<u8> {
+        let (width, height) = view
+            .pages()
+            .get(page_idx)
+            .map(|p| (p.size.width, p.size.height))
+            .unwrap_or((0.0, 0.0));
+
+        let mut sink = VectorSink::new();
+        view.visit_page(
+            page_idx,
+            &mut self.vector_page_visitor(
+                &mut sink,
+                doc,
+                scale_factor,
+                LayerSet::of(&[RenderLayer::Background]),
+            ),
+        );
+        view.visit_page(
+            page_idx,
+            &mut self.vector_page_visitor(
+                &mut sink,
+                doc,
+                scale_factor,
+                LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
+            ),
+        );
+
+        let page = sink.into_page(width, height);
+        encode_vector_page(&page)
+    }
+
+    fn page_visitor<'a>(
         &'a mut self,
         sink: &'a mut dyn RenderSink,
         doc: &'a Doc,
         scale_factor: f32,
         active: LayerSet,
+    ) -> RenderVisitor<'a> {
+        self.make_page_visitor(sink, doc, scale_factor, active, TextRenderMode::Raster)
+    }
+
+    fn vector_page_visitor<'a>(
+        &'a mut self,
+        sink: &'a mut dyn RenderSink,
+        doc: &'a Doc,
+        scale_factor: f32,
+        active: LayerSet,
+    ) -> RenderVisitor<'a> {
+        self.make_page_visitor(
+            sink,
+            doc,
+            scale_factor,
+            active,
+            TextRenderMode::VectorExport,
+        )
+    }
+
+    fn make_page_visitor<'a>(
+        &'a mut self,
+        sink: &'a mut dyn RenderSink,
+        doc: &'a Doc,
+        scale_factor: f32,
+        active: LayerSet,
+        text_mode: TextRenderMode,
     ) -> RenderVisitor<'a> {
         let theme = self.resource.lock().unwrap().theme;
         RenderVisitor {
@@ -568,6 +643,7 @@ impl Renderer {
             root_transform: Transform::scale(scale_factor),
             box_stack: Vec::new(),
             active,
+            text_mode,
             theme,
         }
     }
@@ -589,6 +665,7 @@ pub struct RenderVisitor<'a> {
     root_transform: Transform,
     box_stack: Vec<BoxFrame>,
     active: LayerSet,
+    text_mode: TextRenderMode,
     theme: Theme,
 }
 
@@ -646,6 +723,14 @@ impl<'a> RenderVisitor<'a> {
         base_transform: Transform,
     ) {
         for run in glyph_runs {
+            if self.text_mode == TextRenderMode::VectorExport {
+                let resource = Arc::clone(&self.renderer.resource);
+                let fonts = resource.lock().unwrap();
+                self.sink
+                    .draw_glyph_run(run, color, base_transform, &fonts.font_registry);
+                continue;
+            }
+
             let resource = Arc::clone(&self.renderer.resource);
             let resource_guard = resource.lock().unwrap();
             let positioned = crate::glyph::rasterize(
@@ -1345,6 +1430,8 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vector::export::VectorSink;
+    use crate::vector::types::{VectorOp, VectorPage};
     use editor_resource::ThemeVariant;
 
     #[test]
@@ -1587,6 +1674,94 @@ mod tests {
         assert!((r.height - 1.0).abs() < 0.01);
     }
 
+    fn export_page_to_vector_page(doc: &Doc) -> VectorPage {
+        let resource = Arc::new(Mutex::new(Resource::new_test()));
+        let mut view = editor_view::View::new_test();
+        view.layout(doc);
+
+        let (width, height) = view
+            .pages()
+            .first()
+            .map(|p| (p.size.width, p.size.height))
+            .expect("test document must layout to at least one page");
+
+        let mut renderer = Renderer::new(resource);
+        let mut sink = VectorSink::new();
+
+        view.visit_page(
+            0,
+            &mut renderer.vector_page_visitor(
+                &mut sink,
+                doc,
+                1.0,
+                LayerSet::of(&[RenderLayer::Background]),
+            ),
+        );
+        view.visit_page(
+            0,
+            &mut renderer.vector_page_visitor(
+                &mut sink,
+                doc,
+                1.0,
+                LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
+            ),
+        );
+
+        sink.into_page(width, height)
+    }
+
+    #[test]
+    fn table_border_page_is_vectorized() {
+        // 테이블 보더가 페이지 export 결과에서 벡터 path op로 나타나는지 확인한다.
+        use editor_macros::doc;
+
+        let (doc,) = doc! {
+            root {
+                table {
+                    table_row {
+                        table_cell { paragraph }
+                        table_cell { paragraph }
+                    }
+                }
+            }
+        };
+
+        let page = export_page_to_vector_page(&doc);
+
+        assert!(page.width > 0.0);
+        assert!(page.height > 0.0);
+        assert!(
+            page.ops
+                .iter()
+                .any(|op| matches!(op, VectorOp::FillPath { .. } | VectorOp::StrokePath { .. })),
+            "table border page must contain vector path ops"
+        );
+    }
+
+    #[test]
+    fn horizontal_rule_pattern_page_is_vectorized() {
+        // horizontal rule 패턴이 페이지 export 결과에서 벡터 path op로 나타나는지 확인한다.
+        use editor_macros::doc;
+
+        let (doc,) = doc! {
+            root {
+                paragraph { text("a") }
+                horizontal_rule
+            }
+        };
+
+        let page = export_page_to_vector_page(&doc);
+
+        assert!(page.width > 0.0);
+        assert!(page.height > 0.0);
+        assert!(
+            page.ops
+                .iter()
+                .any(|op| matches!(op, VectorOp::FillPath { .. } | VectorOp::StrokePath { .. })),
+            "horizontal rule page must contain vector path ops"
+        );
+    }
+
     #[test]
     fn line_with_ruby_annotation_invokes_ruby_raster_path() {
         use editor_view::glyph_run::{Glyph, RubyAnnotation, Synthesis};
@@ -1605,6 +1780,14 @@ mod tests {
             fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
             fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {}
             fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {
                 self.image_draws += 1;
             }
@@ -1684,6 +1867,14 @@ mod tests {
                 self.fills.push(c);
             }
             fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 
@@ -1786,6 +1977,14 @@ mod tests {
                 self.count += 1;
             }
             fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 
@@ -1865,6 +2064,14 @@ mod tests {
                 self.count += 1;
             }
             fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 
@@ -1932,6 +2139,14 @@ mod tests {
                 self.count += 1;
             }
             fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 
@@ -2033,6 +2248,14 @@ mod tests {
                 self.count += 1;
             }
             fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 

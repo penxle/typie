@@ -599,6 +599,15 @@ impl Editor {
         );
     }
 
+    pub fn export_page_vector(&mut self, page_idx: u32, scale_factor: f32) -> Vec<u8> {
+        self.renderer.export_page_vector(
+            &self.state.doc,
+            &self.view,
+            page_idx as usize,
+            scale_factor,
+        )
+    }
+
     fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {
         match msg {
             Message::Key { event } => handle::handle_key_event(self, event)?,
