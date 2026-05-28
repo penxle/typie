@@ -31,13 +31,17 @@
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ThemeVariant } from '$lib/editor-ffi/theme';
 
+  type Font = { id?: string | null; weight: number; subfamilyDisplayName?: string | null; state: string };
+  type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: readonly Font[] };
+
   type Props = {
     style?: SystemStyleObject;
+    fontFamilies?: readonly FontFamily[];
     onSearchClick?: () => void;
     onFontUploadClick?: () => void;
   };
 
-  let { style, onSearchClick, onFontUploadClick }: Props = $props();
+  let { style, fontFamilies = [], onSearchClick, onFontUploadClick }: Props = $props();
 
   const app = getAppContext();
   const theme = getThemeContext();
@@ -219,8 +223,8 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarFontFamily fontFamilies={[]} onUploadClick={onFontUploadClick} />
-    <ToolbarFontWeight />
+    <ToolbarFontFamily {fontFamilies} onUploadClick={onFontUploadClick} />
+    <ToolbarFontWeight {fontFamilies} />
     <ToolbarFontSize />
   </div>
 

@@ -29,10 +29,12 @@
     graph: Uint8Array;
     style?: SystemStyleObject;
     onReady?: () => void;
+    header?: Snippet;
+    footer?: Snippet;
     children?: Snippet;
   };
 
-  let { document$key, graph, style, onReady, children }: Props = $props();
+  let { document$key, graph, style, onReady, header, footer, children }: Props = $props();
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
@@ -63,7 +65,8 @@
   let clientWidth = $state<number>();
   let clientHeight = $state<number>();
 
-  const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
+  const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
+  const isPaginated = $derived(layoutMode?.type === 'paginated');
 
   const cursor = $derived.by(() => {
     const editor = ctx.editor;
@@ -107,7 +110,6 @@
 
 <div
   style:--page-gap={isPaginated ? `${PAGE_GAP}px` : undefined}
-  style:cursor
   class={css(
     {
       position: 'relative',
@@ -116,10 +118,7 @@
       alignItems: 'center',
       overflow: 'auto',
       scrollbar: 'hidden',
-      userSelect: 'none',
       ...(isPaginated && {
-        rowGap: 'var(--page-gap)',
-        paddingY: 'var(--page-gap)',
         backgroundColor: 'surface.subtle',
       }),
     },
@@ -132,51 +131,89 @@
       if (ctx.editor) ctx.editor.scrollContainerEl = undefined;
     };
   }}
-  draggable={ctx.editor && !ctx.editor.isSelectionCollapsed ? true : undefined}
-  oncontextmenu={handle(ctx.editor, handleContextMenu)}
-  ondragend={() => handleDragEnd(ctx)}
-  ondragenter={(event) => handleDragEnter(ctx, event)}
-  ondragleave={(event) => handleDragLeave(ctx, event)}
-  ondragover={(event) => handleDragOver(ctx, event)}
-  ondragstart={(event) => handleDragStart(ctx, event)}
-  ondrop={(event) => handleDrop(ctx, event)}
-  onfocusin={() => ctx.editor?.focus()}
-  onfocusout={(event) => {
-    if (!window.document.hasFocus()) return;
-    if (event.relatedTarget === ctx.editor?.inputEl) return;
-    ctx.editor?.blur();
-  }}
-  onpointercancel={handle(ctx.editor, handlePointerCancel)}
-  onpointerdown={handle(ctx.editor, handlePointerDown)}
-  onpointerleave={() => ctx.editor?.clearLinkHover()}
-  onpointermove={handle(ctx.editor, handlePointerMove)}
-  onpointerup={handle(ctx.editor, handlePointerUp)}
   onscroll={() => ctx.editor?.refreshPointerStyle()}
-  role="textbox"
-  tabindex={0}
   bind:clientWidth
   bind:clientHeight
 >
-  {#if ctx.editor}
-    {#each ctx.editor.pageSizes as { width, height }, i (i)}
-      <Page {height} page={i} {width} />
-    {/each}
+  {#if ctx.editor && header}
+    <div
+      style:width={layoutMode?.type === 'paginated' ? `${layoutMode.page_width}px` : '100%'}
+      style:max-width={layoutMode?.type === 'continuous' ? `${layoutMode.max_width}px` : undefined}
+      class={css({ flexShrink: '0' })}
+    >
+      {@render header()}
+    </div>
+  {/if}
 
-    <CaretPositioned>
-      <Caret />
-      <Input />
-    </CaretPositioned>
+  <div
+    style:cursor
+    class={css({
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      flexGrow: '1',
+      width: 'full',
+      userSelect: 'none',
+      ...(isPaginated && {
+        rowGap: 'var(--page-gap)',
+      }),
+    })}
+    draggable={ctx.editor && !ctx.editor.isSelectionCollapsed ? true : undefined}
+    oncontextmenu={handle(ctx.editor, handleContextMenu)}
+    ondragend={() => handleDragEnd(ctx)}
+    ondragenter={(event) => handleDragEnter(ctx, event)}
+    ondragleave={(event) => handleDragLeave(ctx, event)}
+    ondragover={(event) => handleDragOver(ctx, event)}
+    ondragstart={(event) => handleDragStart(ctx, event)}
+    ondrop={(event) => handleDrop(ctx, event)}
+    onfocusin={() => ctx.editor?.focus()}
+    onfocusout={(event) => {
+      if (!window.document.hasFocus()) return;
+      if (event.relatedTarget === ctx.editor?.inputEl) return;
+      ctx.editor?.blur();
+    }}
+    onpointercancel={handle(ctx.editor, handlePointerCancel)}
+    onpointerdown={handle(ctx.editor, handlePointerDown)}
+    onpointerleave={() => ctx.editor?.clearLinkHover()}
+    onpointermove={handle(ctx.editor, handlePointerMove)}
+    onpointerup={handle(ctx.editor, handlePointerUp)}
+    role="textbox"
+    tabindex={0}
+  >
+    {#if ctx.editor}
+      {#each ctx.editor.pageSizes as { width, height }, i (i)}
+        <Page {height} page={i} {width} />
+      {/each}
 
-    <LineHighlight />
+      <CaretPositioned>
+        <Caret />
+        <Input />
+      </CaretPositioned>
 
-    <Scrollbar />
+      <LineHighlight />
 
-    <ContextMenu />
+      <ContextMenu />
 
-    <LinkTooltip />
+      <LinkTooltip />
 
-    {#if children}
-      {@render children()}
+      {#if children}
+        {@render children()}
+      {/if}
     {/if}
+  </div>
+
+  {#if ctx.editor && footer}
+    <div
+      style:width={layoutMode?.type === 'paginated' ? `${layoutMode.page_width}px` : '100%'}
+      style:max-width={layoutMode?.type === 'continuous' ? `${layoutMode.max_width}px` : undefined}
+      class={css({ flexShrink: '0' })}
+    >
+      {@render footer()}
+    </div>
+  {/if}
+
+  {#if ctx.editor}
+    <Scrollbar />
   {/if}
 </div>

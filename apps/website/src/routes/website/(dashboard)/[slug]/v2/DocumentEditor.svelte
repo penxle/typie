@@ -824,6 +824,7 @@
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
           <BottomToolbar
+            {fontFamilies}
             onFontUploadClick={() => {
               if (entity.user.subscription) {
                 fontUploadModalOpen = true;
@@ -1023,7 +1024,7 @@
                           ctx.editor?.focus();
                           ctx.editor?.enqueue({
                             type: 'navigation',
-                            op: { type: 'move', movement: { type: 'document', direction: 'forward' }, extend: false },
+                            op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false },
                           });
                         }
                       }}

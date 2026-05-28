@@ -20,17 +20,9 @@
 </script>
 
 <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowY: 'hidden' })}>
-  {#if header}
-    {@render header()}
-  {/if}
-
-  <View style={css.raw({ flex: '1' }, style)} {document$key} {graph} {onReady}>
+  <View style={css.raw({ flex: '1' }, style)} {document$key} {footer} {graph} {header} {onReady}>
     {#if children}
       {@render children()}
     {/if}
   </View>
-
-  {#if footer}
-    {@render footer()}
-  {/if}
 </div>

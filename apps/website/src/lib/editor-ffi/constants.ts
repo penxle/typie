@@ -1,4 +1,5 @@
 export const PAGE_GAP = 24;
+export const CROP_MARKER_SIZE = 32;
 
 export const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { untrack } from 'svelte';
+  import { CROP_MARKER_SIZE } from '../constants';
   import { getEditorContext } from '../editor.svelte';
   import ExternalElement from './ExternalElement.svelte';
   import LinkOverlay from './LinkOverlay.svelte';
@@ -20,7 +21,9 @@
   const scaleFactor = $derived(ctx.editor?.scaleFactor ?? 1);
   const cssWidth = $derived(Math.round(width * scaleFactor) / scaleFactor);
   const cssHeight = $derived(Math.round(height * scaleFactor) / scaleFactor);
-  const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
+  const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
+  const isPaginated = $derived(layoutMode?.type === 'paginated');
+  const showCropMarker = $derived(layoutMode?.type === 'paginated' && !(ctx.editor?.readOnly ?? false));
   const externalElements = $derived(ctx.editor?.externalElements.filter((element) => element.page_idx === page) ?? []);
   const tableOverlays = $derived(ctx.editor?.tableOverlays.filter((overlay) => overlay.page_idx === page) ?? []);
 </script>
@@ -83,4 +86,30 @@
   {/each}
 
   <LinkOverlay {page} />
+
+  {#if showCropMarker && layoutMode?.type === 'paginated'}
+    {@const marginLeft = layoutMode.page_margin_left}
+    {@const marginRight = layoutMode.page_margin_right}
+    {@const marginTop = layoutMode.page_margin_top}
+    {@const marginBottom = layoutMode.page_margin_bottom}
+    <svg
+      class={css({
+        pointerEvents: 'none',
+        position: 'absolute',
+        inset: '0',
+        height: 'full',
+        width: 'full',
+        overflow: 'visible',
+        color: 'text.default',
+        opacity: '15',
+      })}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d={`M ${marginLeft} ${marginTop - CROP_MARKER_SIZE} L ${marginLeft} ${marginTop} L ${marginLeft - CROP_MARKER_SIZE} ${marginTop} M ${width - marginRight} ${marginTop - CROP_MARKER_SIZE} L ${width - marginRight} ${marginTop} L ${width - marginRight + CROP_MARKER_SIZE} ${marginTop} M ${marginLeft} ${height - marginBottom + CROP_MARKER_SIZE} L ${marginLeft} ${height - marginBottom} L ${marginLeft - CROP_MARKER_SIZE} ${height - marginBottom} M ${width - marginRight} ${height - marginBottom + CROP_MARKER_SIZE} L ${width - marginRight} ${height - marginBottom} L ${width - marginRight + CROP_MARKER_SIZE} ${height - marginBottom}`}
+        fill="none"
+        stroke="currentColor"
+      />
+    </svg>
+  {/if}
 </div>

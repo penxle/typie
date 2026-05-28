@@ -8,6 +8,7 @@ use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
+use crate::event::EditorEvent;
 use crate::message::*;
 
 pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(), EditorError> {
@@ -37,6 +38,42 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     ..
                 }
             );
+
+            // ArrowUp at the document's first navigable position (or the
+            // leading gap cursor) hands focus off to the surrounding shell
+            // UI (e.g. the subtitle field). Only the vertical single-step
+            // upward movement triggers this — Page/Document backward are
+            // scroll/jump commands and should not exit.
+            let is_upward_exit = !extend
+                && matches!(
+                    movement,
+                    Movement::Line {
+                        direction: Direction::Backward,
+                        axis: Axis::Vertical,
+                    }
+                );
+
+            if is_upward_exit && selection.is_collapsed() {
+                let at_document_start = match selection
+                    .resolve(&editor.state.doc)
+                    .and_then(|rs| rs.as_gap_cursor())
+                {
+                    Some(GapCursor::LeadingUnit { .. }) => true,
+                    Some(_) => false,
+                    None => editor
+                        .resolve_movement(
+                            &selection.head,
+                            &Movement::Document {
+                                direction: Direction::Backward,
+                            },
+                        )
+                        .is_some_and(|sel| sel.head == selection.head),
+                };
+                if at_document_start {
+                    editor.push_event(EditorEvent::CursorExitedDocumentStart);
+                    return Ok(());
+                }
+            }
 
             // Gap logic only for non-extend moves. Evaluated here and applied
             // with an early return so it does not depend on resolve_movement
