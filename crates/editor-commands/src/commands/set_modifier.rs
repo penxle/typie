@@ -5,7 +5,7 @@ use editor_transaction::Transaction;
 use crate::helpers::{
     apply_modifier_to_node, collect_applicable_targets_in_range, collect_text_nodes_in_range,
     compact_and_restore_selection, filter_applicable_node_ids, is_text_applicable, is_unit_variant,
-    resolve_applicable_target_collapsed, resolve_inherited_modifiers,
+    resolve_applicable_target_collapsed, resolve_base_modifiers, resolve_inherited_modifiers,
 };
 use crate::{CommandError, CommandResult};
 
@@ -54,7 +54,12 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
         .collect();
 
     if inherited_value == Some(modifier) {
-        pending.push(PendingModifier::Unset { ty: modifier_type });
+        let base_has_override = resolve_base_modifiers(&node, pos.offset)
+            .iter()
+            .any(|m| m.as_type() == modifier_type);
+        if base_has_override {
+            pending.push(PendingModifier::Unset { ty: modifier_type });
+        }
     } else {
         pending.push(PendingModifier::Set {
             modifier: modifier.clone(),
@@ -220,6 +225,35 @@ mod tests {
             }
             selection: (t1, 3)
             pending_modifiers: [text_color("#ff0000".to_string())]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_set_text_color_matching_root_default_at_empty_paragraph_is_noop() {
+        let (initial, ..) = state! {
+            doc {
+                root [paragraph_indent(200)] {
+                    p1: paragraph {}
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::TextColor {
+                value: "black".to_string()
+            }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root [paragraph_indent(200)] {
+                    p1: paragraph {}
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

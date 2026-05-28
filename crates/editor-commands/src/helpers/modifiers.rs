@@ -15,7 +15,7 @@ pub(crate) fn resolve_effective_modifiers(
     apply_pending_delta(base_modifiers, pending_modifiers)
 }
 
-fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
+pub(crate) fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
     match node.node() {
         Node::Text(text_node) => {
             let node_len = text_node.text.len();
