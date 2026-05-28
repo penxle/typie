@@ -73,6 +73,14 @@ impl Slice {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.fragment.children.is_empty()
+            && !matches!(
+                self.fragment.node,
+                PlainNode::Text(_) | PlainNode::HardBreak(_)
+            )
+    }
+
     pub fn to_payload(&self) -> ClipboardPayload {
         ClipboardPayload {
             html: self.to_html(),
@@ -204,6 +212,22 @@ mod tests {
             selection: none
         };
         assert!(Slice::extract(&s).is_none());
+    }
+
+    #[test]
+    fn is_empty_recognizes_bare_container() {
+        let slice = Slice {
+            fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
+            open_start: 0,
+            open_end: 0,
+        };
+        assert!(slice.is_empty());
+    }
+
+    #[test]
+    fn is_empty_keeps_text_leaf_non_empty() {
+        let slice = Slice::from_text("hello");
+        assert!(!slice.is_empty());
     }
 
     #[test]

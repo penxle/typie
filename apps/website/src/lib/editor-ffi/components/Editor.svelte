@@ -10,7 +10,7 @@
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handleContextMenu } from '../handlers/contextmenu';
-  import { handleDragOver, handleDrop } from '../handlers/drop';
+  import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from '../handlers/dnd';
   import { handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import Caret from './Caret.svelte';
   import CaretPositioned from './CaretPositioned.svelte';
@@ -128,12 +128,18 @@
       if (ctx.editor) ctx.editor.scrollContainerEl = undefined;
     };
   }}
+  draggable={ctx.editor && !ctx.editor.isSelectionCollapsed ? true : undefined}
   oncontextmenu={handle(ctx.editor, handleContextMenu)}
+  ondragend={() => handleDragEnd(ctx)}
+  ondragenter={(event) => handleDragEnter(ctx, event)}
+  ondragleave={(event) => handleDragLeave(ctx, event)}
   ondragover={(event) => handleDragOver(ctx, event)}
+  ondragstart={(event) => handleDragStart(ctx, event)}
   ondrop={(event) => handleDrop(ctx, event)}
   onfocusin={() => ctx.editor?.focus()}
-  onfocusout={() => {
+  onfocusout={(event) => {
     if (!window.document.hasFocus()) return;
+    if (event.relatedTarget === ctx.editor?.inputEl) return;
     ctx.editor?.blur();
   }}
   onpointercancel={handle(ctx.editor, handlePointerCancel)}

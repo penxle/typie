@@ -893,7 +893,7 @@ mod tests {
 
     #[test]
     fn ffi_dnd_over_returns_events() {
-        use editor_core::{DndOp, DndPayloadKind, EditorEvent, InputModifiers, Message};
+        use editor_core::{DndOp, EditorEvent, ExternalDndPayloadKind, InputModifiers, Message};
 
         let (initial, ..) = state! {
             doc { root { paragraph { t: text("hello") } } }
@@ -907,11 +907,17 @@ mod tests {
 
         editor
             .enqueue(Message::Dnd {
+                op: DndOp::EnterExternal {
+                    payload: ExternalDndPayloadKind::Text,
+                },
+            })
+            .expect("ffi enqueue returns Ok");
+        editor
+            .enqueue(Message::Dnd {
                 op: DndOp::Over {
                     page: 0,
                     x: cursor.caret.x,
                     y: cursor.line.y + cursor.line.height * 0.5,
-                    payload: DndPayloadKind::Text,
                     modifiers: InputModifiers::default(),
                 },
             })

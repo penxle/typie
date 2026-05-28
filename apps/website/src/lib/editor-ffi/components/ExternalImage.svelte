@@ -11,13 +11,13 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '../editor.svelte';
+  import { isAcceptedImagePlaceholderDrag } from '../handlers/dnd';
   import {
     calculateImageContainerSize,
     calculateImageWidth,
     createDeleteNodeMessage,
     createSetImageAttrsMessage,
     deriveImageStage,
-    getFirstImageFile,
     processImageUpload,
     resolveImageSrc,
   } from '../handlers/image-flow';
@@ -160,12 +160,10 @@
   };
 
   const handleDragOver = (event: DragEvent) => {
-    if (!canEdit || stage === 'ready') return;
-
-    const items = [...(event.dataTransfer?.items ?? [])];
-    if (items.length > 0 && !items.some((item) => item.kind === 'file' && item.type.startsWith('image/'))) return;
+    if (!canEdit || stage !== 'empty' || !isAcceptedImagePlaceholderDrag(event.dataTransfer)) return;
 
     event.preventDefault();
+    event.stopPropagation();
 
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'copy';
@@ -173,15 +171,23 @@
   };
 
   const handleDrop = (event: DragEvent) => {
-    if (!canEdit || stage === 'ready') return;
+    if (!canEdit || stage !== 'empty' || !isAcceptedImagePlaceholderDrag(event.dataTransfer)) return;
+
+    const files = [...(event.dataTransfer?.files ?? [])].filter((file) => file.type.startsWith('image/'));
+    const [file, ...rest] = files;
+    if (!file) return;
 
     event.preventDefault();
     event.stopPropagation();
-
-    const file = getFirstImageFile(event.dataTransfer?.files ?? []);
-    if (!file) return;
-
     void processFile(file);
+
+    for (const next of rest) {
+      ctx.pendingImageDrops.push(next);
+      ctx.editor?.enqueue({
+        type: 'insertion',
+        op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
+      });
+    }
   };
 
   const getWidthBounds = (boundsWidth: number) => {

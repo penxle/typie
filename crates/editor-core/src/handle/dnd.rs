@@ -1,6 +1,8 @@
 use crate::editor::Editor;
 use crate::error::EditorError;
-use crate::message::{DndDropPayload, DndOp, DndPayloadKind, InputModifiers};
+use crate::event::EditorEvent;
+use crate::interaction::InteractionState;
+use crate::message::{DndDropPayload, DndOp, InputModifiers};
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
 use editor_model::{Fragment, PlainFileNode, PlainImageNode, PlainNode, PlainRootNode};
@@ -13,23 +15,67 @@ enum SelectionAfterDrop {
 }
 
 pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> {
-    match op {
-        DndOp::Over {
-            page,
-            x,
-            y,
-            payload,
-            ..
-        } => {
-            let source = internal_dnd_source(editor, payload);
-            let target = editor
-                .view
-                .drop_target_at(&editor.state.doc, page, x, y, source);
+    let previous_drop_target = editor.interaction.drop_target();
+    let result = match op {
+        DndOp::StartInternalSelection => {
+            editor.interaction = editor
+                .state
+                .selection
+                .as_ref()
+                .filter(|selection| !selection.is_collapsed())
+                .map_or(InteractionState::Idle, |source| {
+                    InteractionState::InternalDnd {
+                        source: StableSelection::freeze(source, &editor.state.doc),
+                        drop_target: None,
+                    }
+                });
+            Ok(())
+        }
+        DndOp::EnterExternal { payload } => {
+            if !matches!(&editor.interaction, InteractionState::ExternalDnd { payload: active, .. } if *active == payload)
+            {
+                editor.interaction = InteractionState::ExternalDnd {
+                    payload,
+                    drop_target: None,
+                };
+            }
+            Ok(())
+        }
+        DndOp::Over { page, x, y, .. } => {
+            let internal_source =
+                if let InteractionState::InternalDnd { source, .. } = &editor.interaction {
+                    let selection = source.thaw(&editor.state.doc);
+                    (!selection.is_collapsed()).then_some(selection)
+                } else {
+                    None
+                };
+            if internal_source.is_none()
+                && matches!(&editor.interaction, InteractionState::InternalDnd { .. })
+            {
+                editor.interaction = InteractionState::Idle;
+            }
+
+            let target = match &editor.interaction {
+                InteractionState::InternalDnd { .. } => editor.view.drop_target_at(
+                    &editor.state.doc,
+                    page,
+                    x,
+                    y,
+                    internal_source.as_ref(),
+                ),
+                InteractionState::ExternalDnd { .. } => {
+                    editor
+                        .view
+                        .drop_target_at(&editor.state.doc, page, x, y, None)
+                }
+                _ => None,
+            };
             // TODO(TR-100): Filter targets by payload-specific drop policy before
             // showing the indicator. Internal drops need the legacy can_drop checks
             // such as page-break restrictions; external drops still need a product
             // decision between rejecting the target and coercing unsupported content.
-            editor.set_drop_target(target);
+            editor.interaction.set_drop_target(target);
+            Ok(())
         }
         DndOp::Drop {
             page,
@@ -38,59 +84,62 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             payload,
             modifiers,
         } => {
-            let payload_kind = payload_kind_for_drop(&payload);
-            let source = internal_dnd_source(editor, payload_kind);
-            let target = editor.drop_target().or_else(|| {
-                editor
-                    .view
-                    .drop_target_at(&editor.state.doc, page, x, y, source)
-            });
+            let internal_source =
+                if let InteractionState::InternalDnd { source, .. } = &editor.interaction {
+                    let selection = source.thaw(&editor.state.doc);
+                    (!selection.is_collapsed()).then_some(selection)
+                } else {
+                    None
+                };
+            let accepts_payload = match (&editor.interaction, &payload) {
+                (InteractionState::InternalDnd { .. }, DndDropPayload::InternalSelection) => {
+                    internal_source.is_some()
+                }
+                (
+                    InteractionState::ExternalDnd { .. },
+                    DndDropPayload::Text { .. } | DndDropPayload::Files { .. },
+                ) => true,
+                _ => false,
+            };
+            let target = if accepts_payload {
+                let source = internal_source.as_ref();
+                editor.interaction.drop_target().or_else(|| {
+                    editor
+                        .view
+                        .drop_target_at(&editor.state.doc, page, x, y, source)
+                })
+            } else {
+                None
+            };
             let result = if let Some(target) = target {
-                apply_drop(editor, target.position, payload, modifiers)
+                apply_drop(editor, target.position, payload, modifiers, internal_source)
             } else {
                 Ok(())
             };
-            editor.set_drop_target(None);
-            result?;
+            editor.interaction = InteractionState::Idle;
+            result
         }
-        DndOp::Leave | DndOp::End => {
-            editor.set_drop_target(None);
+        DndOp::Leave => {
+            match &mut editor.interaction {
+                InteractionState::InternalDnd { drop_target, .. } => {
+                    *drop_target = None;
+                }
+                InteractionState::ExternalDnd { .. } => {
+                    editor.interaction = InteractionState::Idle;
+                }
+                _ => {}
+            }
+            Ok(())
         }
-        DndOp::Start { .. } | DndOp::Enter { .. } => {}
-    }
-    Ok(())
-}
-
-fn internal_dnd_source(
-    editor: &Editor,
-    payload: DndPayloadKind,
-) -> Option<&editor_state::Selection> {
-    if payload != DndPayloadKind::InternalSelection {
-        return None;
-    }
-    editor
-        .state
-        .selection
-        .as_ref()
-        .filter(|selection| !selection.is_collapsed())
-}
-
-fn payload_kind_for_drop(payload: &DndDropPayload) -> DndPayloadKind {
-    match payload {
-        DndDropPayload::InternalSelection => DndPayloadKind::InternalSelection,
-        DndDropPayload::Text { html, .. } if html.as_deref().is_some_and(|h| !h.is_empty()) => {
-            DndPayloadKind::Html
+        DndOp::End => {
+            editor.interaction = InteractionState::Idle;
+            Ok(())
         }
-        DndDropPayload::Text { .. } => DndPayloadKind::Text,
-        DndDropPayload::Files {
-            image_count,
-            file_count,
-        } => match (*image_count > 0, *file_count > 0) {
-            (true, true) => DndPayloadKind::MixedFiles,
-            (true, false) => DndPayloadKind::ImageFiles,
-            _ => DndPayloadKind::Files,
-        },
+    };
+    if editor.interaction.drop_target() != previous_drop_target {
+        editor.push_event(EditorEvent::RenderInvalidated);
     }
+    result
 }
 
 fn apply_drop(
@@ -98,6 +147,7 @@ fn apply_drop(
     position: Position,
     payload: DndDropPayload,
     modifiers: InputModifiers,
+    source: Option<Selection>,
 ) -> Result<(), EditorError> {
     match payload {
         DndDropPayload::Text { text, html } => {
@@ -125,7 +175,7 @@ fn apply_drop(
             SelectionAfterDrop::KeepCommandSelection,
         ),
         DndDropPayload::InternalSelection => {
-            drop_internal_selection_at(editor, position, modifiers.alt)
+            drop_internal_selection_at(editor, position, modifiers.alt, source)
         }
     }
 }
@@ -155,7 +205,7 @@ fn slice_from_drop_text_payload(
 ) -> Slice {
     if let Some(html) = html.filter(|html| !html.is_empty()) {
         let slice = Slice::from_html(html, resource);
-        if !slice_is_empty(&slice) {
+        if !slice.is_empty() {
             return slice;
         }
     }
@@ -163,27 +213,18 @@ fn slice_from_drop_text_payload(
     Slice::from_text(text)
 }
 
-fn slice_is_empty(slice: &Slice) -> bool {
-    slice.fragment.children.is_empty()
-        && !matches!(
-            slice.fragment.node,
-            PlainNode::Text(_) | PlainNode::HardBreak(_)
-        )
-}
-
 fn drop_internal_selection_at(
     editor: &mut Editor,
     position: Position,
     copy: bool,
+    source: Option<Selection>,
 ) -> Result<(), EditorError> {
-    let Some(source) = editor
-        .state
-        .selection
-        .filter(|selection| !selection.is_collapsed())
-    else {
+    let Some(source) = source else {
         return Ok(());
     };
-    let Some(slice) = Slice::extract(editor.state()) else {
+    let mut state = editor.state().clone();
+    state.selection = Some(source.clone());
+    let Some(slice) = Slice::extract(&state) else {
         return Ok(());
     };
 

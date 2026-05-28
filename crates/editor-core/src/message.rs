@@ -41,8 +41,7 @@ pub struct KeyEvent {
 #[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum DndPayloadKind {
-    InternalSelection,
+pub enum ExternalDndPayloadKind {
     Text,
     Html,
     ImageFiles,
@@ -63,19 +62,14 @@ pub enum DndDropPayload {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DndOp {
-    Start {
-        page: usize,
-        x: f32,
-        y: f32,
-    },
-    Enter {
-        payload: DndPayloadKind,
+    StartInternalSelection,
+    EnterExternal {
+        payload: ExternalDndPayloadKind,
     },
     Over {
         page: usize,
         x: f32,
         y: f32,
-        payload: DndPayloadKind,
         #[serde(default)]
         modifiers: InputModifiers,
     },

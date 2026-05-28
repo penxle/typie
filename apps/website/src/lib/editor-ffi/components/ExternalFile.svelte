@@ -11,6 +11,7 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { formatFileSize } from '$lib/utils/format';
   import { getEditorContext } from '../editor.svelte';
+  import { isAcceptedFilePlaceholderDrag } from '../handlers/dnd';
   import { createDeleteNodeMessage, deriveFileStage, processFileUpload } from '../handlers/file-flow';
   import { uploadFileAsFile } from '../handlers/upload';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
@@ -109,6 +110,37 @@
     a.href = asset.url;
     a.download = asset.name;
     a.click();
+  };
+
+  const handleDragOver = (event: DragEvent) => {
+    if (!canEdit || stage !== 'empty' || !isAcceptedFilePlaceholderDrag(event.dataTransfer)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleDrop = (event: DragEvent) => {
+    if (!canEdit || stage !== 'empty' || !isAcceptedFilePlaceholderDrag(event.dataTransfer)) return;
+
+    const files = [...(event.dataTransfer?.files ?? [])];
+    const [file, ...rest] = files;
+    if (!file) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    void processFile(file);
+
+    for (const next of rest) {
+      ctx.pendingFileDrops.push(next);
+      ctx.editor?.enqueue({
+        type: 'insertion',
+        op: { type: 'fragment', fragment: { node: { type: 'file', id: undefined } } },
+      });
+    }
   };
 </script>
 
@@ -212,6 +244,8 @@
           height: '48px',
         }),
       )}
+      ondragovercapture={handleDragOver}
+      ondropcapture={handleDrop}
       use:anchor
     >
       <div class={flex({ align: 'center', gap: '12px', paddingX: '14px', paddingY: '12px', fontSize: '14px', color: 'text.disabled' })}>

@@ -35,6 +35,11 @@ pub fn selection_rects(
         return vec![];
     }
 
+    if let Some(cell_rect) = selection.as_cell_rect() {
+        let ids: Vec<_> = cell_rect.cells().map(|cell| cell.id()).collect();
+        return super::search::node_box_rects(tree, pages, &ids);
+    }
+
     let from = Position::from(selection.from());
     let to = Position::from(selection.to());
     // Resolve which Line/Atom each endpoint belongs to up front so soft-wrap
@@ -106,6 +111,7 @@ pub fn selection_hit_test(
     if selection.is_collapsed() {
         return false;
     }
+
     let rects: Vec<Rect> = selection_rects(tree, pages, selection)
         .into_iter()
         .filter(|r| r.page_idx == page_idx)

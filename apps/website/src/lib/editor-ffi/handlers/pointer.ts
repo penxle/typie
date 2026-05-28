@@ -44,8 +44,22 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
   const count = PointerState.of(editor).resolveClickCount(e);
   const modifiers = { shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey };
 
-  e.currentTarget.setPointerCapture(e.pointerId);
+  const selectionHit = !editor.isSelectionCollapsed && editor.selectionHitTest(page, x, y);
+  const nativeDragCandidate = !editor.isSelectionCollapsed && selectionHit;
+  if (nativeDragCandidate) {
+    const target = e.currentTarget;
+    editor.beginNativeDragAdmission();
+    target.removeAttribute('tabindex');
+    setTimeout(() => {
+      target.setAttribute('tabindex', '0');
+    }, 0);
+  } else {
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  PointerState.of(editor).markPointerDown(e.pointerId, !nativeDragCandidate);
   editor.enqueue({ type: 'pointer', event: { type: 'down', page, x, y, count, modifiers } });
+  editor.flush();
 };
 
 export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
@@ -75,11 +89,15 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
     return;
   }
 
-  if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+  const state = PointerState.of(editor);
+  if (!state.hasActivePointer(e.pointerId)) {
     return;
   }
 
+  state.releasePointer(e.currentTarget, e.pointerId);
   editor.enqueue({ type: 'pointer', event: { type: 'up' } });
+  editor.flush();
+  editor.endNativeDragAdmission({ restoreFocus: true });
 };
 
 export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
@@ -88,11 +106,15 @@ export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> 
     return;
   }
 
-  if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+  const state = PointerState.of(editor);
+  if (!state.hasActivePointer(e.pointerId)) {
     return;
   }
 
+  state.releasePointer(e.currentTarget, e.pointerId);
   editor.enqueue({ type: 'pointer', event: { type: 'cancel' } });
+  editor.flush();
+  editor.endNativeDragAdmission({ restoreFocus: false });
 };
 
 class PointerState {
@@ -105,6 +127,8 @@ class PointerState {
 
   #dragPending: { page: number; x: number; y: number } | null = null;
   #dragScheduled = false;
+  #activePointerId: number | null = null;
+  #capturedPointerId: number | null = null;
 
   static of(editor: Editor): PointerState {
     let state = this.#instances.get(editor);
@@ -147,5 +171,22 @@ class PointerState {
         }
       });
     }
+  }
+
+  markPointerDown(pointerId: number, captured: boolean) {
+    this.#activePointerId = pointerId;
+    this.#capturedPointerId = captured ? pointerId : null;
+  }
+
+  hasActivePointer(pointerId: number): boolean {
+    return this.#activePointerId === pointerId;
+  }
+
+  releasePointer(target: HTMLElement, pointerId: number): void {
+    if (this.#capturedPointerId === pointerId && target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+    this.#activePointerId = null;
+    this.#capturedPointerId = null;
   }
 }

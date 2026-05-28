@@ -92,6 +92,7 @@ export class Editor {
   #rootModifiers = $state<Modifier[]>();
   #blockState = $state<BlockState | undefined>();
   #focused = $state(false);
+  #nativeDragAdmissionRetainsFocus = false;
   #effectCleanup: (() => void) | null = null;
 
   #pointerStyle = $state<PointerStyle>('default');
@@ -158,6 +159,10 @@ export class Editor {
           self.#setFocused(true);
         };
         const onBlur = () => {
+          if (self.#nativeDragAdmissionRetainsFocus) {
+            return;
+          }
+
           self.#setFocused(false);
         };
 
@@ -253,6 +258,25 @@ export class Editor {
 
   blur() {
     this.inputEl?.blur();
+  }
+
+  beginNativeDragAdmission() {
+    this.#nativeDragAdmissionRetainsFocus = true;
+    this.#setFocused(true);
+  }
+
+  endNativeDragAdmission({ restoreFocus }: { restoreFocus: boolean }) {
+    const wasRetainingFocus = this.#nativeDragAdmissionRetainsFocus;
+    this.#nativeDragAdmissionRetainsFocus = false;
+    if (!wasRetainingFocus) {
+      return;
+    }
+
+    if (restoreFocus && this.#selection !== undefined) {
+      this.focus();
+    } else if (!this.inputEl || document.activeElement !== this.inputEl) {
+      this.#setFocused(false);
+    }
   }
 
   openContextMenu(opts: {

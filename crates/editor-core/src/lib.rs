@@ -8,6 +8,7 @@ mod font;
 mod handle;
 mod history;
 mod ime;
+mod interaction;
 mod message;
 mod state_field;
 mod tracked_range;

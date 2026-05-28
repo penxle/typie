@@ -616,15 +616,15 @@ export type Direction = "forward" | "backward";
 
 export type DndDropPayload = { type: "internal_selection" } | { type: "text"; text: string; html: string | undefined } | { type: "files"; image_count: number; file_count: number };
 
-export type DndOp = { type: "start"; page: number; x: number; y: number } | { type: "enter"; payload: DndPayloadKind } | { type: "over"; page: number; x: number; y: number; payload: DndPayloadKind; modifiers?: InputModifiers } | { type: "leave" } | { type: "drop"; page: number; x: number; y: number; payload: DndDropPayload; modifiers?: InputModifiers } | { type: "end" };
-
-export type DndPayloadKind = "internal_selection" | "text" | "html" | "image_files" | "files" | "mixed_files";
+export type DndOp = { type: "start_internal_selection" } | { type: "enter_external"; payload: ExternalDndPayloadKind } | { type: "over"; page: number; x: number; y: number; modifiers?: InputModifiers } | { type: "leave" } | { type: "drop"; page: number; x: number; y: number; payload: DndDropPayload; modifiers?: InputModifiers } | { type: "end" };
 
 export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "scroll"; rect: PageRect } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
 export type EmbedNodeAttr = { type: "id" } & string | undefined;
+
+export type ExternalDndPayloadKind = "text" | "html" | "image_files" | "files" | "mixed_files";
 
 export type ExternalElementData = { type: "image"; id: string | undefined; proportion: number } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
 
@@ -747,6 +747,7 @@ declare class Editor {
     cursor(): CursorMetrics | undefined;
     cursor_hit_test(page: number, x: number, y: number): boolean;
     enqueue(message: Message): void;
+    export_page_vector(page: number, scale_factor: number): Uint8Array;
     external_elements(): ExternalElement[];
     freeze_selection(selection: Selection): StableSelection;
     ime(before_limit: number, after_limit: number): Ime;

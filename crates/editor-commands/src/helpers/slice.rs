@@ -14,12 +14,12 @@ pub(crate) fn insert_slice_at_position(
     position: Position,
     slice: Slice,
 ) -> Result<Option<Selection>, CommandError> {
-    if is_empty_slice(&slice) {
+    if slice.is_empty() {
         return Ok(None);
     }
 
     let slice = coerce_slice_for_position(tr, position, slice);
-    if is_empty_slice(&slice) {
+    if slice.is_empty() {
         return Ok(None);
     }
 
@@ -129,14 +129,6 @@ fn coerce_fragment_for_parent(f: Fragment, parent_type: NodeType) -> Vec<Fragmen
 fn child_allowed(parent_type: NodeType, child_type: NodeType) -> bool {
     let spec = Schema::node_spec(parent_type);
     spec.content.allowed_types().contains(&child_type)
-}
-
-fn is_empty_slice(slice: &Slice) -> bool {
-    slice.fragment.children.is_empty()
-        && !matches!(
-            slice.fragment.node,
-            PlainNode::Text(_) | PlainNode::HardBreak(_)
-        )
 }
 
 // An inline-only slice represents pasteable content that fits inside a single
@@ -712,7 +704,7 @@ mod tests {
             open_start: 0,
             open_end: 0,
         };
-        assert!(is_empty_slice(&empty));
+        assert!(empty.is_empty());
     }
 
     #[test]

@@ -5,7 +5,10 @@ use editor_state::{
 
 use crate::editor::Editor;
 use crate::error::EditorError;
+use crate::interaction::{InteractionState, PressContext};
 use crate::message::*;
+
+const DRAG_START_THRESHOLD_PX: f32 = 5.0;
 
 /// The anchor cell for the current drag: the live cell-rect's anchor cell if
 /// the selection is already a cell-rect (the latch's source of truth — also
@@ -22,6 +25,84 @@ fn drag_anchor_cell(editor: &Editor, pos: &editor_state::Position) -> Option<edi
         return Some(cr.anchor_cell.id());
     }
     enclosing_table_cell(&editor.state.doc, pos.node_id)
+}
+
+fn set_selection(editor: &mut Editor, selection: Selection) -> Result<(), EditorError> {
+    editor.clear_preferred_x();
+    editor.transact(|tr| {
+        tr.set_selection(Some(selection))?;
+        Ok(())
+    })
+}
+
+fn selection_drag_anchor(
+    editor: &Editor,
+    ext_hit: Option<Selection>,
+    shift: bool,
+) -> Option<Selection> {
+    let anchor = editor.state.selection.map(|s| s.anchor);
+    if shift {
+        anchor.map(Selection::collapsed)
+    } else {
+        ext_hit.or_else(|| anchor.map(Selection::collapsed))
+    }
+}
+
+fn drag_start_threshold_crossed(
+    start_page: usize,
+    start_x: f32,
+    start_y: f32,
+    page: usize,
+    x: f32,
+    y: f32,
+) -> bool {
+    if page != start_page {
+        return true;
+    }
+
+    let dx = x - start_x;
+    let dy = y - start_y;
+    dx * dx + dy * dy >= DRAG_START_THRESHOLD_PX * DRAG_START_THRESHOLD_PX
+}
+
+fn extend_drag_selection(
+    editor: &mut Editor,
+    armed: Selection,
+    page: usize,
+    x: f32,
+    y: f32,
+) -> Result<(), EditorError> {
+    if let Some(a) = drag_anchor_cell(editor, &armed.head) {
+        let cells = table_cell_ids(&editor.state.doc, a);
+        if let Some(h) = editor.view.nearest_node_box(page, x, y, &cells) {
+            let is_cell_mode = editor
+                .state
+                .selection
+                .as_ref()
+                .and_then(|s| s.resolve(&editor.state.doc))
+                .is_some_and(|r| r.as_cell_rect().is_some());
+            if (h != a || is_cell_mode)
+                && let Some(sel) = cell_rect_selection(&editor.state.doc, a, h)
+            {
+                return set_selection(editor, sel);
+            }
+        }
+    }
+
+    if let Some(hit) = editor.view.hit_test_extending(page, x, y) {
+        // Re-anchor to the armed edge farther from the pointer, then take the
+        // hit edge farther from that anchor. A unit (image/monolithic) armed
+        // click or a unit under the pointer stays fully enveloped whichever
+        // way the drag goes; a collapsed text caret or promoted slot has equal
+        // endpoints, so both steps degenerate to the plain anchor->hit
+        // selection.
+        let doc = &editor.state.doc;
+        let fixed = farther_endpoint(doc, hit.head, armed.anchor, armed.head);
+        let head = farther_endpoint(doc, fixed, hit.anchor, hit.head);
+        set_selection(editor, Selection::new(fixed, head))?;
+    }
+
+    Ok(())
 }
 
 pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<(), EditorError> {
@@ -85,30 +166,43 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             };
 
             if let Some(new_selection) = selection {
-                editor.clear_preferred_x();
-                editor.transact(|tr| {
-                    tr.set_selection(Some(new_selection))?;
-                    Ok(())
-                })?;
-            }
+                let position = new_selection.head;
+                let selection_hit =
+                    count == 1 && !modifiers.shift && editor.selection_hit_test(page, x, y);
+                let context = if count == 1
+                    && !modifiers.shift
+                    && new_selection.is_unit_node_selection(&editor.state.doc)
+                {
+                    PressContext::OnSelectable(new_selection)
+                } else if selection_hit {
+                    PressContext::InSelection
+                } else {
+                    PressContext::Empty
+                };
+                let should_update_selection_on_down = match context {
+                    PressContext::InSelection => false,
+                    PressContext::OnSelectable(_) => !selection_hit,
+                    PressContext::Empty => true,
+                };
 
-            // Arm the whole selection, not a point: a unit (image/monolithic)
-            // click yields a two-position bracket, so Move can re-anchor to the
-            // edge that keeps the unit enveloped whichever way the drag goes. A
-            // text caret or promoted gutter slot is collapsed, so a single point
-            // is preserved as before. Non-shift keeps ext_hit's gutter promotion.
-            editor.set_drag_anchor(
-                (count == 1)
-                    .then(|| {
-                        let anchor = editor.state.selection.map(|s| s.anchor);
-                        if modifiers.shift {
-                            anchor.map(Selection::collapsed)
-                        } else {
-                            ext_hit.or_else(|| anchor.map(Selection::collapsed))
-                        }
-                    })
-                    .flatten(),
-            );
+                if should_update_selection_on_down {
+                    set_selection(editor, new_selection)?;
+                }
+
+                let selection_anchor = (count == 1 && !context.can_drag_content())
+                    .then(|| selection_drag_anchor(editor, ext_hit, modifiers.shift))
+                    .flatten();
+                editor.interaction = InteractionState::Pressed {
+                    page,
+                    start_x: x,
+                    start_y: y,
+                    position,
+                    selection_anchor,
+                    context,
+                };
+            } else {
+                editor.interaction = InteractionState::Idle;
+            }
         }
 
         PointerEvent::SecondaryDown { page, x, y } => {
@@ -134,54 +228,67 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             }
         }
 
-        PointerEvent::Move { page, x, y } => {
-            let Some(armed) = editor.drag_anchor() else {
-                return Ok(());
-            };
+        PointerEvent::Move { page, x, y } => match editor.interaction.clone() {
+            InteractionState::Pressed {
+                page: start_page,
+                start_x,
+                start_y,
+                selection_anchor: Some(armed),
+                context,
+                ..
+            } if !context.can_drag_content()
+                && drag_start_threshold_crossed(start_page, start_x, start_y, page, x, y) =>
+            {
+                editor.interaction = InteractionState::DraggingSelection { anchor: armed };
+                extend_drag_selection(editor, armed, page, x, y)?;
+            }
+            InteractionState::DraggingSelection { anchor } => {
+                extend_drag_selection(editor, anchor, page, x, y)?;
+            }
+            InteractionState::Pressed { .. }
+            | InteractionState::Idle
+            | InteractionState::InternalDnd { .. }
+            | InteractionState::ExternalDnd { .. } => {}
+        },
 
-            if let Some(a) = drag_anchor_cell(editor, &armed.head) {
-                let cells = table_cell_ids(&editor.state.doc, a);
-                if let Some(h) = editor.view.nearest_node_box(page, x, y, &cells) {
-                    let is_cell_mode = editor
-                        .state
-                        .selection
-                        .as_ref()
-                        .and_then(|s| s.resolve(&editor.state.doc))
-                        .is_some_and(|r| r.as_cell_rect().is_some());
-                    if (h != a || is_cell_mode)
-                        && let Some(sel) = cell_rect_selection(&editor.state.doc, a, h)
-                    {
-                        editor.clear_preferred_x();
-                        editor.transact(|tr| {
-                            tr.set_selection(Some(sel))?;
-                            Ok(())
-                        })?;
-                        return Ok(());
+        PointerEvent::Up => {
+            let mut clear_pointer_interaction = false;
+            if let InteractionState::Pressed {
+                position, context, ..
+            } = editor.interaction.clone()
+            {
+                clear_pointer_interaction = true;
+                match context {
+                    PressContext::InSelection => {
+                        set_selection(editor, Selection::collapsed(position))?;
                     }
+                    PressContext::OnSelectable(selection) => {
+                        // TODO(TR-100): v2 core pointer messages do not carry
+                        // read-only state yet. Legacy collapses to the
+                        // selectable anchor in read-only mode.
+                        set_selection(editor, selection)?;
+                    }
+                    PressContext::Empty => {}
                 }
             }
-
-            if let Some(hit) = editor.view.hit_test_extending(page, x, y) {
-                // Re-anchor to the armed edge farther from the pointer, then take
-                // the hit edge farther from that anchor. A unit (image/monolithic)
-                // armed click or a unit under the pointer stays fully enveloped
-                // whichever way the drag goes; a collapsed text caret or promoted
-                // slot has equal endpoints, so both steps degenerate to the plain
-                // anchor→hit selection.
-                let doc = &editor.state.doc;
-                let fixed = farther_endpoint(doc, hit.head, armed.anchor, armed.head);
-                let head = farther_endpoint(doc, fixed, hit.anchor, hit.head);
-                let new_selection = Selection::new(fixed, head);
-                editor.clear_preferred_x();
-                editor.transact(|tr| {
-                    tr.set_selection(Some(new_selection))?;
-                    Ok(())
-                })?;
+            if matches!(
+                editor.interaction,
+                InteractionState::DraggingSelection { .. }
+            ) {
+                clear_pointer_interaction = true;
+            }
+            if clear_pointer_interaction {
+                editor.interaction = InteractionState::Idle;
             }
         }
 
-        PointerEvent::Up | PointerEvent::Cancel => {
-            editor.set_drag_anchor(None);
+        PointerEvent::Cancel => {
+            if matches!(
+                editor.interaction,
+                InteractionState::Pressed { .. } | InteractionState::DraggingSelection { .. }
+            ) {
+                editor.interaction = InteractionState::Idle;
+            }
         }
     }
 
@@ -193,6 +300,20 @@ mod tests {
     use editor_macros::state;
 
     use super::*;
+
+    fn selection_drag_armed(editor: &Editor) -> bool {
+        matches!(
+            editor.interaction,
+            InteractionState::Pressed {
+                selection_anchor: Some(_),
+                ..
+            } | InteractionState::DraggingSelection { .. }
+        )
+    }
+
+    fn pointer_idle(editor: &Editor) -> bool {
+        matches!(editor.interaction, InteractionState::Idle)
+    }
 
     #[test]
     fn double_click_fallback_when_no_layout() {
@@ -366,6 +487,159 @@ mod tests {
     }
 
     #[test]
+    fn primary_down_inside_range_keeps_selection_until_up() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let caret = editor
+            .view
+            .cursor_metrics(&editor.state.doc, &editor_state::Position::new(t, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                editor_state::Position::new(t, 0),
+                editor_state::Position::new(t, 5),
+            )),
+            "primary down inside the current selection must preserve it so native DnD can start"
+        );
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Up,
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(editor_state::Position::new(t, 2))),
+            "a plain click inside the selection collapses on pointer up"
+        );
+    }
+
+    #[test]
+    fn dnd_start_inside_range_prevents_pointer_up_collapse() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let caret = editor
+            .view
+            .cursor_metrics(&editor.state.doc, &editor_state::Position::new(t, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Up,
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                editor_state::Position::new(t, 0),
+                editor_state::Position::new(t, 5),
+            )),
+            "once native DnD starts, the pending click collapse must be canceled"
+        );
+    }
+
+    #[test]
+    fn primary_down_on_unit_selects_it_without_drag_extending() {
+        use editor_state::{Affinity, Position};
+
+        let (state, r1, i0, i1) = state! {
+            doc { r1: root { i0: image i1: image paragraph {} } }
+            selection: (r1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        for id in [i0, i1] {
+            editor
+                .view
+                .set_external_height(&editor.state.doc, id, 100.0);
+        }
+        editor.view.layout(&editor.state.doc);
+
+        let atom_center = |editor: &Editor, idx: usize| {
+            let elements = editor
+                .view
+                .external_elements(&editor.state.doc, editor.state().selection.as_ref());
+            let e = &elements[idx];
+            (
+                e.page_idx,
+                e.bounds.x + e.bounds.width / 2.0,
+                e.bounds.y + e.bounds.height / 2.0,
+            )
+        };
+
+        let (p0, x0, y0) = atom_center(&editor, 0);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: p0,
+                x: x0,
+                y: y0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let selected_image = Some(Selection::new(
+            Position {
+                node_id: r1,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: r1,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        ));
+        assert_eq!(editor.state().selection, selected_image);
+
+        let (p1, x1, y1) = atom_center(&editor, 1);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: p1,
+                x: x1,
+                y: y1,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            selected_image,
+            "unit presses are native-DnD candidates, not drag-selection anchors"
+        );
+    }
+
+    #[test]
     fn shift_click_extends_selection() {
         let (state, ..) = state! {
             doc { root { paragraph { t: text("hello world") } } }
@@ -432,7 +706,7 @@ mod tests {
             .selection
             .expect("selection exists in test")
             .anchor;
-        assert!(editor.drag_anchor().is_some());
+        assert!(selection_drag_armed(&editor));
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -445,6 +719,41 @@ mod tests {
         let sel = editor.state().selection.expect("selection exists in test");
         assert_eq!(sel.anchor, anchor);
         assert_ne!(sel.anchor, sel.head);
+    }
+
+    #[test]
+    fn move_within_drag_threshold_keeps_press_pending() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x: 0.0,
+                y: 5.0,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        let selection_after_down = editor.state().selection;
+
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Move {
+                page: 0,
+                x: 3.0,
+                y: 5.0,
+            },
+        });
+
+        assert_eq!(editor.state().selection, selection_after_down);
+        assert!(matches!(
+            editor.interaction,
+            InteractionState::Pressed { .. }
+        ));
     }
 
     #[test]
@@ -472,7 +781,7 @@ mod tests {
             .selection
             .expect("selection exists in test")
             .anchor;
-        assert!(editor.drag_anchor().is_some());
+        assert!(selection_drag_armed(&editor));
 
         editor.state.selection = Some(Selection::collapsed(Position::new(t, 11)));
 
@@ -549,7 +858,7 @@ mod tests {
     }
 
     #[test]
-    fn drag_down_from_first_image_keeps_it_selected() {
+    fn drag_down_from_first_image_keeps_it_selected_for_native_dnd() {
         use editor_state::{Affinity, Position};
 
         let (state, r1, i0, i1, i2) = state! {
@@ -603,6 +912,7 @@ mod tests {
             "Down on the first image must node-select it"
         );
 
+        let selected_image = editor.state().selection;
         let (p2, x2, y2) = atom_center(&editor, 2);
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -614,20 +924,8 @@ mod tests {
 
         assert_eq!(
             editor.state().selection,
-            Some(Selection::new(
-                Position {
-                    node_id: r1,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                },
-                Position {
-                    node_id: r1,
-                    offset: 3,
-                    affinity: Affinity::Upstream,
-                },
-            )),
-            "dragging down from the first image must keep it selected: \
-             anchor stays at the image's leading edge (r1,0), not its trailing edge (r1,1)"
+            selected_image,
+            "moving after a unit press must keep the unit selected; browser native DnD owns the content drag"
         );
     }
 
@@ -663,7 +961,7 @@ mod tests {
         );
         assert_eq!(sel.head.node_id, p1);
         assert_eq!(sel.head.offset, 0);
-        assert!(editor.drag_anchor().is_some());
+        assert!(selection_drag_armed(&editor));
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -693,10 +991,8 @@ mod tests {
     }
 
     #[test]
-    fn drag_up_from_last_image_keeps_it_selected() {
-        use editor_state::{Affinity, Position};
-
-        let (state, r1, i0, i1, i2) = state! {
+    fn drag_up_from_last_image_keeps_it_selected_for_native_dnd() {
+        let (state, _, i0, i1, i2) = state! {
             doc { r1: root { i0: image i1: image i2: image paragraph {} } }
             selection: (r1, 2, >) -> (r1, 3, <)
         };
@@ -731,6 +1027,7 @@ mod tests {
             },
         });
 
+        let selected_image = editor.state().selection;
         let (p0, x0, y0) = atom_center(&editor, 0);
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -742,20 +1039,8 @@ mod tests {
 
         assert_eq!(
             editor.state().selection,
-            Some(Selection::new(
-                Position {
-                    node_id: r1,
-                    offset: 3,
-                    affinity: Affinity::Upstream,
-                },
-                Position {
-                    node_id: r1,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                },
-            )),
-            "dragging up from the last image must keep it selected: \
-             anchor stays at the image's trailing edge (r1,3), not its leading edge (r1,2)"
+            selected_image,
+            "moving after a unit press must keep the unit selected; browser native DnD owns the content drag"
         );
     }
 
@@ -778,7 +1063,7 @@ mod tests {
         });
 
         assert_eq!(editor.state().selection, before);
-        assert!(editor.drag_anchor().is_none());
+        assert!(pointer_idle(&editor));
     }
 
     #[test]
@@ -788,6 +1073,7 @@ mod tests {
             selection: (t, 0)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Down {
@@ -799,13 +1085,13 @@ mod tests {
             },
         });
 
-        assert!(editor.drag_anchor().is_some());
+        assert!(selection_drag_armed(&editor));
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Up,
         });
 
-        assert!(editor.drag_anchor().is_none());
+        assert!(pointer_idle(&editor));
     }
 
     #[test]
@@ -815,6 +1101,7 @@ mod tests {
             selection: (t, 0)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Down {
@@ -826,13 +1113,13 @@ mod tests {
             },
         });
 
-        assert!(editor.drag_anchor().is_some());
+        assert!(selection_drag_armed(&editor));
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Cancel,
         });
 
-        assert!(editor.drag_anchor().is_none());
+        assert!(pointer_idle(&editor));
     }
 
     #[test]
@@ -866,7 +1153,7 @@ mod tests {
             .selection
             .expect("selection exists in test")
             .anchor;
-        assert!(editor.drag_anchor().is_some());
+        assert!(selection_drag_armed(&editor));
 
         editor.apply(Message::Pointer {
             event: PointerEvent::Move {
@@ -959,7 +1246,7 @@ mod tests {
             },
         });
         assert!(
-            editor.drag_anchor().is_some(),
+            selection_drag_armed(&editor),
             "Down must arm a drag anchor (count==1)"
         );
 
@@ -1290,6 +1577,46 @@ mod tests {
             .expect("shift+click other cell → cell-rect");
         assert_eq!(cr.anchor_cell.id(), c00);
         assert_eq!(cr.head_cell.id(), c11);
+    }
+
+    #[test]
+    fn primary_down_outside_cell_rect_updates_selection() {
+        let (state, _, c00, _, c01, _, c10, _) = state! {
+            doc { root { table {
+                tr0: table_row {
+                    c00: table_cell { paragraph { t00: text("aa") } }
+                    c01: table_cell { paragraph { text("bb") } }
+                }
+                tr1: table_row {
+                    c10: table_cell { paragraph { text("cc") } }
+                    c11: table_cell { paragraph { text("dd") } }
+                }
+            } } }
+            selection: (t00, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        let cell_rect =
+            cell_rect_selection(&editor.state.doc, c00, c10).expect("first column cell-rect");
+        editor.state.selection = Some(cell_rect);
+
+        let (x, y) = cell_center(&editor, c01);
+        editor.apply(Message::Pointer {
+            event: PointerEvent::Down {
+                page: 0,
+                x,
+                y,
+                count: 1,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert_ne!(
+            editor.state().selection,
+            Some(cell_rect),
+            "clicking outside a cell-rect must not be treated as InSelection"
+        );
     }
 
     #[test]

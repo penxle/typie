@@ -1127,6 +1127,36 @@ mod tests {
     }
 
     #[test]
+    fn view_selection_rects_use_cell_boxes_for_cell_rect() {
+        let (state, c00, c11) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    table_cell { paragraph { text("b") } }
+                }
+                table_row {
+                    table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let selection = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
+        let resolved = selection.resolve(&state.doc).unwrap();
+        let ids: Vec<_> = resolved
+            .as_cell_rect()
+            .unwrap()
+            .cells()
+            .map(|cell| cell.id())
+            .collect();
+
+        assert_eq!(view.selection_rects(&resolved), view.node_box_rects(&ids));
+    }
+
+    #[test]
     fn arrow_right_onto_image_selects_image_then_passes() {
         let (state, t1, t2) = state! {
             doc { root {
