@@ -144,6 +144,13 @@ fn build_corpus() -> Vec<Message> {
                 group: "missing".into(),
             },
         },
+        Message::TrackedRange {
+            op: TrackedRangeOp::ReplaceText {
+                id: "missing".into(),
+                expected_text: None,
+                replacement: "x".into(),
+            },
+        },
     ]
 }
 

@@ -158,6 +158,47 @@ impl<'a> ResolvedSelection<'a> {
                 node_end_offset,
             )
     }
+
+    /// Concatenates text node content within the selection.
+    ///
+    /// Multi-byte safe: slices by unicode codepoints, not bytes.
+    pub fn collect_text(&self) -> String {
+        let mut out = String::new();
+        if let Some(root) = self.doc.root() {
+            collect_text_walk(&root, self, &mut out);
+        }
+        out
+    }
+}
+
+fn collect_text_walk(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out: &mut String) {
+    if !rs.intersects_subtree(node) {
+        return;
+    }
+    if let Node::Text(text_node) = node.node() {
+        let from = rs.from();
+        let to = rs.to();
+        let full = text_node.text.to_string();
+        let total = full.chars().count();
+        let start = if from.node_id() == node.id() {
+            from.offset().min(total)
+        } else {
+            0
+        };
+        let end = if to.node_id() == node.id() {
+            to.offset().min(total)
+        } else {
+            total
+        };
+        if end > start {
+            let slice: String = full.chars().skip(start).take(end - start).collect();
+            out.push_str(&slice);
+        }
+        return;
+    }
+    for child in node.children() {
+        collect_text_walk(&child, rs, out);
+    }
 }
 
 /// `true` iff the position `(pos_path, pos_offset)` is at or before the boundary

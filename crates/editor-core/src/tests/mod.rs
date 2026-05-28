@@ -3,3 +3,4 @@ mod scroll_into_view_integration;
 mod tracked_decoration_integration;
 mod tracked_range_hit_test;
 mod tracked_range_integration;
+mod tracked_range_replace_integration;

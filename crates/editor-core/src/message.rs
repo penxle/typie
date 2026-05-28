@@ -372,6 +372,12 @@ pub enum TrackedRangeOp {
     RemoveGroupDecoration {
         group: String,
     },
+    ReplaceText {
+        id: String,
+        #[serde(default)]
+        expected_text: Option<String>,
+        replacement: String,
+    },
 }
 
 #[ffi]

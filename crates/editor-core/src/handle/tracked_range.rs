@@ -1,9 +1,10 @@
+use editor_commands::{self as commands};
 use editor_state::StableSelection;
 use editor_view::GroupDecoration;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
-use crate::event::EditorEvent;
+use crate::event::{EditorEvent, TrackedRangeReplaceOutcome};
 use crate::message::*;
 use crate::state_field::StateField;
 use crate::tracked_range::TrackedRange;
@@ -98,8 +99,75 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 editor.view.remove_group_decoration(&group);
             });
         }
+        TrackedRangeOp::ReplaceText {
+            id,
+            expected_text,
+            replacement,
+        } => {
+            handle_replace_text(editor, id, expected_text, replacement)?;
+        }
     }
     Ok(())
+}
+
+fn handle_replace_text(
+    editor: &mut Editor,
+    id: String,
+    expected_text: Option<String>,
+    replacement: String,
+) -> Result<(), EditorError> {
+    let outcome = classify_replace_text(editor, &id, expected_text.as_deref(), &replacement);
+
+    if editor.is_probing() {
+        editor.mark_probed_change(matches!(outcome, TrackedRangeReplaceOutcome::Replaced));
+        return Ok(());
+    }
+
+    if let TrackedRangeReplaceOutcome::Replaced = outcome {
+        let range = editor
+            .tracked_ranges()
+            .get(&id)
+            .expect("range existed at classification time")
+            .clone();
+        let selection = range.selection.thaw(&editor.state.doc);
+        editor.transact(|tr| {
+            commands::replace_tracked_range(tr, selection, &replacement)?;
+            Ok(())
+        })?;
+    }
+
+    editor.push_event(EditorEvent::TrackedRangeReplaceResult { id, outcome });
+    Ok(())
+}
+
+fn classify_replace_text(
+    editor: &Editor,
+    id: &str,
+    expected_text: Option<&str>,
+    replacement: &str,
+) -> TrackedRangeReplaceOutcome {
+    let Some(range) = editor.tracked_ranges().get(id) else {
+        return TrackedRangeReplaceOutcome::UnknownId;
+    };
+    if range.explicitly_invalid {
+        return TrackedRangeReplaceOutcome::Invalid;
+    }
+    let selection = range.selection.thaw(&editor.state.doc);
+    if selection.is_collapsed() {
+        return TrackedRangeReplaceOutcome::Invalid;
+    }
+    if replacement.contains(['\n', '\r']) {
+        return TrackedRangeReplaceOutcome::InvalidReplacement;
+    }
+    if let Some(expected) = expected_text {
+        let Some(resolved) = selection.resolve(&editor.state.doc) else {
+            return TrackedRangeReplaceOutcome::Invalid;
+        };
+        if resolved.collect_text() != expected {
+            return TrackedRangeReplaceOutcome::TextMismatch;
+        }
+    }
+    TrackedRangeReplaceOutcome::Replaced
 }
 
 fn commit_view_or_probe<F>(editor: &mut Editor, would_change: bool, apply: F)
