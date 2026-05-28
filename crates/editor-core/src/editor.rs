@@ -449,6 +449,9 @@ impl Editor {
             fields.insert(StateField::Ime);
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
+            if !self.tracked_ranges.is_empty() {
+                fields.insert(StateField::TrackedRanges);
+            }
         }
 
         if ops.iter().any(

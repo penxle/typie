@@ -1,5 +1,6 @@
 mod can_invariants;
 mod scroll_into_view_integration;
+mod state_changed_tracked_ranges;
 mod tracked_decoration_integration;
 mod tracked_range_hit_test;
 mod tracked_range_integration;

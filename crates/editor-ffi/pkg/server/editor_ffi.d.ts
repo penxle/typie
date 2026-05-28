@@ -551,6 +551,8 @@ export interface TrackedRange {
     head: Position;
     metadata: string;
     invalid: boolean;
+    rects: PageRect[];
+    text: string;
 }
 
 export interface TrackedRangeHit {
@@ -749,6 +751,8 @@ declare class Editor {
     page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
+    prose_text(): string;
+    prose_to_selection(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
     render_page_to_buffer(page: number, width: number, height: number): Uint8Array;
     root_attrs(): PlainRootNode;

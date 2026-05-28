@@ -43,6 +43,8 @@ pub struct TrackedRange {
     pub head: editor_state::Position,
     pub metadata: String,
     pub invalid: bool,
+    pub rects: Vec<editor_view::PageRect>,
+    pub text: String,
 }
 
 #[ffi]
@@ -358,16 +360,33 @@ impl Editor {
                 Some(g) => Box::new(registry.iter_group(g)),
                 None => Box::new(registry.iter()),
             };
+            let view = inner.editor.view();
             let result: Vec<TrackedRange> = ranges
                 .map(|r| {
                     let sel = r.selection.thaw(doc);
+                    let invalid = r.explicitly_invalid || sel.is_collapsed();
+                    let resolved = if invalid { None } else { sel.resolve(doc) };
+                    let rects = match &resolved {
+                        Some(resolved) => view
+                            .selection_rects(resolved)
+                            .into_iter()
+                            .map(|sr| sr.without_meta())
+                            .collect(),
+                        None => Vec::new(),
+                    };
+                    let text = match &resolved {
+                        Some(resolved) => resolved.collect_text(),
+                        None => String::new(),
+                    };
                     TrackedRange {
                         id: r.id.clone(),
                         group: r.group.clone(),
                         anchor: sel.anchor,
                         head: sel.head,
                         metadata: r.metadata.clone(),
-                        invalid: r.explicitly_invalid || sel.is_collapsed(),
+                        invalid,
+                        rects,
+                        text,
                     }
                 })
                 .collect();
@@ -399,6 +418,55 @@ impl Editor {
                 })
                 .collect();
             Ok(public.into_ffi()?)
+        })
+    }
+
+    pub fn prose_text(&self) -> EditorResult<String> {
+        use editor_state::DocProseExt;
+        self.with_inner(|inner| Ok(inner.editor.state().doc.prose().text().to_string()))
+    }
+
+    pub fn prose_to_selection(
+        &self,
+        start: u32,
+        end: u32,
+    ) -> EditorResult<Option<Complex<editor_state::Selection>>> {
+        use editor_state::{
+            Affinity, DocProseExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+        };
+
+        self.with_inner(|inner| {
+            let doc = &inner.editor.state().doc;
+            let prose = doc.prose();
+            let Some(flat) = prose.to_flat_range((start as usize)..(end as usize)) else {
+                return Ok(None);
+            };
+            let Some(anchor_rp) = ResolvedPosition::from_flat(doc, flat.start) else {
+                return Ok(None);
+            };
+            let Some(head_rp) = ResolvedPosition::from_flat(doc, flat.end) else {
+                return Ok(None);
+            };
+
+            let (anchor_aff, head_aff) = if start == end {
+                (Affinity::Downstream, Affinity::Downstream)
+            } else {
+                (Affinity::Downstream, Affinity::Upstream)
+            };
+
+            let selection = Selection {
+                anchor: Position {
+                    node_id: anchor_rp.node_id(),
+                    offset: anchor_rp.offset(),
+                    affinity: anchor_aff,
+                },
+                head: Position {
+                    node_id: head_rp.node_id(),
+                    offset: head_rp.offset(),
+                    affinity: head_aff,
+                },
+            };
+            Ok(Some(selection).into_ffi()?)
         })
     }
 }
@@ -1018,6 +1086,178 @@ mod tests {
             .expect("export_page_vector must return Ok");
         let magic = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
         assert_eq!(magic, 0x3156_4554u32);
+    }
+
+    #[test]
+    fn ffi_prose_to_selection_within_single_paragraph() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("hello world") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(0, 5).expect("ok").expect("some");
+        assert_eq!(
+            sel.anchor.node_id, sel.head.node_id,
+            "single-block range must share nodeId"
+        );
+        assert_eq!(
+            sel.head.offset - sel.anchor.offset,
+            5,
+            "offset delta should be codepoint count"
+        );
+        assert!(matches!(
+            sel.anchor.affinity,
+            editor_state::Affinity::Downstream
+        ));
+        assert!(matches!(
+            sel.head.affinity,
+            editor_state::Affinity::Upstream
+        ));
+
+        let _ = t1;
+    }
+
+    #[test]
+    fn ffi_prose_to_selection_handles_multibyte_codepoints() {
+        // "한글" → 2 codepoints, "ñ" → 1 codepoint, total 3.
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("한글ñ") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(0, 3).expect("ok").expect("some");
+        assert_eq!(sel.head.offset - sel.anchor.offset, 3, "3 codepoints");
+
+        let _ = t1;
+    }
+
+    #[test]
+    fn ffi_prose_to_selection_empty_range_is_collapsed() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(2, 2).expect("ok").expect("some");
+        assert!(
+            sel.is_collapsed(),
+            "empty range must produce collapsed selection (anchor==head incl. affinity)"
+        );
+
+        let _ = t1;
+    }
+
+    #[test]
+    fn ffi_prose_to_selection_out_of_range_returns_none() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(0, 5).expect("ok");
+        assert!(sel.is_none(), "OOB range returns None");
+
+        let _ = t1;
+    }
+
+    #[test]
+    fn ffi_prose_to_selection_inverted_returns_none() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(3, 1).expect("ok");
+        assert!(sel.is_none(), "inverted range returns None");
+
+        let _ = t1;
+    }
+
+    #[test]
+    fn ffi_prose_to_selection_handles_emoji_surrogate_pair() {
+        // "a😀b" — 3 codepoints, 6 UTF-8 bytes ('a'=1, '😀'=4, 'b'=1).
+        // Position.offset is a codepoint index (Text::len() == chars().count()), so
+        // the full range 0..3 spans 3 codepoints and the delta must be 3.
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("a😀b") } } }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(0, 3).expect("ok").expect("some");
+        assert_eq!(
+            sel.anchor.node_id, sel.head.node_id,
+            "single-block range must share nodeId"
+        );
+        assert_eq!(
+            sel.head.offset - sel.anchor.offset,
+            3,
+            "offset unit is codepoints: 'a'(1) + '😀'(1) + 'b'(1) = 3"
+        );
+
+        // 0..2 covers "a" and "😀" — 2 codepoints
+        let sel2 = editor.prose_to_selection(0, 2).expect("ok").expect("some");
+        assert_eq!(sel2.anchor.node_id, sel2.head.node_id);
+        assert_eq!(
+            sel2.head.offset - sel2.anchor.offset,
+            2,
+            "offset unit is codepoints: 'a'(1) + '😀'(1) = 2"
+        );
+
+        let _ = t1;
+    }
+
+    #[test]
+    fn ffi_prose_to_selection_across_blocks() {
+        // Two paragraphs: prose text is "a\n\nb" — 4 codepoints across two blocks.
+        // anchor resolves to t1 (first paragraph text node) and head to t2 (second),
+        // so anchor.node_id != head.node_id.
+        let (initial, t1, _t2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("a") }
+                    paragraph { t2: text("b") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(0, 4).expect("ok").expect("some");
+        assert_ne!(
+            sel.anchor.node_id, sel.head.node_id,
+            "cross-block range must have distinct anchor/head nodeIds"
+        );
+
+        let _ = t1;
+    }
+
+    #[test]
+    fn ffi_prose_text_returns_doc_plain_text() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("안녕") }
+                    paragraph { _t2: text("Hello") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let text = editor.prose_text().expect("prose_text ok");
+        assert!(text.contains("안녕"), "first paragraph text missing");
+        assert!(text.contains("Hello"), "second paragraph text missing");
+        assert_eq!(
+            text.chars().count(),
+            9,
+            "expected 9 codepoints, got: {text:?}"
+        );
     }
 
     fn op_count(bytes: &[u8]) -> u32 {

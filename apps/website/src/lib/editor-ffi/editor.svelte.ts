@@ -29,6 +29,7 @@ import type {
   StableSelection,
   TableOverlay,
   ThemeVariant,
+  TrackedRange,
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type {
@@ -43,6 +44,13 @@ import type {
   FileAsset,
   ImageAsset,
 } from './types';
+
+export type SpellcheckError = {
+  id: string;
+  context: string;
+  corrections: string[];
+  explanation: string;
+};
 
 let wasmInitPromise: Promise<void> | null = null;
 
@@ -139,6 +147,11 @@ export class Editor {
 
   inflightFiles = $state(new SvelteMap<string, { name: string; size: number }>());
 
+  spellcheckErrors = $state<SpellcheckError[]>([]);
+  trackedRanges = $state<TrackedRange[]>([]);
+  activeSpellcheckErrorId = $state<string | null>(null);
+  #spellcheckDecorationsInstalled = false;
+
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
 
@@ -159,7 +172,11 @@ export class Editor {
     self.on('font_data_missing', fontDataMissingHandler);
     self.on('scroll', self.#scrollHandler);
     self.on('tracked_range_replace_result', (_, { id, outcome }) => {
-      self.#handleReplaceResult(id, outcome);
+      if (id.startsWith('search-match:')) {
+        self.#handleSearchReplaceResult(id, outcome);
+      } else if (self.spellcheckErrors.some((e) => e.id === id)) {
+        self.#handleSpellcheckReplaceResult(id);
+      }
     });
 
     register(self);
@@ -755,6 +772,43 @@ export class Editor {
     });
   }
 
+  proseText(): string {
+    this.flush();
+    return this.#wasm.prose_text();
+  }
+
+  proseToSelection(start: number, end: number): Selection | undefined {
+    this.flush();
+    return this.#wasm.prose_to_selection(start, end) ?? undefined;
+  }
+
+  installSpellcheckDecorations(): void {
+    if (this.#spellcheckDecorationsInstalled) return;
+    this.#spellcheckDecorationsInstalled = true;
+
+    const underline = { color: 'text.red', style: 'wavy' as const, thickness: 1.5 };
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'spellcheck',
+        style: { background: undefined, underline },
+        enabled: true,
+      },
+    });
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'spellcheck-active',
+        style: { background: 'bg.red', underline },
+        enabled: true,
+      },
+    });
+  }
+
   #scrollToActiveMatch(): void {
     const idx = this.#searchActiveIdx;
     if (idx === undefined) return;
@@ -763,8 +817,7 @@ export class Editor {
     this.enqueue({ type: 'view', op: { type: 'scroll_into_view', target: { type: 'tracked_item', id: match.id } } });
   }
 
-  #handleReplaceResult(id: string, outcome: string): void {
-    if (!id.startsWith('search-match:')) return;
+  #handleSearchReplaceResult(id: string, outcome: string): void {
     if (outcome !== 'replaced') return;
     const idx = this.#searchMatches.findIndex((m) => m.id === id);
     if (idx === -1) return;
@@ -782,6 +835,147 @@ export class Editor {
       this.#applyActiveMark();
       this.#scrollToActiveMatch();
     }
+  }
+
+  setSpellcheckErrors(
+    items: {
+      id: string;
+      selection: Selection;
+      context: string;
+      corrections: string[];
+      explanation: string;
+    }[],
+  ): void {
+    for (const item of items) {
+      this.enqueue({
+        type: 'tracked_range',
+        op: {
+          type: 'add',
+          id: item.id,
+          group: 'spellcheck',
+          selection: item.selection,
+          metadata: '',
+        },
+      });
+    }
+    this.spellcheckErrors = items.map((item) => ({
+      id: item.id,
+      context: item.context,
+      corrections: item.corrections,
+      explanation: item.explanation,
+    }));
+  }
+
+  removeSpellcheckError(id: string): void {
+    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
+    this.spellcheckErrors = this.spellcheckErrors.filter((e) => e.id !== id);
+    if (this.activeSpellcheckErrorId === id) {
+      this.activeSpellcheckErrorId = null;
+    }
+  }
+
+  applySpellcheckCorrection(id: string, replacement: string): void {
+    const err = this.spellcheckErrors.find((e) => e.id === id);
+    if (!err) return;
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: { type: 'replace_text', id, expected_text: err.context, replacement },
+    });
+    this.enqueue({
+      type: 'tracked_range',
+      op: { type: 'remove', id },
+    });
+
+    this.spellcheckErrors = this.spellcheckErrors.filter((e) => e.id !== id);
+    if (this.activeSpellcheckErrorId === id) {
+      this.activeSpellcheckErrorId = null;
+    }
+  }
+
+  setActiveSpellcheckError(id: string | null): void {
+    if (this.activeSpellcheckErrorId === id) return;
+
+    const restoreToNormalGroup = (errorId: string) => {
+      const range = this.trackedRanges.find((r) => r.id === errorId);
+      if (!range || range.invalid) return;
+      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
+      if (!stable) return;
+      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: errorId } });
+      this.enqueue({
+        type: 'tracked_range',
+        op: { type: 'add_frozen', id: errorId, group: 'spellcheck', selection: stable, metadata: '' },
+      });
+    };
+
+    const promoteToActiveGroup = (errorId: string): boolean => {
+      const range = this.trackedRanges.find((r) => r.id === errorId);
+      if (!range || range.invalid) return false;
+      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
+      if (!stable) return false;
+      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: errorId } });
+      this.enqueue({
+        type: 'tracked_range',
+        op: { type: 'add_frozen', id: errorId, group: 'spellcheck-active', selection: stable, metadata: '' },
+      });
+      return true;
+    };
+
+    if (this.activeSpellcheckErrorId !== null) {
+      restoreToNormalGroup(this.activeSpellcheckErrorId);
+    }
+
+    this.activeSpellcheckErrorId = id;
+
+    if (id !== null) {
+      const ok = promoteToActiveGroup(id);
+      if (!ok) {
+        this.activeSpellcheckErrorId = null;
+        return;
+      }
+      this.scrollIntoView({ type: 'tracked_item', id });
+    }
+  }
+
+  #syncActiveSpellcheckErrorFromSelection(): void {
+    const cursor = this.#cursor;
+    if (!cursor) return;
+
+    const cx = cursor.caret.x;
+    const cy = cursor.line.y + cursor.line.height / 2;
+    const pageIdx = cursor.page_idx;
+
+    const hit =
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck-active')[0] ??
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck')[0];
+
+    if (hit) {
+      this.setActiveSpellcheckError(hit.id);
+    } else if (this.activeSpellcheckErrorId !== null) {
+      this.setActiveSpellcheckError(null);
+    }
+  }
+
+  removeSpellcheckErrorsByContext(context: string): void {
+    const targets = this.spellcheckErrors.filter((e) => e.context === context).map((e) => e.id);
+    if (targets.length === 0) return;
+
+    for (const id of targets) {
+      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
+    }
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const targetSet = new Set(targets);
+    this.spellcheckErrors = this.spellcheckErrors.filter((e) => !targetSet.has(e.id));
+    if (this.activeSpellcheckErrorId !== null && targetSet.has(this.activeSpellcheckErrorId)) {
+      this.activeSpellcheckErrorId = null;
+    }
+  }
+
+  clearSpellcheckErrors(): void {
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'spellcheck' } });
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'spellcheck-active' } });
+    this.spellcheckErrors = [];
+    this.activeSpellcheckErrorId = null;
   }
 
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {
@@ -827,6 +1021,7 @@ export class Editor {
       if (this.#selection === undefined) {
         this.inputEl?.blur();
       }
+      this.#syncActiveSpellcheckErrorFromSelection();
     }
 
     if (fields.includes('page_sizes')) {
@@ -858,6 +1053,34 @@ export class Editor {
       this.#blockState = this.#wasm.block_state();
     }
 
+    if (fields.includes('tracked_ranges')) {
+      this.trackedRanges = this.#wasm.tracked_ranges();
+
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const rangeById = new Map(this.trackedRanges.map((r) => [r.id, r]));
+
+      const isStale = (e: SpellcheckError): boolean => {
+        const r = rangeById.get(e.id);
+        if (!r) return true;
+        if (r.invalid) return true;
+        if (r.text !== e.context) return true;
+        return false;
+      };
+
+      for (const e of this.spellcheckErrors) {
+        const r = rangeById.get(e.id);
+        if (r && !r.invalid && r.text !== e.context) {
+          this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: e.id } });
+        }
+      }
+
+      this.spellcheckErrors = this.spellcheckErrors.filter((e) => !isStale(e));
+
+      if (this.activeSpellcheckErrorId !== null && !this.spellcheckErrors.some((e) => e.id === this.activeSpellcheckErrorId)) {
+        this.activeSpellcheckErrorId = null;
+      }
+    }
+
     const pageDomChanged = fields.includes('root_attrs') || fields.includes('page_sizes');
     if (pageDomChanged) {
       this.refreshPointerStyleAfterDomUpdate();
@@ -865,6 +1088,10 @@ export class Editor {
       this.refreshPointerStyle();
     }
   };
+
+  #handleSpellcheckReplaceResult(id: string): void {
+    this.removeSpellcheckError(id);
+  }
 
   #scrollHandler: EditorEventListener<'scroll'> = (_, { rect: { page_idx, rect } }) => {
     const pageEl = this.pageEls[page_idx];

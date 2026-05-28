@@ -35,6 +35,7 @@
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
+  import SpellcheckPopover from './SpellcheckPopover.svelte';
   import { Pusher } from './sync/pusher.svelte';
   import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_query$key } from '$mearie';
@@ -730,6 +731,9 @@
           {/if}
 
           <FeedbackPopover />
+          {#if ctx.editor}
+            <SpellcheckPopover editor={ctx.editor} />
+          {/if}
 
           {#if query.data.me.id === entity.user.id}
             <Menu placement="bottom-end">
