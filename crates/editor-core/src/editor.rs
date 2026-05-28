@@ -717,8 +717,15 @@ impl Editor {
     }
 
     pub fn can(&mut self, msg: Message) -> Result<bool, EditorError> {
+        self.probe(|editor| editor.process_message(msg))
+    }
+
+    pub(crate) fn probe(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<(), EditorError>,
+    ) -> Result<bool, EditorError> {
         let guard = ProbeGuard::enter(self);
-        let result = guard.editor.process_message(msg);
+        let result = f(guard.editor);
         let changed = guard.finish();
         result.map(|()| changed)
     }
@@ -2397,6 +2404,107 @@ mod tests {
     }
 
     #[test]
+    fn internal_dnd_over_inside_source_selection_rejects_drop_indicator() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 1) -> (t, 4)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(editor.drop_indicator_for_test().is_none());
+    }
+
+    #[test]
+    fn internal_dnd_page_break_source_rejects_nested_inline_drop_indicator() {
+        let (initial, _p1, t2) = state! {
+            doc { root {
+                p1: paragraph { text("a") page_break }
+                blockquote { paragraph { t2: text("inside") } }
+                paragraph {}
+            } }
+            selection: (p1, 1) -> (p1, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t2, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(editor.drop_indicator_for_test().is_none());
+    }
+
+    #[test]
+    fn internal_dnd_page_break_source_allows_root_inline_drop_indicator() {
+        let (initial, _p1, t2) = state! {
+            doc { root {
+                p1: paragraph { text("a") page_break }
+                paragraph { t2: text("root") }
+                paragraph {}
+            } }
+            selection: (p1, 1) -> (p1, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t2, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(editor.drop_indicator_for_test().is_some());
+    }
+
+    #[test]
     fn drop_text_inserts_at_drop_target_not_current_selection() {
         let (initial, t) = state! {
             doc { root { paragraph { t: text("hello") } } }
@@ -2461,6 +2569,43 @@ mod tests {
             .expect("cursor metrics")
             .caret;
 
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                payload: DndDropPayload::Text {
+                    text: "!".into(),
+                    html: None,
+                },
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        editor_state::assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn drop_text_without_drop_target_is_noop() {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::EnterExternal {
+                payload: ExternalDndPayloadKind::Text,
+            },
+        });
         editor.apply(Message::Dnd {
             op: DndOp::Drop {
                 page: 0,

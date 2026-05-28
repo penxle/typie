@@ -242,10 +242,9 @@ impl View {
         page_idx: usize,
         x: f32,
         y: f32,
-        source: Option<&Selection>,
     ) -> Option<crate::DropTarget> {
         let result = self.layout.as_ref()?;
-        query::drop_target_at(&result.tree, &result.pages, doc, page_idx, x, y, source)
+        query::drop_target_at(&result.tree, &result.pages, doc, page_idx, x, y)
     }
 
     pub fn interactive_hit_test(

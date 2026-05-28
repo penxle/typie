@@ -1,5 +1,5 @@
 use editor_model::{Doc, NodeId};
-use editor_state::{Position, Selection};
+use editor_state::Position;
 
 use crate::page::LayoutPage;
 use crate::paginate::*;
@@ -14,11 +14,10 @@ pub(crate) fn drop_target_at(
     page_idx: usize,
     x: f32,
     page_y: f32,
-    source: Option<&Selection>,
 ) -> Option<DropTarget> {
     let page = pages.get(page_idx)?;
     let hit = HitTester::for_page(tree, page, x, page_y);
-    let position = dnd_position(&hit, doc, source)?;
+    let position = dnd_position(&hit, doc)?;
     let indicator = drop_indicator_from_position(tree, pages, doc, position)?;
     Some(DropTarget {
         position,
@@ -26,7 +25,7 @@ pub(crate) fn drop_target_at(
     })
 }
 
-fn dnd_position(hit: &HitTester<'_>, doc: &Doc, source: Option<&Selection>) -> Option<Position> {
+fn dnd_position(hit: &HitTester<'_>, doc: &Doc) -> Option<Position> {
     let position = if let Some(position) = hit.block_gap_position(doc) {
         promote_block_container_edge_position(doc, position).unwrap_or(position)
     } else {
@@ -35,12 +34,6 @@ fn dnd_position(hit: &HitTester<'_>, doc: &Doc, source: Option<&Selection>) -> O
             .or_else(|| hit.closest_target())
             .map(|target| target.selection(target_x).head)?
     };
-
-    if let Some(source) = source
-        && position_inside_selection(doc, position, source)
-    {
-        return None;
-    }
 
     Some(position)
 }
@@ -77,16 +70,6 @@ fn promote_block_container_edge_position(doc: &Doc, position: Position) -> Optio
     } else {
         None
     }
-}
-
-fn position_inside_selection(doc: &Doc, position: Position, selection: &Selection) -> bool {
-    let Some(resolved_selection) = selection.resolve(doc) else {
-        return false;
-    };
-    let Some(resolved_position) = position.resolve(doc) else {
-        return false;
-    };
-    resolved_selection.contains(&resolved_position)
 }
 
 fn drop_indicator_from_position(
@@ -271,7 +254,7 @@ mod tests {
             .caret;
 
         let target = view
-            .drop_target_at(&doc, 0, caret.x, caret.y + caret.height * 0.5, None)
+            .drop_target_at(&doc, 0, caret.x, caret.y + caret.height * 0.5)
             .expect("valid dnd target");
 
         assert_eq!(target.position.node_id, t);
@@ -301,7 +284,7 @@ mod tests {
         view.layout(&doc);
 
         let target = view
-            .drop_target_at(&doc, 0, 40.0, 0.0, None)
+            .drop_target_at(&doc, 0, 40.0, 0.0)
             .expect("page top margin should be a root start drop target");
 
         assert_eq!(target.position, Position::new(NodeId::ROOT, 0));
@@ -324,7 +307,7 @@ mod tests {
         let page_bottom = view.pages()[0].size.height;
 
         let target = view
-            .drop_target_at(&doc, 0, 40.0, page_bottom, None)
+            .drop_target_at(&doc, 0, 40.0, page_bottom)
             .expect("page bottom margin should be a root end drop target");
 
         assert_eq!(target.position, Position::new(NodeId::ROOT, 1));
@@ -375,7 +358,7 @@ mod tests {
         };
         let page = make_page(0.0, 100.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 40.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 40.0)
             .expect("gap between root blocks must be a drop target");
 
         assert_eq!(
@@ -448,7 +431,7 @@ mod tests {
         };
         let page = make_page(0.0, 120.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 60.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 60.0)
             .expect("gap inside fold_content must be a DnD target");
 
         assert_eq!(target.position, Position::new(fc, 1));
@@ -514,7 +497,7 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 55.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 55.0)
             .expect("gap inside table_cell scope must be a DnD target");
 
         assert_eq!(target.position, Position::new(cell, 1));
@@ -564,7 +547,7 @@ mod tests {
         };
         let page = make_page(0.0, 100.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 20.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 20.0)
             .expect("table-cell leading padding should be a scoped cell drop target");
 
         assert_eq!(target.position, Position::new(cell, 0));
@@ -626,7 +609,7 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 180.0, 50.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 180.0, 50.0)
             .expect("same-row side margin should use the nearest table-cell gap");
 
         assert_eq!(target.position, Position::new(cell, 1));
@@ -664,7 +647,7 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 50.0, 50.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 50.0, 50.0)
             .expect("leading padding before a root child container should be a root boundary");
 
         assert_eq!(target.position, Position::new(NodeId::ROOT, 1));
@@ -702,7 +685,7 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 50.0, 90.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 50.0, 90.0)
             .expect("trailing padding after a root child container should be a root boundary");
 
         assert_eq!(target.position, Position::new(NodeId::ROOT, 2));
@@ -771,9 +754,9 @@ mod tests {
         };
         let pages = [make_page(0.0, 180.0)];
 
-        let leading = drop_target_at(&tree, &pages, &doc, 0, 70.0, 90.0, None)
+        let leading = drop_target_at(&tree, &pages, &doc, 0, 70.0, 90.0)
             .expect("leading padding before nested container should target parent boundary");
-        let trailing = drop_target_at(&tree, &pages, &doc, 0, 70.0, 130.0, None)
+        let trailing = drop_target_at(&tree, &pages, &doc, 0, 70.0, 130.0)
             .expect("trailing padding after nested container should target parent boundary");
 
         assert_eq!(leading.position, Position::new(fc, 1));
@@ -828,7 +811,7 @@ mod tests {
         };
         let page = make_page(0.0, 120.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 70.0, 40.0, None)
+        let target = drop_target_at(&tree, &[page], &doc, 0, 70.0, 40.0)
             .expect("fold_content leading padding should stay inside fold_content");
 
         assert_eq!(target.position, Position::new(fc, 0));
@@ -880,7 +863,7 @@ mod tests {
     }
 
     #[test]
-    fn dnd_hit_test_rejects_internal_target_inside_source_selection() {
+    fn dnd_hit_test_returns_candidate_inside_source_selection() {
         let (doc, t) = doc! {
             root { paragraph { t: text("hello") } }
         };
@@ -890,16 +873,9 @@ mod tests {
             .cursor_metrics(&doc, &Position::new(t, 2))
             .expect("cursor metrics")
             .caret;
-        let source = Selection::new(Position::new(t, 1), Position::new(t, 4));
 
-        let target = view.drop_target_at(
-            &doc,
-            0,
-            caret.x,
-            caret.y + caret.height * 0.5,
-            Some(&source),
-        );
+        let target = view.drop_target_at(&doc, 0, caret.x, caret.y + caret.height * 0.5);
 
-        assert!(target.is_none());
+        assert!(target.is_some());
     }
 }
