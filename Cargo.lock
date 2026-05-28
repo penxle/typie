@@ -731,6 +731,8 @@ dependencies = [
 name = "editor-crdt"
 version = "0.0.1"
 dependencies = [
+ "base62",
+ "editor-common",
  "editor-macros",
  "getrandom 0.4.2",
  "hashbrown 0.17.1",
@@ -738,6 +740,7 @@ dependencies = [
  "proptest",
  "ruzstd",
  "serde",
+ "serde_json",
  "thiserror",
  "tsify",
  "uniffi",

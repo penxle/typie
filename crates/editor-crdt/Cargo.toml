@@ -8,7 +8,9 @@ uniffi = ["dep:uniffi"]
 wasm = ["dep:tsify", "dep:wasm-bindgen"]
 
 [dependencies]
+editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
+base62.workspace = true
 getrandom.workspace = true
 hashbrown = { workspace = true }
 imbl = { workspace = true, features = ["serde"] }
@@ -21,3 +23,4 @@ wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+serde_json = { workspace = true }

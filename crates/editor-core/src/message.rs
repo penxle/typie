@@ -1,7 +1,7 @@
 pub use editor_common::{Axis, DecorationStyle, Direction, Movement};
 use editor_macros::ffi;
 use editor_model::{Fragment, Modifier, ModifierType, NodeId, PlainNode, TableBorderStyle};
-use editor_state::Selection;
+use editor_state::{Selection, StableSelection};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -166,6 +166,9 @@ pub enum ModifierOp {
 pub enum SelectionOp {
     Set {
         selection: Selection,
+    },
+    SetFrozen {
+        selection: StableSelection,
     },
     Unset,
     SetFlat {

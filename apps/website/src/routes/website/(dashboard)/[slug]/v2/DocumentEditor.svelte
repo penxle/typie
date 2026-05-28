@@ -36,6 +36,7 @@
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import { Pusher } from './sync/pusher.svelte';
+  import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_query$key } from '$mearie';
 
   type Props = {
@@ -403,16 +404,13 @@
     Record<
       string,
       {
-        selection?: {
-          anchor: { node_id: string; offset: number; affinity?: 'downstream' | 'upstream' };
-          head: { node_id: string; offset: number; affinity?: 'downstream' | 'upstream' };
-        };
+        selection?: StableSelection;
         type?: string;
         element?: string;
         timestamp: number;
       }
     >
-  >('typie:selections:v2', {});
+  >('typie:selections:v3', {});
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -563,13 +561,12 @@
       if (!fields.includes('selection')) return;
       const sel = editor.selection;
       if (!sel || !documentId || !editorReady || !editor.focused) return;
+      const frozen = editor.freezeSelection(sel);
+      if (!frozen) return;
       selectionsStore.current = {
         ...selectionsStore.current,
         [documentId]: {
-          selection: {
-            anchor: { node_id: sel.anchor.node_id, offset: sel.anchor.offset, affinity: sel.anchor.affinity },
-            head: { node_id: sel.head.node_id, offset: sel.head.offset, affinity: sel.head.affinity },
-          },
+          selection: frozen,
           timestamp: dayjs().valueOf(),
         },
       };
@@ -584,15 +581,11 @@
     const saved = selectionsStore.current[documentId];
 
     if (saved?.selection) {
-      const sel = saved.selection;
       ctx.editor?.enqueue({
         type: 'selection',
         op: {
-          type: 'set',
-          selection: {
-            anchor: { node_id: sel.anchor.node_id, offset: sel.anchor.offset, affinity: sel.anchor.affinity },
-            head: { node_id: sel.head.node_id, offset: sel.head.offset, affinity: sel.head.affinity },
-          },
+          type: 'set_frozen',
+          selection: saved.selection,
         },
       });
       ctx.editor?.scrollIntoView({ type: 'selection' });

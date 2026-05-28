@@ -26,6 +26,7 @@ import type {
   Selection,
   SelectionEndpoints,
   Size,
+  StableSelection,
   TableOverlay,
   ThemeVariant,
   Viewport,
@@ -216,6 +217,14 @@ export class Editor {
 
   get selection() {
     return this.#selection;
+  }
+
+  freezeSelection(selection: Selection): StableSelection | undefined {
+    try {
+      return this.#wasm.freeze_selection(selection);
+    } catch {
+      return undefined;
+    }
   }
 
   get isSelectionCollapsed(): boolean {

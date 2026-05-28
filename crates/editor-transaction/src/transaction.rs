@@ -301,16 +301,22 @@ impl Transaction {
     }
 
     pub fn set_selection(&mut self, selection: Option<Selection>) -> Result<(), StepError> {
-        // Mirror what apply_to does: normalize through the current doc.
-        // If the effective result matches the live selection, the step is a noop.
-        let new_effective = selection
-            .as_ref()
-            .map(|s| s.normalize(&self.state.doc).unwrap_or(*s));
+        // Normalize through the current doc. If normalization fails (an endpoint
+        // doesn't resolve against the live doc), drop the request rather than
+        // panicking inside freeze. If the effective result matches the live
+        // selection, the step is a noop.
+        let new_effective = match selection.as_ref() {
+            Some(s) => match s.normalize(&self.state.doc) {
+                Some(n) => Some(n),
+                None => return Ok(()),
+            },
+            None => None,
+        };
         if new_effective == self.state.selection {
             return Ok(());
         }
         let old = self.selection_stable.clone();
-        let new = selection
+        let new = new_effective
             .as_ref()
             .map(|s| StableSelection::freeze(s, &self.state.doc));
         self.apply_step(Step::SetSelection { old, new })

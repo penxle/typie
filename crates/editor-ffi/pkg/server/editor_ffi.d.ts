@@ -151,27 +151,6 @@ export interface Changeset<P> {
 }
 
 /**
- * CRDT-standard `(actor, clock)` identity. Used as char-id here; meant to be reused
- * across future primitives (sequence-CRDT, OR-Set add tokens, LWW register timestamps,
- * op identity).
- *
- * **`clock` is per-actor monotonic — *not a strict Lamport timestamp*.**
- * We don't bump our clock when observing remote ops, so cross-actor comparison
- * does not reflect causal precedence. Sufficient for RGA tie-break (deterministic
- * ordering) but reusing this for LWW winner determination requires the op-generation
- * layer to provide Lamport semantics (`L = max(L_self, observed_max) + 1`) separately.
- *
- * `Ord` / `PartialOrd` are implemented manually — `derive` depends on field
- * declaration order, which is fragile. Clock-primary is just a setup that *can*
- * evolve into a Lamport-compatible form later; it is not itself a Lamport guarantee
- * (see caveat above).
- */
-export interface Dot {
-    actor: number;
-    clock: number;
-}
-
-/**
  * One link in the structural chain from root to the cursor's leaf node.
  *
  * `child_dot` is this node's dot in its parent's `children` RGA. For the
@@ -618,6 +597,8 @@ export type DndDropPayload = { type: "internal_selection" } | { type: "text"; te
 
 export type DndOp = { type: "start_internal_selection" } | { type: "enter_external"; payload: ExternalDndPayloadKind } | { type: "over"; page: number; x: number; y: number; modifiers?: InputModifiers } | { type: "leave" } | { type: "drop"; page: number; x: number; y: number; payload: DndDropPayload; modifiers?: InputModifiers } | { type: "end" };
 
+export type Dot = string;
+
 export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "scroll"; rect: PageRect } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
@@ -704,7 +685,7 @@ export type ScrollTarget = { type: "tracked_item"; id: string } | { type: "selec
 
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
-export type SelectionOp = { type: "set"; selection: Selection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
+export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges";
 

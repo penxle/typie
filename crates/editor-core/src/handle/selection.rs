@@ -30,6 +30,10 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             SelectionOp::Set { selection } => {
                 commands::set_selection(tr, selection)?;
             }
+            SelectionOp::SetFrozen { selection } => {
+                let live = selection.thaw(&tr.doc());
+                commands::set_selection(tr, live)?;
+            }
             SelectionOp::SetFlat { start, end } => {
                 let doc = tr.doc();
                 let start_pos = match ResolvedPosition::from_flat(&doc, start) {
@@ -125,7 +129,7 @@ fn resolve_extend_to_selection(editor: &Editor, op: &SelectionOp) -> Option<Sele
 mod tests {
     use editor_macros::state;
     use editor_model::Modifier;
-    use editor_state::{Composition, PendingModifier, Position, Selection};
+    use editor_state::{Composition, PendingModifier, Position, Selection, StableSelection};
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
@@ -202,6 +206,39 @@ mod tests {
                 op: SelectionOp::Unset,
             },
         );
+    }
+
+    #[test]
+    fn select_set_frozen_restores_selection() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        let target = Selection::collapsed(Position::new(t1, 3));
+        let frozen = StableSelection::freeze(&target, &state.doc);
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetFrozen { selection: frozen },
+        });
+        assert_eq!(editor.state().selection, Some(target));
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn select_set_with_unaddressable_node_is_noop() {
+        // A NodeId that doesn't exist in the doc (e.g. left over from a
+        // previous session) must not panic — the request is silently dropped.
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        let before = state.selection;
+        let bogus = Selection::collapsed(Position::new(editor_model::NodeId::new(), 0));
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set { selection: bogus },
+        });
+        assert_eq!(editor.state().selection, before);
     }
 
     #[test]
