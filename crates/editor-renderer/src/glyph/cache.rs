@@ -1,6 +1,6 @@
 use hashbrown::HashMap;
 
-use crate::glyph::RasterizedGlyph;
+use crate::glyph::{RasterizedGlyph, SvgPathGlyph};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GlyphCacheKey {
@@ -41,8 +41,17 @@ struct CachedGlyph {
     font_version: u64,
 }
 
+struct CachedSvgPathGlyph {
+    result: Option<SvgPathGlyph>,
+    font_version: u64,
+}
+
 pub struct GlyphCache {
     map: HashMap<GlyphCacheKey, CachedGlyph>,
+}
+
+pub struct SvgPathGlyphCache {
+    map: HashMap<GlyphCacheKey, CachedSvgPathGlyph>,
 }
 
 impl GlyphCache {
@@ -80,5 +89,74 @@ impl GlyphCache {
                 font_version,
             },
         );
+    }
+}
+
+impl SvgPathGlyphCache {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    pub fn get(
+        &self,
+        key: &GlyphCacheKey,
+        current_font_version: u64,
+    ) -> Option<&Option<SvgPathGlyph>> {
+        let cached = self.map.get(key)?;
+        if cached.result.is_some() || cached.font_version == current_font_version {
+            Some(&cached.result)
+        } else {
+            None
+        }
+    }
+
+    pub fn insert(&mut self, key: GlyphCacheKey, result: Option<SvgPathGlyph>, font_version: u64) {
+        self.map.insert(
+            key,
+            CachedSvgPathGlyph {
+                result,
+                font_version,
+            },
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GlyphCacheKey, SvgPathGlyphCache};
+    use crate::glyph::SvgPathGlyph;
+    use crate::types::{Path, PathElement};
+
+    #[test]
+    fn svg_path_cache_preserves_svg_path_glyph() {
+        // SVG path glyph cache 가 SVG path 기반 글리프 표현을 그대로 저장하고
+        // 다시 꺼낼 수 있는지 확인한다.
+        let mut cache = SvgPathGlyphCache::new();
+        let key = GlyphCacheKey::new(1, 400, 42, 16.0, false, false, 0);
+        let glyph = SvgPathGlyph {
+            path: Path {
+                elements: vec![
+                    PathElement::MoveTo { x: 0.0, y: 0.0 },
+                    PathElement::LineTo { x: 1.0, y: 0.0 },
+                    PathElement::Close,
+                ],
+            },
+            placement_left: 3,
+            placement_top: 4,
+        };
+
+        cache.insert(key, Some(glyph), 7);
+
+        let cached = cache
+            .get(&key, 7)
+            .expect("cache entry must exist")
+            .as_ref()
+            .expect("cache entry must contain glyph");
+
+        assert_eq!(cached.placement_left, 3);
+        assert_eq!(cached.placement_top, 4);
+        assert_eq!(cached.path.elements.len(), 3);
     }
 }

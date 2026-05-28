@@ -8,10 +8,10 @@ mod outline_pen;
 mod scaler;
 mod scratch;
 
-pub use cache::GlyphCache;
+pub use cache::{GlyphCache, SvgPathGlyphCache};
 pub use scaler::ScaleContext;
 
-use crate::types::Transform as RenderTransform;
+use crate::types::{Path, Transform as RenderTransform};
 use cache::GlyphCacheKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,10 +31,30 @@ pub struct RasterizedGlyph {
 }
 
 #[derive(Debug, Clone)]
+pub struct SvgPathGlyph {
+    pub path: Path,
+    pub placement_left: i32,
+    pub placement_top: i32,
+}
+
+#[derive(Debug, Clone)]
 pub struct PositionedGlyph {
     pub raster: RasterizedGlyph,
     pub blit_x: i32,
     pub blit_y: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct PositionedSvgPathGlyph {
+    pub path: SvgPathGlyph,
+    pub blit_x: i32,
+    pub blit_y: i32,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct PositionedGlyphs {
+    pub rasters: Vec<PositionedGlyph>,
+    pub svg_paths: Vec<PositionedSvgPathGlyph>,
 }
 
 /// base_transform 의 2×3 매트릭스로 logical (x, y) 를 매핑한다.
@@ -49,18 +69,22 @@ pub fn rasterize(
     fonts: &editor_resource::FontRegistry,
     scale_ctx: &mut ScaleContext,
     cache: &mut GlyphCache,
+    svg_path_cache: &mut SvgPathGlyphCache,
     scale_factor: f32,
     base_transform: RenderTransform,
-) -> Vec<PositionedGlyph> {
+) -> PositionedGlyphs {
     let Some(font_data) = fonts.font_data(run.family_id, run.weight) else {
-        return Vec::new();
+        return PositionedGlyphs::default();
     };
     let font_version = fonts.font_version(run.family_id, run.weight);
     let scaled_font_size = run.font_size * scale_factor;
     let has_skew = run.synthesis.skew.is_some();
     let embolden = run.synthesis.embolden;
 
-    let mut out = Vec::with_capacity(run.glyphs.len());
+    let mut out = PositionedGlyphs {
+        rasters: Vec::with_capacity(run.glyphs.len()),
+        svg_paths: Vec::with_capacity(run.glyphs.len()),
+    };
     for g in &run.glyphs {
         if g.id == 0 {
             continue;
@@ -84,6 +108,34 @@ pub fn rasterize(
             subpixel_x,
         );
 
+        let svg_path = match svg_path_cache.get(&key, font_version) {
+            Some(entry) => entry.clone(),
+            None => {
+                let r = scaler::svg_path_glyph(
+                    scale_ctx,
+                    font_data,
+                    g.id,
+                    scaled_font_size,
+                    embolden,
+                    run.synthesis.skew,
+                    subpixel_x as f32 / 4.0,
+                );
+                svg_path_cache.insert(key, r.clone(), font_version);
+                r
+            }
+        };
+
+        if let Some(path) = svg_path {
+            let blit_x = snapped_x.floor() as i32 + path.placement_left;
+            let blit_y = glyph_y_device.floor() as i32 - path.placement_top;
+            out.svg_paths.push(PositionedSvgPathGlyph {
+                path,
+                blit_x,
+                blit_y,
+            });
+            continue;
+        }
+
         let raster = match cache.get(&key, font_version) {
             Some(entry) => entry.clone(),
             None => {
@@ -106,7 +158,7 @@ pub fn rasterize(
         let blit_x = snapped_x.floor() as i32 + raster.placement_left;
         let blit_y = glyph_y_device.floor() as i32 - raster.placement_top;
 
-        out.push(PositionedGlyph {
+        out.rasters.push(PositionedGlyph {
             raster,
             blit_x,
             blit_y,

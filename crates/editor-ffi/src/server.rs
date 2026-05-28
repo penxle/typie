@@ -33,6 +33,10 @@ impl EditorServer {
         Ok(editor_server::font::get_font_codepoints(&ttf_data)?)
     }
 
+    pub fn outline_text_to_svg(&self, font_data: Vec<u8>, text: String) -> EditorResult<String> {
+        Ok(editor_server::font::outline_text_to_svg(&font_data, &text)?)
+    }
+
     pub fn build_font(
         &self,
         ttf_data: Vec<u8>,
@@ -253,6 +257,14 @@ mod tests {
     }
     fn dec_dots(b: &[u8]) -> Vec<Dot> {
         editor_crdt::wire::decode_dots(b).unwrap()
+    }
+
+    fn load_test_font() -> Vec<u8> {
+        std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/Pretendard-Regular.ttf"
+        ))
+        .expect("test font not found")
     }
 
     #[test]
@@ -511,5 +523,24 @@ mod tests {
             result,
             Err(EditorError::Ffi(FfiError::CausalOrderViolation { .. }))
         ));
+    }
+
+    #[test]
+    fn outline_text_to_svg_forwards_svg_document() {
+        // FFI 래퍼가 outline_text_to_svg 결과를 그대로 전달해 SVG 문서를 반환하는지 확인한다.
+        let server = EditorServer;
+        let svg = server
+            .outline_text_to_svg(load_test_font(), "A".to_string())
+            .unwrap();
+        assert!(svg.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg""#));
+        assert!(svg.contains("<path d=\""));
+    }
+
+    #[test]
+    fn outline_text_to_svg_rejects_invalid_font_data() {
+        // 잘못된 폰트 바이트를 넘기면 FFI 래퍼도 에러를 그대로 반환해야 한다.
+        let server = EditorServer;
+        let result = server.outline_text_to_svg(vec![0, 1, 2, 3], "A".to_string());
+        assert!(result.is_err());
     }
 }

@@ -6,7 +6,9 @@ use editor_view::style::{BoxStyle, DecorationData};
 use editor_view::{Edges, LineMetrics, PageRect, PageVisitor, TableLayoutInfo};
 use std::sync::{Arc, Mutex};
 
-use crate::glyph::{Content, GlyphCache, ScaleContext};
+use crate::glyph::{
+    Content, GlyphCache, PositionedGlyph, PositionedSvgPathGlyph, ScaleContext, SvgPathGlyphCache,
+};
 use crate::icons::ICONS;
 use crate::sink::RenderSink;
 use crate::types::{
@@ -40,6 +42,32 @@ fn bake_mask_to_premul_rgba(mask: &[u8], width: u32, height: u32, color: Color) 
         width,
         height,
     }
+}
+
+fn draw_positioned_raster_glyph(sink: &mut dyn RenderSink, pg: &PositionedGlyph, color: Color) {
+    let image = match pg.raster.content {
+        Content::Mask => {
+            bake_mask_to_premul_rgba(&pg.raster.data, pg.raster.width, pg.raster.height, color)
+        }
+        Content::Color => Image {
+            data: pg.raster.data.clone(),
+            width: pg.raster.width,
+            height: pg.raster.height,
+        },
+    };
+
+    let t = Transform::IDENTITY.translate(pg.blit_x as f32, pg.blit_y as f32);
+    let rect = Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
+    sink.draw_image(&image, rect, t);
+}
+
+fn draw_positioned_svg_path_glyph(
+    sink: &mut dyn RenderSink,
+    pg: &PositionedSvgPathGlyph,
+    color: Color,
+) {
+    let t = Transform::IDENTITY.translate(pg.blit_x as f32, pg.blit_y as f32);
+    sink.fill_path(&pg.path.path, color, t);
 }
 
 fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
@@ -457,6 +485,7 @@ pub struct Renderer {
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) scale_ctx: ScaleContext,
     pub(crate) glyph_cache: GlyphCache,
+    pub(crate) svg_path_glyph_cache: SvgPathGlyphCache,
 }
 
 impl Renderer {
@@ -465,6 +494,7 @@ impl Renderer {
             resource,
             scale_ctx: ScaleContext::new(),
             glyph_cache: GlyphCache::new(),
+            svg_path_glyph_cache: SvgPathGlyphCache::new(),
         }
     }
 
@@ -735,29 +765,17 @@ impl<'a> RenderVisitor<'a> {
                 &resource_guard.font_registry,
                 &mut self.renderer.scale_ctx,
                 &mut self.renderer.glyph_cache,
+                &mut self.renderer.svg_path_glyph_cache,
                 self.scale_factor,
                 base_transform,
             );
             drop(resource_guard);
 
-            for pg in &positioned {
-                let image = match pg.raster.content {
-                    Content::Mask => bake_mask_to_premul_rgba(
-                        &pg.raster.data,
-                        pg.raster.width,
-                        pg.raster.height,
-                        color,
-                    ),
-                    Content::Color => Image {
-                        data: pg.raster.data.clone(),
-                        width: pg.raster.width,
-                        height: pg.raster.height,
-                    },
-                };
-
-                let t = Transform::IDENTITY.translate(pg.blit_x as f32, pg.blit_y as f32);
-                let rect = Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
-                self.sink.draw_image(&image, rect, t);
+            for pg in &positioned.rasters {
+                draw_positioned_raster_glyph(self.sink, pg, color);
+            }
+            for pg in &positioned.svg_paths {
+                draw_positioned_svg_path_glyph(self.sink, pg, color);
             }
         }
     }
@@ -795,28 +813,17 @@ impl<'a> RenderVisitor<'a> {
                 &resource_guard.font_registry,
                 &mut self.renderer.scale_ctx,
                 &mut self.renderer.glyph_cache,
+                &mut self.renderer.svg_path_glyph_cache,
                 self.scale_factor,
                 base_transform,
             );
             drop(resource_guard);
 
-            for pg in &positioned {
-                let image = match pg.raster.content {
-                    Content::Mask => bake_mask_to_premul_rgba(
-                        &pg.raster.data,
-                        pg.raster.width,
-                        pg.raster.height,
-                        color,
-                    ),
-                    Content::Color => Image {
-                        data: pg.raster.data.clone(),
-                        width: pg.raster.width,
-                        height: pg.raster.height,
-                    },
-                };
-                let t = Transform::IDENTITY.translate(pg.blit_x as f32, pg.blit_y as f32);
-                let rect = Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
-                self.sink.draw_image(&image, rect, t);
+            for pg in &positioned.rasters {
+                draw_positioned_raster_glyph(self.sink, pg, color);
+            }
+            for pg in &positioned.svg_paths {
+                draw_positioned_svg_path_glyph(self.sink, pg, color);
             }
         }
     }
@@ -1760,7 +1767,7 @@ mod tests {
     }
 
     #[test]
-    fn line_with_ruby_annotation_invokes_ruby_raster_path() {
+    fn line_with_ruby_annotation_invokes_ruby_svg_path_rendering() {
         use editor_view::glyph_run::{Glyph, RubyAnnotation, Synthesis};
 
         // Pretendard-Regular 'A' (U+0041) is glyph id 3, which has an outline.
@@ -1768,6 +1775,7 @@ mod tests {
 
         #[derive(Default)]
         struct CountingSink {
+            path_fills: usize,
             image_draws: usize,
         }
         impl RenderSink for CountingSink {
@@ -1775,7 +1783,9 @@ mod tests {
                 (1000, 1000)
             }
             fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
-            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
+                self.path_fills += 1;
+            }
             fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
             fn draw_glyph_run(
                 &mut self,
@@ -1835,12 +1845,76 @@ mod tests {
             &[ruby],
         );
 
-        // No base glyphs, but at least one ruby glyph raster must have been produced.
-        // The exact image_draws count depends on glyph cache state, but must be > 0.
+        // Pretendard outline glyph 는 SVG path glyph 로 캐시되어 fill_path 경로로 렌더되어야 한다.
         assert!(
-            sink.image_draws > 0,
-            "ruby annotation glyph must be rasterized"
+            sink.path_fills > 0,
+            "ruby annotation glyph must be rendered through fill_path"
         );
+        assert_eq!(sink.image_draws, 0);
+    }
+
+    #[test]
+    fn svg_path_glyphs_are_filled_instead_of_drawn_as_images() {
+        // SVG path 캐시 glyph 는 이미지 draw 경로가 아니라 fill_path 로 렌더되어야 한다.
+        #[derive(Default)]
+        struct CountingSink {
+            path_fills: usize,
+            image_draws: usize,
+        }
+
+        impl RenderSink for CountingSink {
+            fn pixel_size(&self) -> (u32, u32) {
+                (100, 100)
+            }
+            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
+                self.path_fills += 1;
+            }
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {
+                self.image_draws += 1;
+            }
+        }
+
+        let glyph = PositionedSvgPathGlyph {
+            path: crate::glyph::SvgPathGlyph {
+                path: Path {
+                    elements: vec![
+                        PathElement::MoveTo { x: 0.0, y: 0.0 },
+                        PathElement::LineTo { x: 4.0, y: 0.0 },
+                        PathElement::LineTo { x: 4.0, y: 4.0 },
+                        PathElement::Close,
+                    ],
+                },
+                placement_left: 0,
+                placement_top: 0,
+            },
+            blit_x: 12,
+            blit_y: 24,
+        };
+
+        let mut sink = CountingSink::default();
+        draw_positioned_svg_path_glyph(
+            &mut sink,
+            &glyph,
+            Color {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255,
+            },
+        );
+
+        assert_eq!(sink.path_fills, 1);
+        assert_eq!(sink.image_draws, 0);
     }
 
     #[test]
