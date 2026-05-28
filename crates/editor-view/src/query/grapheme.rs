@@ -69,6 +69,7 @@ pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
 
     let first = &line.glyph_runs[0];
     let last = &line.glyph_runs[line.glyph_runs.len() - 1];
+    let last_offset = last.offset + run_codepoint_count(last);
 
     if local_x <= first.x {
         return Position::new(first.node_id, first.offset);
@@ -76,11 +77,7 @@ pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
 
     if local_x >= last.x + last.width {
         // Upstream so soft-wrap boundaries resolve to this (upper) line.
-        return Position {
-            node_id: last.node_id,
-            offset: last.offset + run_codepoint_count(last),
-            affinity: Affinity::Upstream,
-        };
+        return last_position_in_line(line);
     }
 
     for run in &line.glyph_runs {
@@ -96,10 +93,14 @@ pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
             acc += g.advance;
             cp_offset += g.codepoints as usize;
         }
-        return Position::new(run.node_id, run.offset + cp_offset);
+        let offset = run.offset + cp_offset;
+        if run.node_id == last.node_id && offset == last_offset {
+            return last_position_in_line(line);
+        }
+        return Position::new(run.node_id, offset);
     }
 
-    Position::new(last.node_id, last.offset + run_codepoint_count(last))
+    Position::new(last.node_id, last_offset)
 }
 
 #[cfg(test)]
@@ -422,6 +423,34 @@ mod tests {
             child_range: None,
         };
         let pos = position_at_x(&line, 100.0);
+        assert_eq!(pos.offset, 5);
+        assert_eq!(pos.affinity, editor_state::Affinity::Upstream);
+    }
+
+    #[test]
+    fn position_at_x_last_grapheme_right_half_is_upstream_at_line_end() {
+        let id = NodeId::new();
+        let line = LayoutLine {
+            node_id: id,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![GlyphRun::make_test_run(
+                id,
+                0,
+                "abcde",
+                0.0,
+                ascii_spans(5, 10.0),
+            )],
+            ruby_annotations: vec![],
+            text_indent: 0.0,
+            child_range: None,
+        };
+
+        let pos = position_at_x(&line, 46.0);
+
         assert_eq!(pos.offset, 5);
         assert_eq!(pos.affinity, editor_state::Affinity::Upstream);
     }
