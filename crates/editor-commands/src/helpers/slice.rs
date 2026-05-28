@@ -613,12 +613,23 @@ fn insert_blocks_at_block_boundary(
     }
 
     let mut last_inserted: Option<NodeId> = None;
-    for (offset, block) in blocks.iter().enumerate() {
-        let subtree = (*block).clone().into_subtree();
-        let inserted_id = subtree.id;
-        tr.insert_subtree(container_id, base_index + offset, subtree)?;
-        last_inserted = Some(inserted_id);
-    }
+    tr.batch(|tr| {
+        for (offset, block) in blocks.iter().enumerate() {
+            let subtree = (*block).clone().into_subtree();
+            let inserted_id = subtree.id;
+            tr.insert_subtree(container_id, base_index + offset, subtree)?;
+            last_inserted = Some(inserted_id);
+        }
+
+        let steps = {
+            let doc = tr.doc();
+            doc.node(container_id)
+                .map(|container| fulfill(&container))
+                .unwrap_or_default()
+        };
+        tr.apply_steps(steps)?;
+        Ok::<(), CommandError>(())
+    })?;
 
     if let Some(id) = last_inserted {
         let final_pos = position_at_end_of_block(tr, id);

@@ -17,11 +17,23 @@ pub fn insert_slice_at(
 mod tests {
     use editor_clipboard::Slice;
     use editor_macros::state;
-    use editor_model::{Node, NodeId};
+    use editor_model::{Fragment, Node, NodeId, PlainImageNode, PlainNode, PlainRootNode};
     use editor_state::{Affinity, Position, Selection};
     use editor_transaction::Transaction;
 
     use super::*;
+
+    fn image_slice() -> Slice {
+        Slice {
+            fragment: Fragment {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: vec![],
+                children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
+            },
+            open_start: 0,
+            open_end: 0,
+        }
+    }
 
     #[test]
     fn insert_slice_at_block_position_before_unit_keeps_unit() {
@@ -75,5 +87,27 @@ mod tests {
                 },
             )
         );
+    }
+
+    #[test]
+    fn insert_slice_at_image_at_root_end_fulfills_trailing_paragraph() {
+        let (initial, ..) = state! {
+            doc { r: root {
+                paragraph { text("before") }
+            } }
+            selection: (r, 0)
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let result = insert_slice_at(&mut tr, Position::new(NodeId::ROOT, 1), image_slice());
+        assert!(result.expect("insert succeeds").is_some());
+        let (actual, ..) = tr.commit();
+
+        let root = actual.doc.node(NodeId::ROOT).expect("root exists");
+        let children: Vec<_> = root.children().map(|c| c.node()).collect();
+        assert!(matches!(
+            children.as_slice(),
+            [Node::Paragraph(_), Node::Image(_), Node::Paragraph(_)]
+        ));
     }
 }
