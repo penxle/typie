@@ -302,6 +302,34 @@ mod tests {
     }
 
     #[test]
+    fn insert_into_empty_paragraph_preserves_paragraph_only_modifier() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph [line_height(220)] {} } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (expected, ..) = state! {
+            doc { root { paragraph [line_height(220)] { t1: text("X") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_into_empty_paragraph_with_mixed_markers_carries_only_text_applicable() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph [bold, line_height(220)] {} } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
+        let (expected, ..) = state! {
+            doc { root { paragraph [line_height(220)] { t1: text("Y") [bold] } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn insert_text_clears_paragraph_marker_even_if_text_already_styled() {
         let (initial, ..) = state! {
             doc { root { paragraph [bold] { t1: text("Hi") [bold] } } }

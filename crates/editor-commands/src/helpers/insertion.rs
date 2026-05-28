@@ -4,7 +4,8 @@ use editor_state::{Affinity, PendingModifiers, Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    carryable_modifiers_at, find_enclosing_paragraph_id, resolve_effective_modifiers,
+    carryable_modifiers_at, find_enclosing_paragraph_id, is_text_applicable,
+    resolve_effective_modifiers,
 };
 use crate::{CommandError, CommandResult};
 
@@ -36,6 +37,7 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
     let mut effective_mods = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
+    effective_mods.retain(|m| is_text_applicable(m.as_type()));
     let insert_len = text.char_count();
 
     let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
@@ -45,6 +47,9 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         && let Some(p_node) = doc.node(p_id)
     {
         for m in p_node.modifiers() {
+            if !is_text_applicable(m.as_type()) {
+                continue;
+            }
             if !effective_mods.iter().any(|e| e.as_type() == m.as_type()) {
                 effective_mods.push(m.clone());
             }
@@ -53,7 +58,12 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
 
     let marker_to_clear: Vec<Modifier> = host_paragraph_id
         .and_then(|id| doc.node(id))
-        .map(|p| p.modifiers().cloned().collect())
+        .map(|p| {
+            p.modifiers()
+                .filter(|m| is_text_applicable(m.as_type()))
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default();
 
     match node.node() {
