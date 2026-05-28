@@ -1,36 +1,12 @@
 use super::*;
 
 use editor_common::Rect;
-use editor_state::Selection;
 
 use crate::page::LayoutPage;
 use crate::paginate::*;
 
-fn exact_hit_test(tree: &LayoutTree, page: &LayoutPage, x: f32, page_y: f32) -> Option<Selection> {
-    HitTester::for_page(tree, page, x, page_y).exact_selection()
-}
-
-fn closest_hit_test(
-    tree: &LayoutTree,
-    page: &LayoutPage,
-    x: f32,
-    page_y: f32,
-) -> Option<Selection> {
-    HitTester::for_page(tree, page, x, page_y).closest_selection()
-}
-
-fn closest_hit_test_extending(
-    tree: &LayoutTree,
-    page: &LayoutPage,
-    x: f32,
-    page_y: f32,
-) -> Option<Selection> {
-    HitTester::for_page(tree, page, x, page_y).closest_extending_selection()
-}
-
 use crate::glyph_run::{GlyphRun, GraphemeSpan};
 use crate::style::*;
-use crate::view::View;
 use editor_common::EdgeInsets;
 use editor_macros::doc;
 use editor_model::NodeId;
@@ -147,7 +123,8 @@ fn exact_hit_on_line() {
     };
     let page = make_page(0.0, 100.0);
 
-    let sel = exact_hit_test(&tree, &page, 25.0, 5.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 25.0, 5.0);
+    let sel = hit.exact_target().unwrap().selection(hit.target_x());
     assert!(sel.is_collapsed());
     assert_eq!(sel.head.node_id, id);
 }
@@ -174,7 +151,8 @@ fn exact_hit_on_spacing_returns_none() {
     let page = make_page(0.0, 100.0);
 
     // Click in the spacing area (y=25)
-    assert!(exact_hit_test(&tree, &page, 5.0, 25.0).is_none());
+    let hit = HitTester::for_page(&tree, &page, 5.0, 25.0);
+    assert!(hit.exact_target().is_none());
 }
 
 #[test]
@@ -201,7 +179,8 @@ fn closest_hit_on_spacing_returns_nearest_line() {
     let page = make_page(0.0, 100.0);
 
     // Click in spacing (y=25) -- should find closest line
-    let sel = closest_hit_test(&tree, &page, 5.0, 25.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 5.0, 25.0);
+    let sel = hit.closest_target().unwrap().selection(hit.target_x());
     assert!(sel.is_collapsed());
     // Should be id1 (closer: line1 bottom at 20, dist=5; line2 top at 36, dist=11)
     assert_eq!(sel.head.node_id, id1);
@@ -223,8 +202,71 @@ fn closest_hit_in_margin_returns_nearest() {
     let page = make_page(0.0, 200.0);
 
     // Click in margin area (x=5, y=5) -- outside all boxes
-    let sel = closest_hit_test(&tree, &page, 5.0, 5.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 5.0, 5.0);
+    let sel = hit.closest_target().unwrap().selection(hit.target_x());
     assert_eq!(sel.head.node_id, id);
+}
+
+#[test]
+fn block_gap_above_root_content_returns_root_start() {
+    let (doc, p1, p2) = doc! {
+        root {
+            p1: paragraph {}
+            p2: paragraph {}
+        }
+    };
+    let tree = LayoutTree {
+        root: make_box_node(
+            NodeId::ROOT,
+            0.0,
+            20.0,
+            200.0,
+            80.0,
+            vec![
+                make_box_node(p1, 0.0, 20.0, 200.0, 20.0, vec![]),
+                make_box_node(p2, 0.0, 60.0, 200.0, 20.0, vec![]),
+            ],
+        ),
+    };
+    let page = make_page(0.0, 120.0);
+
+    let hit = HitTester::for_page(&tree, &page, 10.0, 0.0);
+
+    assert_eq!(
+        hit.block_gap_position(&doc),
+        Some(Position::new(NodeId::ROOT, 0))
+    );
+}
+
+#[test]
+fn block_gap_below_root_content_returns_root_end() {
+    let (doc, p1, p2) = doc! {
+        root {
+            p1: paragraph {}
+            p2: paragraph {}
+        }
+    };
+    let tree = LayoutTree {
+        root: make_box_node(
+            NodeId::ROOT,
+            0.0,
+            20.0,
+            200.0,
+            80.0,
+            vec![
+                make_box_node(p1, 0.0, 20.0, 200.0, 20.0, vec![]),
+                make_box_node(p2, 0.0, 60.0, 200.0, 20.0, vec![]),
+            ],
+        ),
+    };
+    let page = make_page(0.0, 120.0);
+
+    let hit = HitTester::for_page(&tree, &page, 10.0, 120.0);
+
+    assert_eq!(
+        hit.block_gap_position(&doc),
+        Some(Position::new(NodeId::ROOT, 2))
+    );
 }
 
 #[test]
@@ -253,7 +295,8 @@ fn closest_hit_below_paragraph_returns_last_line() {
     let page = make_page(0.0, 200.0);
 
     // Click at y=100, well below paragraph (ends at y=60).
-    let sel = closest_hit_test(&tree, &page, 5.0, 100.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 5.0, 100.0);
+    let sel = hit.closest_target().unwrap().selection(hit.target_x());
     assert_eq!(sel.head.node_id, line3);
 }
 
@@ -297,32 +340,13 @@ fn closest_hit_stays_within_page() {
     };
     let page_0 = make_page(0.0, 1123.0);
 
-    let sel = closest_hit_test(&tree, &page_0, 5.0, 1000.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page_0, 5.0, 1000.0);
+    let sel = hit.closest_target().unwrap().selection(hit.target_x());
     assert_eq!(sel.head.node_id, id_p0);
 }
 
 #[test]
-fn extending_drag_above_top_promotes_to_front_slot() {
-    let (doc,) = doc! {
-        root {
-            fold {
-                fold_title { text("title") }
-                fold_content { paragraph { text("content") } }
-            }
-            paragraph {}
-        }
-    };
-    let mut view = View::new_test();
-    view.layout(&doc);
-
-    let sel = view.hit_test_extending(0, 20.0, -100.0).unwrap();
-    assert!(sel.is_collapsed());
-    assert_eq!(sel.head.node_id, NodeId::ROOT);
-    assert_eq!(sel.head.offset, 0, "above-top escape → Front slot (idx)");
-}
-
-#[test]
-fn exact_hit_in_monolithic_box_returns_leaf_while_closest_above_promotes() {
+fn exact_hit_in_monolithic_box_returns_leaf() {
     let line_id = NodeId::new();
     let line = make_line_node(line_id, 0.0, 100.0, "hello", 10.0);
     let mono = LayoutNode {
@@ -349,83 +373,12 @@ fn exact_hit_in_monolithic_box_returns_leaf_while_closest_above_promotes() {
     };
     let page = make_page(0.0, 200.0);
 
-    let exact = exact_hit_test(&tree, &page, 25.0, 110.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 25.0, 110.0);
+    let exact = hit.exact_target().unwrap().selection(hit.target_x());
     assert!(exact.is_collapsed());
     assert_eq!(
         exact.head.node_id, line_id,
         "exact hit inside a monolithic box must return the text leaf"
-    );
-
-    let promoted = closest_hit_test_extending(&tree, &page, 25.0, -50.0).unwrap();
-    assert!(promoted.is_collapsed());
-    assert_eq!(
-        promoted.head.node_id,
-        NodeId::ROOT,
-        "above the monolithic box, the extending closest path must promote"
-    );
-    assert_eq!(promoted.head.offset, 0);
-}
-
-#[test]
-fn extending_drag_below_bottom_promotes_to_back_slot() {
-    let (doc,) = doc! {
-        root {
-            paragraph {}
-            fold {
-                fold_title { text("title") }
-                fold_content { paragraph { text("content") } }
-            }
-        }
-    };
-    let mut view = View::new_test();
-    view.layout(&doc);
-
-    let sel = view.hit_test_extending(0, 20.0, 99999.0).unwrap();
-    assert!(sel.is_collapsed());
-    assert_eq!(sel.head.node_id, NodeId::ROOT);
-    assert_eq!(
-        sel.head.offset, 2,
-        "below-bottom escape → Back slot (idx+1)"
-    );
-}
-
-#[test]
-fn plain_hit_test_in_gutter_does_not_promote() {
-    let (doc,) = doc! {
-        root {
-            fold {
-                fold_title { text("title") }
-                fold_content { paragraph { text("content") } }
-            }
-            paragraph {}
-        }
-    };
-    let mut view = View::new_test();
-    view.layout(&doc);
-
-    let sel = view.hit_test(0, 20.0, -100.0).unwrap();
-    assert!(sel.is_collapsed());
-    assert_ne!(
-        sel.head.node_id,
-        NodeId::ROOT,
-        "plain Down must not promote; head stays on nearest text leaf"
-    );
-    let ft_text = doc
-        .node(NodeId::ROOT)
-        .unwrap()
-        .children()
-        .next()
-        .unwrap() // fold
-        .children()
-        .next()
-        .unwrap() // fold_title
-        .children()
-        .next()
-        .unwrap() // text("title")
-        .id();
-    assert_eq!(
-        sel.head.node_id, ft_text,
-        "plain Down must land on the nearest text leaf (fold_title text), not promote"
     );
 }
 
@@ -502,7 +455,8 @@ fn hit_test_in_empty_trailing_line_returns_paragraph_offset() {
         y_end: 800.0,
         size: Size::new(200.0, 800.0),
     };
-    let sel = closest_hit_test(&tree, &page, 50.0, 30.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 50.0, 30.0);
+    let sel = hit.closest_target().unwrap().selection(hit.target_x());
     assert_eq!(sel.head.node_id, p1);
     assert_eq!(sel.head.offset, 2);
 }
@@ -524,11 +478,13 @@ fn click_left_of_line_goes_to_start() {
     let page = make_page(0.0, 100.0);
 
     // Click at x=5 (left margin, before line x=20)
-    let sel = exact_hit_test(&tree, &page, 5.0, 5.0);
+    let hit = HitTester::for_page(&tree, &page, 5.0, 5.0);
+    let sel = hit.exact_target();
     // exact misses (x=5 is outside line rect at x=20)
     assert!(sel.is_none());
     // closest finds the line, cursor should be at offset 0 (start)
-    let sel = closest_hit_test(&tree, &page, 5.0, 5.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 5.0, 5.0);
+    let sel = hit.closest_target().unwrap().selection(hit.target_x());
     assert_eq!(sel.head.node_id, id);
     assert_eq!(sel.head.offset, 0);
 }
@@ -550,7 +506,8 @@ fn exact_hit_on_atom_node_selects_atom() {
     };
     let page = make_page(0.0, 100.0);
     // page-local (50,20) → abs (50,20) ∈ atom rect (10..110, 0..40).
-    let sel = exact_hit_test(&tree, &page, 50.0, 20.0).unwrap();
+    let hit = HitTester::for_page(&tree, &page, 50.0, 20.0);
+    let sel = hit.exact_target().unwrap().selection(hit.target_x());
     assert!(
         !sel.is_collapsed(),
         "click on atom must node-select, got {:?}",
@@ -630,7 +587,10 @@ fn closest_hit_in_table_row_side_margin_stays_in_nearest_cell_scope() {
     };
     let page = make_page(0.0, 100.0);
 
-    let sel = closest_hit_test(&tree, &page, 290.0, 20.0)
+    let hit = HitTester::for_page(&tree, &page, 290.0, 20.0);
+    let sel = hit
+        .closest_target()
+        .map(|target| target.selection(hit.target_x()))
         .expect("same-row side margin should resolve into a table cell scope");
 
     assert_eq!(sel.head.node_id, right_p);

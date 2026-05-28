@@ -212,13 +212,28 @@ impl View {
         let result = self.layout.as_ref()?;
         let page = result.pages.get(page_idx)?;
         let hit = query::HitTester::for_page(&result.tree, page, x, y);
-        hit.exact_selection().or_else(|| hit.closest_selection())
+        let target_x = hit.target_x();
+        hit.exact_target()
+            .or_else(|| hit.closest_target())
+            .map(|target| target.selection(target_x))
     }
 
     pub fn hit_test_extending(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
         let result = self.layout.as_ref()?;
         let page = result.pages.get(page_idx)?;
-        query::HitTester::for_page(&result.tree, page, x, y).hit_extending_selection()
+        let hit = query::HitTester::for_page(&result.tree, page, x, y);
+        let target_x = hit.target_x();
+        hit.exact_target()
+            .map(|target| target.selection(target_x))
+            .or_else(|| {
+                let target = hit.closest_target()?;
+                Some(query::selection_drag::selection_from_closest_target(
+                    &result.tree.root,
+                    target,
+                    target_x,
+                    hit.document_y(),
+                ))
+            })
     }
 
     pub fn drop_target_at(
@@ -637,6 +652,89 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&doc);
         assert!(!view.pages().is_empty());
+    }
+
+    #[test]
+    fn hit_test_extending_above_top_promotes_to_front_slot() {
+        let (doc,) = doc! {
+            root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = view.hit_test_extending(0, 20.0, -100.0).unwrap();
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(sel.head.offset, 0, "above-top escape -> Front slot (idx)");
+    }
+
+    #[test]
+    fn hit_test_extending_below_bottom_promotes_to_back_slot() {
+        let (doc,) = doc! {
+            root {
+                paragraph {}
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = view.hit_test_extending(0, 20.0, 99999.0).unwrap();
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(
+            sel.head.offset, 2,
+            "below-bottom escape -> Back slot (idx+1)"
+        );
+    }
+
+    #[test]
+    fn hit_test_in_gutter_does_not_promote() {
+        let (doc,) = doc! {
+            root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let sel = view.hit_test(0, 20.0, -100.0).unwrap();
+        assert!(sel.is_collapsed());
+        assert_ne!(
+            sel.head.node_id,
+            NodeId::ROOT,
+            "plain hit test must not promote; head stays on nearest text leaf"
+        );
+        let ft_text = doc
+            .node(NodeId::ROOT)
+            .unwrap()
+            .children()
+            .next()
+            .unwrap()
+            .children()
+            .next()
+            .unwrap()
+            .children()
+            .next()
+            .unwrap()
+            .id();
+        assert_eq!(
+            sel.head.node_id, ft_text,
+            "plain hit test must land on the nearest text leaf"
+        );
     }
 
     #[test]

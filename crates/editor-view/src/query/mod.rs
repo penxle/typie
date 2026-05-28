@@ -11,6 +11,7 @@ pub(crate) mod pointer_style;
 pub(crate) mod search;
 pub(crate) mod segmentation;
 pub(crate) mod selection;
+pub(crate) mod selection_drag;
 mod visit;
 
 pub use composition::CompositionRect;

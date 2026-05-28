@@ -30,8 +30,10 @@ fn dnd_position(hit: &HitTester<'_>, doc: &Doc, source: Option<&Selection>) -> O
     let position = if let Some(position) = hit.block_gap_position(doc) {
         promote_block_container_edge_position(doc, position).unwrap_or(position)
     } else {
-        hit.hit_extending_selection()
-            .map(|selection| selection.head)?
+        let target_x = hit.target_x();
+        hit.exact_target()
+            .or_else(|| hit.closest_target())
+            .map(|target| target.selection(target_x).head)?
     };
 
     if let Some(source) = source
@@ -288,6 +290,48 @@ mod tests {
             }
             other => panic!("expected inline indicator, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn dnd_hit_test_page_top_margin_returns_root_start_block_position() {
+        let (doc,) = doc! {
+            root { paragraph { text("hello") } }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let target = view
+            .drop_target_at(&doc, 0, 40.0, 0.0, None)
+            .expect("page top margin should be a root start drop target");
+
+        assert_eq!(target.position, Position::new(NodeId::ROOT, 0));
+        match target.indicator {
+            crate::DropIndicator::Block { page_idx, y, .. } => {
+                assert_eq!(page_idx, 0);
+                assert_eq!(y, 20.0);
+            }
+            other => panic!("expected block indicator, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dnd_hit_test_page_bottom_margin_returns_root_end_block_position() {
+        let (doc,) = doc! {
+            root { paragraph { text("hello") } }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let page_bottom = view.pages()[0].size.height;
+
+        let target = view
+            .drop_target_at(&doc, 0, 40.0, page_bottom, None)
+            .expect("page bottom margin should be a root end drop target");
+
+        assert_eq!(target.position, Position::new(NodeId::ROOT, 1));
+        assert!(matches!(
+            target.indicator,
+            crate::DropIndicator::Block { page_idx: 0, .. }
+        ));
     }
 
     #[test]

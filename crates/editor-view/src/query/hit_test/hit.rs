@@ -56,45 +56,17 @@ impl<'a> HitTester<'a> {
         }
     }
 
-    /// Exact target classification used by click/pointer policies before each
-    /// caller maps the target to a selection or cursor style.
+    /// Exact target classification used by click/pointer policies.
     pub(crate) fn exact_target(&self) -> Option<HitTarget<'a>> {
         let (root, x) = self.target_root_and_x();
         exact_hit_target(root, x, self.y)
     }
 
-    /// Exact hit: returns a selection only at a precise coordinate on a navigable node.
-    pub(crate) fn exact_selection(&self) -> Option<Selection> {
-        let (root, x) = self.target_root_and_x();
-        exact_hit_target(root, x, self.y).map(|target| target.selection(x))
-    }
-
-    /// Closest hit: returns the nearest navigable by euclidean edge distance,
-    /// restricted to navigables owned by the current page by `rect.y` range.
-    pub(crate) fn closest_selection(&self) -> Option<Selection> {
+    /// Closest navigable target by euclidean edge distance, restricted to
+    /// navigables owned by the current page by `rect.y` range.
+    pub(crate) fn closest_target(&self) -> Option<HitTarget<'a>> {
         let (root, x) = self.target_root_and_x();
         closest_target(root, x, self.y, self.page.y_start, self.page.y_end)
-            .map(|target| target.selection(x))
-    }
-
-    /// Extending variant: when the click fully escapes a monolithic ancestor's
-    /// vertical range, promote the head to that container's slot boundary so the
-    /// drag/shift-extend can select the container as a unit. Plain
-    /// non-extending hit testing must use the exact/closest path instead.
-    pub(crate) fn closest_extending_selection(&self) -> Option<Selection> {
-        let (root, x) = self.target_root_and_x();
-        let target = closest_target(root, x, self.y, self.page.y_start, self.page.y_end)?;
-        if let Some(promoted) = promote_outside_y(&self.tree.root, target.node(), self.y) {
-            return Some(Selection::collapsed(promoted));
-        }
-        Some(target.selection(x))
-    }
-
-    /// Exact hit first, then the extending closest fallback used by drag-style
-    /// hit tests.
-    pub(crate) fn hit_extending_selection(&self) -> Option<Selection> {
-        self.exact_selection()
-            .or_else(|| self.closest_extending_selection())
     }
 
     /// Returns a block insertion position only when the point falls in a
@@ -105,6 +77,14 @@ impl<'a> HitTester<'a> {
             BlockGapSearch::Hit(position) => Some(position),
             BlockGapSearch::Blocked | BlockGapSearch::Miss => None,
         }
+    }
+
+    pub(crate) fn document_y(&self) -> f32 {
+        self.y
+    }
+
+    pub(crate) fn target_x(&self) -> f32 {
+        self.target_root_and_x().1
     }
 
     /// Confine row-like scopes, such as table cells, before hit policy runs.
@@ -280,16 +260,21 @@ fn collect_box_path_at<'a>(
     true
 }
 
-/// Search for a block gap inside the containing branch. Text and atom hits
-/// block gap placement; scope boxes confine the search.
+/// Search for a block gap in the active branch. Points above or below the
+/// branch still resolve to its first/last structural slot, matching DnD's page
+/// margin behavior; text and atom hits block gap placement.
 fn block_gap_in_node(node: &LayoutNode, doc: &Doc, x: f32, y: f32) -> BlockGapSearch {
-    if !node.rect.contains(x, y) {
-        return BlockGapSearch::Miss;
-    }
-
     let LayoutContent::Box(b) = &node.content else {
         return BlockGapSearch::Blocked;
     };
+
+    if !node.rect.contains(x, y) {
+        if y < node.rect.y || y > node.rect.bottom() {
+            return block_gap_between_direct_children(b, doc, y)
+                .map_or(BlockGapSearch::Miss, BlockGapSearch::Hit);
+        }
+        return BlockGapSearch::Miss;
+    }
 
     for child in &b.children {
         if !child.rect.contains(x, y) {
@@ -441,109 +426,6 @@ fn nearest_scope_in_row<'a>(node: &'a LayoutNode, x: f32, y: f32) -> Option<&'a 
 
 fn rect_area(rect: &Rect) -> f32 {
     rect.width * rect.height
-}
-
-/// When the click sits outside the vertical range of `leaf`'s monolithic
-/// ancestor boxes, snap the head up the structural ancestry to the slot
-/// boundary of the outermost monolithic box the click fully escaped. Above
-/// the box -> its Front slot `(parent, idx)`; below -> its Back slot
-/// `(parent, idx + 1)`. Without this, dragging the selection past a
-/// monolithic container stalls at the container's innermost text position,
-/// making it impossible to select the container as a unit.
-///
-/// The returned affinity points at the box the user is interacting with:
-/// `above` returns Downstream (the slot points forward at the box being
-/// approached); `below` returns Upstream (the slot points back at the box just
-/// crossed). When surrounding normalize/unit logic resolves the slot to an
-/// adjacent child via affinity, this consistently picks the box involved in
-/// the gesture instead of the unrelated next sibling.
-///
-/// Only a true escape into the gutter promotes when escaping above the box.
-/// The inter-block gap directly above the box belongs to the approach toward
-/// the box, not an escape past it: `closest_target` can pick the box's own
-/// leading text there, and that text caret, not a unit promotion, is the
-/// intended drag-extend target. So above promotion requires the click to be
-/// past the previous sibling too, or there to be no previous sibling at all.
-/// The below direction needs no such guard: once the click is past the box's
-/// bottom, `closest_target` resolves to the next sibling's text rather than
-/// back into the box.
-fn promote_outside_y(root: &LayoutNode, leaf: &LayoutNode, click_y: f32) -> Option<Position> {
-    let mut path: Vec<(&LayoutNode, usize)> = Vec::new();
-    if !build_path(root, leaf, &mut path) {
-        return None;
-    }
-    for k in 1..path.len() {
-        let ancestor = path[k].0;
-        let LayoutContent::Box(ancestor_box) = &ancestor.content else {
-            continue;
-        };
-        if !ancestor_box.style.monolithic {
-            continue;
-        }
-        let above = click_y < ancestor.rect.y;
-        let below = click_y >= ancestor.rect.y + ancestor.rect.height;
-        if above || below {
-            let (parent_box_node, idx) = path[k - 1];
-            if above
-                && idx > 0
-                && let Some(prev) = nth_content_child(parent_box_node, idx - 1)
-                && click_y >= prev.rect.y + prev.rect.height
-            {
-                continue;
-            }
-            if let LayoutContent::Box(parent_box) = &parent_box_node.content {
-                let (slot, affinity) = if below {
-                    (idx + 1, Affinity::Upstream)
-                } else {
-                    (idx, Affinity::Downstream)
-                };
-                return Some(Position {
-                    node_id: parent_box.node_id,
-                    offset: slot,
-                    affinity,
-                });
-            }
-        }
-    }
-    None
-}
-
-/// The `n`-th non-spacing child of `parent`, matching the content indexing
-/// that `build_path` uses (`Spacing` children are skipped there too).
-fn nth_content_child(parent: &LayoutNode, n: usize) -> Option<&LayoutNode> {
-    let LayoutContent::Box(b) = &parent.content else {
-        return None;
-    };
-    b.children
-        .iter()
-        .filter(|c| !matches!(c.content, LayoutContent::Spacing(_)))
-        .nth(n)
-}
-
-fn build_path<'a>(
-    node: &'a LayoutNode,
-    target: &LayoutNode,
-    path: &mut Vec<(&'a LayoutNode, usize)>,
-) -> bool {
-    if std::ptr::eq(node, target) {
-        return true;
-    }
-    let LayoutContent::Box(b) = &node.content else {
-        return false;
-    };
-    let mut content_idx = 0usize;
-    for child in &b.children {
-        if matches!(child.content, LayoutContent::Spacing(_)) {
-            continue;
-        }
-        path.push((node, content_idx));
-        if build_path(child, target, path) {
-            return true;
-        }
-        path.pop();
-        content_idx += 1;
-    }
-    false
 }
 
 fn navigate_to_line(line: &LayoutLine, rect: &Rect, x: f32) -> Selection {
