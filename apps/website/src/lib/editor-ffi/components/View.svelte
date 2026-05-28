@@ -148,7 +148,6 @@
   <div
     style:cursor
     class={css({
-      position: 'relative',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
