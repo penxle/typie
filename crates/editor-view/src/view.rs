@@ -849,6 +849,44 @@ mod tests {
     }
 
     #[test]
+    fn cursor_on_empty_right_aligned_paragraph_rests_at_right_edge() {
+        let (doc, p1) = doc! { root { p1: paragraph [alignment(Alignment::Right)] } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let pos = Position::new(p1, 0);
+        let m = view.cursor_metrics(&doc, &pos).unwrap();
+
+        assert!(
+            (m.caret.x - (m.line.x + m.line.width)).abs() < 1.0,
+            "right-aligned empty paragraph caret must rest at the right edge \
+             (caret.x={}, line.x={}, line.width={})",
+            m.caret.x,
+            m.line.x,
+            m.line.width,
+        );
+    }
+
+    #[test]
+    fn cursor_on_empty_center_aligned_paragraph_rests_at_horizontal_center() {
+        let (doc, p1) = doc! { root { p1: paragraph [alignment(Alignment::Center)] } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let pos = Position::new(p1, 0);
+        let m = view.cursor_metrics(&doc, &pos).unwrap();
+
+        let mid = m.line.x + m.line.width / 2.0;
+        assert!(
+            (m.caret.x - mid).abs() < 1.0,
+            "center-aligned empty paragraph caret must rest at horizontal center \
+             (caret.x={}, mid={})",
+            m.caret.x,
+            mid,
+        );
+    }
+
+    #[test]
     fn cursor_metrics_pending_on_non_empty_paragraph_unchanged() {
         use crate::view_state::PendingStyle;
         use editor_model::Modifier;

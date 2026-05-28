@@ -56,7 +56,7 @@ pub struct LayoutLine {
     pub cursor_descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
     pub ruby_annotations: Vec<RubyAnnotation>,
-    pub text_indent: f32,
+    pub empty_caret_x: f32,
     /// Mirror of [`crate::measure::MeasuredLine::child_range`]; see that
     /// type for the inclusive-both matching contract and `None` semantics.
     pub child_range: Option<Range<usize>>,

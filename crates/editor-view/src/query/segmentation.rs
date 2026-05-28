@@ -292,7 +292,7 @@ mod tests {
             cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
             ruby_annotations: vec![],
-            text_indent: 0.0,
+            empty_caret_x: 0.0,
             child_range: None,
         }
     }
@@ -312,7 +312,7 @@ mod tests {
                 GlyphRun::make_test_run(id2, 0, "world", 60.0, gs(5)),
             ],
             ruby_annotations: vec![],
-            text_indent: 0.0,
+            empty_caret_x: 0.0,
             child_range: None,
         };
         (line, id1, id2)

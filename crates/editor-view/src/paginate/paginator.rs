@@ -102,7 +102,7 @@ impl Paginator {
                         cursor_descent: l.cursor_descent,
                         glyph_runs: l.glyph_runs.clone(),
                         ruby_annotations: l.ruby_annotations.clone(),
-                        text_indent: l.text_indent,
+                        empty_caret_x: l.empty_caret_x,
                         child_range: l.child_range.clone(),
                     }),
                 }
@@ -519,7 +519,7 @@ fn place_node_at(
                 cursor_descent: l.cursor_descent,
                 glyph_runs: l.glyph_runs.clone(),
                 ruby_annotations: l.ruby_annotations.clone(),
-                text_indent: l.text_indent,
+                empty_caret_x: l.empty_caret_x,
                 child_range: l.child_range.clone(),
             }),
         },
@@ -568,7 +568,7 @@ mod tests {
                 cursor_descent: height * 0.1,
                 glyph_runs: vec![],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         })

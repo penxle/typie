@@ -16,12 +16,12 @@ pub fn line_start_x(line: &LayoutLine) -> f32 {
     line.glyph_runs
         .first()
         .map(|r| r.x)
-        .unwrap_or(line.text_indent)
+        .unwrap_or(line.empty_caret_x)
 }
 
 pub fn line_end_x(line: &LayoutLine) -> f32 {
     line.glyph_runs
         .last()
         .map(|r| r.x + r.width)
-        .unwrap_or(line.text_indent)
+        .unwrap_or(line.empty_caret_x)
 }

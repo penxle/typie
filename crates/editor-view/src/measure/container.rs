@@ -56,6 +56,7 @@ fn make_gap_phantom_block(
         node.id(),
         &base_style,
         width,
+        editor_model::Alignment::Left,
         indent,
         index..index,
     );

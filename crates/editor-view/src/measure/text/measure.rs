@@ -8,11 +8,20 @@ use crate::view_state::ViewState;
 use super::resolve::{apply_pending_to_style, resolve_text_style};
 use super::strut::compute_strut;
 
+pub(crate) fn empty_caret_x_for(align: Alignment, indent: f32, width: f32) -> f32 {
+    match align {
+        Alignment::Left | Alignment::Justify => indent,
+        Alignment::Center => width / 2.0,
+        Alignment::Right => width,
+    }
+}
+
 pub(crate) fn build_strut_only_line(
     measurer: &mut Measurer,
     paragraph_id: editor_model::NodeId,
     base_style: &super::resolve::ResolvedTextStyle,
     width: f32,
+    align: Alignment,
     indent: f32,
     child_range: std::ops::Range<usize>,
 ) -> Arc<MeasuredNode> {
@@ -38,7 +47,7 @@ pub(crate) fn build_strut_only_line(
             cursor_descent: strut.descent,
             glyph_runs: vec![],
             ruby_annotations: vec![],
-            text_indent: indent,
+            empty_caret_x: empty_caret_x_for(align, indent, width),
             child_range: Some(child_range),
         }),
     })
@@ -119,6 +128,7 @@ fn measure_segment(
                 paragraph_id,
                 base_style,
                 width,
+                align,
                 indent,
                 child_range.clone(),
             )]
@@ -141,6 +151,7 @@ fn measure_segment(
                     paragraph_id,
                     base_style,
                     width,
+                    align,
                     indent,
                     child_range.clone(),
                 )];
@@ -274,7 +285,7 @@ fn measure_segment(
                             cursor_descent,
                             glyph_runs,
                             ruby_annotations,
-                            text_indent: indent,
+                            empty_caret_x: empty_caret_x_for(align, indent, width),
                             child_range: line_child_range,
                         }),
                     })

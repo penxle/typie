@@ -429,7 +429,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(id, 0, "test", 0.0, gs(4))],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         }
@@ -447,7 +447,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(id, 0, "test", 0.0, gs(4))],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         }
@@ -718,7 +718,7 @@ mod tests {
                         cursor_descent: 4.0,
                         glyph_runs: vec![], // empty line
                         ruby_annotations: vec![],
-                        text_indent: 0.0,
+                        empty_caret_x: 0.0,
                         child_range: Some(0..0),
                     }),
                 }],
@@ -747,7 +747,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         };
@@ -762,7 +762,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         };
@@ -794,7 +794,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 0, "abcde", 0.0, gs(5))],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         };
@@ -809,7 +809,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(t, 5, "fghij", 0.0, gs(5))],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         };
@@ -855,7 +855,7 @@ mod tests {
                 cursor_descent: 4.0,
                 glyph_runs: vec![],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: Some(child_range),
             }),
         }

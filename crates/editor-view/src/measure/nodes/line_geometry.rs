@@ -143,7 +143,7 @@ fn expand_line(
             cursor_descent: line.cursor_descent,
             glyph_runs,
             ruby_annotations,
-            text_indent: line.text_indent,
+            empty_caret_x: line.empty_caret_x,
             child_range: line.child_range.clone(),
         }),
     }

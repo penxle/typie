@@ -208,7 +208,7 @@ mod tests {
                 cursor_descent: height * 0.1,
                 glyph_runs: vec![],
                 ruby_annotations: vec![],
-                text_indent: 0.0,
+                empty_caret_x: 0.0,
                 child_range: None,
             }),
         }

@@ -19,7 +19,6 @@ pub fn measure_paragraph(
     width: f32,
     view_state: &ViewState,
 ) -> MeasuredNode {
-    let indent = resolve_paragraph_indent(node);
     let align = node
         .modifiers()
         .find_map(|m| match m {
@@ -27,6 +26,11 @@ pub fn measure_paragraph(
             _ => None,
         })
         .unwrap_or_default();
+
+    let indent = match align {
+        Alignment::Left | Alignment::Justify => resolve_paragraph_indent(node),
+        Alignment::Center | Alignment::Right => 0.0,
+    };
 
     let (mut children, total_height) =
         measure_inline_text(measurer, doc, node, width, align, indent, view_state);
@@ -98,6 +102,82 @@ mod tests {
             _ => panic!("expected Box"),
         }
         assert!(m.height > 0.0);
+    }
+
+    #[test]
+    fn paragraph_indent_applies_on_left_alignment() {
+        let (doc, p1) = doc! {
+            root [paragraph_indent(200)] {
+                p1: paragraph { text("hi") }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!("expected Line")
+        };
+        let first_x = l.glyph_runs.first().map(|r| r.x).unwrap_or(l.empty_caret_x);
+        assert!(
+            first_x > 1.0,
+            "left-aligned paragraph_indent must push first run rightward (first_x={first_x})",
+        );
+    }
+
+    #[test]
+    fn paragraph_indent_suppressed_on_right_alignment() {
+        let (doc, p1) = doc! {
+            root [paragraph_indent(200)] {
+                p1: paragraph [alignment(Alignment::Right)] { text("hi") }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!("expected Line")
+        };
+        let last = l.glyph_runs.last().expect("expected glyph run");
+        let trailing_gap = b.children[0].width - (last.x + last.width);
+        assert!(
+            trailing_gap.abs() < 1.0,
+            "right-aligned paragraph must hug the right edge regardless of paragraph_indent \
+             (trailing_gap={trailing_gap}, line_width={})",
+            b.children[0].width,
+        );
+    }
+
+    #[test]
+    fn paragraph_indent_suppressed_on_center_alignment() {
+        let (doc, p1) = doc! {
+            root [paragraph_indent(200)] {
+                p1: paragraph [alignment(Alignment::Center)] { text("hi") }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!("expected Line")
+        };
+        let first = l.glyph_runs.first().expect("expected glyph run");
+        let last = l.glyph_runs.last().expect("expected glyph run");
+        let left_gap = first.x;
+        let right_gap = b.children[0].width - (last.x + last.width);
+        assert!(
+            (left_gap - right_gap).abs() < 1.0,
+            "center-aligned paragraph must be symmetric around the center regardless of \
+             paragraph_indent (left_gap={left_gap}, right_gap={right_gap})",
+        );
     }
 
     #[test]

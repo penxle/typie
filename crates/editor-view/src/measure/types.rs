@@ -45,7 +45,7 @@ pub struct MeasuredLine {
     pub cursor_descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
     pub ruby_annotations: Vec<RubyAnnotation>,
-    pub text_indent: f32,
+    pub empty_caret_x: f32,
     /// Paragraph child-offset interval this visual line owns for matching
     /// container-anchored cursor positions. Matching is inclusive of both
     /// endpoints (`start <= offset && offset <= end`, not `Range::contains`).

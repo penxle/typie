@@ -112,7 +112,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             ruby_annotations: vec![],
-                            text_indent: 0.0,
+                            empty_caret_x: 0.0,
                             child_range: None,
                         }),
                     }],
@@ -188,7 +188,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             ruby_annotations: vec![],
-                            text_indent: 0.0,
+                            empty_caret_x: 0.0,
                             child_range: None,
                         }),
                     }],
@@ -239,7 +239,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             ruby_annotations: vec![],
-                            text_indent: 0.0,
+                            empty_caret_x: 0.0,
                             child_range: None,
                         }),
                     }],
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn cursor_rect_empty_line_with_text_indent() {
+    fn cursor_rect_empty_line_uses_empty_caret_x() {
         let id = NodeId::new();
         let tree = LayoutTree {
             root: LayoutNode {
@@ -299,7 +299,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![],
                             ruby_annotations: vec![],
-                            text_indent: 32.0,
+                            empty_caret_x: 32.0,
                             child_range: Some(0..0),
                         }),
                     }],
@@ -349,7 +349,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             ruby_annotations: vec![],
-                            text_indent: 0.0,
+                            empty_caret_x: 0.0,
                             child_range: None,
                         }),
                     }],
@@ -458,7 +458,7 @@ mod tests {
                                 cursor_descent: 4.0,
                                 glyph_runs: vec![GlyphRun::make_test_run(t1, 0, "a", 0.0, gs(1))],
                                 ruby_annotations: vec![],
-                                text_indent: 0.0,
+                                empty_caret_x: 0.0,
                                 child_range: Some(0..2),
                             }),
                         },
@@ -473,7 +473,7 @@ mod tests {
                                 cursor_descent: 4.0,
                                 glyph_runs: vec![],
                                 ruby_annotations: vec![],
-                                text_indent: 0.0,
+                                empty_caret_x: 0.0,
                                 child_range: Some(2..2),
                             }),
                         },
@@ -528,7 +528,7 @@ mod tests {
                             cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             ruby_annotations: vec![],
-                            text_indent: 0.0,
+                            empty_caret_x: 0.0,
                             child_range: None,
                         }),
                     }],
