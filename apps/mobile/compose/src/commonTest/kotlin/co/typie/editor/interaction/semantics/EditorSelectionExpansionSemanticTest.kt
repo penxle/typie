@@ -21,13 +21,15 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorSelectionExpansionSemanticTest {
   @Test
-  fun `double tap drag extension dispatches extend to with materialized initial selection`() =
+  fun `double tap drag extension dispatches extend to with materialized base selection`() =
     runTest(StandardTestDispatcher()) {
       val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -47,13 +49,11 @@ class EditorSelectionExpansionSemanticTest {
         listOf(
           Message.Selection(
             SelectionOp.ExtendTo(
-              anchorPage = 0,
-              anchorX = 10f,
-              anchorY = 24f,
+              anchor = selection.anchor,
               headPage = 1,
               headX = 30f,
               headY = 40f,
-              initialSelection = selection,
+              baseSelection = selection,
             )
           )
         )
@@ -61,7 +61,7 @@ class EditorSelectionExpansionSemanticTest {
     }
 
   @Test
-  fun `double tap drag extension waits until selection endpoints are materialized`() =
+  fun `double tap drag extension materializes without selection endpoints`() =
     runTest(StandardTestDispatcher()) {
       val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
       val fake =
@@ -69,20 +69,22 @@ class EditorSelectionExpansionSemanticTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
 
-      assertNull(editor.resolveSelectionExtensionContext())
+      assertEquals(selection, editor.resolveSelectionExtensionContext()?.baseSelection)
       assertEquals(emptyList(), fake.enqueued)
     }
 
   @Test
   fun `double tap drag extension keeps the initially materialized selection while dragging`() =
     runTest(StandardTestDispatcher()) {
-      val initialSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val baseSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
       val expandedSelection = Selection(anchor = Position("text", 0), head = Position("text", 11))
-      var currentSelection = initialSelection
+      var currentSelection = baseSelection
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(
@@ -112,9 +114,9 @@ class EditorSelectionExpansionSemanticTest {
       )
 
       assertEquals(
-        initialSelection,
+        baseSelection,
         (fake.enqueued.single() as Message.Selection).op.let {
-          (it as SelectionOp.ExtendTo).initialSelection
+          (it as SelectionOp.ExtendTo).baseSelection
         },
       )
     }
@@ -127,6 +129,8 @@ class EditorSelectionExpansionSemanticTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -135,7 +139,7 @@ class EditorSelectionExpansionSemanticTest {
 
       editor.sync {}
 
-      assertEquals(selection, selectionExpansionSemantic.context(editor)?.initialSelection)
+      assertEquals(selection, selectionExpansionSemantic.context(editor)?.baseSelection)
     }
 
   @Test
@@ -148,6 +152,8 @@ class EditorSelectionExpansionSemanticTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(
@@ -166,7 +172,7 @@ class EditorSelectionExpansionSemanticTest {
       editor.sync {}
       selectionExpansionSemantic.markWordSelectionCommitted()
 
-      assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.initialSelection)
+      assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.baseSelection)
     }
 
   @Test
@@ -179,6 +185,8 @@ class EditorSelectionExpansionSemanticTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(
@@ -197,6 +205,6 @@ class EditorSelectionExpansionSemanticTest {
       currentSelection = wordSelection
       editor.sync {}
 
-      assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.initialSelection)
+      assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.baseSelection)
     }
 }

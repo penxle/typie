@@ -1,35 +1,11 @@
-use editor_state::{Position, Selection, StableSelection};
+use editor_state::StableSelection;
 use editor_view::DropTarget;
 
 use crate::message::ExternalDndPayloadKind;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum PressContext {
-    Empty,
-    InSelection,
-    OnSelectable(Selection),
-}
-
-impl PressContext {
-    pub(crate) fn can_drag_content(&self) -> bool {
-        matches!(self, Self::InSelection | Self::OnSelectable(_))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum InteractionState {
+pub(crate) enum DndState {
     Idle,
-    Pressed {
-        page: usize,
-        start_x: f32,
-        start_y: f32,
-        position: Position,
-        selection_anchor: Option<Selection>,
-        context: PressContext,
-    },
-    DraggingSelection {
-        anchor: Selection,
-    },
     InternalDnd {
         source: StableSelection,
         drop_target: Option<DropTarget>,
@@ -40,13 +16,13 @@ pub(crate) enum InteractionState {
     },
 }
 
-impl Default for InteractionState {
+impl Default for DndState {
     fn default() -> Self {
         Self::Idle
     }
 }
 
-impl InteractionState {
+impl DndState {
     pub(crate) fn drop_target(&self) -> Option<DropTarget> {
         match self {
             Self::InternalDnd { drop_target, .. } | Self::ExternalDnd { drop_target, .. } => {

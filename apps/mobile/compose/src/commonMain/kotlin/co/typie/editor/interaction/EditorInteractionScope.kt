@@ -5,8 +5,6 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
-import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
@@ -215,9 +213,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
 
   override fun requestFocus(editor: Editor): Boolean = editor.focus()
 
-  override fun enqueuePointerCancel() {
-    editor?.enqueue(Message.Pointer(EditorPointerEvent.Cancel))
-  }
+  override fun enqueuePointerCancel() = Unit
 
   override fun setScrollGestureLocked(locked: Boolean) {
     if (locked) {

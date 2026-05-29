@@ -1,7 +1,7 @@
 pub use editor_common::{Axis, DecorationStyle, Direction, Movement};
 use editor_macros::ffi;
 use editor_model::{Fragment, Modifier, ModifierType, NodeId, PlainNode, TableBorderStyle};
-use editor_state::{Selection, StableSelection};
+use editor_state::{Position, Selection, StableSelection};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -86,32 +86,6 @@ pub enum DndOp {
 }
 
 #[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum PointerEvent {
-    Down {
-        page: usize,
-        x: f32,
-        y: f32,
-        count: u32,
-        #[serde(default)]
-        modifiers: InputModifiers,
-    },
-    SecondaryDown {
-        page: usize,
-        x: f32,
-        y: f32,
-    },
-    Move {
-        page: usize,
-        x: f32,
-        y: f32,
-    },
-    Up,
-    Cancel,
-}
-
-#[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Break {
@@ -171,22 +145,40 @@ pub enum SelectionOp {
         selection: StableSelection,
     },
     Unset,
+    SetAt {
+        page: usize,
+        x: f32,
+        y: f32,
+    },
     SetFlat {
         start: usize,
         end: usize,
     },
     ExtendTo {
-        anchor_page: usize,
-        anchor_x: f32,
-        anchor_y: f32,
+        anchor: Position,
         head_page: usize,
         head_x: f32,
         head_y: f32,
-        initial_selection: Option<Selection>,
+        base_selection: Option<Selection>,
+    },
+    SelectUnitAt {
+        page: usize,
+        x: f32,
+        y: f32,
+        unit: SelectionPointUnit,
     },
     Expand {
         unit: SelectionExpansionUnit,
     },
+}
+
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionPointUnit {
+    Word,
+    Sentence,
+    Paragraph,
 }
 
 #[ffi]
@@ -393,9 +385,6 @@ pub enum TrackedRangeOp {
 pub enum Message {
     Key {
         event: KeyEvent,
-    },
-    Pointer {
-        event: PointerEvent,
     },
     Insertion {
         op: InsertionOp,

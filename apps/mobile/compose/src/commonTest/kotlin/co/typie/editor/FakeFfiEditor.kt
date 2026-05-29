@@ -1,5 +1,6 @@
 package co.typie.editor
 
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CharacterCounts
 import co.typie.editor.ffi.ClipboardPayload
@@ -11,16 +12,22 @@ import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.LayoutMode
+import co.typie.editor.ffi.LinkRect
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.PointerStyle
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.SearchOptions
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.StablePosition
+import co.typie.editor.ffi.StableSelection
 import co.typie.editor.ffi.TableOverlay
+import co.typie.editor.ffi.TrackedRange
+import co.typie.editor.ffi.TrackedRangeHit
 import co.typie.editor.ffi.Tri
 
 internal class FakeFfiEditor(
@@ -77,6 +84,12 @@ internal class FakeFfiEditor(
 
   override fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? = null
 
+  override fun pageLinkRects(page: Int): List<LinkRect> = emptyList()
+
+  override fun linkRects(): List<LinkRect> = emptyList()
+
+  override fun linkHitTest(page: Int, x: Float, y: Float): LinkRect? = null
+
   override fun selectionEndpoints(): SelectionEndpoints? = selectionEndpointsProvider()
 
   override fun selectionHitTest(page: Int, x: Float, y: Float): Boolean =
@@ -126,8 +139,29 @@ internal class FakeFfiEditor(
 
   override fun currentHeads(): ByteArray = ByteArray(0)
 
+  override fun freezeSelection(selection: Selection): StableSelection =
+    StableSelection(anchor = EmptyStablePosition, head = EmptyStablePosition)
+
+  override fun findMatches(query: String, options: SearchOptions?): List<Selection> = emptyList()
+
+  override fun trackedRanges(group: String?): List<TrackedRange> = emptyList()
+
+  override fun exportPageVector(page: Int, scaleFactor: Double): ByteArray = ByteArray(0)
+
+  override fun trackedRangesAt(
+    page: Int,
+    x: Float,
+    y: Float,
+    group: String?,
+  ): List<TrackedRangeHit> = emptyList()
+
+  override fun proseText(): String = ""
+
+  override fun proseToSelection(start: Int, end: Int): Selection? = null
+
   private companion object {
     val EmptyPosition = Position(nodeId = "", offset = 0)
+    val EmptyStablePosition = StablePosition.ContainerStart(emptyList(), Affinity.Downstream)
     val EmptySelection = Selection(anchor = EmptyPosition, head = EmptyPosition)
     val EmptyRootAttrs = PlainRootNode(layoutMode = LayoutMode.Continuous(maxWidth = 0))
     val EmptyIme = Ime(text = "", windowStart = 0, selection = ImeRange(0, 0), composing = null)

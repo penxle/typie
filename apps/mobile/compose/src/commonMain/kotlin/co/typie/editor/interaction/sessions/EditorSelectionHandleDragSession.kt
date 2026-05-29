@@ -1,8 +1,7 @@
 package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
-import co.typie.editor.ffi.PageRect
-import co.typie.editor.ffi.SelectionEndpoints
+import co.typie.editor.ffi.Position
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.semantics.dispatchSelectionHandleExtension
@@ -37,8 +36,16 @@ internal class EditorSelectionHandleDragSession {
     }
 
     val endpoints = context.editor.selectionEndpoints() ?: return false
-    val handle = endpoints.handle(type)
-    val anchor = endpoints.anchorFor(type)
+    val handle =
+      when (type) {
+        EditorSelectionHandleType.From -> endpoints.from
+        EditorSelectionHandleType.To -> endpoints.to
+      }
+    val anchor =
+      when (type) {
+        EditorSelectionHandleType.From -> endpoints.toPosition
+        EditorSelectionHandleType.To -> endpoints.fromPosition
+      }
     val startTouchPosition =
       pendingContext?.takeIf { it.type == type }?.touchPosition ?: touchPosition
     val handleCenter =
@@ -99,17 +106,5 @@ private data class EditorSelectionHandleDragContext(
   val type: EditorSelectionHandleType,
   val startTouchPosition: Offset,
   val startHandlePosition: Offset,
-  val anchor: PageRect,
+  val anchor: Position,
 )
-
-private fun SelectionEndpoints.handle(type: EditorSelectionHandleType) =
-  when (type) {
-    EditorSelectionHandleType.From -> from
-    EditorSelectionHandleType.To -> to
-  }
-
-private fun SelectionEndpoints.anchorFor(type: EditorSelectionHandleType) =
-  when (type) {
-    EditorSelectionHandleType.From -> to
-    EditorSelectionHandleType.To -> from
-  }

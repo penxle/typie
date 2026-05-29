@@ -1,6 +1,7 @@
 editor_macros::preamble!();
 
 mod block_state;
+mod dnd;
 mod editor;
 mod error;
 mod event;
@@ -8,7 +9,6 @@ mod font;
 mod handle;
 mod history;
 mod ime;
-mod interaction;
 mod message;
 mod search;
 mod state_field;

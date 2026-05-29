@@ -1419,12 +1419,14 @@ mod tests {
 
         let endpoints = view.selection_endpoints(&resolved).unwrap();
         assert_eq!(endpoints.from.page_idx, only.page_idx);
+        assert_eq!(endpoints.from_position, Position::new(t, 1));
         assert_eq!(endpoints.from.rect.x, only.rect.x);
         assert_eq!(endpoints.from.rect.y, only.rect.y);
         assert_eq!(endpoints.from.rect.width, 0.0);
         assert_eq!(endpoints.from.rect.height, only.rect.height);
 
         assert_eq!(endpoints.to.page_idx, only.page_idx);
+        assert_eq!(endpoints.to_position, Position::new(t, 4));
         assert_eq!(endpoints.to.rect.x, only.rect.x + only.rect.width);
         assert_eq!(endpoints.to.rect.y, only.rect.y);
         assert_eq!(endpoints.to.rect.width, 0.0);
@@ -1448,6 +1450,8 @@ mod tests {
         let b = view.selection_endpoints(&reverse).unwrap();
         assert_eq!(a.from.rect.x, b.from.rect.x);
         assert_eq!(a.to.rect.x, b.to.rect.x);
+        assert_eq!(b.from_position, Position::new(t, 1));
+        assert_eq!(b.to_position, Position::new(t, 4));
     }
 
     #[test]

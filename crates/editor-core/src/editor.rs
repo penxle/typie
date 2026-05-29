@@ -17,12 +17,12 @@ use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
 
 use crate::block_state::BlockState;
+use crate::dnd::DndState;
 use crate::error::EditorError;
 use crate::event::{EditorEvent, FontData};
 use crate::handle;
 use crate::history::History;
 use crate::ime::{Ime, ImeRange};
-use crate::interaction::InteractionState;
 use crate::message::*;
 use crate::state_field::StateField;
 use crate::tracked_range::TrackedRangeRegistry;
@@ -78,8 +78,8 @@ pub struct Editor {
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) tracked_ranges: TrackedRangeRegistry,
 
-    // interaction state
-    pub(crate) interaction: InteractionState,
+    // drag-and-drop state
+    pub(crate) dnd: DndState,
 
     focused: bool,
     message_queue: Vec<Message>,
@@ -93,25 +93,25 @@ pub struct Editor {
 struct ProbeGuard<'e> {
     editor: &'e mut Editor,
     prev: Mode,
-    interaction: InteractionState,
+    dnd: DndState,
     finished: bool,
 }
 
 impl<'e> ProbeGuard<'e> {
     fn enter(editor: &'e mut Editor) -> Self {
-        let interaction = editor.interaction.clone();
+        let dnd = editor.dnd.clone();
         let prev = std::mem::replace(&mut editor.mode, Mode::Probe { changed: false });
         Self {
             editor,
             prev,
-            interaction,
+            dnd,
             finished: false,
         }
     }
 
     fn finish(mut self) -> bool {
         let restored = std::mem::replace(&mut self.editor.mode, self.prev);
-        self.editor.interaction = self.interaction.clone();
+        self.editor.dnd = self.dnd.clone();
         self.finished = true;
         let Mode::Probe { changed } = restored else {
             unreachable!("ProbeGuard installed Probe at enter; only finish replaces it")
@@ -125,7 +125,7 @@ impl Drop for ProbeGuard<'_> {
         // panic 등 비정상 경로에서 mode를 안전하게 복원.
         if !self.finished {
             self.editor.mode = self.prev;
-            self.editor.interaction = self.interaction.clone();
+            self.editor.dnd = self.dnd.clone();
         }
     }
 }
@@ -139,7 +139,7 @@ impl Editor {
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),
-            interaction: InteractionState::default(),
+            dnd: DndState::default(),
             focused: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
@@ -598,7 +598,7 @@ impl Editor {
             });
         }
 
-        if let Some(target) = self.interaction.drop_target() {
+        if let Some(target) = self.dnd.drop_target() {
             marks.push(Mark {
                 data: MarkData::DropIndicator,
                 rects: vec![target.indicator.rect()],
@@ -627,7 +627,6 @@ impl Editor {
     fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {
         match msg {
             Message::Key { event } => handle::handle_key_event(self, event)?,
-            Message::Pointer { event } => handle::handle_pointer_event(self, event)?,
             Message::Insertion { op } => handle::handle_insertion_op(self, op)?,
             Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
@@ -1070,7 +1069,7 @@ impl Editor {
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),
-            interaction: InteractionState::default(),
+            dnd: DndState::default(),
             focused: false,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
@@ -1100,9 +1099,7 @@ impl Editor {
 
     #[cfg(test)]
     pub(crate) fn drop_indicator_for_test(&self) -> Option<editor_view::DropIndicator> {
-        self.interaction
-            .drop_target()
-            .map(|target| target.indicator)
+        self.dnd.drop_target().map(|target| target.indicator)
     }
 
     #[cfg(any(test, feature = "test-utils"))]
@@ -1113,8 +1110,8 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
+    use crate::dnd::DndState;
     use crate::editor::Editor;
-    use crate::interaction::InteractionState;
     use editor_crdt::{OpGraph, RgaOp};
     use editor_macros::{doc, state};
     use editor_model::{
@@ -2414,10 +2411,7 @@ mod tests {
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
         assert!(editor.drop_indicator_for_test().is_none());
-        assert!(matches!(
-            editor.interaction,
-            InteractionState::InternalDnd { .. }
-        ));
+        assert!(matches!(editor.dnd, DndState::InternalDnd { .. }));
     }
 
     #[test]
@@ -2807,7 +2801,7 @@ mod tests {
         editor.apply(Message::Dnd {
             op: DndOp::StartInternalSelection,
         });
-        let InteractionState::InternalDnd { drop_target, .. } = &mut editor.interaction else {
+        let DndState::InternalDnd { drop_target, .. } = &mut editor.dnd else {
             panic!("internal dnd should start from selected image");
         };
         *drop_target = Some(editor_view::DropTarget {
@@ -2882,7 +2876,7 @@ mod tests {
             selection: (root, 0)
         };
         let mut editor = Editor::new_test(initial);
-        editor.interaction = InteractionState::ExternalDnd {
+        editor.dnd = DndState::ExternalDnd {
             payload: ExternalDndPayloadKind::Text,
             drop_target: Some(editor_view::DropTarget {
                 position: Position::new(NodeId::ROOT, 1),
@@ -2938,7 +2932,7 @@ mod tests {
             selection: (root, 0)
         };
         let mut editor = Editor::new_test(initial);
-        editor.interaction = InteractionState::ExternalDnd {
+        editor.dnd = DndState::ExternalDnd {
             payload: ExternalDndPayloadKind::Text,
             drop_target: Some(editor_view::DropTarget {
                 position: Position::new(NodeId::ROOT, 1),

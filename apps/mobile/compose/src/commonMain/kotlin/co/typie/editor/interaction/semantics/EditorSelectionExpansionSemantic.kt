@@ -4,13 +4,13 @@ import co.typie.editor.Editor
 import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 
 internal data class EditorSelectionExtensionContext(
-  val anchor: PageRect,
-  val initialSelection: Selection,
+  val anchor: Position,
+  val baseSelection: Selection?,
 )
 
 internal class EditorSelectionExpansionSemantic {
@@ -75,12 +75,14 @@ internal class EditorSelectionExpansionSemantic {
 }
 
 internal fun Editor.resolveSelectionExtensionContext(): EditorSelectionExtensionContext? {
-  val initialSelection = state.selection ?: return null
-  if (initialSelection.isCollapsed()) {
+  val baseSelection = state.selection ?: return null
+  if (baseSelection.isCollapsed()) {
     return null
   }
-  val anchor = selectionEndpoints()?.from ?: return null
-  return EditorSelectionExtensionContext(anchor = anchor, initialSelection = initialSelection)
+  return EditorSelectionExtensionContext(
+    anchor = baseSelection.anchor,
+    baseSelection = baseSelection,
+  )
 }
 
 internal fun Editor.dispatchSelectionExtension(
@@ -90,17 +92,14 @@ internal fun Editor.dispatchSelectionExtension(
   if (point.page < 0) {
     return false
   }
-  val anchor = context.anchor
   enqueue(
     Message.Selection(
       SelectionOp.ExtendTo(
-        anchorPage = anchor.pageIdx,
-        anchorX = anchor.rect.x,
-        anchorY = anchor.rect.y + anchor.rect.height / 2f,
+        anchor = context.anchor,
         headPage = point.page,
         headX = point.x,
         headY = point.y,
-        initialSelection = context.initialSelection,
+        baseSelection = context.baseSelection,
       )
     )
   )

@@ -476,6 +476,8 @@ export interface SearchOptions {
 export interface SelectionEndpoints {
     from: PageRect;
     to: PageRect;
+    from_position: Position;
+    to_position: Position;
 }
 
 export interface Size {
@@ -628,7 +630,7 @@ export type LayoutMode = { type: "paginated"; page_width: number; page_height: n
 
 export type ListItemNodeAttr = void;
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "dnd"; op: DndOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent } | { type: "tracked_range"; op: TrackedRangeOp };
+export type Message = { type: "key"; event: KeyEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "dnd"; op: DndOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent } | { type: "tracked_range"; op: TrackedRangeOp };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 
@@ -656,8 +658,6 @@ export type PendingModifiers = PendingModifier[];
 
 export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph" } & PlainParagraphNode) | ({ type: "blockquote" } & PlainBlockquoteNode) | ({ type: "callout" } & PlainCalloutNode) | ({ type: "text" } & PlainTextNode) | ({ type: "bullet_list" } & PlainBulletListNode) | ({ type: "ordered_list" } & PlainOrderedListNode) | ({ type: "list_item" } & PlainListItemNode) | ({ type: "fold" } & PlainFoldNode) | ({ type: "fold_title" } & PlainFoldTitleNode) | ({ type: "fold_content" } & PlainFoldContentNode) | ({ type: "table" } & PlainTableNode) | ({ type: "table_row" } & PlainTableRowNode) | ({ type: "table_cell" } & PlainTableCellNode) | ({ type: "image" } & PlainImageNode) | ({ type: "file" } & PlainFileNode) | ({ type: "embed" } & PlainEmbedNode) | ({ type: "archived" } & PlainArchivedNode) | ({ type: "hard_break" } & PlainHardBreakNode) | ({ type: "horizontal_rule" } & PlainHorizontalRuleNode) | ({ type: "page_break" } & PlainPageBreakNode);
 
-export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "secondary_down"; page: number; x: number; y: number } | { type: "move"; page: number; x: number; y: number } | { type: "up" } | { type: "cancel" };
-
 export type PointerStyle = "default" | "text" | "pointer";
 
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
@@ -666,7 +666,9 @@ export type ScrollTarget = { type: "tracked_item"; id: string } | { type: "selec
 
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
-export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor_page: number; anchor_x: number; anchor_y: number; head_page: number; head_x: number; head_y: number; initial_selection: Selection | undefined } | { type: "expand"; unit: SelectionExpansionUnit };
+export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_at"; page: number; x: number; y: number } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor: Position; head_page: number; head_x: number; head_y: number; base_selection: Selection | undefined } | { type: "select_unit_at"; page: number; x: number; y: number; unit: SelectionPointUnit } | { type: "expand"; unit: SelectionExpansionUnit };
+
+export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges";
 

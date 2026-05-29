@@ -5,7 +5,7 @@ import co.typie.editor.EditorViewportTransform
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.PointerEvent
+import co.typie.editor.ffi.SelectionOp
 
 internal class EditorFloatingCursorSession {
   private var origin: EditorFloatingCursorOrigin? = null
@@ -21,7 +21,7 @@ internal class EditorFloatingCursorSession {
     val point =
       resolveFloatingCursorPoint(origin = origin, dx = dx, dy = dy, transform = transform)
         ?: return null
-    return point.toPointerClickMessages()
+    return point.toSelectionMessages()
   }
 
   fun end() {
@@ -43,8 +43,5 @@ internal fun resolveFloatingCursorPoint(
   return transform.globalToLocal(x = targetGlobal.x, y = targetGlobal.y)
 }
 
-private fun PagePoint.toPointerClickMessages(): List<Message> =
-  listOf(
-    Message.Pointer(PointerEvent.Down(page = page, x = x, y = y, count = 1)),
-    Message.Pointer(PointerEvent.Up),
-  )
+private fun PagePoint.toSelectionMessages(): List<Message> =
+  listOf(Message.Selection(SelectionOp.SetAt(page = page, x = x, y = y)))

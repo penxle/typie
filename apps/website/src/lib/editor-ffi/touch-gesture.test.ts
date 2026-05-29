@@ -13,6 +13,8 @@ const endpoints = (
 ): SelectionEndpoints => ({
   from: { page_idx: from.page_idx, rect: { x: from.x, y: from.y, width: from.width, height: from.height } },
   to: { page_idx: to.page_idx, rect: { x: to.x, y: to.y, width: to.width, height: to.height } },
+  from_position: { node_id: 'text', offset: 0 },
+  to_position: { node_id: 'text', offset: 1 },
 });
 
 describe('computeTouchContextMenuPosition', () => {

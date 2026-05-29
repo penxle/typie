@@ -2,7 +2,7 @@ package co.typie.editor.interaction.semantics
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
-import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Position
 import co.typie.editor.interaction.EditorEdgeAutoScrollViewport
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.ext.computeEdgeAutoScrollPlan
@@ -22,7 +22,7 @@ internal class EditorEdgeAutoScrollSemantic {
   fun trackSelectionHandle(
     edgePosition: Offset,
     dispatchPosition: Offset,
-    anchor: PageRect,
+    anchor: Position,
     context: EditorGestureContext,
   ) {
     track(

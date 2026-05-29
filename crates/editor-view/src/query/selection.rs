@@ -24,6 +24,8 @@ pub type SelectionRect = PageRect<SelectionRectKind>;
 pub struct SelectionEndpoints {
     pub from: PageRect,
     pub to: PageRect,
+    pub from_position: Position,
+    pub to_position: Position,
 }
 
 pub fn selection_rects(
@@ -97,6 +99,8 @@ pub fn selection_endpoints(
                 last.rect.height,
             ),
         ),
+        from_position: Position::from(selection.from()),
+        to_position: Position::from(selection.to()),
     })
 }
 

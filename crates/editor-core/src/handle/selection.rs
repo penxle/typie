@@ -1,7 +1,10 @@
 use editor_commands::{self as commands};
+use editor_model::NodeId;
 use editor_state::{
     PendingModifiers, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    farther_endpoint,
+    cell_rect_selection, enclosing_table_cell, farther_endpoint,
+    resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
+    resolve_word_selection_expansion, table_cell_ids,
 };
 use editor_transaction::HistoryMeta;
 
@@ -20,86 +23,181 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
         });
     }
 
-    let extend_to_selection = resolve_extend_to_selection(editor, &op);
-    let resource = editor.resource.clone();
-
     editor.clear_preferred_x();
-    editor.transact(|tr| {
-        tr.update_meta(|m| m.history = HistoryMeta::Skip);
-        match op {
-            SelectionOp::Set { selection } => {
-                commands::set_selection(tr, selection)?;
-            }
-            SelectionOp::SetFrozen { selection } => {
-                let live = selection.thaw(&tr.doc());
-                commands::set_selection(tr, live)?;
-            }
-            SelectionOp::SetFlat { start, end } => {
-                let doc = tr.doc();
-                let start_pos = match ResolvedPosition::from_flat(&doc, start) {
-                    Some(p) => p,
-                    None => return Ok(()),
-                };
-                let end_pos = match ResolvedPosition::from_flat(&doc, end) {
-                    Some(p) => p,
-                    None => return Ok(()),
-                };
-                commands::set_selection(
-                    tr,
-                    Selection::new(Position::from(&start_pos), Position::from(&end_pos)),
-                )?;
-            }
-            SelectionOp::ExtendTo { .. } => {
-                if let Some(selection) = extend_to_selection
+    match op {
+        SelectionOp::Set { selection } => editor.transact(|tr| {
+            tr.update_meta(|m| m.history = HistoryMeta::Skip);
+            commands::set_selection(tr, selection)?;
+            Ok(())
+        }),
+        SelectionOp::SetFrozen { selection } => editor.transact(|tr| {
+            tr.update_meta(|m| m.history = HistoryMeta::Skip);
+            let live = selection.thaw(&tr.doc());
+            commands::set_selection(tr, live)?;
+            Ok(())
+        }),
+        SelectionOp::SetAt { page, x, y } => {
+            let selection = editor.view.hit_test(page, x, y);
+            editor.transact(|tr| {
+                tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                if let Some(selection) = selection {
+                    commands::set_selection(tr, selection)?;
+                }
+                Ok(())
+            })
+        }
+        SelectionOp::SetFlat { start, end } => editor.transact(|tr| {
+            tr.update_meta(|m| m.history = HistoryMeta::Skip);
+            let doc = tr.doc();
+            let start_pos = match ResolvedPosition::from_flat(&doc, start) {
+                Some(p) => p,
+                None => return Ok(()),
+            };
+            let end_pos = match ResolvedPosition::from_flat(&doc, end) {
+                Some(p) => p,
+                None => return Ok(()),
+            };
+            commands::set_selection(
+                tr,
+                Selection::new(Position::from(&start_pos), Position::from(&end_pos)),
+            )?;
+            Ok(())
+        }),
+        SelectionOp::ExtendTo {
+            anchor,
+            head_page,
+            head_x,
+            head_y,
+            base_selection,
+        } => {
+            let selection = resolve_extend_to_selection(
+                editor,
+                anchor,
+                head_page,
+                head_x,
+                head_y,
+                base_selection,
+            );
+            editor.transact(|tr| {
+                tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                if let Some(selection) = selection
                     && tr.selection() != Some(selection)
                 {
                     commands::set_selection(tr, selection)?;
                 }
-            }
-            SelectionOp::Expand { unit } => match (unit, tr.selection()) {
-                (SelectionExpansionUnit::Word, Some(selection)) => {
-                    let resource = resource.lock().unwrap();
-                    commands::select_word_at(tr, selection, &resource)?;
-                }
-                (SelectionExpansionUnit::Sentence, Some(selection)) => {
-                    let resource = resource.lock().unwrap();
-                    commands::select_sentence_at(tr, selection, &resource)?;
-                }
-                (SelectionExpansionUnit::Paragraph, Some(selection)) => {
-                    commands::select_paragraph_at(tr, selection)?;
-                }
-                (SelectionExpansionUnit::All, _) => {
-                    commands::select_all(tr)?;
-                }
-                (_, None) => {}
-            },
-            SelectionOp::Unset => unreachable!("handled above"),
+                Ok(())
+            })
         }
-        Ok(())
-    })
+        SelectionOp::SelectUnitAt { page, x, y, unit } => {
+            let selection = resolve_select_unit_at_selection(editor, page, x, y, unit);
+            editor.transact(|tr| {
+                tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                if let Some(selection) = selection {
+                    commands::set_selection(tr, selection)?;
+                }
+                Ok(())
+            })
+        }
+        SelectionOp::Expand { unit } => {
+            let resource = editor.resource.clone();
+            editor.transact(|tr| {
+                tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                match (unit, tr.selection()) {
+                    (SelectionExpansionUnit::Word, Some(selection)) => {
+                        let resource = resource.lock().unwrap();
+                        commands::select_word_at(tr, selection, &resource)?;
+                    }
+                    (SelectionExpansionUnit::Sentence, Some(selection)) => {
+                        let resource = resource.lock().unwrap();
+                        commands::select_sentence_at(tr, selection, &resource)?;
+                    }
+                    (SelectionExpansionUnit::Paragraph, Some(selection)) => {
+                        commands::select_paragraph_at(tr, selection)?;
+                    }
+                    (SelectionExpansionUnit::All, _) => {
+                        commands::select_all(tr)?;
+                    }
+                    (_, None) => {}
+                }
+                Ok(())
+            })
+        }
+        SelectionOp::Unset => unreachable!("handled above"),
+    }
 }
 
-fn resolve_extend_to_selection(editor: &Editor, op: &SelectionOp) -> Option<Selection> {
-    let SelectionOp::ExtendTo {
-        anchor_page,
-        anchor_x,
-        anchor_y,
-        head_page,
-        head_x,
-        head_y,
-        initial_selection,
-    } = op
-    else {
-        return None;
-    };
+fn drag_anchor_cell(editor: &Editor, pos: &Position) -> Option<NodeId> {
+    if let Some(resolved) = editor
+        .state
+        .selection
+        .as_ref()
+        .and_then(|selection| selection.resolve(&editor.state.doc))
+        && let Some(cell_rect) = resolved.as_cell_rect()
+    {
+        return Some(cell_rect.anchor_cell.id());
+    }
+    enclosing_table_cell(&editor.state.doc, pos.node_id)
+}
 
+fn resolve_select_unit_at_selection(
+    editor: &Editor,
+    page: usize,
+    x: f32,
+    y: f32,
+    unit: SelectionPointUnit,
+) -> Option<Selection> {
+    let hit = editor.view.hit_test(page, x, y)?;
+    match unit {
+        SelectionPointUnit::Word => {
+            let resource = editor.resource.lock().unwrap();
+            Some(resolve_word_selection_expansion(&editor.state.doc, hit, &resource).unwrap_or(hit))
+        }
+        SelectionPointUnit::Sentence => {
+            let resource = editor.resource.lock().unwrap();
+            Some(
+                resolve_sentence_selection_expansion(&editor.state.doc, hit, &resource)
+                    .unwrap_or(hit),
+            )
+        }
+        SelectionPointUnit::Paragraph => {
+            Some(resolve_paragraph_selection_expansion(&editor.state.doc, hit).unwrap_or(hit))
+        }
+    }
+}
+
+fn resolve_extend_to_selection(
+    editor: &Editor,
+    anchor: Position,
+    head_page: usize,
+    head_x: f32,
+    head_y: f32,
+    base_selection: Option<Selection>,
+) -> Option<Selection> {
     let doc = &editor.state().doc;
-    let head_hit = editor
-        .view
-        .hit_test_extending(*head_page, *head_x, *head_y)?;
+    if let Some(anchor_cell) = drag_anchor_cell(editor, &anchor) {
+        let cells = table_cell_ids(doc, anchor_cell);
+        if let Some(head_cell) = editor
+            .view
+            .nearest_node_box(head_page, head_x, head_y, &cells)
+        {
+            let is_cell_mode = editor
+                .state
+                .selection
+                .as_ref()
+                .and_then(|selection| selection.resolve(doc))
+                .is_some_and(|resolved| resolved.as_cell_rect().is_some());
+            if (head_cell != anchor_cell || is_cell_mode)
+                && let Some(selection) = cell_rect_selection(doc, anchor_cell, head_cell)
+            {
+                return Some(selection);
+            }
+        }
+    }
 
-    let selection = if let Some(initial_selection) = initial_selection {
-        let initial = initial_selection.resolve(doc)?;
+    let head_hit = editor.view.hit_test_extending(head_page, head_x, head_y)?;
+
+    let selection = if let Some(base_selection) = base_selection {
+        let initial = base_selection.resolve(doc)?;
         let head = head_hit.resolve(doc)?;
         let initial_from = Position::from(initial.from());
         let initial_to = Position::from(initial.to());
@@ -114,10 +212,6 @@ fn resolve_extend_to_selection(editor: &Editor, op: &SelectionOp) -> Option<Sele
             Selection::new(initial_from, initial_to)
         }
     } else {
-        let anchor_hit = editor
-            .view
-            .hit_test_extending(*anchor_page, *anchor_x, *anchor_y)?;
-        let anchor = farther_endpoint(doc, head_hit.head, anchor_hit.anchor, anchor_hit.head);
         let head = farther_endpoint(doc, anchor, head_hit.anchor, head_hit.head);
         Selection::new(anchor, head)
     };
@@ -257,7 +351,54 @@ mod tests {
     }
 
     #[test]
-    fn extend_to_with_initial_selection_expands_word_range() {
+    fn set_at_sets_hit_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetAt {
+                page: 0,
+                x: 9999.0,
+                y: 5.0,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.anchor.offset, 5);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn select_unit_at_word_expands_hit_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello world") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::SelectUnitAt {
+                page: 0,
+                x: 20.0,
+                y: 5.0,
+                unit: SelectionPointUnit::Word,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.offset, 5);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_with_base_selection_expands_word_range() {
         let (state, ..) = state! {
             doc { root { paragraph { t: text("hello world") } } }
             selection: (t, 0) -> (t, 5)
@@ -270,13 +411,11 @@ mod tests {
 
         editor.apply(Message::Selection {
             op: SelectionOp::ExtendTo {
-                anchor_page: 0,
-                anchor_x: 0.0,
-                anchor_y: 5.0,
+                anchor: initial.anchor,
                 head_page: 0,
                 head_x: 9999.0,
                 head_y: 5.0,
-                initial_selection: Some(initial),
+                base_selection: Some(initial),
             },
         });
 
@@ -292,7 +431,32 @@ mod tests {
     }
 
     #[test]
-    fn extend_to_without_initial_selection_ignores_collapsed_result() {
+    fn extend_to_without_base_selection_uses_anchor_position() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t, 1),
+                head_page: 0,
+                head_x: 9999.0,
+                head_y: 5.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t, 1));
+        assert_eq!(sel.head.offset, 5);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_without_base_selection_ignores_collapsed_result() {
         let (state, ..) = state! {
             doc { root { paragraph { t: text("hello") } } }
             selection: (t, 0) -> (t, 5)
@@ -303,13 +467,11 @@ mod tests {
 
         editor.apply(Message::Selection {
             op: SelectionOp::ExtendTo {
-                anchor_page: 0,
-                anchor_x: 20.0,
-                anchor_y: -100.0,
+                anchor: before.expect("selection exists in test").anchor,
                 head_page: 0,
                 head_x: 20.0,
                 head_y: -100.0,
-                initial_selection: None,
+                base_selection: None,
             },
         });
 

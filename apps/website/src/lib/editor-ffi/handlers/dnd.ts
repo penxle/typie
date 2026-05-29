@@ -1,3 +1,4 @@
+import { markNativeSelectionDragStarted } from './pointer';
 import type { DndDropPayload, ExternalDndPayloadKind, InputModifiers } from '@typie/editor-ffi/browser';
 import type { EditorContext } from '../editor.svelte';
 
@@ -97,6 +98,7 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
   }
 
   if (editor.readOnly) {
+    markNativeSelectionDragStarted(editor);
     dataTransfer.effectAllowed = 'copy';
     dataTransfer.setData('text/plain', payload.text);
     dataTransfer.setData('text/html', payload.html);
@@ -106,6 +108,7 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
   }
 
   internalDndEditors.add(editor);
+  markNativeSelectionDragStarted(editor);
   dataTransfer.effectAllowed = 'copyMove';
   dataTransfer.setData(INTERNAL_SELECTION_MIME, '1');
   dataTransfer.setData('text/plain', payload.text);

@@ -10,14 +10,16 @@ const createEvent = () =>
     preventDefault: vi.fn(),
   }) as unknown as MouseEvent & { currentTarget: HTMLElement };
 
-const createEditor = ({ readOnly = false } = {}) =>
+const createEditor = ({ readOnly = false, selectionHit = false, isSelectionCollapsed = true } = {}) =>
   ({
     readOnly,
+    isSelectionCollapsed,
     gesture: {
       shouldSuppressNativeContextMenu: vi.fn(() => false),
     },
     clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
     interactiveHitTest: vi.fn(),
+    selectionHitTest: vi.fn(() => selectionHit),
     enqueue: vi.fn(),
     flush: vi.fn(),
     collectContextMenuContributions: vi.fn(() => []),
@@ -29,36 +31,41 @@ const createEditor = ({ readOnly = false } = {}) =>
   };
 
 describe('handleContextMenu', () => {
-  it('sends a secondary pointer down before opening the menu', () => {
+  it('sets selection at the hit point before opening the menu', () => {
     const editor = createEditor();
     const event = createEvent();
 
     handleContextMenu(editor, event);
 
     expect(editor.enqueue).toHaveBeenCalledWith({
-      type: 'pointer',
-      event: {
-        type: 'secondary_down',
-        page: 0,
-        x: 10,
-        y: 20,
-      },
+      type: 'selection',
+      op: { type: 'set_at', page: 0, x: 10, y: 20 },
     });
     expect(editor.flush).toHaveBeenCalledTimes(1);
     expect(editor.flush.mock.invocationCallOrder[0]).toBeLessThan(editor.openContextMenu.mock.invocationCallOrder[0]);
   });
 
-  it('expands the hit word before opening a read-only context menu', () => {
+  it('selects the hit word before opening a read-only context menu', () => {
     const editor = createEditor({ readOnly: true });
     const event = createEvent();
 
     handleContextMenu(editor, event);
 
-    expect(editor.enqueue).toHaveBeenNthCalledWith(2, {
+    expect(editor.enqueue).toHaveBeenCalledWith({
       type: 'selection',
-      op: { type: 'expand', unit: 'word' },
+      op: { type: 'select_unit_at', page: 0, x: 10, y: 20, unit: 'word' },
     });
     expect(editor.flush).toHaveBeenCalledTimes(1);
     expect(editor.flush.mock.invocationCallOrder[0]).toBeLessThan(editor.openContextMenu.mock.invocationCallOrder[0]);
+  });
+
+  it('preserves a range selection when opening inside it', () => {
+    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false });
+    const event = createEvent();
+
+    handleContextMenu(editor, event);
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.flush).toHaveBeenCalledTimes(1);
   });
 });

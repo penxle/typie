@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handlePointerDown, handlePointerUp } from './pointer';
+import { handlePointerDown, handlePointerUp, markNativeSelectionDragStarted } from './pointer';
 import type { Editor } from '../editor.svelte';
+
+const collapsedSelection = {
+  anchor: { node_id: 't1', offset: 2 },
+  head: { node_id: 't1', offset: 2 },
+} as const;
+
+const rangeSelection = {
+  anchor: { node_id: 't1', offset: 1 },
+  head: { node_id: 't1', offset: 4 },
+} as const;
 
 const createPointerTarget = ({ captured = false } = {}) => {
   return {
@@ -45,13 +55,16 @@ const createPointerEvent = ({
 const createEditor = ({
   selectionHit = false,
   isSelectionCollapsed = true,
+  selection = collapsedSelection,
 }: {
   selectionHit?: boolean;
   isSelectionCollapsed?: boolean;
+  selection?: typeof collapsedSelection | typeof rangeSelection | undefined;
 } = {}) => {
   return {
     readOnly: false,
     isSelectionCollapsed,
+    selection,
     clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
     interactiveHitTest: vi.fn(() => null),
     selectionHitTest: vi.fn(() => selectionHit),
@@ -74,9 +87,9 @@ const createEditor = ({
 };
 
 describe('pointer native drag admission', () => {
-  it('sends pointer down immediately on a selected range without capturing pointer and temporarily removes tabindex', () => {
+  it('admits native drag on a selected range without capturing pointer and collapses on click release', () => {
     vi.useFakeTimers();
-    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false });
+    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false, selection: rangeSelection });
     const target = createPointerTarget();
     const down = createPointerEvent({ target });
 
@@ -86,18 +99,8 @@ describe('pointer native drag admission', () => {
     expect(editor.beginNativeDragAdmission).toHaveBeenCalledTimes(1);
     expect(target.removeAttribute).toHaveBeenCalledWith('tabindex');
     expect(target.setAttribute).not.toHaveBeenCalled();
-    expect(editor.enqueue).toHaveBeenCalledWith({
-      type: 'pointer',
-      event: {
-        type: 'down',
-        page: 0,
-        x: 10,
-        y: 20,
-        count: 1,
-        modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-      },
-    });
-    expect(editor.flush).toHaveBeenCalledTimes(1);
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.flush).not.toHaveBeenCalled();
     vi.runAllTimers();
     expect(target.setAttribute).toHaveBeenCalledWith('tabindex', '0');
     vi.useRealTimers();
@@ -105,8 +108,8 @@ describe('pointer native drag admission', () => {
     handlePointerUp(editor, createPointerEvent({ target }));
 
     expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: true });
-    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'pointer', event: { type: 'up' } });
-    expect(editor.flush).toHaveBeenCalledTimes(2);
+    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
+    expect(editor.flush).toHaveBeenCalledTimes(1);
   });
 
   it('restores tabindex even after the browser clears event.currentTarget', () => {
@@ -130,7 +133,19 @@ describe('pointer native drag admission', () => {
     vi.useRealTimers();
   });
 
-  it('captures regular primary down and sends up even if capture is already gone', () => {
+  it('does not collapse on pointer up after native dragstart', () => {
+    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false, selection: rangeSelection });
+    const target = createPointerTarget();
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+    markNativeSelectionDragStarted(editor);
+    handlePointerUp(editor, createPointerEvent({ target }));
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: true });
+  });
+
+  it('captures regular primary down and sends set_at instead of raw pointer messages', () => {
     const editor = createEditor();
     const target = createPointerTarget({ captured: true });
 
@@ -140,6 +155,6 @@ describe('pointer native drag admission', () => {
     expect(editor.beginNativeDragAdmission).not.toHaveBeenCalled();
     expect(target.setPointerCapture).toHaveBeenCalledWith(1);
     expect(target.releasePointerCapture).toHaveBeenCalledWith(1);
-    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'pointer', event: { type: 'up' } });
+    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
   });
 });

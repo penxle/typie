@@ -7,8 +7,11 @@ import co.typie.editor.PagePoint
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
+import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
+import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorInteractionEffects
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,7 +23,7 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorCursorMoveSemanticTest {
   @Test
-  fun `primary click dispatch sends down up and runs before commit hook`() =
+  fun `primary click dispatch sends set at and runs before commit hook`() =
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -37,10 +40,7 @@ class EditorCursorMoveSemanticTest {
       )
 
       val expectedMessages: List<Message> =
-        listOf(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 1)),
-          Message.Pointer(EditorPointerEvent.Up),
-        )
+        listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)))
       assertEquals(expectedMessages, fake.enqueued)
       assertTrue(beforeCommitCalled)
     }
@@ -65,17 +65,16 @@ class EditorCursorMoveSemanticTest {
       )
 
       val expectedMessages: List<Message> =
-        listOf(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 1)),
-          Message.Pointer(EditorPointerEvent.Up),
-        )
+        listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)))
       assertEquals(expectedMessages, fake.enqueued)
     }
 
   @Test
-  fun `primary click dispatch preserves pointer input modifiers`() =
+  fun `shift primary click extends from the current selection anchor`() =
     runTest(StandardTestDispatcher()) {
-      val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) })
+      val selection = Selection(anchor = Position("text", 1), head = Position("text", 3))
+      val fake =
+        FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
 
@@ -90,16 +89,15 @@ class EditorCursorMoveSemanticTest {
 
       val expectedMessages: List<Message> =
         listOf(
-          Message.Pointer(
-            EditorPointerEvent.Down(
-              page = 0,
-              x = 10f,
-              y = 20f,
-              count = 1,
-              modifiers = InputModifiers(shift = true),
+          Message.Selection(
+            SelectionOp.ExtendTo(
+              anchor = selection.anchor,
+              headPage = 0,
+              headX = 10f,
+              headY = 20f,
+              baseSelection = null,
             )
-          ),
-          Message.Pointer(EditorPointerEvent.Up),
+          )
         )
       assertEquals(expectedMessages, fake.enqueued)
     }
@@ -125,8 +123,9 @@ class EditorCursorMoveSemanticTest {
 
       val expectedMessages: List<Message> =
         listOf(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 2)),
-          Message.Pointer(EditorPointerEvent.Up),
+          Message.Selection(
+            SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Word)
+          )
         )
       assertEquals(expectedMessages, fake.enqueued)
     }

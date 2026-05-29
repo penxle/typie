@@ -6,7 +6,7 @@ import {
   TOUCH_MENU_VIEWPORT_PADDING,
 } from './constants';
 import { tryHandleInteractiveHit } from './handlers/pointer';
-import type { InputModifiers, SelectionEndpoints } from '@typie/editor-ffi/browser';
+import type { InputModifiers, Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
 
 export type TouchMenuPosition = {
@@ -98,6 +98,8 @@ export class TouchGestureController {
   #pressStart: { x: number; y: number; time: number } | null = null;
   #lastClientPoint: { x: number; y: number } | null = null;
   #pendingDown: DeferredDown | null = null;
+  #dragAnchor: Position | null = null;
+  #baseSelection: Selection | undefined;
   #selectionHit = false;
   #longPressTimer: ReturnType<typeof setTimeout> | null = null;
   #suppressNativeContextMenuUntil = 0;
@@ -159,14 +161,10 @@ export class TouchGestureController {
     switch (this.#phase) {
       case 'pressing': {
         this.#clearLongPressTimer();
-        const downEnqueued = this.#flushDeferredDown();
-        if (downEnqueued) {
-          this.#editor.enqueue({ type: 'pointer', event: { type: 'up' } });
-        }
+        this.#flushDeferredDown();
         break;
       }
       case 'tapMoved': {
-        this.#editor.enqueue({ type: 'pointer', event: { type: 'up' } });
         break;
       }
       case 'longPressed': {
@@ -182,9 +180,6 @@ export class TouchGestureController {
   handlePointerCancel(e: PointerEvent): void {
     if (this.#activePointerId !== e.pointerId) return;
 
-    if (this.#phase === 'tapMoved') {
-      this.#editor.enqueue({ type: 'pointer', event: { type: 'cancel' } });
-    }
     this.#reset();
   }
 
@@ -211,10 +206,10 @@ export class TouchGestureController {
     }
 
     this.#editor.enqueue({
-      type: 'pointer',
-      event: { type: 'down', page: down.page, x: down.x, y: down.y, count: 2, modifiers: down.modifiers },
+      type: 'selection',
+      op: { type: 'select_unit_at', page: down.page, x: down.x, y: down.y, unit: 'word' },
     });
-    this.#editor.enqueue({ type: 'pointer', event: { type: 'up' } });
+    this.#editor.flush();
 
     const fallbackPoint = this.#lastClientPoint ? { x: this.#lastClientPoint.x, y: this.#lastClientPoint.y } : null;
 
@@ -276,16 +271,30 @@ export class TouchGestureController {
       return false;
     }
     this.#editor.enqueue({
-      type: 'pointer',
-      event: { type: 'down', page: down.page, x: down.x, y: down.y, count: down.count, modifiers: down.modifiers },
+      type: 'selection',
+      op: { type: 'set_at', page: down.page, x: down.x, y: down.y },
     });
+    this.#editor.flush();
+    const selection = this.#editor.selection;
+    this.#dragAnchor = selection?.anchor ?? null;
+    this.#baseSelection = undefined;
     return true;
   }
 
   #routeMoveToWasm(e: PointerEvent): void {
     const local = this.#editor.clientToLocal(e.clientX, e.clientY);
-    if (!local) return;
-    this.#editor.enqueue({ type: 'pointer', event: { type: 'move', page: local.page, x: local.x, y: local.y } });
+    if (!local || !this.#dragAnchor) return;
+    this.#editor.enqueue({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: this.#dragAnchor,
+        head_page: local.page,
+        head_x: local.x,
+        head_y: local.y,
+        base_selection: this.#baseSelection,
+      },
+    });
   }
 
   #clearLongPressTimer(): void {
@@ -302,6 +311,8 @@ export class TouchGestureController {
     this.#pressStart = null;
     this.#lastClientPoint = null;
     this.#pendingDown = null;
+    this.#dragAnchor = null;
+    this.#baseSelection = undefined;
     this.#selectionHit = false;
   }
 }

@@ -1,8 +1,12 @@
-import type { InteractiveHit, Rect } from '@typie/editor-ffi/browser';
+import type { InputModifiers, InteractiveHit, Position, Rect, Selection } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { EditorEventHandler } from '../types';
 
+const DRAG_START_THRESHOLD_PX = 5;
+
 const pointInRect = (x: number, y: number, r: Rect): boolean => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
+
+type LocalPoint = { page: number; x: number; y: number };
 
 export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, local: { x: number; y: number }): boolean => {
   const editMode = !editor.readOnly;
@@ -42,7 +46,7 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
 
   const { page, x, y } = local;
   const count = PointerState.of(editor).resolveClickCount(e);
-  const modifiers = { shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey };
+  const modifiers: InputModifiers = { shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey };
 
   const selectionHit = !editor.isSelectionCollapsed && editor.selectionHitTest(page, x, y);
   const nativeDragCandidate = !editor.isSelectionCollapsed && selectionHit;
@@ -57,9 +61,37 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
-  PointerState.of(editor).markPointerDown(e.pointerId, !nativeDragCandidate);
-  editor.enqueue({ type: 'pointer', event: { type: 'down', page, x, y, count, modifiers } });
-  editor.flush();
+  const state = PointerState.of(editor);
+  if (!nativeDragCandidate) {
+    if (count === 1 && modifiers.shift && editor.selection) {
+      editor.enqueue({
+        type: 'selection',
+        op: {
+          type: 'extend_to',
+          anchor: editor.selection.anchor,
+          head_page: page,
+          head_x: x,
+          head_y: y,
+          base_selection: undefined,
+        },
+      });
+    } else if (count === 1) {
+      editor.enqueue({ type: 'selection', op: { type: 'set_at', page, x, y } });
+    } else {
+      editor.enqueue({
+        type: 'selection',
+        op: {
+          type: 'select_unit_at',
+          page,
+          x,
+          y,
+          unit: count === 2 ? 'word' : 'paragraph',
+        },
+      });
+    }
+    editor.flush();
+  }
+  state.markPointerDown(editor, e.pointerId, !nativeDragCandidate, { page, x, y }, count, modifiers, nativeDragCandidate);
 };
 
 export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
@@ -80,7 +112,7 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
   }
 
   e.preventDefault();
-  PointerState.of(editor).enqueueMoveThrottled(editor, local.page, local.x, local.y);
+  PointerState.of(editor).enqueueMoveThrottled(editor, local);
 };
 
 export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
@@ -95,7 +127,7 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
   }
 
   state.releasePointer(e.currentTarget, e.pointerId);
-  editor.enqueue({ type: 'pointer', event: { type: 'up' } });
+  state.finishPointerUp(editor, e.pointerId);
   editor.flush();
   editor.endNativeDragAdmission({ restoreFocus: true });
 };
@@ -112,9 +144,13 @@ export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> 
   }
 
   state.releasePointer(e.currentTarget, e.pointerId);
-  editor.enqueue({ type: 'pointer', event: { type: 'cancel' } });
+  state.cancelPointer(e.pointerId);
   editor.flush();
   editor.endNativeDragAdmission({ restoreFocus: false });
+};
+
+export const markNativeSelectionDragStarted = (editor: Editor): void => {
+  PointerState.of(editor).markNativeDragStarted();
 };
 
 class PointerState {
@@ -125,10 +161,18 @@ class PointerState {
   #clickY = 0;
   #clickCount = 0;
 
-  #dragPending: { page: number; x: number; y: number } | null = null;
+  #dragPending: LocalPoint | null = null;
   #dragScheduled = false;
-  #activePointerId: number | null = null;
-  #capturedPointerId: number | null = null;
+  #session: {
+    pointerId: number;
+    captured: boolean;
+    down: LocalPoint;
+    anchor: Position | null;
+    baseSelection: Selection | undefined;
+    nativeDragCandidate: boolean;
+    nativeDragStarted: boolean;
+    dragging: boolean;
+  } | null = null;
 
   static of(editor: Editor): PointerState {
     let state = this.#instances.get(editor);
@@ -157,36 +201,97 @@ class PointerState {
     return this.#clickCount;
   }
 
-  enqueueMoveThrottled(editor: Editor, page: number, x: number, y: number) {
-    this.#dragPending = { page, x, y };
+  enqueueMoveThrottled(editor: Editor, point: LocalPoint) {
+    this.#dragPending = point;
 
     if (!this.#dragScheduled) {
       this.#dragScheduled = true;
       requestAnimationFrame(() => {
         this.#dragScheduled = false;
-        if (this.#dragPending) {
-          const { page, x, y } = this.#dragPending;
-          this.#dragPending = null;
-          editor.enqueue({ type: 'pointer', event: { type: 'move', page, x, y } });
-        }
+        this.#flushDragPending(editor);
       });
     }
   }
 
-  markPointerDown(pointerId: number, captured: boolean) {
-    this.#activePointerId = pointerId;
-    this.#capturedPointerId = captured ? pointerId : null;
+  markPointerDown(
+    editor: Editor,
+    pointerId: number,
+    captured: boolean,
+    down: LocalPoint,
+    count: number,
+    modifiers: InputModifiers,
+    nativeDragCandidate: boolean,
+  ) {
+    const selection = editor.selection;
+    const canExtend = !nativeDragCandidate && (count > 1 ? selection !== undefined : modifiers.shift || editor.isSelectionCollapsed);
+    this.#session = {
+      pointerId,
+      captured,
+      down,
+      anchor: canExtend ? (selection?.anchor ?? null) : null,
+      baseSelection: count > 1 && selection && !editor.isSelectionCollapsed ? selection : undefined,
+      nativeDragCandidate,
+      nativeDragStarted: false,
+      dragging: false,
+    };
   }
 
   hasActivePointer(pointerId: number): boolean {
-    return this.#activePointerId === pointerId;
+    return this.#session?.pointerId === pointerId;
   }
 
   releasePointer(target: HTMLElement, pointerId: number): void {
-    if (this.#capturedPointerId === pointerId && target.hasPointerCapture(pointerId)) {
+    if (this.#session?.captured && this.#session.pointerId === pointerId && target.hasPointerCapture(pointerId)) {
       target.releasePointerCapture(pointerId);
     }
-    this.#activePointerId = null;
-    this.#capturedPointerId = null;
+  }
+
+  finishPointerUp(editor: Editor, pointerId: number): void {
+    const session = this.#session;
+    if (!session || session.pointerId !== pointerId) return;
+
+    this.#flushDragPending(editor);
+    if (session.nativeDragCandidate && !session.nativeDragStarted) {
+      editor.enqueue({ type: 'selection', op: { type: 'set_at', page: session.down.page, x: session.down.x, y: session.down.y } });
+    }
+    this.#session = null;
+  }
+
+  cancelPointer(pointerId: number): void {
+    if (this.#session?.pointerId !== pointerId) return;
+    this.#dragPending = null;
+    this.#session = null;
+  }
+
+  markNativeDragStarted(): void {
+    if (this.#session?.nativeDragCandidate) {
+      this.#session.nativeDragStarted = true;
+    }
+  }
+
+  #flushDragPending(editor: Editor): void {
+    const point = this.#dragPending;
+    this.#dragPending = null;
+    if (!point || !this.#session?.anchor) return;
+
+    const { down } = this.#session;
+    const dx = point.x - down.x;
+    const dy = point.y - down.y;
+    if (!this.#session.dragging && point.page === down.page && dx * dx + dy * dy < DRAG_START_THRESHOLD_PX * DRAG_START_THRESHOLD_PX) {
+      return;
+    }
+
+    this.#session.dragging = true;
+    editor.enqueue({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: this.#session.anchor,
+        head_page: point.page,
+        head_x: point.x,
+        head_y: point.y,
+        base_selection: this.#session.baseSelection,
+      },
+    });
   }
 }

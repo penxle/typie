@@ -199,7 +199,6 @@ fn message_variants_are_enumerated() {
     };
     match msg {
         Message::Key { .. }
-        | Message::Pointer { .. }
         | Message::Insertion { .. }
         | Message::Deletion { .. }
         | Message::Selection { .. }

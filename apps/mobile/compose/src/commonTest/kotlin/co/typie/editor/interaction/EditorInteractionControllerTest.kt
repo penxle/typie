@@ -12,12 +12,12 @@ import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
-import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
@@ -253,18 +253,17 @@ class EditorInteractionControllerTest {
       assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
       assertTrue(host.focused)
       assertEquals(
-        listOf<Message>(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 1)),
-          Message.Pointer(EditorPointerEvent.Up),
-        ),
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
         fake.enqueued,
       )
     }
 
   @Test
-  fun `single tap dispatch preserves pointer input modifiers`() =
+  fun `shift single tap dispatch extends from current selection anchor`() =
     runTest(StandardTestDispatcher()) {
-      val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) })
+      val selection = Selection(anchor = Position("text", 1), head = Position("text", 3))
+      val fake =
+        FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -289,16 +288,15 @@ class EditorInteractionControllerTest {
 
       assertEquals(
         listOf<Message>(
-          Message.Pointer(
-            EditorPointerEvent.Down(
-              page = 0,
-              x = 10f,
-              y = 20f,
-              count = 1,
-              modifiers = InputModifiers(shift = true),
+          Message.Selection(
+            SelectionOp.ExtendTo(
+              anchor = selection.anchor,
+              headPage = 0,
+              headX = 10f,
+              headY = 20f,
+              baseSelection = null,
             )
-          ),
-          Message.Pointer(EditorPointerEvent.Up),
+          )
         ),
         fake.enqueued,
       )
@@ -451,10 +449,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       val expectedMessages: List<Message> =
-        listOf(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 1)),
-          Message.Pointer(EditorPointerEvent.Up),
-        )
+        listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)))
       assertEquals(expectedMessages, fake.enqueued)
       assertEquals(listOf(2L), host.requestedBringIntoViewVersions)
     }
@@ -467,6 +462,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -509,6 +506,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -611,6 +610,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -646,13 +647,11 @@ class EditorInteractionControllerTest {
       assertEquals(
         Message.Selection(
           SelectionOp.ExtendTo(
-            anchorPage = 0,
-            anchorX = 10f,
-            anchorY = 24f,
+            anchor = selection.anchor,
             headPage = 0,
             headX = 15f,
             headY = 20f,
-            initialSelection = selection,
+            baseSelection = selection,
           )
         ),
         fake.enqueued.last(),
@@ -667,6 +666,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -694,13 +695,11 @@ class EditorInteractionControllerTest {
 
       val extend =
         fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
-      assertEquals(0, extend.anchorPage)
-      assertEquals(40f, extend.anchorX)
-      assertEquals(24f, extend.anchorY)
+      assertEquals(selection.head, extend.anchor)
       assertEquals(0, extend.headPage)
       assertEquals(20f, extend.headX)
       assertEquals(44f, extend.headY)
-      assertNull(extend.initialSelection)
+      assertNull(extend.baseSelection)
       assertEquals(Offset(20f, 44f), controller.magnifierPosition)
 
       assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.From))
@@ -717,6 +716,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -741,12 +742,10 @@ class EditorInteractionControllerTest {
 
       val extend =
         fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
-      assertEquals(0, extend.anchorPage)
-      assertEquals(10f, extend.anchorX)
-      assertEquals(24f, extend.anchorY)
+      assertEquals(endpoints.fromPosition, extend.anchor)
       assertEquals(50f, extend.headX)
       assertEquals(44f, extend.headY)
-      assertNull(extend.initialSelection)
+      assertNull(extend.baseSelection)
 
       assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
@@ -761,6 +760,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -797,6 +798,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -837,6 +840,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -876,6 +881,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -906,15 +913,49 @@ class EditorInteractionControllerTest {
       runCurrent()
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
-      assertEquals(0, extend.anchorPage)
-      assertEquals(10f, extend.anchorX)
-      assertEquals(24f, extend.anchorY)
+      assertEquals(endpoints.fromPosition, extend.anchor)
       assertEquals(0, extend.headPage)
       assertEquals(50f, extend.headX)
       assertEquals(70f, extend.headY)
-      assertNull(extend.initialSelection)
+      assertNull(extend.baseSelection)
 
       assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+    }
+
+  @Test
+  fun `selection from handle drag anchors opposite document endpoint for reverse selection`() =
+    runTest(StandardTestDispatcher()) {
+      val selection = Selection(anchor = Position("text", 5), head = Position("text", 0))
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val down = Offset(12f, 24f)
+
+      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.From, down))
+      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.From, down))
+      assertTrue(
+        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.From, Offset(16f, 30f))
+      )
+
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(endpoints.toPosition, extend.anchor)
+      assertNull(extend.baseSelection)
     }
 
   @Test
@@ -1138,6 +1179,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -1165,20 +1208,22 @@ class EditorInteractionControllerTest {
 
       val extend =
         fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
-      assertEquals(selection, extend.initialSelection)
+      assertEquals(selection, extend.baseSelection)
       assertEquals(18f, extend.headX)
     }
 
   @Test
   fun `double tap drag can shrink back to the initial selected word range`() =
     runTest(StandardTestDispatcher()) {
-      val initialSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val baseSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
       val expandedSelection = Selection(anchor = Position("text", 0), head = Position("text", 12))
-      var currentSelection = initialSelection
+      var currentSelection = baseSelection
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(
@@ -1212,18 +1257,18 @@ class EditorInteractionControllerTest {
       controller.onPointerMove(pointerId = 2L, position = start + Offset(5f, 0f), nowMillis = 150L)
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
-      assertEquals(initialSelection, extend.initialSelection)
+      assertEquals(baseSelection, extend.baseSelection)
       assertEquals(15f, extend.headX)
     }
 
   @Test
   fun `double tap drag edge auto-scroll keeps materialized initial selection`() =
     runTest(StandardTestDispatcher()) {
-      val initialSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val baseSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
       val endpoints = selectionEndpoints()
       val fake =
         FakeFfiEditor(
-          selectionProvider = { initialSelection },
+          selectionProvider = { baseSelection },
           selectionEndpointsProvider = { endpoints },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -1255,9 +1300,8 @@ class EditorInteractionControllerTest {
       runCurrent()
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
-      assertEquals(initialSelection, extend.initialSelection)
-      assertEquals(10f, extend.anchorX)
-      assertEquals(24f, extend.anchorY)
+      assertEquals(baseSelection, extend.baseSelection)
+      assertEquals(baseSelection.anchor, extend.anchor)
       assertEquals(22f, extend.headX)
       assertEquals(70f, extend.headY)
 
@@ -1300,8 +1344,9 @@ class EditorInteractionControllerTest {
       assertEquals(start, controller.magnifierPosition)
       assertEquals(
         listOf<Message>(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 2)),
-          Message.Pointer(EditorPointerEvent.Up),
+          Message.Selection(
+            SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Word)
+          )
         ),
         fake.enqueued,
       )
@@ -1319,7 +1364,7 @@ class EditorInteractionControllerTest {
       )
 
       val extend = (fake.enqueued.last() as Message.Selection).op as SelectionOp.ExtendTo
-      assertEquals(wordSelection, extend.initialSelection)
+      assertEquals(wordSelection, extend.baseSelection)
       assertEquals(22f, extend.headX)
       assertEquals(start + Offset(12f, -6f), controller.magnifierPosition)
 
@@ -1423,8 +1468,9 @@ class EditorInteractionControllerTest {
       assertEquals(EditorInteractionMode.LongPressWordSelecting, controller.interactionMode)
       assertEquals(
         listOf<Message>(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 10f, y = 20f, count = 2)),
-          Message.Pointer(EditorPointerEvent.Up),
+          Message.Selection(
+            SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Word)
+          )
         ),
         fake.enqueued,
       )
@@ -1462,13 +1508,9 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       assertEquals(
-        listOf<Message>(
-          Message.Pointer(EditorPointerEvent.Down(page = 0, x = 22f, y = 14f, count = 1)),
-          Message.Pointer(EditorPointerEvent.Up),
-        ),
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 22f, y = 14f))),
         fake.enqueued,
       )
-      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
     }
 
   @Test
@@ -1756,6 +1798,8 @@ class EditorInteractionControllerTest {
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+          fromPosition = Position("text", 0),
+          toPosition = Position("text", 5),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -1914,6 +1958,8 @@ class EditorInteractionControllerTest {
       SelectionEndpoints(
         from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
         to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+        fromPosition = Position("text", 0),
+        toPosition = Position("text", 5),
       )
 
     fun testEdgeAutoScrollViewport(rect: ComposeRect): EditorEdgeAutoScrollViewport =

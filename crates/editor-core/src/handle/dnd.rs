@@ -1,7 +1,7 @@
+use crate::dnd::DndState;
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
-use crate::interaction::InteractionState;
 use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifiers};
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
@@ -15,26 +15,24 @@ enum SelectionAfterDrop {
 }
 
 pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> {
-    let previous_drop_target = editor.interaction.drop_target();
+    let previous_drop_target = editor.dnd.drop_target();
     let result = match op {
         DndOp::StartInternalSelection => {
-            editor.interaction = editor
+            editor.dnd = editor
                 .state
                 .selection
                 .as_ref()
                 .filter(|selection| !selection.is_collapsed())
-                .map_or(InteractionState::Idle, |source| {
-                    InteractionState::InternalDnd {
-                        source: StableSelection::freeze(source, &editor.state.doc),
-                        drop_target: None,
-                    }
+                .map_or(DndState::Idle, |source| DndState::InternalDnd {
+                    source: StableSelection::freeze(source, &editor.state.doc),
+                    drop_target: None,
                 });
             Ok(())
         }
         DndOp::EnterExternal { payload } => {
-            if !matches!(&editor.interaction, InteractionState::ExternalDnd { payload: active, .. } if *active == payload)
+            if !matches!(&editor.dnd, DndState::ExternalDnd { payload: active, .. } if *active == payload)
             {
-                editor.interaction = InteractionState::ExternalDnd {
+                editor.dnd = DndState::ExternalDnd {
                     payload,
                     drop_target: None,
                 };
@@ -47,21 +45,18 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             y,
             modifiers,
         } => {
-            let internal_source =
-                if let InteractionState::InternalDnd { source, .. } = &editor.interaction {
-                    let selection = source.thaw(&editor.state.doc);
-                    (!selection.is_collapsed()).then_some(selection)
-                } else {
-                    None
-                };
-            if internal_source.is_none()
-                && matches!(&editor.interaction, InteractionState::InternalDnd { .. })
-            {
-                editor.interaction = InteractionState::Idle;
+            let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
+                let selection = source.thaw(&editor.state.doc);
+                (!selection.is_collapsed()).then_some(selection)
+            } else {
+                None
+            };
+            if internal_source.is_none() && matches!(&editor.dnd, DndState::InternalDnd { .. }) {
+                editor.dnd = DndState::Idle;
             }
 
-            let target = match editor.interaction.clone() {
-                InteractionState::InternalDnd { .. } => editor
+            let target = match editor.dnd.clone() {
+                DndState::InternalDnd { .. } => editor
                     .view
                     .drop_target_at(&editor.state.doc, page, x, y)
                     .filter(|target| {
@@ -76,7 +71,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                                 )
                         })
                     }),
-                InteractionState::ExternalDnd { payload, .. } => editor
+                DndState::ExternalDnd { payload, .. } => editor
                     .view
                     .drop_target_at(&editor.state.doc, page, x, y)
                     .filter(|target| {
@@ -90,25 +85,24 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                     }),
                 _ => None,
             };
-            editor.interaction.set_drop_target(target);
+            editor.dnd.set_drop_target(target);
             Ok(())
         }
         DndOp::Drop {
             payload, modifiers, ..
         } => {
-            let internal_source =
-                if let InteractionState::InternalDnd { source, .. } = &editor.interaction {
-                    let selection = source.thaw(&editor.state.doc);
-                    (!selection.is_collapsed()).then_some(selection)
-                } else {
-                    None
-                };
-            let accepts_payload = match (&editor.interaction, &payload) {
-                (InteractionState::InternalDnd { .. }, DndDropPayload::InternalSelection) => {
+            let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
+                let selection = source.thaw(&editor.state.doc);
+                (!selection.is_collapsed()).then_some(selection)
+            } else {
+                None
+            };
+            let accepts_payload = match (&editor.dnd, &payload) {
+                (DndState::InternalDnd { .. }, DndDropPayload::InternalSelection) => {
                     internal_source.is_some()
                 }
                 (
-                    InteractionState::ExternalDnd { .. },
+                    DndState::ExternalDnd { .. },
                     DndDropPayload::Text { .. } | DndDropPayload::Files { .. },
                 ) => true,
                 _ => false,
@@ -116,7 +110,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             let target = if accepts_payload {
                 match (&payload, internal_source.as_ref()) {
                     (DndDropPayload::InternalSelection, Some(source)) => {
-                        editor.interaction.drop_target().filter(|target| {
+                        editor.dnd.drop_target().filter(|target| {
                             !position_inside_selection(&editor.state.doc, target.position, source)
                                 && can_apply_drop(
                                     editor,
@@ -127,7 +121,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                                 )
                         })
                     }
-                    _ => editor.interaction.drop_target().filter(|target| {
+                    _ => editor.dnd.drop_target().filter(|target| {
                         can_apply_drop(editor, target.position, payload.clone(), modifiers, None)
                     }),
                 }
@@ -139,27 +133,27 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             } else {
                 Ok(())
             };
-            editor.interaction = InteractionState::Idle;
+            editor.dnd = DndState::Idle;
             result
         }
         DndOp::Leave => {
-            match &mut editor.interaction {
-                InteractionState::InternalDnd { drop_target, .. } => {
+            match &mut editor.dnd {
+                DndState::InternalDnd { drop_target, .. } => {
                     *drop_target = None;
                 }
-                InteractionState::ExternalDnd { .. } => {
-                    editor.interaction = InteractionState::Idle;
+                DndState::ExternalDnd { .. } => {
+                    editor.dnd = DndState::Idle;
                 }
                 _ => {}
             }
             Ok(())
         }
         DndOp::End => {
-            editor.interaction = InteractionState::Idle;
+            editor.dnd = DndState::Idle;
             Ok(())
         }
     };
-    if editor.interaction.drop_target() != previous_drop_target {
+    if editor.dnd.drop_target() != previous_drop_target {
         editor.push_event(EditorEvent::RenderInvalidated);
     }
     result
