@@ -218,6 +218,11 @@
     cellSelectionButtonFixed = { left: r.left + centerX, top: r.top + bottomY + 4 };
   }
 
+  function syncFixedPositions() {
+    syncToolbarFixed();
+    syncCellSelectionButtonFixed();
+  }
+
   $effect(() => {
     void overlay.bounds;
     void overlay.is_cell_selection;
@@ -225,16 +230,27 @@
     void overlay.cell_selection_col_start;
     void overlay.cell_selection_col_end;
     void isActive;
-    syncToolbarFixed();
-    syncCellSelectionButtonFixed();
-    const scrollEl = editor?.scrollContainerEl;
-    if (!scrollEl) return;
-    const onScroll = () => {
-      syncToolbarFixed();
-      syncCellSelectionButtonFixed();
+    syncFixedPositions();
+
+    const onLayoutChange = () => {
+      syncFixedPositions();
     };
-    scrollEl.addEventListener('scroll', onScroll, { passive: true });
-    return () => scrollEl.removeEventListener('scroll', onScroll);
+
+    window.addEventListener('resize', onLayoutChange);
+
+    const scrollEl = editor?.scrollContainerEl;
+    scrollEl?.addEventListener('scroll', onLayoutChange, { passive: true });
+
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(onLayoutChange);
+    if (scrollEl) {
+      resizeObserver?.observe(scrollEl);
+    }
+
+    return () => {
+      window.removeEventListener('resize', onLayoutChange);
+      scrollEl?.removeEventListener('scroll', onLayoutChange);
+      resizeObserver?.disconnect();
+    };
   });
   const isAlignButtonVisible = $derived(!Number.isFinite(overlay.proportion) || overlay.proportion < 1 - 0.001);
 
