@@ -1664,6 +1664,89 @@ mod tests {
     }
 
     #[test]
+    fn arrow_right_from_empty_paragraph_selection_before_image_selects_image() {
+        let (state, r, ..) = state! {
+            doc {
+                r: root {
+                    image
+                    paragraph {}
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        );
+
+        let s = editor.state().selection.expect("selection exists in test");
+        assert_eq!(
+            s.anchor,
+            Position {
+                node_id: r,
+                offset: 2,
+                affinity: editor_state::Affinity::Downstream,
+            },
+        );
+        assert_eq!(
+            s.head,
+            Position {
+                node_id: r,
+                offset: 3,
+                affinity: editor_state::Affinity::Upstream,
+            },
+        );
+    }
+
+    #[test]
+    fn arrow_down_from_empty_paragraph_selection_before_image_selects_image() {
+        let (state, r, ..) = state! {
+            doc {
+                r: root {
+                    image
+                    paragraph {}
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+
+        let s = editor.state().selection.expect("selection exists in test");
+        assert_eq!(
+            s.anchor,
+            Position {
+                node_id: r,
+                offset: 2,
+                affinity: editor_state::Affinity::Downstream,
+            },
+        );
+        assert_eq!(
+            s.head,
+            Position {
+                node_id: r,
+                offset: 3,
+                affinity: editor_state::Affinity::Upstream,
+            },
+        );
+    }
+
+    #[test]
     fn arrow_left_from_second_fold_node_selection_enters_between_gap() {
         // Backward from a non-leading selected unit hits the
         // else-if-backward between-gap branch (mirror of the forward

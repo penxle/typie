@@ -31,9 +31,7 @@ fn collect_lines<'a>(node: &'a LayoutNode, pos: &Position, out: &mut Vec<&'a Lay
             // For any interior position it stays transparent and recurses, so
             // editing/navigation inside the block is unaffected.
             if let Some(nv) = b.nav
-                && nv.parent_id == pos.node_id
-                && pos.offset >= nv.index
-                && pos.offset <= nv.index + 1
+                && position_attaches_to_child(pos, nv.parent_id, nv.index)
             {
                 out.push(node);
                 return;
@@ -68,11 +66,21 @@ fn collect_lines<'a>(node: &'a LayoutNode, pos: &Position, out: &mut Vec<&'a Lay
             }
         }
         LayoutContent::Atom(a) => {
-            if a.parent_id == pos.node_id && pos.offset >= a.index && pos.offset <= a.index + 1 {
+            if position_attaches_to_child(pos, a.parent_id, a.index) {
                 out.push(node);
             }
         }
         LayoutContent::Spacing(_) => {}
+    }
+}
+
+fn position_attaches_to_child(pos: &Position, parent_id: NodeId, index: usize) -> bool {
+    if pos.node_id != parent_id {
+        return false;
+    }
+    match pos.affinity {
+        Affinity::Downstream => pos.offset == index,
+        Affinity::Upstream => index.checked_add(1) == Some(pos.offset),
     }
 }
 
