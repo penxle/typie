@@ -98,7 +98,7 @@ export class Editor {
 
   #viewport!: Viewport;
 
-  inputEl = $state<HTMLInputElement>();
+  inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
   scrollContainerEl = $state<HTMLDivElement>();
 

@@ -7,7 +7,7 @@
   import { IME_CONTEXT_AFTER_LIMIT, IME_CONTEXT_BEFORE_LIMIT, normalizeImeContext } from '../input/ime-context';
   import { ImeInputAdapter } from '../input/ime-input-adapter';
   import type { Message } from '@typie/editor-ffi/browser';
-  import type { ImeContext } from '../input/ime-context';
+  import type { ImeContext, ImeTextInput } from '../input/ime-context';
 
   const { editor } = getEditorContext();
 
@@ -50,12 +50,25 @@
 </script>
 
 {#if editor}
-  <input
+  <textarea
     bind:this={editor.inputEl}
-    class={css({ position: 'absolute', left: '0', top: '0', width: '1px', height: '[1em]', opacity: '0', pointerEvents: 'none' })}
-    onbeforeinput={(e) => inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: HTMLInputElement })}
+    class={css({
+      position: 'absolute',
+      left: '0',
+      top: '0',
+      width: '1px',
+      height: '[1em]',
+      opacity: '0',
+      pointerEvents: 'none',
+      resize: 'none',
+      overflow: 'hidden',
+    })}
+    autocapitalize="off"
+    autocomplete="off"
+    autocorrect="off"
+    onbeforeinput={(e) => inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput })}
     oncompositionend={() => inputAdapter.handleCompositionEnd()}
-    oncompositionstart={(e) => inputAdapter.handleCompositionStart(e as CompositionEvent & { currentTarget: HTMLInputElement })}
+    oncompositionstart={(e) => inputAdapter.handleCompositionStart(e as CompositionEvent & { currentTarget: ImeTextInput })}
     oncompositionupdate={(e) => inputAdapter.handleCompositionUpdate(e)}
     oncopy={handle(editor, handleCopy)}
     oncut={handle(editor, handleCut)}
@@ -63,5 +76,6 @@
     oninput={(e) => inputAdapter.handleInput(e)}
     onkeydown={handle(editor, handleKeyDown)}
     onpaste={handle(editor, handlePaste)}
-  />
+    spellcheck={false}
+  ></textarea>
 {/if}

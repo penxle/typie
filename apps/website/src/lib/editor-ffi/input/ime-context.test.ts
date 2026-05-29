@@ -81,7 +81,7 @@ describe('web IME context', () => {
   });
 
   it('syncs the hidden input value and DOM selection from flat offsets', () => {
-    const input = document.createElement('input');
+    const input = document.createElement('textarea');
 
     syncInputElementToContext(input, {
       text: 'a😀b',
@@ -96,7 +96,7 @@ describe('web IME context', () => {
   });
 
   it('syncs an empty paragraph cursor without collapsing it to previous text', () => {
-    const input = document.createElement('input');
+    const input = document.createElement('textarea');
 
     syncInputElementToContext(input, {
       text: '\u2028prev\u2029\u2028\u2029',
@@ -111,7 +111,7 @@ describe('web IME context', () => {
   });
 
   it('reads DOM selection as absolute flat offsets', () => {
-    const input = document.createElement('input');
+    const input = document.createElement('textarea');
     input.value = 'a😀b';
     input.setSelectionRange(1, 3);
 
@@ -120,7 +120,7 @@ describe('web IME context', () => {
   });
 
   it('updates local context from DOM input and preserves the supplied composing range', () => {
-    const input = document.createElement('input');
+    const input = document.createElement('textarea');
     input.value = 'aXb';
     input.setSelectionRange(2, 2);
 

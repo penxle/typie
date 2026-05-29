@@ -1,6 +1,7 @@
+import type { ImeTextInput } from '../input/ime-context';
 import type { EditorEventHandler } from '../types';
 
-export const handleCopy: EditorEventHandler<HTMLInputElement, ClipboardEvent> = (editor, e) => {
+export const handleCopy: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
   const payload = editor.copySelection();
   if (!payload) {
     return;
@@ -19,7 +20,7 @@ export const handleCopy: EditorEventHandler<HTMLInputElement, ClipboardEvent> = 
   e.preventDefault();
 };
 
-export const handleCut: EditorEventHandler<HTMLInputElement, ClipboardEvent> = (editor, e) => {
+export const handleCut: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
   const payload = editor.copySelection();
   if (!payload) {
     return;
@@ -39,7 +40,7 @@ export const handleCut: EditorEventHandler<HTMLInputElement, ClipboardEvent> = (
   editor.enqueue({ type: 'clipboard', op: { type: 'cut' } });
 };
 
-export const handlePaste: EditorEventHandler<HTMLInputElement, ClipboardEvent> = (editor, e) => {
+export const handlePaste: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
   const text = e.clipboardData?.getData('text/plain') ?? '';
   const html = e.clipboardData?.getData('text/html') || undefined;
 

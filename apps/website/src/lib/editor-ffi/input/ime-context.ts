@@ -1,7 +1,7 @@
 import { clamp } from '@typie/ui/utils';
 import type { Ime } from '@typie/editor-ffi/browser';
 
-export type ImeTextInput = HTMLInputElement | HTMLTextAreaElement;
+export type ImeTextInput = HTMLTextAreaElement;
 
 export const IME_CONTEXT_BEFORE_LIMIT = 64;
 export const IME_CONTEXT_AFTER_LIMIT = 64;

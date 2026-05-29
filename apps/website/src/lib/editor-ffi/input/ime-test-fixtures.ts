@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { ImeContext } from './ime-context';
+import type { ImeContext, ImeTextInput } from './ime-context';
 
 export const context = (text: string, windowStart = 20): ImeContext => ({
   text,
@@ -14,19 +14,19 @@ export const composingContext = (text: string, start: number, end: number, windo
 });
 
 export const beforeInputEvent = (
-  input: HTMLInputElement,
+  input: ImeTextInput,
   inputType: string,
   data: string | null = null,
-): InputEvent & { currentTarget: HTMLInputElement } =>
+): InputEvent & { currentTarget: ImeTextInput } =>
   ({
     currentTarget: input,
     inputType,
     data,
     preventDefault: vi.fn(),
-  }) as unknown as InputEvent & { currentTarget: HTMLInputElement };
+  }) as unknown as InputEvent & { currentTarget: ImeTextInput };
 
-export const inputEvent = (input: HTMLInputElement): Event & { currentTarget: HTMLInputElement } =>
-  ({ currentTarget: input }) as Event & { currentTarget: HTMLInputElement };
+export const inputEvent = (input: ImeTextInput): Event & { currentTarget: ImeTextInput } =>
+  ({ currentTarget: input }) as Event & { currentTarget: ImeTextInput };
 
-export const compositionEvent = (input: HTMLInputElement, data = ''): CompositionEvent & { currentTarget: HTMLInputElement } =>
-  ({ currentTarget: input, data }) as CompositionEvent & { currentTarget: HTMLInputElement };
+export const compositionEvent = (input: ImeTextInput, data = ''): CompositionEvent & { currentTarget: ImeTextInput } =>
+  ({ currentTarget: input, data }) as CompositionEvent & { currentTarget: ImeTextInput };

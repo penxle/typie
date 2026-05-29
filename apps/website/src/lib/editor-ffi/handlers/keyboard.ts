@@ -1,5 +1,6 @@
 import type { Message, Movement } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
+import type { ImeTextInput } from '../input/ime-context';
 import type { EditorEventHandler } from '../types';
 
 type KeyBindingModifier = 'shift' | 'mod' | 'ctrl' | 'alt';
@@ -245,7 +246,7 @@ const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {
   return true;
 };
 
-export const handleKeyDown: EditorEventHandler<HTMLInputElement, KeyboardEvent> = (editor, e) => {
+export const handleKeyDown: EditorEventHandler<ImeTextInput, KeyboardEvent> = (editor, e) => {
   if (e.isComposing) return;
 
   const binding = bindings.find((b) => matchBinding(b, e));

@@ -6,7 +6,7 @@ import { beforeInputEvent, compositionEvent, context, inputEvent } from './ime-t
 import type { Message } from '@typie/editor-ffi/browser';
 import type { ImeContext } from './ime-context';
 
-const createInput = () => document.createElement('input');
+const createInput = () => document.createElement('textarea');
 
 const createImeHarness = (initialContext: ImeContext) => {
   const input = createInput();
@@ -430,6 +430,41 @@ describe('ImeInputAdapter', () => {
         ops: [
           { type: 'set_selection', start: 20, end: 20 },
           { type: 'replace_selection', text: 'a' },
+        ],
+      },
+    ]);
+  });
+
+  it('preserves hard breaks in the hidden input when typing after a hard break', () => {
+    const input = createInput();
+    const messages: Message[] = [];
+    const adapter = new ImeInputAdapter({
+      readContext: () => ({
+        text: '\u2028123\n\u2029',
+        windowStart: 0,
+        selection: { start: 5, end: 5 },
+        composing: null,
+      }),
+      enqueue: (next) => messages.push(...next),
+    });
+
+    adapter.syncFromEditor(input);
+
+    expect(input.value).toBe('\u2028123\n\u2029');
+    expect(input.selectionStart).toBe(5);
+    expect(input.selectionEnd).toBe(5);
+
+    adapter.handleBeforeInput(beforeInputEvent(input, 'insertText', '1'));
+    input.value = '\u2028123\n1\u2029';
+    input.setSelectionRange(6, 6);
+    adapter.handleInput(inputEvent(input));
+
+    expect(messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 5, end: 5 },
+          { type: 'replace_selection', text: '1' },
         ],
       },
     ]);

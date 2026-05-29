@@ -11,7 +11,7 @@ import {
 } from './ime-context';
 import { normalizeLineBreakBeforeInput, readDomComposingReplacement, readDomInputDiff, textInputMessage } from './ime-normalizer';
 import type { Message } from '@typie/editor-ffi/browser';
-import type { ImeContext, ImeRange } from './ime-context';
+import type { ImeContext, ImeRange, ImeTextInput } from './ime-context';
 import type { DomInputDiff } from './ime-normalizer';
 
 type ImeInputAdapterDeps = {
@@ -76,7 +76,7 @@ const resolveActiveCompositionSyncContext = (local: ImeContext, incoming: ImeCon
   };
 };
 
-const readDuplicateCommittedPreeditTarget = (context: ImeContext, input: HTMLInputElement, text: string | null): ImeRange | null => {
+const readDuplicateCommittedPreeditTarget = (context: ImeContext, input: ImeTextInput, text: string | null): ImeRange | null => {
   if (!context.composing || text == null || readContextCompositionText(context) !== text) {
     return null;
   }
@@ -104,7 +104,7 @@ export class ImeInputAdapter {
     this.#deps = deps;
   }
 
-  syncFromEditor(input: HTMLInputElement): void {
+  syncFromEditor(input: ImeTextInput): void {
     const context = this.#deps.readContext();
     if (!context) {
       return;
@@ -137,7 +137,7 @@ export class ImeInputAdapter {
     syncInputElementToContext(input, context);
   }
 
-  handleBeforeInput(e: InputEvent & { currentTarget: HTMLInputElement }): void {
+  handleBeforeInput(e: InputEvent & { currentTarget: ImeTextInput }): void {
     if (this.#commitPending && (e.inputType === 'insertText' || e.inputType === 'insertCompositionText')) {
       this.#commitPending = false;
       this.#pendingEditIntent = null;
@@ -189,7 +189,7 @@ export class ImeInputAdapter {
     // input own the preedit buffer, then translate the mutated DOM value in input.
   }
 
-  handleInput(e: Event & { currentTarget: HTMLInputElement }): void {
+  handleInput(e: Event & { currentTarget: ImeTextInput }): void {
     const context = this.#currentContext(e.currentTarget, false);
     if (!context) {
       return;
@@ -209,7 +209,7 @@ export class ImeInputAdapter {
     this.#handleTextInputWithDiff(context, e.currentTarget, diff);
   }
 
-  #handleInputWithoutDiff(context: ImeContext, input: HTMLInputElement): void {
+  #handleInputWithoutDiff(context: ImeContext, input: ImeTextInput): void {
     const intent = this.#pendingEditIntent;
     this.#pendingEditIntent = null;
 
@@ -235,7 +235,7 @@ export class ImeInputAdapter {
     this.#context = updateContextFromInputElement(context, input, context.composing);
   }
 
-  #handleCompositionInputWithDiff(context: ImeContext, input: HTMLInputElement, diff: DomInputDiff): void {
+  #handleCompositionInputWithDiff(context: ImeContext, input: ImeTextInput, diff: DomInputDiff): void {
     if (this.#pendingCompositionText == null && isDuplicateCommittedPreeditDiff(context, diff)) {
       if (input.value !== context.text) {
         input.value = context.text;
@@ -258,7 +258,7 @@ export class ImeInputAdapter {
     this.#applyCompositionEdit(context, input, edit);
   }
 
-  #handleTextInputWithDiff(context: ImeContext, input: HTMLInputElement, diff: DomInputDiff): void {
+  #handleTextInputWithDiff(context: ImeContext, input: ImeTextInput, diff: DomInputDiff): void {
     const intent = this.#pendingEditIntent;
     this.#pendingEditIntent = null;
     this.#pendingCompositionTarget = null;
@@ -278,7 +278,7 @@ export class ImeInputAdapter {
     this.#context = updateContextFromInputElement(context, input, null);
   }
 
-  #applyCompositionEdit(context: ImeContext, input: HTMLInputElement, edit: ImeCompositionEdit): void {
+  #applyCompositionEdit(context: ImeContext, input: ImeTextInput, edit: ImeCompositionEdit): void {
     const composing = { start: edit.target.start, end: edit.target.start + codePointLength(edit.text) };
     const messages = textInputMessage([
       { type: 'set_composition', start: edit.target.start, end: edit.target.end },
@@ -295,7 +295,7 @@ export class ImeInputAdapter {
     this.#context = updateContextFromInputElement(context, input, composing);
   }
 
-  handleCompositionStart(e: CompositionEvent & { currentTarget: HTMLInputElement }): void {
+  handleCompositionStart(e: CompositionEvent & { currentTarget: ImeTextInput }): void {
     this.#clearCommitPending();
     this.#pendingCompositionText = null;
     this.#pendingCompositionTarget = null;
@@ -328,7 +328,7 @@ export class ImeInputAdapter {
     }
   }
 
-  #currentContext(input: HTMLInputElement, syncDom = true): ImeContext | null {
+  #currentContext(input: ImeTextInput, syncDom = true): ImeContext | null {
     if (this.#context) {
       return this.#context;
     }
