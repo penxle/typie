@@ -52,6 +52,14 @@ export type SpellcheckError = {
   explanation: string;
 };
 
+export type AiFeedback = {
+  id: string;
+  startText: string;
+  endText: string;
+  feedback: string;
+  category: string | null;
+};
+
 let wasmInitPromise: Promise<void> | null = null;
 
 function ensureWasmInitialized(): Promise<void> {
@@ -151,6 +159,10 @@ export class Editor {
   trackedRanges = $state<TrackedRange[]>([]);
   activeSpellcheckErrorId = $state<string | null>(null);
   #spellcheckDecorationsInstalled = false;
+
+  aiFeedbacks = $state<AiFeedback[]>([]);
+  activeAiFeedbackId = $state<string | null>(null);
+  #aiFeedbackDecorationsInstalled = false;
 
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
@@ -811,6 +823,33 @@ export class Editor {
     });
   }
 
+  installAiFeedbackDecorations(): void {
+    if (this.#aiFeedbackDecorationsInstalled) return;
+    this.#aiFeedbackDecorationsInstalled = true;
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'ai-feedback',
+        style: { background: 'bg.blue', background_radius: 2, background_inset: 2, underline: undefined },
+        enabled: true,
+        z_index: 0,
+      },
+    });
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'ai-feedback-active',
+        style: { background: 'bg.blue', background_radius: 2, background_inset: 0, underline: undefined },
+        enabled: true,
+        z_index: 1,
+      },
+    });
+  }
+
   #scrollToActiveMatch(): void {
     const idx = this.#searchActiveIdx;
     if (idx === undefined) return;
@@ -980,6 +1019,114 @@ export class Editor {
     this.activeSpellcheckErrorId = null;
   }
 
+  addAiFeedback(item: {
+    id: string;
+    selection: Selection;
+    startText: string;
+    endText: string;
+    feedback: string;
+    category: string | null;
+  }): void {
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'add',
+        id: item.id,
+        group: 'ai-feedback',
+        selection: item.selection,
+        metadata: '',
+      },
+    });
+    this.aiFeedbacks = [
+      ...this.aiFeedbacks,
+      {
+        id: item.id,
+        startText: item.startText,
+        endText: item.endText,
+        feedback: item.feedback,
+        category: item.category,
+      },
+    ];
+  }
+
+  removeAiFeedback(id: string): void {
+    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
+    this.aiFeedbacks = this.aiFeedbacks.filter((f) => f.id !== id);
+    if (this.activeAiFeedbackId === id) {
+      this.activeAiFeedbackId = null;
+    }
+  }
+
+  clearAiFeedbacks(): void {
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'ai-feedback' } });
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'ai-feedback-active' } });
+    this.aiFeedbacks = [];
+    this.activeAiFeedbackId = null;
+  }
+
+  setActiveAiFeedback(id: string | null): void {
+    if (this.activeAiFeedbackId === id) return;
+
+    const restoreToNormalGroup = (feedbackId: string) => {
+      const range = this.trackedRanges.find((r) => r.id === feedbackId);
+      if (!range || range.invalid) return;
+      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
+      if (!stable) return;
+      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: feedbackId } });
+      this.enqueue({
+        type: 'tracked_range',
+        op: { type: 'add_frozen', id: feedbackId, group: 'ai-feedback', selection: stable, metadata: '' },
+      });
+    };
+
+    const promoteToActiveGroup = (feedbackId: string): boolean => {
+      const range = this.trackedRanges.find((r) => r.id === feedbackId);
+      if (!range || range.invalid) return false;
+      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
+      if (!stable) return false;
+      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: feedbackId } });
+      this.enqueue({
+        type: 'tracked_range',
+        op: { type: 'add_frozen', id: feedbackId, group: 'ai-feedback-active', selection: stable, metadata: '' },
+      });
+      return true;
+    };
+
+    if (this.activeAiFeedbackId !== null) {
+      restoreToNormalGroup(this.activeAiFeedbackId);
+    }
+
+    this.activeAiFeedbackId = id;
+
+    if (id !== null) {
+      const ok = promoteToActiveGroup(id);
+      if (!ok) {
+        this.activeAiFeedbackId = null;
+        return;
+      }
+      this.scrollIntoView({ type: 'tracked_item', id });
+    }
+  }
+
+  #syncActiveAiFeedbackFromSelection(): void {
+    const cursor = this.#cursor;
+    if (!cursor) return;
+
+    const cx = cursor.caret.x;
+    const cy = cursor.line.y + cursor.line.height / 2;
+    const pageIdx = cursor.page_idx;
+
+    const hit =
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback-active')[0] ??
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback')[0];
+
+    if (hit) {
+      this.setActiveAiFeedback(hit.id);
+    } else if (this.activeAiFeedbackId !== null) {
+      this.setActiveAiFeedback(null);
+    }
+  }
+
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {
     const output = match(mode)
       .with('state', () => this.#wasm.inspect_state())
@@ -1024,6 +1171,7 @@ export class Editor {
         this.inputEl?.blur();
       }
       this.#syncActiveSpellcheckErrorFromSelection();
+      this.#syncActiveAiFeedbackFromSelection();
     }
 
     if (fields.includes('page_sizes')) {
@@ -1080,6 +1228,15 @@ export class Editor {
 
       if (this.activeSpellcheckErrorId !== null && !this.spellcheckErrors.some((e) => e.id === this.activeSpellcheckErrorId)) {
         this.activeSpellcheckErrorId = null;
+      }
+
+      this.aiFeedbacks = this.aiFeedbacks.filter((f) => {
+        const r = rangeById.get(f.id);
+        return r !== undefined && !r.invalid;
+      });
+
+      if (this.activeAiFeedbackId !== null && !this.aiFeedbacks.some((f) => f.id === this.activeAiFeedbackId)) {
+        this.activeAiFeedbackId = null;
       }
     }
 

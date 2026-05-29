@@ -4,7 +4,6 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon, RingSpinner } from '@typie/ui/components';
-  import { nanoid } from 'nanoid';
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
@@ -15,15 +14,6 @@
   import { graphql } from '$mearie';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { DocumentPanelV2_Ai_document$key, DocumentPanelV2_Ai_user$key } from '$mearie';
-
-  type AiFeedback = {
-    id: string;
-    startText: string;
-    endText: string;
-    feedback: string;
-    category: string | null;
-    active: boolean;
-  };
 
   type Props = {
     document$key: DocumentPanelV2_Ai_document$key;
@@ -64,24 +54,17 @@
   let checkFailed = $state(false);
   let listContainer = $state<HTMLElement>();
   let progress = $state<{ current: number; total: number; phase: string } | null>(null);
-
-  let aiFeedbacks = $state<AiFeedback[]>([]);
-  const activeFeedback = $derived(aiFeedbacks.find((v) => v.active));
-
-  let analysisVars = $state<{
-    text: string;
-    mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[];
-  } | null>(null);
+  let analysisText = $state<string | null>(null);
 
   createSubscription(
     graphql(`
-      subscription DocumentPanelV2_Ai_LiteraryAnalysisDocumentStream($text: String!, $mappings: [DocumentTextMappingInput!]!) {
-        literaryAnalysisDocumentStream(text: $text, mappings: $mappings) {
+      subscription DocumentPanelV2_Ai_LiteraryAnalysisDocumentStreamV2($text: String!) {
+        literaryAnalysisDocumentStreamV2(text: $text) {
           type
           feedback {
-            nodeId
-            startOffset
-            endOffset
+            id
+            start
+            end
             startText
             endText
             feedback
@@ -95,27 +78,24 @@
         }
       }
     `),
-    () => ({ text: analysisVars?.text ?? '', mappings: analysisVars?.mappings ?? [] }),
+    () => ({ text: analysisText ?? '' }),
     () => ({
-      skip: !analysisVars,
+      skip: !analysisText,
       onData: (data) => {
-        const payload = data.literaryAnalysisDocumentStream;
+        if (!editor) return;
+        const payload = data.literaryAnalysisDocumentStreamV2;
         if (payload.type === 'feedback' && payload.feedback) {
-          const item = payload.feedback;
-          const newId = nanoid();
-
-          aiFeedbacks = [
-            ...aiFeedbacks,
-            {
-              id: newId,
-              startText: item.startText,
-              endText: item.endText,
-              feedback: item.feedback,
-              category: item.category ?? null,
-              active: false,
-            },
-          ];
-
+          const fb = payload.feedback;
+          const selection = editor.proseToSelection(fb.start, fb.end);
+          if (!selection) return;
+          editor.addAiFeedback({
+            id: fb.id,
+            selection,
+            startText: fb.startText,
+            endText: fb.endText,
+            feedback: fb.feedback,
+            category: fb.category ?? null,
+          });
           scrollToBottom();
         } else if (payload.type === 'progress' && payload.progress) {
           progress = payload.progress;
@@ -127,6 +107,11 @@
           progress = null;
           checkFailed = true;
         }
+      },
+      onError: () => {
+        inflight = false;
+        progress = null;
+        checkFailed = true;
       },
     }),
   );
@@ -142,56 +127,83 @@
   };
 
   const runAnalysis = async () => {
-    if (inflight) return;
-
-    // v2 FFI: getTextWithMappings 미구현
-    console.warn('[v2] DocumentPanelAi: getTextWithMappings not available in v2 FFI');
+    if (!editor || inflight) return;
 
     inflight = true;
     hasChecked = true;
     checkFailed = false;
-    aiFeedbacks = [];
     progress = null;
 
-    analysisVars = { text: '', mappings: [] };
+    editor.clearAiFeedbacks();
+    editor.installAiFeedbackDecorations();
+
+    const text = editor.proseText();
+    if (!text.trim()) {
+      inflight = false;
+      analysisText = null;
+      return;
+    }
+
+    analysisText = null;
+    await tick();
+    analysisText = text;
   };
 
+  const cancelAnalysis = () => {
+    analysisText = null;
+    inflight = false;
+    progress = null;
+  };
+
+  const activeFeedback = $derived(
+    editor && editor.activeAiFeedbackId ? editor.aiFeedbacks.find((f) => f.id === editor.activeAiFeedbackId) : undefined,
+  );
+
   const setActiveFeedback = (feedbackId: string) => {
-    aiFeedbacks = aiFeedbacks.map((f) => ({ ...f, active: f.id === feedbackId }));
+    editor?.setActiveAiFeedback(feedbackId);
   };
 
   const removeFeedback = (feedbackId: string) => {
-    aiFeedbacks = aiFeedbacks.filter((f) => f.id !== feedbackId);
+    editor?.removeAiFeedback(feedbackId);
   };
 
   const handleKeyDown = (e: KeyboardEvent, feedbackId: string) => {
+    if (!editor) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       setActiveFeedback(feedbackId);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const currentIndex = aiFeedbacks.findIndex((f) => f.id === feedbackId);
-      const prevFeedback = aiFeedbacks[currentIndex - 1];
-      if (prevFeedback) {
-        setActiveFeedback(prevFeedback.id);
-        const prevElement = globalThis.document.querySelector(`[data-panel-ai-feedback="${prevFeedback.id}"]`) as HTMLElement;
-        prevElement?.focus();
+      const idx = editor.aiFeedbacks.findIndex((f) => f.id === feedbackId);
+      const prev = editor.aiFeedbacks[idx - 1];
+      if (prev) {
+        setActiveFeedback(prev.id);
+        const el = globalThis.document.querySelector(`[data-panel-ai-feedback="${prev.id}"]`) as HTMLElement | null;
+        el?.focus();
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const currentIndex = aiFeedbacks.findIndex((f) => f.id === feedbackId);
-      const nextFeedback = aiFeedbacks[currentIndex + 1];
-      if (nextFeedback) {
-        setActiveFeedback(nextFeedback.id);
-        const nextElement = globalThis.document.querySelector(`[data-panel-ai-feedback="${nextFeedback.id}"]`) as HTMLElement;
-        nextElement?.focus();
+      const idx = editor.aiFeedbacks.findIndex((f) => f.id === feedbackId);
+      const next = editor.aiFeedbacks[idx + 1];
+      if (next) {
+        setActiveFeedback(next.id);
+        const el = globalThis.document.querySelector(`[data-panel-ai-feedback="${next.id}"]`) as HTMLElement | null;
+        el?.focus();
       }
     }
   };
 
+  $effect(() => {
+    if (activeFeedback) {
+      const el = listContainer?.querySelector(`[data-panel-ai-feedback="${activeFeedback.id}"]`) as HTMLElement | null;
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  });
+
   onMount(() => {
     return () => {
-      analysisVars = null;
+      analysisText = null;
+      editor?.clearAiFeedbacks();
     };
   });
 </script>
@@ -221,7 +233,7 @@
   >
     <div class={flex({ alignItems: 'center', gap: '6px' })}>
       AI 피드백
-      {#if hasChecked && !checkFailed && aiFeedbacks.length > 0}
+      {#if editor && hasChecked && !checkFailed && editor.aiFeedbacks.length > 0}
         <div
           class={css({
             borderRadius: '4px',
@@ -233,12 +245,26 @@
             backgroundColor: 'accent.brand.subtle',
           })}
         >
-          {aiFeedbacks.length}
+          {editor.aiFeedbacks.length}
         </div>
       {/if}
     </div>
 
-    {#if !inflight && hasChecked && aiOptIn}
+    {#if inflight}
+      <button
+        class={css({
+          fontSize: '13px',
+          fontWeight: 'medium',
+          color: 'text.faint',
+          transition: 'common',
+          _hover: { color: 'text.subtle' },
+        })}
+        onclick={cancelAnalysis}
+        type="button"
+      >
+        취소
+      </button>
+    {:else if hasChecked && aiOptIn}
       <button
         class={css({
           fontSize: '13px',
@@ -335,14 +361,14 @@
         overflowY: 'auto',
       })}
     >
-      {#if !inflight && aiFeedbacks.length === 0}
+      {#if editor && !inflight && editor.aiFeedbacks.length === 0}
         <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '24px' })}>
           <Icon style={css.raw({ color: 'text.faint' })} icon={CircleCheckIcon} size={32} />
           <div class={css({ fontSize: '16px', color: 'text.faint' })}>피드백이 없습니다</div>
         </div>
       {/if}
 
-      {#each aiFeedbacks as feedback (feedback.id)}
+      {#each editor?.aiFeedbacks ?? [] as feedback (feedback.id)}
         <div
           class={css({
             position: 'relative',
