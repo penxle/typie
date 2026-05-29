@@ -710,10 +710,14 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                 if delta.start_tokens > 0 {
                     let doc = tr.doc();
                     if let Some(pos) = ResolvedPosition::from_flat(&doc, delta.replace_start) {
+                        let previous_selection = tr.selection();
                         commands::set_selection(tr, Selection::collapsed((&pos).into()))?;
-                    }
-                    for _ in 0..delta.start_tokens {
-                        structural_backward(tr)?;
+                        for _ in 0..delta.start_tokens {
+                            if !structural_backward(tr)? {
+                                tr.set_selection(previous_selection)?;
+                                break;
+                            }
+                        }
                     }
                 }
 
@@ -1632,6 +1636,46 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("aaaaa") } } }
             selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_all_with_same_text_places_cursor_after_inserted_text() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("a") } } }
+            selection: (t1, 1)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::SetSelection { start: 0, end: 3 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("a") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_nested_full_selection_keeps_cursor_after_inserted_text() {
+        let (s, ..) = state! {
+            doc { root { blockquote { paragraph { t1: text("a") } } } }
+            selection: (t1, 1)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::SetSelection { start: 0, end: 5 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { blockquote { paragraph { t1: text("a") } } } }
+            selection: (t1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
