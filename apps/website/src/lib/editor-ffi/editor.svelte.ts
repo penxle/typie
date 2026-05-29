@@ -760,13 +760,15 @@ export class Editor {
     if (idx === undefined) return;
     const match = this.#searchMatches[idx];
     if (!match) return;
+    const live = this.#wasm.tracked_ranges('search-match').find((r) => r.id === match.id);
+    const selection = live && !live.invalid ? { anchor: live.anchor, head: live.head } : match.selection;
     this.enqueue({
       type: 'tracked_range',
       op: {
         type: 'add',
         id: `search-match-active:${match.id}`,
         group: 'search-match-active',
-        selection: match.selection,
+        selection,
         metadata: '',
       },
     });
