@@ -60,6 +60,10 @@
     }),
   );
   const canEdit = $derived(!ctx.editor?.readOnly);
+  const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
+  const isOnlySelectedElement = $derived(
+    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node_id,
+  );
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
@@ -74,7 +78,7 @@
   });
 
   $effect(() => {
-    pickerOpened = element.is_selected && stage === 'empty';
+    pickerOpened = isOnlySelectedElement && stage === 'empty';
   });
 
   $effect(() => {

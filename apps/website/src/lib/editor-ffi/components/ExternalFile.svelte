@@ -35,6 +35,10 @@
   const hasFile = $derived(!!asset || stage === 'uploading');
   const displayName = $derived(asset?.name || inflight?.name || '파일');
   const displaySize = $derived(asset ? formatFileSize(Number(asset.size)) : undefined);
+  const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
+  const isOnlySelectedElement = $derived(
+    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node_id,
+  );
 
   let pickerOpened = $state(false);
 
@@ -45,7 +49,7 @@
   });
 
   $effect(() => {
-    pickerOpened = element.is_selected && stage === 'empty';
+    pickerOpened = isOnlySelectedElement && stage === 'empty';
   });
 
   const deleteNode = () => {

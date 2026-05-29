@@ -31,7 +31,11 @@
   let inflight = $state(false);
   let error = $state(false);
 
-  const showUrlInput = $derived(element.is_selected && !embedId && !inflight && canEdit);
+  const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
+  const isOnlySelectedElement = $derived(
+    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node_id,
+  );
+  const showUrlInput = $derived(isOnlySelectedElement && !embedId && !inflight && canEdit);
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
