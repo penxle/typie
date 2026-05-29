@@ -155,6 +155,78 @@ describe('ImeInputAdapter', () => {
     ]);
   });
 
+  it('emits a replacement when the entire flat text is replaced with the same typed text', () => {
+    const input = document.createElement('input');
+    const messages: Message[] = [];
+    const adapter = new ImeInputAdapter({
+      readContext: () => ({
+        text: '\u2028a\u2029',
+        windowStart: 0,
+        selection: { start: 0, end: 3 },
+        composing: null,
+      }),
+      enqueue: (next) => messages.push(...next),
+    });
+
+    adapter.syncFromEditor(input);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(3);
+
+    const beforeInput = beforeInputEvent(input, 'insertText', 'a');
+    adapter.handleBeforeInput(beforeInput);
+    expect(beforeInput.preventDefault).not.toHaveBeenCalled();
+
+    input.value = 'a';
+    input.setSelectionRange(1, 1);
+    adapter.handleInput(inputEvent(input));
+
+    expect(messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 0, end: 3 },
+          { type: 'replace_selection', text: 'a' },
+        ],
+      },
+    ]);
+  });
+
+  it('emits a replacement when selected text is replaced with the same typed text', () => {
+    const input = document.createElement('input');
+    const messages: Message[] = [];
+    const adapter = new ImeInputAdapter({
+      readContext: () => ({
+        text: '\u2028a\u2029',
+        windowStart: 0,
+        selection: { start: 1, end: 2 },
+        composing: null,
+      }),
+      enqueue: (next) => messages.push(...next),
+    });
+
+    adapter.syncFromEditor(input);
+    expect(input.selectionStart).toBe(1);
+    expect(input.selectionEnd).toBe(2);
+
+    const beforeInput = beforeInputEvent(input, 'insertText', 'a');
+    adapter.handleBeforeInput(beforeInput);
+    expect(beforeInput.preventDefault).not.toHaveBeenCalled();
+
+    input.value = '\u2028a\u2029';
+    input.setSelectionRange(2, 2);
+    adapter.handleInput(inputEvent(input));
+
+    expect(messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 1, end: 2 },
+          { type: 'replace_selection', text: 'a' },
+        ],
+      },
+    ]);
+  });
+
   it('prefers the native replacement diff when beforeinput selection points at the next character', () => {
     const input = document.createElement('input');
     const messages: Message[] = [];
@@ -413,6 +485,63 @@ describe('ImeInputAdapter', () => {
         ops: [
           { type: 'set_composition', start: 1, end: 2 },
           { type: 'compose', text: '하' },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps repeated Korean preedit text growing after replacing selected text', () => {
+    const input = document.createElement('input');
+    const messages: Message[] = [];
+    const adapter = new ImeInputAdapter({
+      readContext: () => ({
+        text: '\u2028ㅁㅁㅁ\u2029',
+        windowStart: 0,
+        selection: { start: 1, end: 4 },
+        composing: null,
+      }),
+      enqueue: (next) => messages.push(...next),
+    });
+
+    adapter.syncFromEditor(input);
+    adapter.handleCompositionStart(compositionEvent(input));
+
+    adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
+    input.value = '\u2028ㅁ\u2029';
+    input.setSelectionRange(2, 2);
+    adapter.handleInput(inputEvent(input));
+
+    adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
+    input.value = '\u2028ㅁㅁ\u2029';
+    input.setSelectionRange(3, 3);
+    adapter.handleInput(inputEvent(input));
+
+    adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
+    input.value = '\u2028ㅁㅁㅁ\u2029';
+    input.setSelectionRange(4, 4);
+    adapter.handleInput(inputEvent(input));
+
+    expect(input.value).toBe('\u2028ㅁㅁㅁ\u2029');
+    expect(messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 4 },
+          { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 2 },
+          { type: 'compose', text: 'ㅁㅁ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 3 },
+          { type: 'compose', text: 'ㅁㅁㅁ' },
         ],
       },
     ]);

@@ -1,6 +1,7 @@
 import {
   canPreserveNativeInputOnEditorSync,
   codePointLength,
+  codePointSlice,
   flatOffsetToUtf16Index,
   readInputUtf16Selection,
   replaceContextRange,
@@ -30,6 +31,7 @@ export class ImeInputAdapter {
   #context: ImeContext | null = null;
   #pendingEditIntent: ImeEditIntent | null = null;
   #pendingCompositionText: string | null = null;
+  #pendingCompositionTarget: ImeRange | null = null;
   #compositionActive = false;
   #commitPending = false;
 
@@ -60,6 +62,7 @@ export class ImeInputAdapter {
       this.#commitPending = false;
       this.#pendingEditIntent = null;
       this.#pendingCompositionText = null;
+      this.#pendingCompositionTarget = null;
       e.preventDefault();
       return;
     }
@@ -76,6 +79,10 @@ export class ImeInputAdapter {
 
     if (this.#compositionActive && e.inputType === 'insertCompositionText') {
       this.#pendingCompositionText = e.data;
+      this.#pendingCompositionTarget =
+        context && !context.composing
+          ? utf16SelectionToFlatRange(context.text, context.windowStart, readInputUtf16Selection(e.currentTarget))
+          : null;
     }
 
     this.#pendingEditIntent =
@@ -99,13 +106,28 @@ export class ImeInputAdapter {
 
     const diff = readDomInputDiff(context, e.currentTarget.value);
     if (!diff) {
+      const intent = this.#pendingEditIntent;
+      this.#pendingEditIntent = null;
+      if (intent && !isCollapsedRange(intent.replacementCandidate)) {
+        const messages = textInputMessage([
+          { type: 'set_selection', start: intent.replacementCandidate.start, end: intent.replacementCandidate.end },
+          { type: 'replace_selection', text: intent.text },
+        ]);
+        this.#deps.enqueue(messages);
+      }
       this.#context = updateContextFromInputElement(context, e.currentTarget, context.composing);
       return;
     }
 
     if (this.#compositionActive) {
+      const pendingTarget = this.#pendingCompositionTarget;
+      this.#pendingCompositionTarget = null;
       const replacement = readDomComposingReplacement(context, e.currentTarget.value, diff);
-      const text = this.#pendingCompositionText ?? replacement.text;
+      if (pendingTarget && !context.composing) {
+        replacement.targetStart = pendingTarget.start;
+        replacement.targetEnd = pendingTarget.end;
+      }
+      const text = this.#compositionText(context, replacement);
       this.#pendingCompositionText = null;
       const composing = { start: replacement.targetStart, end: replacement.targetStart + codePointLength(text) };
       const messages = textInputMessage([
@@ -126,6 +148,7 @@ export class ImeInputAdapter {
 
     const intent = this.#pendingEditIntent;
     this.#pendingEditIntent = null;
+    this.#pendingCompositionTarget = null;
     const replacement =
       intent &&
       intent.inputType === 'insertText' &&
@@ -145,6 +168,7 @@ export class ImeInputAdapter {
   handleCompositionStart(e: CompositionEvent & { currentTarget: HTMLInputElement }): void {
     this.#clearCommitPending();
     this.#pendingCompositionText = null;
+    this.#pendingCompositionTarget = null;
     this.#compositionActive = true;
     this.#currentContext(e.currentTarget);
   }
@@ -156,6 +180,7 @@ export class ImeInputAdapter {
   handleCompositionEnd(): void {
     this.#compositionActive = false;
     this.#pendingCompositionText = null;
+    this.#pendingCompositionTarget = null;
     const hadComposition = this.#context?.composing != null;
     if (this.#context?.composing) {
       this.#context = {
@@ -196,5 +221,23 @@ export class ImeInputAdapter {
   #setCommitPending(): void {
     this.#commitPending = true;
     setTimeout(() => this.#clearCommitPending(), 0);
+  }
+
+  #compositionText(context: ImeContext, replacement: { text: string }): string {
+    const pending = this.#pendingCompositionText;
+    if (!pending || !context.composing) {
+      return pending ?? replacement.text;
+    }
+
+    const current = codePointSlice(
+      context.text,
+      context.composing.start - context.windowStart,
+      context.composing.end - context.windowStart,
+    );
+    if (replacement.text === `${current}${pending}` && current.endsWith(pending)) {
+      return replacement.text;
+    }
+
+    return pending;
   }
 }
