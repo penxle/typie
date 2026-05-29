@@ -108,6 +108,30 @@ export class ImeInputAdapter {
     if (!diff) {
       const intent = this.#pendingEditIntent;
       this.#pendingEditIntent = null;
+      if (this.#compositionActive) {
+        const pendingTarget = this.#pendingCompositionTarget;
+        this.#pendingCompositionTarget = null;
+        const text = this.#pendingCompositionText;
+        this.#pendingCompositionText = null;
+        const target = pendingTarget ?? context.composing;
+        if (target && text != null) {
+          const composing = { start: target.start, end: target.start + codePointLength(text) };
+          const messages = textInputMessage([
+            { type: 'set_composition', start: target.start, end: target.end },
+            { type: 'compose', text },
+          ]);
+          this.#deps.enqueue(messages);
+
+          const nextText = replaceContextRange(context, target, text);
+          if (e.currentTarget.value !== nextText) {
+            e.currentTarget.value = nextText;
+          }
+          const selection = flatOffsetToUtf16Index(nextText, context.windowStart, composing.end);
+          e.currentTarget.setSelectionRange(selection, selection);
+          this.#context = updateContextFromInputElement(context, e.currentTarget, composing);
+          return;
+        }
+      }
       if (intent && !isCollapsedRange(intent.replacementCandidate)) {
         const messages = textInputMessage([
           { type: 'set_selection', start: intent.replacementCandidate.start, end: intent.replacementCandidate.end },

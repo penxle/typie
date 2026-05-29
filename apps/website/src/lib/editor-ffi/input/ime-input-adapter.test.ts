@@ -546,4 +546,39 @@ describe('ImeInputAdapter', () => {
       },
     ]);
   });
+
+  it('starts composition when selected text is replaced with the same Korean preedit', () => {
+    const input = document.createElement('input');
+    const messages: Message[] = [];
+    const adapter = new ImeInputAdapter({
+      readContext: () => ({
+        text: '\u2028ㅁ\u2029',
+        windowStart: 0,
+        selection: { start: 1, end: 2 },
+        composing: null,
+      }),
+      enqueue: (next) => messages.push(...next),
+    });
+
+    adapter.syncFromEditor(input);
+    adapter.handleCompositionStart(compositionEvent(input));
+
+    adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
+    input.value = '\u2028ㅁ\u2029';
+    input.setSelectionRange(2, 2);
+    adapter.handleInput(inputEvent(input));
+
+    expect(input.value).toBe('\u2028ㅁ\u2029');
+    expect(input.selectionStart).toBe(2);
+    expect(input.selectionEnd).toBe(2);
+    expect(messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 2 },
+          { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+    ]);
+  });
 });
