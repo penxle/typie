@@ -12,6 +12,7 @@ import {
 import { normalizeLineBreakBeforeInput, readDomComposingReplacement, readDomInputDiff, textInputMessage } from './ime-normalizer';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { ImeContext, ImeRange } from './ime-context';
+import type { DomInputDiff } from './ime-normalizer';
 
 type ImeInputAdapterDeps = {
   readContext: () => ImeContext | null;
@@ -24,7 +25,71 @@ type ImeEditIntent = {
   replacementCandidate: ImeRange;
 };
 
+type ImeCompositionEdit = {
+  target: ImeRange;
+  text: string;
+};
+
 const isCollapsedRange = (range: ImeRange): boolean => range.start === range.end;
+
+const readContextCompositionText = (context: ImeContext): string | null => {
+  if (!context.composing) {
+    return null;
+  }
+
+  return codePointSlice(context.text, context.composing.start - context.windowStart, context.composing.end - context.windowStart);
+};
+
+const resolveActiveCompositionSyncContext = (local: ImeContext, incoming: ImeContext): ImeContext | null => {
+  const localText = readContextCompositionText(local);
+  if (localText == null) {
+    return null;
+  }
+
+  if (localText === readContextCompositionText(incoming)) {
+    return incoming;
+  }
+
+  if (incoming.composing || incoming.selection.start !== incoming.selection.end || local.selection.start !== local.selection.end) {
+    return null;
+  }
+
+  const textLength = codePointLength(localText);
+  if (textLength === 0) {
+    return null;
+  }
+
+  const end = incoming.selection.end;
+  const start = end - textLength;
+  if (start < incoming.windowStart) {
+    return null;
+  }
+
+  const incomingText = codePointSlice(incoming.text, start - incoming.windowStart, end - incoming.windowStart);
+  if (incomingText !== localText) {
+    return null;
+  }
+
+  return {
+    ...incoming,
+    composing: { start, end },
+  };
+};
+
+const readDuplicateCommittedPreeditTarget = (context: ImeContext, input: HTMLInputElement, text: string | null): ImeRange | null => {
+  if (!context.composing || text == null || readContextCompositionText(context) !== text) {
+    return null;
+  }
+
+  const selection = utf16SelectionToFlatRange(context.text, context.windowStart, readInputUtf16Selection(input));
+  return selection.start === selection.end && selection.start === context.composing.end ? selection : null;
+};
+
+const isDuplicateCommittedPreeditDiff = (context: ImeContext, diff: { start: number; end: number; insertedText: string }): boolean =>
+  !!context.composing &&
+  diff.start === context.composing.end &&
+  diff.end === context.composing.end &&
+  readContextCompositionText(context) === diff.insertedText;
 
 export class ImeInputAdapter {
   readonly #deps: ImeInputAdapterDeps;
@@ -40,12 +105,27 @@ export class ImeInputAdapter {
   }
 
   syncFromEditor(input: HTMLInputElement): void {
-    if (this.#compositionActive) {
+    const context = this.#deps.readContext();
+    if (!context) {
       return;
     }
 
-    const context = this.#deps.readContext();
-    if (!context) {
+    if (this.#compositionActive) {
+      if (!this.#context) {
+        this.#context = context;
+        syncInputElementToContext(input, context);
+        return;
+      }
+
+      if (canPreserveNativeInputOnEditorSync(this.#context, context)) {
+        return;
+      }
+
+      const syncContext = resolveActiveCompositionSyncContext(this.#context, context);
+      if (syncContext) {
+        this.#context = syncContext;
+        syncInputElementToContext(input, syncContext);
+      }
       return;
     }
 
@@ -77,9 +157,20 @@ export class ImeInputAdapter {
       return;
     }
 
+    const duplicateCommittedPreeditTarget =
+      this.#compositionActive && this.#pendingCompositionText == null && e.inputType === 'insertText' && context
+        ? readDuplicateCommittedPreeditTarget(context, e.currentTarget, e.data)
+        : null;
+    if (duplicateCommittedPreeditTarget) {
+      this.#pendingEditIntent = null;
+      this.#pendingCompositionTarget = duplicateCommittedPreeditTarget;
+      e.preventDefault();
+      return;
+    }
+
     if (this.#compositionActive && e.inputType === 'insertCompositionText') {
       this.#pendingCompositionText = e.data;
-      this.#pendingCompositionTarget =
+      this.#pendingCompositionTarget ??=
         context && !context.composing
           ? utf16SelectionToFlatRange(context.text, context.windowStart, readInputUtf16Selection(e.currentTarget))
           : null;
@@ -106,70 +197,68 @@ export class ImeInputAdapter {
 
     const diff = readDomInputDiff(context, e.currentTarget.value);
     if (!diff) {
-      const intent = this.#pendingEditIntent;
-      this.#pendingEditIntent = null;
-      if (this.#compositionActive) {
-        const pendingTarget = this.#pendingCompositionTarget;
-        this.#pendingCompositionTarget = null;
-        const text = this.#pendingCompositionText;
-        this.#pendingCompositionText = null;
-        const target = pendingTarget ?? context.composing;
-        if (target && text != null) {
-          const composing = { start: target.start, end: target.start + codePointLength(text) };
-          const messages = textInputMessage([
-            { type: 'set_composition', start: target.start, end: target.end },
-            { type: 'compose', text },
-          ]);
-          this.#deps.enqueue(messages);
-
-          const nextText = replaceContextRange(context, target, text);
-          if (e.currentTarget.value !== nextText) {
-            e.currentTarget.value = nextText;
-          }
-          const selection = flatOffsetToUtf16Index(nextText, context.windowStart, composing.end);
-          e.currentTarget.setSelectionRange(selection, selection);
-          this.#context = updateContextFromInputElement(context, e.currentTarget, composing);
-          return;
-        }
-      }
-      if (intent && !isCollapsedRange(intent.replacementCandidate)) {
-        const messages = textInputMessage([
-          { type: 'set_selection', start: intent.replacementCandidate.start, end: intent.replacementCandidate.end },
-          { type: 'replace_selection', text: intent.text },
-        ]);
-        this.#deps.enqueue(messages);
-      }
-      this.#context = updateContextFromInputElement(context, e.currentTarget, context.composing);
+      this.#handleInputWithoutDiff(context, e.currentTarget);
       return;
     }
 
     if (this.#compositionActive) {
-      const pendingTarget = this.#pendingCompositionTarget;
-      this.#pendingCompositionTarget = null;
-      const replacement = readDomComposingReplacement(context, e.currentTarget.value, diff);
-      if (pendingTarget && !context.composing) {
-        replacement.targetStart = pendingTarget.start;
-        replacement.targetEnd = pendingTarget.end;
-      }
-      const text = this.#compositionText(context, replacement);
-      this.#pendingCompositionText = null;
-      const composing = { start: replacement.targetStart, end: replacement.targetStart + codePointLength(text) };
-      const messages = textInputMessage([
-        { type: 'set_composition', start: replacement.targetStart, end: replacement.targetEnd },
-        { type: 'compose', text },
-      ]);
-      this.#deps.enqueue(messages);
-
-      const nextText = replaceContextRange(context, { start: replacement.targetStart, end: replacement.targetEnd }, text);
-      if (e.currentTarget.value !== nextText) {
-        e.currentTarget.value = nextText;
-      }
-      const selection = flatOffsetToUtf16Index(nextText, context.windowStart, composing.end);
-      e.currentTarget.setSelectionRange(selection, selection);
-      this.#context = updateContextFromInputElement(context, e.currentTarget, composing);
+      this.#handleCompositionInputWithDiff(context, e.currentTarget, diff);
       return;
     }
 
+    this.#handleTextInputWithDiff(context, e.currentTarget, diff);
+  }
+
+  #handleInputWithoutDiff(context: ImeContext, input: HTMLInputElement): void {
+    const intent = this.#pendingEditIntent;
+    this.#pendingEditIntent = null;
+
+    if (this.#compositionActive) {
+      const pendingTarget = this.#pendingCompositionTarget;
+      this.#pendingCompositionTarget = null;
+      const text = this.#pendingCompositionText;
+      this.#pendingCompositionText = null;
+      const target = pendingTarget ?? context.composing;
+      if (target && text != null) {
+        this.#applyCompositionEdit(context, input, { target, text });
+        return;
+      }
+    }
+
+    if (intent && !isCollapsedRange(intent.replacementCandidate)) {
+      const messages = textInputMessage([
+        { type: 'set_selection', start: intent.replacementCandidate.start, end: intent.replacementCandidate.end },
+        { type: 'replace_selection', text: intent.text },
+      ]);
+      this.#deps.enqueue(messages);
+    }
+    this.#context = updateContextFromInputElement(context, input, context.composing);
+  }
+
+  #handleCompositionInputWithDiff(context: ImeContext, input: HTMLInputElement, diff: DomInputDiff): void {
+    if (this.#pendingCompositionText == null && isDuplicateCommittedPreeditDiff(context, diff)) {
+      if (input.value !== context.text) {
+        input.value = context.text;
+      }
+      const selection = flatOffsetToUtf16Index(context.text, context.windowStart, context.selection.end);
+      input.setSelectionRange(selection, selection);
+      this.#context = context;
+      return;
+    }
+
+    const pendingTarget = this.#pendingCompositionTarget;
+    this.#pendingCompositionTarget = null;
+    const replacement = readDomComposingReplacement(context, input.value, diff);
+    if (pendingTarget) {
+      replacement.targetStart = pendingTarget.start;
+      replacement.targetEnd = pendingTarget.end;
+    }
+    const edit = this.#compositionEdit(context, replacement);
+    this.#pendingCompositionText = null;
+    this.#applyCompositionEdit(context, input, edit);
+  }
+
+  #handleTextInputWithDiff(context: ImeContext, input: HTMLInputElement, diff: DomInputDiff): void {
     const intent = this.#pendingEditIntent;
     this.#pendingEditIntent = null;
     this.#pendingCompositionTarget = null;
@@ -186,7 +275,24 @@ export class ImeInputAdapter {
       { type: 'replace_selection', text: diff.insertedText },
     ]);
     this.#deps.enqueue(messages);
-    this.#context = updateContextFromInputElement(context, e.currentTarget, null);
+    this.#context = updateContextFromInputElement(context, input, null);
+  }
+
+  #applyCompositionEdit(context: ImeContext, input: HTMLInputElement, edit: ImeCompositionEdit): void {
+    const composing = { start: edit.target.start, end: edit.target.start + codePointLength(edit.text) };
+    const messages = textInputMessage([
+      { type: 'set_composition', start: edit.target.start, end: edit.target.end },
+      { type: 'compose', text: edit.text },
+    ]);
+    this.#deps.enqueue(messages);
+
+    const nextText = replaceContextRange(context, edit.target, edit.text);
+    if (input.value !== nextText) {
+      input.value = nextText;
+    }
+    const selection = flatOffsetToUtf16Index(nextText, context.windowStart, composing.end);
+    input.setSelectionRange(selection, selection);
+    this.#context = updateContextFromInputElement(context, input, composing);
   }
 
   handleCompositionStart(e: CompositionEvent & { currentTarget: HTMLInputElement }): void {
@@ -194,7 +300,8 @@ export class ImeInputAdapter {
     this.#pendingCompositionText = null;
     this.#pendingCompositionTarget = null;
     this.#compositionActive = true;
-    this.#currentContext(e.currentTarget);
+    const context = this.#currentContext(e.currentTarget);
+    this.#pendingCompositionTarget = context?.composing ? { start: context.composing.end, end: context.composing.end } : null;
   }
 
   handleCompositionUpdate(e: CompositionEvent): void {
@@ -247,21 +354,20 @@ export class ImeInputAdapter {
     setTimeout(() => this.#clearCommitPending(), 0);
   }
 
-  #compositionText(context: ImeContext, replacement: { text: string }): string {
+  #compositionEdit(context: ImeContext, replacement: { targetStart: number; targetEnd: number; text: string }): ImeCompositionEdit {
+    const target = { start: replacement.targetStart, end: replacement.targetEnd };
     const pending = this.#pendingCompositionText;
     if (!pending || !context.composing) {
-      return pending ?? replacement.text;
+      const edit = { target, text: pending ?? replacement.text };
+      return edit;
     }
 
-    const current = codePointSlice(
-      context.text,
-      context.composing.start - context.windowStart,
-      context.composing.end - context.windowStart,
-    );
-    if (replacement.text === `${current}${pending}` && current.endsWith(pending)) {
-      return replacement.text;
+    const current = readContextCompositionText(context) ?? '';
+    const targetsCurrentComposition = target.start === context.composing.start && target.end === context.composing.end;
+    if (replacement.text === `${current}${pending}` && current.endsWith(pending) && targetsCurrentComposition) {
+      return { target, text: replacement.text };
     }
 
-    return pending;
+    return { target, text: pending };
   }
 }

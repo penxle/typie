@@ -4,10 +4,52 @@ import { describe, expect, it } from 'vitest';
 import { ImeInputAdapter } from './ime-input-adapter';
 import { beforeInputEvent, compositionEvent, context, inputEvent } from './ime-test-fixtures';
 import type { Message } from '@typie/editor-ffi/browser';
+import type { ImeContext } from './ime-context';
+
+const createInput = () => document.createElement('input');
+
+const createImeHarness = (initialContext: ImeContext) => {
+  const input = createInput();
+  const messages: Message[] = [];
+  let editorContext = initialContext;
+  const adapter = new ImeInputAdapter({
+    readContext: () => editorContext,
+    enqueue: (next) => messages.push(...next),
+  });
+
+  return {
+    input,
+    messages,
+    adapter,
+    setContext: (context: ImeContext) => {
+      editorContext = context;
+    },
+    syncFromEditor: () => adapter.syncFromEditor(input),
+    compositionStart: (data = '') => adapter.handleCompositionStart(compositionEvent(input, data)),
+    compositionUpdate: (data: string) => adapter.handleCompositionUpdate(compositionEvent(input, data)),
+    compositionEnd: () => adapter.handleCompositionEnd(),
+    beforeCompositionInput: (text: string) => adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', text)),
+    beforeTextInput: (text: string) => {
+      const event = beforeInputEvent(input, 'insertText', text);
+      adapter.handleBeforeInput(event);
+      return event;
+    },
+    applyNativeInput: (value: string, selectionStart: number, selectionEnd = selectionStart) => {
+      input.value = value;
+      input.setSelectionRange(selectionStart, selectionEnd);
+      adapter.handleInput(inputEvent(input));
+    },
+    expectInput: (value: string, selectionStart: number, selectionEnd = selectionStart) => {
+      expect(input.value).toBe(value);
+      expect(input.selectionStart).toBe(selectionStart);
+      expect(input.selectionEnd).toBe(selectionEnd);
+    },
+  };
+};
 
 describe('ImeInputAdapter', () => {
   it('captures context during beforeinput and diffs the following native input mutation', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => context(''),
@@ -35,7 +77,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('anchors repeated-character insertions to the beforeinput collapsed selection', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -69,7 +111,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('does not rewrite the native input when editor sync only rebases the same local IME window', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     let syncCount = 0;
     const adapter = new ImeInputAdapter({
@@ -117,7 +159,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('uses the native DOM diff when the following native input appended', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -156,7 +198,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('emits a replacement when the entire flat text is replaced with the same typed text', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -192,7 +234,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('emits a replacement when selected text is replaced with the same typed text', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -228,7 +270,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('prefers the native replacement diff when beforeinput selection points at the next character', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -262,7 +304,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('keeps a collapsed native append as an insertion after many spaces', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const spaces = ' '.repeat(79);
     const text = `\u2028${spaces}e\u2029`;
@@ -300,7 +342,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('does not turn a native collapsed insert into a synthetic previous-character replacement', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -332,7 +374,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('maps input in an empty paragraph after previous text to the empty paragraph flat offset', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -366,7 +408,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('does not suppress the next real input after a prevented line-break beforeinput', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => context(''),
@@ -394,7 +436,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('lets browser composition mutate the DOM and converts repeated updates to flat compose diffs', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => context(''),
@@ -446,7 +488,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('uses insertCompositionText data instead of duplicated native DOM preedit text', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -491,7 +533,7 @@ describe('ImeInputAdapter', () => {
   });
 
   it('keeps repeated Korean preedit text growing after replacing selected text', () => {
-    const input = document.createElement('input');
+    const input = createInput();
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
@@ -548,35 +590,297 @@ describe('ImeInputAdapter', () => {
   });
 
   it('starts composition when selected text is replaced with the same Korean preedit', () => {
-    const input = document.createElement('input');
-    const messages: Message[] = [];
-    const adapter = new ImeInputAdapter({
-      readContext: () => ({
-        text: '\u2028ㅁ\u2029',
-        windowStart: 0,
-        selection: { start: 1, end: 2 },
-        composing: null,
-      }),
-      enqueue: (next) => messages.push(...next),
+    const ime = createImeHarness({
+      text: '\u2028ㅁ\u2029',
+      windowStart: 0,
+      selection: { start: 1, end: 2 },
+      composing: null,
     });
 
-    adapter.syncFromEditor(input);
-    adapter.handleCompositionStart(compositionEvent(input));
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('ㅁ');
+    ime.applyNativeInput('\u2028ㅁ\u2029', 2);
 
-    adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
-    input.value = '\u2028ㅁ\u2029';
-    input.setSelectionRange(2, 2);
-    adapter.handleInput(inputEvent(input));
-
-    expect(input.value).toBe('\u2028ㅁ\u2029');
-    expect(input.selectionStart).toBe(2);
-    expect(input.selectionEnd).toBe(2);
-    expect(messages).toEqual([
+    ime.expectInput('\u2028ㅁ\u2029', 2);
+    expect(ime.messages).toEqual([
       {
         type: 'text_input',
         ops: [
           { type: 'set_composition', start: 1, end: 2 },
           { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps appended Korean preedit text in composition after replacing the full IME buffer', () => {
+    const ime = createImeHarness({
+      text: '\u2028ㅁㄴ\u2029',
+      windowStart: 0,
+      selection: { start: 0, end: 4 },
+      composing: null,
+    });
+
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('ㅁ');
+    ime.applyNativeInput('ㅁ', 1);
+
+    ime.setContext({
+      text: '\u2028ㅁ\u2029',
+      windowStart: 0,
+      selection: { start: 2, end: 2 },
+      composing: { start: 1, end: 2 },
+    });
+    ime.syncFromEditor();
+
+    ime.expectInput('\u2028ㅁ\u2029', 2);
+
+    const duplicateCommittedPreedit = ime.beforeTextInput('ㅁ');
+    expect(duplicateCommittedPreedit.preventDefault).toHaveBeenCalledOnce();
+    expect(ime.messages).toHaveLength(1);
+
+    ime.beforeCompositionInput('ㄴ');
+    ime.applyNativeInput('\u2028ㅁㄴ\u2029', 3);
+
+    ime.expectInput('\u2028ㅁㄴ\u2029', 3);
+
+    ime.setContext({
+      text: '\u2028ㅁㄴ\u2029',
+      windowStart: 0,
+      selection: { start: 3, end: 3 },
+      composing: { start: 2, end: 3 },
+    });
+    ime.syncFromEditor();
+
+    ime.compositionStart();
+    ime.beforeCompositionInput('ㅇ');
+    ime.applyNativeInput('\u2028ㅁㄴㅇ\u2029', 4);
+
+    ime.expectInput('\u2028ㅁㄴㅇ\u2029', 4);
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 0, end: 4 },
+          { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 2, end: 2 },
+          { type: 'compose', text: 'ㄴ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 3, end: 3 },
+          { type: 'compose', text: 'ㅇ' },
+        ],
+      },
+    ]);
+  });
+
+  it('syncs editor-restored structure while composing after replacing a structural selection', () => {
+    const ime = createImeHarness({
+      text: '\u2028\u2028\u2029\u2029',
+      windowStart: 0,
+      selection: { start: 0, end: 4 },
+      composing: null,
+    });
+
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('ㅁ');
+    ime.applyNativeInput('ㅁ', 1);
+
+    ime.setContext({
+      text: '\u2028\u2028\u2029\u2029\u2028ㅁ\u2029',
+      windowStart: 0,
+      selection: { start: 6, end: 6 },
+      composing: { start: 5, end: 6 },
+    });
+    ime.syncFromEditor();
+
+    ime.expectInput('\u2028\u2028\u2029\u2029\u2028ㅁ\u2029', 6);
+
+    ime.compositionStart();
+    ime.beforeCompositionInput('ㄴ');
+    ime.applyNativeInput('\u2028\u2028\u2029\u2029\u2028ㅁㄴ\u2029', 7);
+
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 0, end: 4 },
+          { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 6, end: 6 },
+          { type: 'compose', text: 'ㄴ' },
+        ],
+      },
+    ]);
+  });
+
+  it('infers composition when editor-restored structure omits it during a full-buffer replacement', () => {
+    const ime = createImeHarness({
+      text: '\u2028ㅁㄴㅇ\u2029',
+      windowStart: 0,
+      selection: { start: 0, end: 5 },
+      composing: null,
+    });
+
+    ime.syncFromEditor();
+    ime.compositionStart('\u2028ㅁㄴㅇ\u2029');
+    ime.compositionUpdate('ㅁ');
+    ime.beforeCompositionInput('ㅁ');
+    ime.applyNativeInput('ㅁ', 1);
+
+    ime.setContext({
+      text: '\u2028ㅁ\u2029',
+      windowStart: 0,
+      selection: { start: 2, end: 2 },
+      composing: null,
+    });
+    ime.syncFromEditor();
+
+    ime.expectInput('\u2028ㅁ\u2029', 2);
+
+    ime.compositionUpdate('ㅁ');
+    ime.beforeCompositionInput('ㅁ');
+    ime.applyNativeInput('\u2028ㅁ\u2029', 2);
+    ime.compositionEnd();
+
+    ime.compositionStart();
+    ime.compositionUpdate('ㄴ');
+    ime.beforeCompositionInput('ㄴ');
+    ime.applyNativeInput('\u2028ㅁㄴ\u2029', 3);
+
+    ime.expectInput('\u2028ㅁㄴ\u2029', 3);
+
+    ime.setContext({
+      text: '\u2028ㅁㄴ\u2029',
+      windowStart: 0,
+      selection: { start: 3, end: 3 },
+      composing: null,
+    });
+    ime.syncFromEditor();
+
+    const duplicateSecondPreedit = ime.beforeTextInput('ㄴ');
+    expect(duplicateSecondPreedit.preventDefault).toHaveBeenCalledOnce();
+
+    ime.compositionStart();
+    ime.compositionUpdate('ㅇ');
+    ime.beforeCompositionInput('ㅇ');
+    ime.applyNativeInput('\u2028ㅁㄴㅇ\u2029', 4);
+
+    ime.expectInput('\u2028ㅁㄴㅇ\u2029', 4);
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 0, end: 5 },
+          { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 2 },
+          { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+      { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 2, end: 2 },
+          { type: 'compose', text: 'ㄴ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 3, end: 3 },
+          { type: 'compose', text: 'ㅇ' },
+        ],
+      },
+    ]);
+  });
+
+  it('ignores duplicate committed preedit after replacing a selected empty paragraph', () => {
+    const ime = createImeHarness({
+      text: '\u2028\u2029',
+      windowStart: 0,
+      selection: { start: 0, end: 2 },
+      composing: null,
+    });
+
+    ime.syncFromEditor();
+    ime.compositionStart('\u2028\u2029');
+    ime.compositionUpdate('ㅁ');
+    ime.beforeCompositionInput('ㅁ');
+    ime.applyNativeInput('ㅁ', 1);
+
+    ime.setContext({
+      text: '\u2028ㅁ\u2029',
+      windowStart: 0,
+      selection: { start: 2, end: 2 },
+      composing: { start: 1, end: 2 },
+    });
+    ime.syncFromEditor();
+
+    const duplicateCommittedPreedit = ime.beforeTextInput('ㅁ');
+    expect(duplicateCommittedPreedit.preventDefault).toHaveBeenCalledOnce();
+
+    ime.compositionStart();
+    ime.compositionUpdate('ㄴ');
+    ime.beforeCompositionInput('ㄴ');
+    ime.applyNativeInput('\u2028ㅁㄴ\u2029', 3);
+
+    ime.setContext({
+      text: '\u2028ㅁㄴ\u2029',
+      windowStart: 0,
+      selection: { start: 3, end: 3 },
+      composing: { start: 2, end: 3 },
+    });
+    ime.syncFromEditor();
+
+    ime.compositionEnd();
+    ime.compositionStart();
+    ime.compositionUpdate('ㅇ');
+    ime.beforeCompositionInput('ㅇ');
+    ime.applyNativeInput('\u2028ㅁㄴㅇ\u2029', 4);
+
+    ime.expectInput('\u2028ㅁㄴㅇ\u2029', 4);
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 0, end: 2 },
+          { type: 'compose', text: 'ㅁ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 2, end: 2 },
+          { type: 'compose', text: 'ㄴ' },
+        ],
+      },
+      { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 3, end: 3 },
+          { type: 'compose', text: 'ㅇ' },
         ],
       },
     ]);
