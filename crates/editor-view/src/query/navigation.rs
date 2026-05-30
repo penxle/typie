@@ -579,11 +579,15 @@ pub(crate) fn position_at_preferred_x_in(
     }
 }
 
-/// True when `head`'s containing Line is itself the first (`at_end=false`)
-/// or last (`at_end=true`) navigable Line inside `node_id`'s subtree.
-/// Used for vertical (Line) gap entry, where a caret on the edge Line
-/// must leave the monolithic regardless of column offset — the
-/// position-equality variant misses any column past offset 0/end.
+/// `head`가 속한 Line이 `node_id`의 첫(`at_end=false`) 또는 마지막
+/// (`at_end=true`) 시각적 행에 있으면 true. 세로(Line) 갭 진입에 쓰인다.
+///
+/// 기본은 박스 서브트리의 유일한 첫/마지막 navigable 라인과의 포인터 비교다
+/// (콜아웃·폴드처럼 가장자리 자식이 여러 줄로 접히는 단락 하나일 때, 그
+/// 마지막 줄에서만 벗어나야 하므로). 단, 테이블처럼 가장자리 행이 가로로
+/// 나열된 여러 셀(각자 navigable을 가진 별도 자식 박스)로 이루어진 경우엔
+/// 그 행 안의 어느 셀이든 가장자리로 본다 — 그래야 마지막 행이 마지막 열뿐
+/// 아니라 어느 열에서도 갭으로 진입한다.
 pub(crate) fn is_at_edge_line_of(
     tree: &LayoutTree,
     node_id: NodeId,
@@ -599,15 +603,63 @@ pub(crate) fn is_at_edge_line_of(
     let LayoutContent::Box(b) = &boxed.content else {
         return false;
     };
-    let edge = if at_end {
+    let edge_child = if at_end {
         b.children
             .iter()
             .rev()
-            .find_map(search::find_last_navigable)
+            .find(|c| search::find_last_navigable(c).is_some())
     } else {
-        b.children.iter().find_map(search::find_first_navigable)
+        b.children
+            .iter()
+            .find(|c| search::find_first_navigable(c).is_some())
     };
-    edge.is_some_and(|n| std::ptr::eq(n, cursor_line))
+    let Some(edge_child) = edge_child else {
+        return false;
+    };
+
+    // 가장자리 자식이 가로로 나열된 여러 navigable 열(테이블 행의 셀들)을
+    // 직접 품으면, 그 열들은 같은 시각적 행이므로 어느 셀이든 가장자리다.
+    // 그렇지 않으면(단일 흐름이 여러 줄로 접히는 단락 등) 마지막/첫 줄만
+    // 가장자리이므로 그 단일 navigable 라인과 비교한다.
+    if has_multiple_navigable_columns(edge_child) {
+        subtree_contains(edge_child, cursor_line)
+    } else {
+        let leaf = if at_end {
+            search::find_last_navigable(edge_child)
+        } else {
+            search::find_first_navigable(edge_child)
+        };
+        leaf.is_some_and(|n| std::ptr::eq(n, cursor_line))
+    }
+}
+
+/// `node`의 직계 자식 중 navigable을 서브트리에 품은 "박스"가 둘 이상이면
+/// true. 테이블 행은 셀(navigable을 품은 Box)이 가로로 여럿이고, 단락은
+/// 직계 자식이 Line(navigable 그 자체, 세로로 접힌 줄들)이므로 false다 —
+/// 이 차이로 둘을 구분한다.
+fn has_multiple_navigable_columns(node: &LayoutNode) -> bool {
+    let LayoutContent::Box(b) = &node.content else {
+        return false;
+    };
+    b.children
+        .iter()
+        .filter(|c| {
+            matches!(c.content, LayoutContent::Box(_)) && search::find_first_navigable(c).is_some()
+        })
+        .nth(1)
+        .is_some()
+}
+
+/// `target`(navigable Line/Atom 노드)이 `node` 자신이거나 그 서브트리
+/// 어딘가에 있는지를 포인터 동일성으로 판정한다.
+fn subtree_contains(node: &LayoutNode, target: &LayoutNode) -> bool {
+    if std::ptr::eq(node, target) {
+        return true;
+    }
+    match &node.content {
+        LayoutContent::Box(b) => b.children.iter().any(|c| subtree_contains(c, target)),
+        _ => false,
+    }
 }
 
 /// A navigable unit's `(parent, index)` bracket. An atom carries it directly;
@@ -2425,5 +2477,80 @@ mod tests {
         view.layout(&state.doc);
         let image_id = state.doc.node(r).unwrap().children().next().unwrap().id();
         assert!(view.editable_position_inside(image_id, false).is_none());
+    }
+
+    // TR-199: 테이블 마지막 행의 어느 셀에 있는 커서든 테이블의 아래쪽
+    // 가장자리 행에 있으므로 세로 갭 진입에서 가장자리로 봐야 한다 — 라인이
+    // 테이블 서브트리의 유일한 마지막 navigable인 마지막 열만이 아니라.
+    #[test]
+    fn is_at_edge_line_of_table_last_row_any_column() {
+        let (state, table, t_first, t_last) = state! {
+            doc {
+                root {
+                    table: table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            table_cell { paragraph { text("b") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { t_first: text("c") } }
+                            table_cell { paragraph { t_last: text("d") } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t_first, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let first_col = Position::new(t_first, 1);
+        let last_col = Position::new(t_last, 1);
+
+        assert!(
+            view.is_at_edge_line_of(table, &last_col, true),
+            "last column of last row is on the bottom edge"
+        );
+        assert!(
+            view.is_at_edge_line_of(table, &first_col, true),
+            "first column of last row must also be on the bottom edge"
+        );
+    }
+
+    // 반대 경우: 첫 행의 커서는 아래쪽 가장자리로 보면 안 되고(그러면 첫 행에서
+    // 아래로 새어 나간다) 위쪽 가장자리로 봐야 한다(첫 행에서 위로 벗어남).
+    #[test]
+    fn is_at_edge_line_of_table_first_row_is_top_edge_not_bottom() {
+        let (state, table, t_top, _t_bottom) = state! {
+            doc {
+                root {
+                    table: table {
+                        table_row {
+                            table_cell { paragraph { t_top: text("a") } }
+                            table_cell { paragraph { text("b") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("c") } }
+                            table_cell { paragraph { t_bottom: text("d") } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t_top, 0)
+        };
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let top = Position::new(t_top, 1);
+        assert!(
+            !view.is_at_edge_line_of(table, &top, true),
+            "first row is not the table's bottom edge"
+        );
+        assert!(
+            view.is_at_edge_line_of(table, &top, false),
+            "first row IS the table's top edge"
+        );
     }
 }

@@ -2413,4 +2413,181 @@ mod tests {
             "backward from callout#2 inner-first returns to the same gap (round-trip)"
         );
     }
+
+    // TR-199: 테이블 뒤에 폴드가 오면 그 경계는 두 monolithic 사이의 유효한
+    // 갭이다. 마지막 행에서 아래로 이동하면 마지막 열뿐 아니라 어느 열에서든
+    // 이 갭으로 진입해야 한다. 버그는 테이블의 유일한 "마지막 navigable 라인"이
+    // 마지막 셀에 있어 마지막 열에서만 테이블을 벗어나게 했다.
+    #[test]
+    fn arrow_down_from_non_last_column_of_table_last_row_enters_between_gap() {
+        let (state, r, ..) = state! {
+            doc {
+                r: root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            table_cell { paragraph { text("b") } }
+                            table_cell { paragraph { text("c") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { t: text("d") } }
+                            table_cell { paragraph { text("e") } }
+                            table_cell { paragraph { text("f") } }
+                        }
+                    }
+                    fold { fold_title { text("T") } fold_content { paragraph { text("x") } } }
+                    paragraph {}
+                }
+            }
+            selection: (t, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+            .expect("table↔fold between gap is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert_eq!(
+            (s.anchor, s.head),
+            (expected.anchor, expected.head),
+            "down from the first column of the last row must enter the table↔fold gap"
+        );
+    }
+
+    // 회귀 방지: 마지막 열은 원래 동작했으므로 수정 후에도 유지되어야 한다.
+    #[test]
+    fn arrow_down_from_last_column_of_table_last_row_enters_between_gap() {
+        let (state, r, ..) = state! {
+            doc {
+                r: root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            table_cell { paragraph { text("b") } }
+                            table_cell { paragraph { text("c") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("d") } }
+                            table_cell { paragraph { text("e") } }
+                            table_cell { paragraph { t: text("f") } }
+                        }
+                    }
+                    fold { fold_title { text("T") } fold_content { paragraph { text("x") } } }
+                    paragraph {}
+                }
+            }
+            selection: (t, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+            .expect("table↔fold between gap is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert_eq!(
+            (s.anchor, s.head),
+            (expected.anchor, expected.head),
+            "down from the last column of the last row must enter the table↔fold gap"
+        );
+    }
+
+    // 테이블의 이웃이 일반 문단(monolithic 아님)이면 그 경계는 갭이 아니다.
+    // 이때 마지막 행에서 아래로 이동하면 갭에 멈추지 않고 일반 기하학적 이동으로
+    // 넘어가, 테이블 아래 문단에 도착해야 한다. 버그가 가두던 비-마지막 열에서도
+    // 마찬가지여야 한다.
+    #[test]
+    fn arrow_down_from_non_last_column_of_table_last_row_with_paragraph_neighbor_moves_out() {
+        let (state, _t, below) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            table_cell { paragraph { text("b") } }
+                            table_cell { paragraph { text("c") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { t: text("d") } }
+                            table_cell { paragraph { text("e") } }
+                            table_cell { paragraph { text("f") } }
+                        }
+                    }
+                    paragraph { below: text("below") }
+                }
+            }
+            selection: (t, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(
+            s.resolve(&editor.state().doc)
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_none(),
+            "paragraph neighbor is not a between-gap; must not enter a gap cursor"
+        );
+        assert!(s.is_collapsed());
+        assert_eq!(
+            s.head.node_id, below,
+            "down must move into the paragraph below the table, not stay in the cell"
+        );
+    }
+
+    // TR-199 회귀 방지: 가장자리 행 판정이 "마지막 직계 자식 서브트리"로 넓어지면서,
+    // 자식이 단락 하나뿐이고 그 단락이 여러 줄로 접히는 monolithic(콜아웃 등)에서
+    // 첫 줄에 있어도 가장자리로 오인될 수 있다. 첫 줄에서 down은 갭으로 나가지 말고
+    // 같은 단락의 둘째 줄로 가야 한다.
+    #[test]
+    fn arrow_down_within_multiline_paragraph_in_callout_does_not_exit() {
+        let (state, t_a, t_b) = state! {
+            doc {
+                root {
+                    callout { paragraph { t_a: text("a") hard_break t_b: text("b") } }
+                    callout { paragraph {} }
+                    paragraph {}
+                }
+            }
+            selection: (t_a, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(
+            s.resolve(&editor.state().doc)
+                .and_then(|rs| rs.as_gap_cursor())
+                .is_none(),
+            "down from the first wrapped line must not exit the callout into the gap"
+        );
+        assert!(s.is_collapsed());
+        assert_eq!(
+            s.head.node_id, t_b,
+            "down must move to the second line within the same paragraph"
+        );
+    }
 }
