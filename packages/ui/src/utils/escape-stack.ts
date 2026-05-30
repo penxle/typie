@@ -2,19 +2,20 @@ type EscapeHandler = () => boolean;
 
 const stack: EscapeHandler[] = [];
 
-function handleGlobalEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape' && stack.length > 0) {
-    // LIFO
-    for (let i = stack.length - 1; i >= 0; i--) {
-      const handler = stack[i];
-      const handled = handler();
-
-      if (handled) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
+export function runEscapeStack(): boolean {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    if (stack[i]()) {
+      return true;
     }
+  }
+
+  return false;
+}
+
+function handleGlobalEscape(e: KeyboardEvent) {
+  if (e.key === 'Escape' && runEscapeStack()) {
+    e.preventDefault();
+    e.stopPropagation();
   }
 }
 

@@ -242,7 +242,7 @@
       {:else}
         {@render planUpgradePrompt(LightbulbIcon, 'AI 피드백', '글의 구조, 표현, 흐름에 대한\nAI 분석과 피드백을 받아볼 수 있어요.')}
       {/if}
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'remarks'}
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'comment'}
       <DocumentPanelRemark {editor} />
     {:else}
       <div

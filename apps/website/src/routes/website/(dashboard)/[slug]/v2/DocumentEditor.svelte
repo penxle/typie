@@ -31,6 +31,8 @@
   import CloseButton from '../@pane/CloseButton.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { dragPane } from '../@pane/dnd';
+  import CommentPopover from './@document-comments/CommentPopover.svelte';
+  import DocumentComments from './@document-comments/DocumentComments.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
@@ -62,6 +64,7 @@
           ...EditorContextV2_user
           ...DocumentPanelV2_user
           ...TrialPopupExperimentModal_user
+          ...CommentComposerV2_user
           sites {
             id
             ...DocumentTemplateModalV2_site
@@ -205,7 +208,6 @@
   graphql(`
     fragment EditorContextV2_user on User {
       id
-      ...RemarkPopover_user
     }
   `);
 
@@ -224,6 +226,7 @@
 
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
+  const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
   const title = $derived(document?.title ?? '');
   const assets = $derived(document?.assets);
 
@@ -579,6 +582,8 @@
     editorReady = true;
     onReady?.();
 
+    ctx.editor?.installCommentDecorations();
+
     const saved = selectionsStore.current[documentId];
 
     if (saved?.selection) {
@@ -819,233 +824,238 @@
       <TopToolbar />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
-        <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-          <BottomToolbar
-            {fontFamilies}
-            onFontUploadClick={() => {
-              if (entity.user.subscription) {
-                fontUploadModalOpen = true;
-              } else {
-                PlanUpgradeDialog.show({
-                  message: '폰트 업로드 기능은 FULL ACCESS에서 사용할 수 있어요.',
-                });
-                mixpanel.track('open_plan_upgrade_modal', { via: 'font_family_upload' });
-              }
-            }}
-            onSearchClick={() => (showFindReplace = !showFindReplace)}
-          />
-
-          <div
-            style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
-            style:top={currentViewZenModeEnabled ? '0' : 'auto'}
-            style:left={currentViewZenModeEnabled ? '0' : 'auto'}
-            style:right={currentViewZenModeEnabled ? '0' : 'auto'}
-            style:bottom={currentViewZenModeEnabled ? '0' : 'auto'}
-            class={flex({
-              position: 'relative',
-              flexDirection: 'column',
-              flexGrow: '1',
-              overflowX: 'auto',
-              overflowY: 'hidden',
-              zIndex: app.preference.current.zenModeEnabled && !currentViewZenModeEnabled ? 'underEditor' : 'editor',
-              backgroundColor: 'surface.default',
-            })}
-          >
-            {#if showEditLockedToast}
-              <div
-                class={flex({
-                  position: 'absolute',
-                  top: currentViewZenModeEnabled ? '60px' : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' ? '36px' : '12px',
-                  right: '12px',
-                  zIndex: 'sidebar',
-                  alignItems: 'center',
-                  gap: '10px',
-                  paddingX: '14px',
-                  paddingY: '10px',
-                  borderRadius: '6px',
-                  borderWidth: '1px',
-                  borderColor: 'border.default',
-                  backgroundColor: 'surface.default',
-                  boxShadow: 'small',
-                  fontSize: '13px',
-                  color: 'text.subtle',
-                })}
-                onpointerenter={() => {
-                  if (lockedToastTimer) {
-                    clearTimeout(lockedToastTimer);
-                    lockedToastTimer = null;
+        {#if document && documentId && entity}
+          <DocumentComments {documentId} editor={ctx.editor} entityId={entity.id} {isOwner} me$key={query.data.me} myId={query.data.me.id}>
+            <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
+              <BottomToolbar
+                {fontFamilies}
+                onFontUploadClick={() => {
+                  if (entity.user.subscription) {
+                    fontUploadModalOpen = true;
+                  } else {
+                    PlanUpgradeDialog.show({
+                      message: '폰트 업로드 기능은 FULL ACCESS에서 사용할 수 있어요.',
+                    });
+                    mixpanel.track('open_plan_upgrade_modal', { via: 'font_family_upload' });
                   }
                 }}
-                onpointerleave={() => {
-                  lockedToastTimer = setTimeout(() => {
-                    showEditLockedToast = false;
-                  }, 5000);
-                }}
-                role="alert"
-                transition:fly={{ y: -8, duration: 150 }}
+                onSearchClick={() => (showFindReplace = !showFindReplace)}
+              />
+
+              <div
+                style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
+                style:top={currentViewZenModeEnabled ? '0' : 'auto'}
+                style:left={currentViewZenModeEnabled ? '0' : 'auto'}
+                style:right={currentViewZenModeEnabled ? '0' : 'auto'}
+                style:bottom={currentViewZenModeEnabled ? '0' : 'auto'}
+                class={flex({
+                  position: 'relative',
+                  flexDirection: 'column',
+                  flexGrow: '1',
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  zIndex: app.preference.current.zenModeEnabled && !currentViewZenModeEnabled ? 'underEditor' : 'editor',
+                  backgroundColor: 'surface.default',
+                })}
               >
-                <Icon style={css.raw({ flexShrink: '0' })} icon={LockIcon} size={14} />
-                <span>편집이 잠겨있는 문서예요.</span>
-                {#if query.data.me.id === entity.user.id}
-                  <button
-                    class={css({
-                      marginLeft: '4px',
-                      paddingX: '8px',
-                      paddingY: '4px',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      fontWeight: 'medium',
-                      color: 'text.default',
-                      backgroundColor: 'surface.subtle',
-                      cursor: 'pointer',
-                      transition: 'common',
-                      _hover: { backgroundColor: 'surface.muted' },
-                    })}
-                    onclick={() => {
-                      toggleEditLock();
-                      showEditLockedToast = false;
-                      if (lockedToastTimer) clearTimeout(lockedToastTimer);
-                    }}
-                    type="button"
-                  >
-                    해제하기
-                  </button>
-                {/if}
-              </div>
-            {/if}
-
-            <EditorComponent
-              document$key={document}
-              graph={document.state ? Uint8Array.fromBase64(document.state.graph) : new Uint8Array()}
-              onReady={handleEditorReady}
-            >
-              {#snippet header()}
-                <div
-                  class={flex({
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    paddingTop: '60px',
-                    width: 'full',
-                    ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
-                  })}
-                >
+                {#if showEditLockedToast}
                   <div
-                    style:padding-left={ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
-                      ? `${(ctx.editor.rootAttrs.layout_mode as { page_margin_left: number }).page_margin_left}px`
-                      : '0'}
-                    style:padding-right={ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
-                      ? `${(ctx.editor.rootAttrs.layout_mode as { page_margin_right: number }).page_margin_right}px`
-                      : '0'}
                     class={flex({
-                      flexDirection: 'column',
-                      flexShrink: '0',
-                      width: 'full',
+                      position: 'absolute',
+                      top: currentViewZenModeEnabled ? '60px' : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' ? '36px' : '12px',
+                      right: '12px',
+                      zIndex: 'sidebar',
+                      alignItems: 'center',
+                      gap: '10px',
+                      paddingX: '14px',
+                      paddingY: '10px',
+                      borderRadius: '6px',
+                      borderWidth: '1px',
+                      borderColor: 'border.default',
+                      backgroundColor: 'surface.default',
+                      boxShadow: 'small',
+                      fontSize: '13px',
+                      color: 'text.subtle',
                     })}
+                    onpointerenter={() => {
+                      if (lockedToastTimer) {
+                        clearTimeout(lockedToastTimer);
+                        lockedToastTimer = null;
+                      }
+                    }}
+                    onpointerleave={() => {
+                      lockedToastTimer = setTimeout(() => {
+                        showEditLockedToast = false;
+                      }, 5000);
+                    }}
+                    role="alert"
+                    transition:fly={{ y: -8, duration: 150 }}
                   >
-                    <textarea
-                      bind:this={titleEl}
-                      class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                      autocapitalize="off"
-                      autocomplete="off"
-                      maxlength={100}
-                      onblur={() => {
-                        titleFocused = false;
-                        flushTitleUpdate();
-                      }}
-                      onfocus={() => {
-                        titleFocused = true;
-                        if (documentId) {
-                          selectionsStore.current = {
-                            ...selectionsStore.current,
-                            [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
-                          };
-                        }
-                      }}
-                      oninput={handleTitleChanged}
-                      onkeydown={(e) => {
-                        if (e.isComposing) {
-                          return;
-                        }
-
-                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
-                          e.preventDefault();
-                          subtitleEl?.focus();
-                        }
-                      }}
-                      placeholder="제목을 입력하세요"
-                      rows={1}
-                      spellcheck="false"
-                      bind:value={localTitle}
-                      use:autosize
-                    ></textarea>
-
-                    <textarea
-                      bind:this={subtitleEl}
-                      class={css({
-                        marginTop: '4px',
-                        width: 'full',
-                        fontSize: '16px',
-                        fontWeight: 'medium',
-                        overflow: 'hidden',
-                        resize: 'none',
-                      })}
-                      autocapitalize="off"
-                      autocomplete="off"
-                      maxlength={100}
-                      onblur={() => {
-                        subtitleFocused = false;
-                        flushSubtitleUpdate();
-                      }}
-                      onfocus={() => {
-                        subtitleFocused = true;
-                        if (documentId) {
-                          selectionsStore.current = {
-                            ...selectionsStore.current,
-                            [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
-                          };
-                        }
-                      }}
-                      oninput={handleSubtitleChanged}
-                      onkeydown={(e) => {
-                        if (e.isComposing) {
-                          return;
-                        }
-
-                        if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !localSubtitle)) {
-                          e.preventDefault();
-                          titleEl?.focus();
-                        }
-
-                        if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
-                          e.preventDefault();
-                          ctx.editor?.focus();
-                          ctx.editor?.enqueue({
-                            type: 'navigation',
-                            op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false },
-                          });
-                        }
-                      }}
-                      placeholder="부제목을 입력하세요"
-                      rows={1}
-                      spellcheck="false"
-                      bind:value={localSubtitle}
-                      use:autosize
-                    ></textarea>
-
-                    {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
-                      <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                    <Icon style={css.raw({ flexShrink: '0' })} icon={LockIcon} size={14} />
+                    <span>편집이 잠겨있는 문서예요.</span>
+                    {#if query.data.me.id === entity.user.id}
+                      <button
+                        class={css({
+                          marginLeft: '4px',
+                          paddingX: '8px',
+                          paddingY: '4px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: 'medium',
+                          color: 'text.default',
+                          backgroundColor: 'surface.subtle',
+                          cursor: 'pointer',
+                          transition: 'common',
+                          _hover: { backgroundColor: 'surface.muted' },
+                        })}
+                        onclick={() => {
+                          toggleEditLock();
+                          showEditLockedToast = false;
+                          if (lockedToastTimer) clearTimeout(lockedToastTimer);
+                        }}
+                        type="button"
+                      >
+                        해제하기
+                      </button>
                     {/if}
                   </div>
-                </div>
-              {/snippet}
-            </EditorComponent>
-            {#if showFindReplace}
-              <DocumentFindReplace close={() => (showFindReplace = false)} />
-            {/if}
-          </div>
-        </div>
+                {/if}
 
-        <DocumentPanel document$key={document} editor={ctx.editor} user$key={query.data.me} />
+                <EditorComponent
+                  document$key={document}
+                  graph={document.state ? Uint8Array.fromBase64(document.state.graph) : new Uint8Array()}
+                  onReady={handleEditorReady}
+                >
+                  {#snippet header()}
+                    <div
+                      class={flex({
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        paddingTop: '60px',
+                        width: 'full',
+                        ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
+                      })}
+                    >
+                      <div
+                        style:padding-left={ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
+                          ? `${(ctx.editor.rootAttrs.layout_mode as { page_margin_left: number }).page_margin_left}px`
+                          : '0'}
+                        style:padding-right={ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
+                          ? `${(ctx.editor.rootAttrs.layout_mode as { page_margin_right: number }).page_margin_right}px`
+                          : '0'}
+                        class={flex({
+                          flexDirection: 'column',
+                          flexShrink: '0',
+                          width: 'full',
+                        })}
+                      >
+                        <textarea
+                          bind:this={titleEl}
+                          class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                          autocapitalize="off"
+                          autocomplete="off"
+                          maxlength={100}
+                          onblur={() => {
+                            titleFocused = false;
+                            flushTitleUpdate();
+                          }}
+                          onfocus={() => {
+                            titleFocused = true;
+                            if (documentId) {
+                              selectionsStore.current = {
+                                ...selectionsStore.current,
+                                [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
+                              };
+                            }
+                          }}
+                          oninput={handleTitleChanged}
+                          onkeydown={(e) => {
+                            if (e.isComposing) {
+                              return;
+                            }
+
+                            if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
+                              e.preventDefault();
+                              subtitleEl?.focus();
+                            }
+                          }}
+                          placeholder="제목을 입력하세요"
+                          rows={1}
+                          spellcheck="false"
+                          bind:value={localTitle}
+                          use:autosize
+                        ></textarea>
+
+                        <textarea
+                          bind:this={subtitleEl}
+                          class={css({
+                            marginTop: '4px',
+                            width: 'full',
+                            fontSize: '16px',
+                            fontWeight: 'medium',
+                            overflow: 'hidden',
+                            resize: 'none',
+                          })}
+                          autocapitalize="off"
+                          autocomplete="off"
+                          maxlength={100}
+                          onblur={() => {
+                            subtitleFocused = false;
+                            flushSubtitleUpdate();
+                          }}
+                          onfocus={() => {
+                            subtitleFocused = true;
+                            if (documentId) {
+                              selectionsStore.current = {
+                                ...selectionsStore.current,
+                                [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
+                              };
+                            }
+                          }}
+                          oninput={handleSubtitleChanged}
+                          onkeydown={(e) => {
+                            if (e.isComposing) {
+                              return;
+                            }
+
+                            if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !localSubtitle)) {
+                              e.preventDefault();
+                              titleEl?.focus();
+                            }
+
+                            if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
+                              e.preventDefault();
+                              ctx.editor?.focus();
+                              ctx.editor?.enqueue({
+                                type: 'navigation',
+                                op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false },
+                              });
+                            }
+                          }}
+                          placeholder="부제목을 입력하세요"
+                          rows={1}
+                          spellcheck="false"
+                          bind:value={localSubtitle}
+                          use:autosize
+                        ></textarea>
+
+                        {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
+                          <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                        {/if}
+                      </div>
+                    </div>
+                  {/snippet}
+                  <CommentPopover />
+                </EditorComponent>
+                {#if showFindReplace}
+                  <DocumentFindReplace close={() => (showFindReplace = false)} />
+                {/if}
+              </div>
+            </div>
+
+            <DocumentPanel document$key={document} editor={ctx.editor} user$key={query.data.me} />
+          </DocumentComments>
+        {/if}
       </div>
 
       {#if currentViewZenModeEnabled}

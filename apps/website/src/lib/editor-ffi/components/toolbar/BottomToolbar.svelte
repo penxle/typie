@@ -6,6 +6,7 @@
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
+  import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
   import RedoIcon from '~icons/lucide/redo';
   import RemoveFormattingIcon from '~icons/lucide/remove-formatting';
   import SearchIcon from '~icons/lucide/search';
@@ -302,6 +303,15 @@
         <ToolbarRuby {close} />
       {/snippet}
     </ToolbarDropdownButton>
+
+    <ToolbarButton
+      disabled={isCollapsed}
+      icon={MessageSquarePlusIcon}
+      label="코멘트"
+      onclick={() => ctx.editor?.requestCommentCompose?.()}
+      onpointerdown={(e) => e.preventDefault()}
+      size="small"
+    />
   </div>
 
   <VerticalDivider style={css.raw({ height: '12px' })} />

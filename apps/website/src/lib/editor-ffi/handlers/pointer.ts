@@ -132,6 +132,19 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
   editor.endNativeDragAdmission({ restoreFocus: true });
 };
 
+export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor, e) => {
+  if (e.button !== 0 || !editor.commentClickHandler) return;
+  if (!editor.isSelectionCollapsed) return;
+
+  const local = editor.clientToLocal(e.clientX, e.clientY);
+  if (!local) return;
+
+  const hits = editor.commentHitsAt(local.page, local.x, local.y);
+  if (hits.length > 0) {
+    editor.commentClickHandler(hits[0].id, local.page, hits[0].rect);
+  }
+};
+
 export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
   if (e.pointerType === 'touch') {
     editor.gesture.handlePointerCancel(e);

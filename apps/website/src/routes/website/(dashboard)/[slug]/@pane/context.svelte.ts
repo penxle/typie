@@ -69,6 +69,13 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
   let lastNavigatedSlug: string | undefined;
 
   const state = new LocalStore<PaneGroupState>(currentKey, defaultPaneGroupState);
+
+  for (const k of Object.keys(state.current.panelTabByPaneId)) {
+    if ((state.current.panelTabByPaneId[k] as string) === 'remarks') {
+      state.current.panelTabByPaneId[k] = 'comment';
+    }
+  }
+
   const panes = $derived(collectPanes(state.current.root));
 
   const syncUrl = () => {

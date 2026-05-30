@@ -240,7 +240,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
     <ToolbarPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" />
-    <ToolbarPanelTabButton icon={MessageSquareTextIcon} label="코멘트" tab="remarks" />
+    <ToolbarPanelTabButton icon={MessageSquareTextIcon} label="코멘트" tab="comment" />
     <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" tab="spellcheck" />
     <ToolbarPanelTabButton icon={LightbulbIcon} label="AI 피드백" tab="ai" />
     <ToolbarPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" />

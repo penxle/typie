@@ -15,9 +15,10 @@
     active?: boolean;
     disabled?: boolean;
     onclick?: () => void;
+    onpointerdown?: (e: PointerEvent) => void;
   };
 
-  let { style, size, icon, label, keys, active = false, disabled = false, onclick }: Props = $props();
+  let { style, size, icon, label, keys, active = false, disabled = false, onclick, onpointerdown }: Props = $props();
 </script>
 
 {#if size === 'large'}
@@ -45,6 +46,7 @@
     aria-pressed={active}
     {disabled}
     {onclick}
+    {onpointerdown}
     type="button"
     use:tooltip={{
       message: disabled ? '(준비중)' : undefined,
@@ -79,6 +81,7 @@
     aria-pressed={active}
     {disabled}
     {onclick}
+    {onpointerdown}
     type="button"
     use:tooltip={{
       message: disabled ? `${label} (준비중)` : label,
@@ -112,6 +115,7 @@
     aria-pressed={active}
     {disabled}
     {onclick}
+    {onpointerdown}
     type="button"
     use:tooltip={{
       message: disabled ? `${label} (준비중)` : label,

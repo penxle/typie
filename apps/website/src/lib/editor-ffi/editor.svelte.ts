@@ -164,6 +164,14 @@ export class Editor {
   activeAiFeedbackId = $state<string | null>(null);
   #aiFeedbackDecorationsInstalled = false;
 
+  activeCommentId = $state<string | null>(null);
+  commentClickHandler: ((id: string, page: number, rect: { x: number; y: number; width: number; height: number } | null) => void) | null =
+    null;
+  requestCommentCompose: (() => void) | null = null;
+  #commentDecorationsInstalled = false;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #registeredCommentIds = new Set<string>();
+
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
 
@@ -1062,6 +1070,114 @@ export class Editor {
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'ai-feedback-active' } });
     this.aiFeedbacks = [];
     this.activeAiFeedbackId = null;
+  }
+
+  installCommentDecorations(): void {
+    if (this.#commentDecorationsInstalled) return;
+    this.#commentDecorationsInstalled = true;
+
+    const underline = { color: 'text.amber', style: 'solid' as const, thickness: 2 };
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'comment',
+        style: {
+          background: 'ui.comment-highlight',
+          background_radius: 2,
+          background_inset: 2,
+          underline,
+        },
+        enabled: true,
+        z_index: 0,
+      },
+    });
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'comment-active',
+        style: {
+          background: 'ui.comment-highlight-active',
+          background_radius: 2,
+          background_inset: 2,
+          underline,
+        },
+        enabled: true,
+        z_index: 1,
+      },
+    });
+  }
+
+  addFrozenComment(id: string, selection: StableSelection): void {
+    if (this.#registeredCommentIds.has(id)) return;
+    this.#registeredCommentIds.add(id);
+    this.enqueue({ type: 'tracked_range', op: { type: 'add_frozen', id, group: 'comment', selection, metadata: '' } });
+  }
+
+  setCommentComposeRange(selection: StableSelection | null): void {
+    const id = '__comment_compose__';
+    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
+    if (selection) {
+      this.enqueue({ type: 'tracked_range', op: { type: 'add_frozen', id, group: 'comment', selection, metadata: '' } });
+    }
+  }
+
+  removeComment(id: string): void {
+    if (!this.#registeredCommentIds.has(id)) return;
+    this.#registeredCommentIds.delete(id);
+    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
+    if (this.activeCommentId === id) this.activeCommentId = null;
+  }
+
+  hasComment(id: string): boolean {
+    return this.#registeredCommentIds.has(id);
+  }
+
+  registeredCommentIds(): string[] {
+    return [...this.#registeredCommentIds];
+  }
+
+  isCommentLocatable(id: string): boolean {
+    const r = this.trackedRanges.find((x) => x.id === id);
+    return !!r && !r.invalid;
+  }
+
+  commentHitsAt(
+    page: number,
+    x: number,
+    y: number,
+  ): { id: string; rect: { x: number; y: number; width: number; height: number } | null }[] {
+    return this.#wasm
+      .tracked_ranges_at(page, x, y, null)
+      .filter((hit) => this.#registeredCommentIds.has(hit.id))
+      .map((hit) => {
+        const pr = hit.rects.find((r) => r.page_idx === page) ?? hit.rects[0];
+        return { id: hit.id, rect: pr ? pr.rect : null };
+      });
+  }
+
+  setActiveComment(id: string | null): void {
+    if (this.activeCommentId === id) return;
+
+    const move = (cid: string, group: 'comment' | 'comment-active'): boolean => {
+      const range = this.trackedRanges.find((r) => r.id === cid);
+      if (!range || range.invalid) return false;
+      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
+      if (!stable) return false;
+      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: cid } });
+      this.enqueue({ type: 'tracked_range', op: { type: 'add_frozen', id: cid, group, selection: stable, metadata: '' } });
+      return true;
+    };
+
+    if (this.activeCommentId !== null) move(this.activeCommentId, 'comment');
+    this.activeCommentId = id;
+    if (id !== null) {
+      const ok = move(id, 'comment-active');
+      if (!ok) this.activeCommentId = null;
+    }
   }
 
   setActiveAiFeedback(id: string | null): void {

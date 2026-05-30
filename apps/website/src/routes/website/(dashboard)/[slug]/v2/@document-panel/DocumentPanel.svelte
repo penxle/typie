@@ -13,9 +13,9 @@
   import { PlanUpgradeDialog } from '../../../plan-upgrade-dialog.svelte';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
   import DocumentPanelAi from './DocumentPanelAi.svelte';
+  import DocumentPanelComment from './DocumentPanelComment.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelNote from './DocumentPanelNote.svelte';
-  import DocumentPanelRemark from './DocumentPanelRemark.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import DocumentPanelSpellcheck from './DocumentPanelSpellcheck.svelte';
   import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
@@ -245,8 +245,8 @@
       {:else}
         {@render planUpgradePrompt(LightbulbIcon, 'AI 피드백', '글의 구조, 표현, 흐름에 대한\nAI 분석과 피드백을 받아볼 수 있어요.')}
       {/if}
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'remarks'}
-      <DocumentPanelRemark editor={ctx.editor} />
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'comment'}
+      <DocumentPanelComment editor={ctx.editor} />
     {:else}
       <div
         class={flex({

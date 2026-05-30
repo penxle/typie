@@ -1,3 +1,4 @@
+import { runEscapeStack } from '@typie/ui/utils';
 import type { Message, Movement } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { ImeTextInput } from '../input/ime-context';
@@ -248,6 +249,12 @@ const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {
 
 export const handleKeyDown: EditorEventHandler<ImeTextInput, KeyboardEvent> = (editor, e) => {
   if (e.isComposing) return;
+
+  if (e.key === 'Escape' && runEscapeStack()) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
 
   const binding = bindings.find((b) => matchBinding(b, e));
   if (binding) {

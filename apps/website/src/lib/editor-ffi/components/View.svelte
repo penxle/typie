@@ -11,7 +11,7 @@
   import { handle } from '../handlers';
   import { handleContextMenu } from '../handlers/contextmenu';
   import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from '../handlers/dnd';
-  import { handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
+  import { handleClick, handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import Caret from './Caret.svelte';
   import CaretPositioned from './CaretPositioned.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -145,6 +145,7 @@
     </div>
   {/if}
 
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     style:cursor
     class={css({
@@ -159,6 +160,7 @@
       }),
     })}
     draggable={ctx.editor && !ctx.editor.isSelectionCollapsed ? true : undefined}
+    onclick={handle(ctx.editor, handleClick)}
     oncontextmenu={handle(ctx.editor, handleContextMenu)}
     ondragend={() => handleDragEnd(ctx)}
     ondragenter={(event) => handleDragEnter(ctx, event)}
