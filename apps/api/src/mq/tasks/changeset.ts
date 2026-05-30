@@ -1,8 +1,16 @@
 import * as Sentry from '@sentry/node';
 import dayjs from 'dayjs';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
-import { db, DocumentChangesetsDeadLetter, Documents, DocumentStates, Entities, firstOrThrow } from '#/db/index.ts';
+import {
+  db,
+  DocumentChangesetsDeadLetter,
+  DocumentCharacterCountChanges,
+  Documents,
+  DocumentStates,
+  Entities,
+  firstOrThrow,
+} from '#/db/index.ts';
 import { Lock } from '#/lock.ts';
 import { pubsub } from '#/pubsub.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
@@ -29,27 +37,35 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     const parsedUpdates: { userId: string; deviceId: string; changesets: string }[] = [...updates].toReversed().map((u) => JSON.parse(u));
     const newBundles = parsedUpdates.map((p) => Uint8Array.fromBase64(p.changesets));
 
-    const { graph: existing } = await db
-      .select({ graph: DocumentStates.graph })
+    const { graph: existing, characterCount: baseCharacterCount } = await db
+      .select({ graph: DocumentStates.graph, characterCount: DocumentStates.characterCount })
       .from(DocumentStates)
       .where(eq(DocumentStates.documentId, documentId))
       .then(firstOrThrow);
 
-    const failed: { idx: number; payload: Uint8Array; error: string }[] = [];
+    const failed: { userId: string; deviceId: string; payload: Uint8Array; error: string }[] = [];
+    const perUserDelta = new Map<string, number>();
 
     const result = await wasm.use((host) => {
       let merged = existing;
       let mergedChanged = false;
+      let prevCharacterCount = baseCharacterCount;
 
       for (const [i, bundle] of newBundles.entries()) {
         try {
           const candidate = host.apply(merged, bundle);
           const candidatePlain = host.to_plain(candidate);
           host.verify_plain(candidatePlain);
+
+          const candidateCharacterCount = countCharacters(host.extract_text(candidatePlain));
+          const { userId } = parsedUpdates[i];
+          perUserDelta.set(userId, (perUserDelta.get(userId) ?? 0) + (candidateCharacterCount - prevCharacterCount));
+          prevCharacterCount = candidateCharacterCount;
+
           merged = candidate;
           mergedChanged = true;
         } catch (err) {
-          failed.push({ idx: i, payload: bundle, error: String(err) });
+          failed.push({ userId: parsedUpdates[i].userId, deviceId: parsedUpdates[i].deviceId, payload: bundle, error: String(err) });
         }
       }
 
@@ -59,7 +75,8 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
 
       const plain = host.to_plain(merged);
       const text = host.extract_text(plain);
-      return { graph: merged, plain, text };
+      const characterCount = countCharacters(text);
+      return { graph: merged, plain, text, characterCount };
     });
 
     if (result || failed.length > 0) {
@@ -73,7 +90,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
         imageIds = ids.imageIds;
         fileIds = ids.fileIds;
         blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
-        characterCount = countCharacters(result.text);
+        characterCount = result.characterCount;
       }
 
       const updatedAt = dayjs();
@@ -88,6 +105,33 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
             .where(eq(DocumentStates.documentId, documentId));
           await tx.update(Documents).set({ updatedAt }).where(eq(Documents.id, documentId));
           updated = true;
+
+          for (const [userId, net] of perUserDelta) {
+            if (net === 0) {
+              continue;
+            }
+
+            await tx
+              .insert(DocumentCharacterCountChanges)
+              .values({
+                documentId,
+                userId,
+                bucket: updatedAt.startOf('hour'),
+                additions: Math.max(net, 0),
+                deletions: Math.max(-net, 0),
+              })
+              .onConflictDoUpdate({
+                target: [
+                  DocumentCharacterCountChanges.userId,
+                  DocumentCharacterCountChanges.documentId,
+                  DocumentCharacterCountChanges.bucket,
+                ],
+                set: {
+                  additions: net > 0 ? sql`${DocumentCharacterCountChanges.additions} + ${net}` : undefined,
+                  deletions: net < 0 ? sql`${DocumentCharacterCountChanges.deletions} + ${-net}` : undefined,
+                },
+              });
+          }
         }
 
         if (failed.length > 0) {
@@ -95,8 +139,8 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
             failed.map((f) => ({
               documentId,
               payload: f.payload,
-              userId: parsedUpdates[f.idx].userId,
-              deviceId: parsedUpdates[f.idx].deviceId,
+              userId: f.userId,
+              deviceId: f.deviceId,
               errorMessage: f.error,
             })),
           );
@@ -105,7 +149,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
 
       if (failed.length > 0) {
         for (const f of failed) {
-          Sentry.captureMessage(`changeset dead-lettered: documentId=${documentId} userId=${parsedUpdates[f.idx].userId} error=${f.error}`);
+          Sentry.captureMessage(`changeset dead-lettered: documentId=${documentId} userId=${f.userId} error=${f.error}`);
         }
       }
     }
