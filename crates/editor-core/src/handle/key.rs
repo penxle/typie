@@ -272,6 +272,46 @@ mod tests {
     }
 
     #[test]
+    fn backspace_then_undo_restores_multi_paragraph_selection() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("11") }
+                    paragraph { t2: text("22") }
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 1, <)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn backspace_then_undo_restores_multi_char_inner_selection() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("abc") }
+                    paragraph { t2: text("def") }
+                }
+            }
+            selection: (t1, 2, >) -> (t2, 2, <)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
     fn backspace_across_callout_boundary_round_trips_through_undo() {
         let (state, ..) = state! {
             doc {

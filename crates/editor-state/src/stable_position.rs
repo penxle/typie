@@ -30,12 +30,14 @@ pub enum StablePosition {
     Char {
         chain: Vec<ChainLink>,
         char_dot: Dot,
+        offset: usize,
         bind: Bind,
         affinity: Affinity,
     },
     Child {
         chain: Vec<ChainLink>,
         child_dot: Dot,
+        offset: usize,
         bind: Bind,
         affinity: Affinity,
     },
@@ -94,6 +96,7 @@ pub(crate) fn freeze_position(pos: Position, doc: &Doc) -> StablePosition {
                 StablePosition::Char {
                     chain,
                     char_dot,
+                    offset: pos.offset,
                     bind: Bind::Right,
                     affinity: pos.affinity,
                 }
@@ -114,6 +117,7 @@ pub(crate) fn freeze_position(pos: Position, doc: &Doc) -> StablePosition {
                 StablePosition::Child {
                     chain,
                     child_dot,
+                    offset: pos.offset,
                     bind: Bind::Right,
                     affinity: pos.affinity,
                 }
@@ -154,12 +158,13 @@ fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
     match sp {
         StablePosition::Char {
             char_dot,
+            offset,
             bind,
             affinity,
             ..
         } => match &entry.node {
             Node::Text(text) => {
-                resolve_dot_in_text(&text.text, *char_dot, *bind, leaf_id, *affinity)
+                resolve_dot_in_text(&text.text, *char_dot, *offset, *bind, leaf_id, *affinity)
             }
             _ => Position {
                 node_id: leaf_id,
@@ -169,6 +174,7 @@ fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
         },
         StablePosition::Child {
             child_dot,
+            offset,
             bind,
             affinity,
             ..
@@ -178,7 +184,14 @@ fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
                 offset: 0,
                 affinity: *affinity,
             },
-            _ => resolve_dot_in_children(&entry.children, *child_dot, *bind, leaf_id, *affinity),
+            _ => resolve_dot_in_children(
+                &entry.children,
+                *child_dot,
+                *offset,
+                *bind,
+                leaf_id,
+                *affinity,
+            ),
         },
         StablePosition::ContainerStart { affinity, .. } => Position {
             node_id: leaf_id,
@@ -191,14 +204,16 @@ fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
 fn resolve_dot_in_text(
     text: &editor_crdt::Text,
     dot: editor_crdt::Dot,
+    fallback_offset: usize,
     bind: Bind,
     node_id: NodeId,
     aff: Affinity,
 ) -> Position {
+    let fallback = fallback_offset.min(text.len());
     if !text.contains_dot(dot) {
         return Position {
             node_id,
-            offset: 0,
+            offset: fallback,
             affinity: aff,
         };
     }
@@ -216,11 +231,11 @@ fn resolve_dot_in_text(
         }
         None => {
             let offset = match bind {
-                Bind::Right => text.next_live_offset_after(dot).unwrap_or(text.len()),
+                Bind::Right => text.next_live_offset_after(dot).unwrap_or(fallback),
                 Bind::Left => text
                     .prev_live_offset_before(dot)
                     .map(|o| o + 1)
-                    .unwrap_or(0),
+                    .unwrap_or(fallback),
             };
             Position {
                 node_id,
@@ -234,14 +249,16 @@ fn resolve_dot_in_text(
 fn resolve_dot_in_children(
     children: &editor_crdt::Rga<NodeId>,
     dot: editor_crdt::Dot,
+    fallback_offset: usize,
     bind: Bind,
     node_id: NodeId,
     aff: Affinity,
 ) -> Position {
+    let fallback = fallback_offset.min(children.len());
     if !children.contains_dot(dot) {
         return Position {
             node_id,
-            offset: 0,
+            offset: fallback,
             affinity: aff,
         };
     }
@@ -259,13 +276,11 @@ fn resolve_dot_in_children(
         }
         None => {
             let offset = match bind {
-                Bind::Right => children
-                    .next_live_offset_after(dot)
-                    .unwrap_or(children.len()),
+                Bind::Right => children.next_live_offset_after(dot).unwrap_or(fallback),
                 Bind::Left => children
                     .prev_live_offset_before(dot)
                     .map(|o| o + 1)
-                    .unwrap_or(0),
+                    .unwrap_or(fallback),
             };
             Position {
                 node_id,
@@ -363,6 +378,7 @@ mod tests {
         let sp = StablePosition::Char {
             chain: chain.clone(),
             char_dot: Dot::new(1, 0),
+            offset: 1,
             bind: Bind::Right,
             affinity: Affinity::default(),
         };
@@ -500,10 +516,11 @@ mod tests {
     }
 
     #[test]
-    fn thaw_resurrection_dot_absent_node_alive_returns_offset_zero() {
+    fn thaw_resurrection_dot_absent_node_alive_falls_back_to_frozen_offset() {
         // `Doc::from_plain` rebuilds the doc under a fresh actor seed, so replayed
         // text inserts get new Dots while NodeIds are preserved verbatim — the
-        // exact shape needed to exercise the resurrection branch.
+        // exact shape an undo produces. The original char_dot is gone, so thaw
+        // falls back to the frozen leaf offset clamped to the live length.
         use editor_macros::doc;
         let (doc1, t1) = doc! { root { paragraph { t1: text("a") } } };
         let pos = crate::Position::new(t1, 1);
@@ -525,7 +542,7 @@ mod tests {
 
         let back = super::thaw_position(&sp, &doc2);
         assert_eq!(back.node_id, t1);
-        assert_eq!(back.offset, 0);
+        assert_eq!(back.offset, 1);
     }
 
     #[test]
