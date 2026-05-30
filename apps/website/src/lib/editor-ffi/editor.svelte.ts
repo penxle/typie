@@ -175,6 +175,17 @@ export class Editor {
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
 
+  characterCounts = $state({
+    docWithWhitespace: 0,
+    docWithoutWhitespace: 0,
+    docWithoutWhitespaceAndPunctuation: 0,
+    selectionWithWhitespace: 0,
+    selectionWithoutWhitespace: 0,
+    selectionWithoutWhitespaceAndPunctuation: 0,
+  });
+  characterCountsVersion = $state(0);
+  #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   private constructor() {
     // no-op
   }
@@ -804,6 +815,29 @@ export class Editor {
     return this.#wasm.prose_to_selection(start, end) ?? undefined;
   }
 
+  updateCharacterCounts(): void {
+    if (this.#characterCountsDebounceTimer) {
+      clearTimeout(this.#characterCountsDebounceTimer);
+    }
+
+    this.#characterCountsDebounceTimer = setTimeout(() => {
+      this.#characterCountsDebounceTimer = null;
+      if (this.#destroyed) {
+        return;
+      }
+
+      const counts = this.#wasm.character_counts();
+      this.characterCounts = {
+        docWithWhitespace: counts.doc_with_whitespace,
+        docWithoutWhitespace: counts.doc_without_whitespace,
+        docWithoutWhitespaceAndPunctuation: counts.doc_without_whitespace_and_punctuation,
+        selectionWithWhitespace: counts.selection_with_whitespace,
+        selectionWithoutWhitespace: counts.selection_without_whitespace,
+        selectionWithoutWhitespaceAndPunctuation: counts.selection_without_whitespace_and_punctuation,
+      };
+    }, 150);
+  }
+
   installSpellcheckDecorations(): void {
     if (this.#spellcheckDecorationsInstalled) return;
     this.#spellcheckDecorationsInstalled = true;
@@ -1290,6 +1324,10 @@ export class Editor {
       this.#syncActiveAiFeedbackFromSelection();
     }
 
+    if (fields.includes('doc') || fields.includes('selection')) {
+      this.characterCountsVersion++;
+    }
+
     if (fields.includes('page_sizes')) {
       this.#pageSizes = this.#wasm.page_sizes();
     }
@@ -1406,6 +1444,11 @@ export class Editor {
     if (this.#rafId !== null) {
       cancelAnimationFrame(this.#rafId);
       this.#rafId = null;
+    }
+
+    if (this.#characterCountsDebounceTimer) {
+      clearTimeout(this.#characterCountsDebounceTimer);
+      this.#characterCountsDebounceTimer = null;
     }
 
     this.#gesture?.destroy();

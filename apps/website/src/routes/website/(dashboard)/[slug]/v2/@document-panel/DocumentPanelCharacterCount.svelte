@@ -12,21 +12,30 @@
     editor: Editor | undefined;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let { editor: _editor }: Props = $props();
+  let { editor }: Props = $props();
 
   let open = $state(false);
 
-  // v2 FFI: characterCounts 미구현 — stub 0
-  const counts = {
-    selectionWithWhitespace: 0,
-    docWithWhitespace: 0,
-    selectionWithoutWhitespace: 0,
-    docWithoutWhitespace: 0,
-    selectionWithoutWhitespaceAndPunctuation: 0,
-    docWithoutWhitespaceAndPunctuation: 0,
-  };
-  const hasSelection = false;
+  $effect(() => {
+    if (!editor) {
+      return;
+    }
+
+    void editor.characterCountsVersion;
+    editor.updateCharacterCounts();
+  });
+
+  const counts = $derived(
+    editor?.characterCounts ?? {
+      docWithWhitespace: 0,
+      docWithoutWhitespace: 0,
+      docWithoutWhitespaceAndPunctuation: 0,
+      selectionWithWhitespace: 0,
+      selectionWithoutWhitespace: 0,
+      selectionWithoutWhitespaceAndPunctuation: 0,
+    },
+  );
+  const hasSelection = $derived(counts.selectionWithWhitespace > 0);
 </script>
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '8px' })} bind:open>
