@@ -23,6 +23,7 @@
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { blockquoteVariants, horizontalRuleVariants } from '$lib/editor-ffi/components/values';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { createBlockquoteVariantMessage, createHorizontalRuleVariantMessage } from '$lib/editor-ffi/handlers/variant-flow';
   import TableSizeSelector from './TableSizeSelector.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -42,6 +43,7 @@
 
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
+  const blockState = $derived(ctx.editor?.blockState);
 
   const enqueue = (message: Message) => {
     ctx.editor?.enqueue(message);
@@ -114,7 +116,7 @@
             <DropdownMenuItem
               style={css.raw({ justifyContent: 'center', height: '48px' })}
               onclick={() => {
-                enqueue(insertFragment({ node: { type: 'horizontal_rule', variant } }));
+                enqueue(createHorizontalRuleVariantMessage(blockState, variant));
                 close();
               }}
             >
@@ -136,7 +138,7 @@
             <DropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
-                enqueue(insertFragment({ node: { type: 'blockquote', variant } }));
+                enqueue(createBlockquoteVariantMessage(blockState, variant));
                 close();
               }}
             >
