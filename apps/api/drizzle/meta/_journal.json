@@ -596,6 +596,13 @@
       "when": 1778270536588,
       "tag": "0084_illegal_silverclaw",
       "breakpoints": false
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1780135261252,
+      "tag": "0085_black_princess_powerful",
+      "breakpoints": false
     }
   ]
 }

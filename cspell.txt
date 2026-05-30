@@ -194,6 +194,7 @@ unclipped
 UNDISPATCHED
 uniffi
 unplugin
+unresolve
 unstub
 unsubscriber
 usize

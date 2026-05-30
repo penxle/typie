@@ -689,6 +689,56 @@ export const DocumentStates = pgTable('document_states', {
     .default(sql`now()`),
 });
 
+export const DocumentCommentThreads = pgTable(
+  'document_comment_threads',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_COMMENT_THREADS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    selection: jsonb('selection').notNull(),
+    state: E._DocumentCommentThreadState('state').notNull().default('ACTIVE'),
+    resolvedBy: text('resolved_by').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    resolvedAt: datetime('resolved_at'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.documentId, t.state)],
+);
+
+export const DocumentComments = pgTable(
+  'document_comments',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_COMMENTS)),
+    threadId: text('thread_id')
+      .notNull()
+      .references(() => DocumentCommentThreads.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    content: text('content').notNull(),
+    state: E._DocumentCommentState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.threadId, t.createdAt)],
+);
+
 export const DocumentChangesetsDeadLetter = pgTable('document_changesets_dead_letter', {
   id: text('id')
     .primaryKey()

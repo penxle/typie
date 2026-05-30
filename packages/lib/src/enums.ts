@@ -75,6 +75,18 @@ export const NoteState = {
   DELETED_CASCADED: 'DELETED_CASCADED',
 } as const;
 
+export type DocumentCommentThreadState = keyof typeof DocumentCommentThreadState;
+export const DocumentCommentThreadState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
+} as const;
+
+export type DocumentCommentState = keyof typeof DocumentCommentState;
+export const DocumentCommentState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
+} as const;
+
 export type PaymentInvoiceState = keyof typeof PaymentInvoiceState;
 export const PaymentInvoiceState = {
   UPCOMING: 'UPCOMING',

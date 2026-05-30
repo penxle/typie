@@ -5,6 +5,7 @@ import './resolvers/auth.ts';
 import './resolvers/blob.ts';
 import './resolvers/changeset.ts';
 import './resolvers/document.ts';
+import './resolvers/document-comment.ts';
 import './resolvers/entity.ts';
 import './resolvers/folder.ts';
 import './resolvers/font.ts';

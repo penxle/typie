@@ -84,6 +84,19 @@ enum CouponState {
   DISABLED
 }
 
+input CreateDocumentCommentInput {
+  clientId: String!
+  content: String!
+  threadId: ID!
+}
+
+input CreateDocumentCommentThreadInput {
+  clientId: String!
+  content: String!
+  documentId: ID!
+  selection: JSON!
+}
+
 input CreateDocumentInput {
   lowerOrder: String
   parentEntityId: ID
@@ -146,6 +159,16 @@ enum CreditCodeState {
 
 scalar DateTime
 
+input DeleteDocumentCommentInput {
+  clientId: String!
+  commentId: ID!
+}
+
+input DeleteDocumentCommentThreadInput {
+  clientId: String!
+  threadId: ID!
+}
+
 input DeleteDocumentInput {
   documentId: ID!
 }
@@ -179,6 +202,7 @@ type Document implements IDocument {
   assets: [DocumentAsset!]!
   characterCount: Int!
   characterCountChange: CharacterCountChange!
+  commentThreads(resolved: Boolean): [DocumentCommentThread!]!
   contentRating: DocumentContentRating!
   createdAt: DateTime!
   entity: Entity!
@@ -220,6 +244,37 @@ enum DocumentAvailableAction {
 type DocumentChangesetsUpdatedEvent {
   changesets: Binary!
   heads: Binary!
+}
+
+type DocumentComment {
+  content: String!
+  createdAt: DateTime!
+  id: ID!
+  updatedAt: DateTime!
+  user: User!
+}
+
+enum DocumentCommentState {
+  ACTIVE
+  DELETED
+}
+
+type DocumentCommentThread {
+  comments: [DocumentComment!]!
+  createdAt: DateTime!
+  id: ID!
+  resolved: Boolean!
+  resolvedAt: DateTime
+  resolvedBy: User
+  selection: JSON!
+  state: DocumentCommentThreadState!
+  updatedAt: DateTime!
+  user: User!
+}
+
+enum DocumentCommentThreadState {
+  ACTIVE
+  DELETED
 }
 
 enum DocumentConflictKind {
@@ -759,6 +814,8 @@ type Mutation {
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
   createDocument(input: CreateDocumentInput!): Document!
+  createDocumentComment(input: CreateDocumentCommentInput!): DocumentCommentThread!
+  createDocumentCommentThread(input: CreateDocumentCommentThreadInput!): DocumentCommentThread!
   createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
@@ -768,6 +825,8 @@ type Mutation {
   createWsSession: String!
   deleteBillingKey: Boolean!
   deleteDocument(input: DeleteDocumentInput!): Document!
+  deleteDocumentComment(input: DeleteDocumentCommentInput!): DocumentCommentThread!
+  deleteDocumentCommentThread(input: DeleteDocumentCommentThreadInput!): DocumentCommentThread!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
@@ -806,6 +865,7 @@ type Mutation {
   reportDocument(input: ReportDocumentInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
+  resolveDocumentCommentThread(input: ResolveDocumentCommentThreadInput!): DocumentCommentThread!
   revokeUserDevice(input: RevokeUserDeviceInput!): UserDevice!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
   scheduleSubscriptionCancellation: Subscription_!
@@ -819,9 +879,11 @@ type Mutation {
   syncDocument(input: SyncDocumentInput!): [SyncDocumentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
+  unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
   updateDocument(input: UpdateDocumentInput!): Document!
+  updateDocumentComment(input: UpdateDocumentCommentInput!): DocumentCommentThread!
   updateDocumentType(input: UpdateDocumentTypeInput!): Document!
   updateDocumentsOption(input: UpdateDocumentsOptionInput!): [Document!]!
   updateEmail(input: UpdateEmailInput!): Boolean!
@@ -1181,6 +1243,11 @@ input ResetPasswordInput {
   password: String!
 }
 
+input ResolveDocumentCommentThreadInput {
+  clientId: String!
+  threadId: ID!
+}
+
 input RevokeUserDeviceInput {
   deviceId: ID!
 }
@@ -1312,6 +1379,7 @@ input SubscribePlanWithBillingKeyInput {
 
 type Subscription {
   documentChangesetsUpdated(clientId: String!, documentId: ID!, heads: Binary!): DocumentChangesetsUpdatedEvent!
+  documentCommentStream(clientId: String!, documentId: ID!): DocumentCommentThread!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   literaryAnalysisDocumentStreamV2(text: String!): DocumentLiteraryAnalysisPayloadV2!
@@ -1387,6 +1455,11 @@ input UnlockDocumentViewInput {
   password: String!
 }
 
+input UnresolveDocumentCommentThreadInput {
+  clientId: String!
+  threadId: ID!
+}
+
 input UpdateBillingKeyInput {
   birthOrBusinessRegistrationNumber: String!
   cardNumber: String!
@@ -1396,6 +1469,12 @@ input UpdateBillingKeyInput {
 
 input UpdateBootstrapInput {
   bootstrap: JSON!
+}
+
+input UpdateDocumentCommentInput {
+  clientId: String!
+  commentId: ID!
+  content: String!
 }
 
 input UpdateDocumentInput {
