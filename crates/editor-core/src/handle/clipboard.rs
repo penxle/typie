@@ -1199,6 +1199,45 @@ mod tests {
     }
 
     #[test]
+    fn repaste_as_text_survives_duplicate_remote_changeset() {
+        let (s_source, ..) = state! {
+            doc { root { paragraph { t1: text("hello") [bold] } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let payload = Slice::extract(&s_source).unwrap().to_payload();
+
+        let (s_target, ..) = state! {
+            doc { root { paragraph { t2: text("Hi") } } }
+            selection: (t2, 1)
+        };
+        let duplicate_cs = s_target
+            .graph
+            .changesets_as_vec()
+            .into_iter()
+            .next()
+            .expect("fixture graph has an initial changeset");
+        let mut editor = Editor::new_test(s_target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+        editor.receive_remote_changeset(duplicate_cs);
+        editor.tick().unwrap();
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+
+        let (expected, ..) = state! {
+            doc { root { paragraph { t3: text("Hhelloi") } } }
+            selection: (t3, 6)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn repaste_as_text_preserves_list_marker_from_text_payload() {
         let (s_target, ..) = state! {
             doc { root { paragraph { t2: text("") } } }

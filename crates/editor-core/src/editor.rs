@@ -939,7 +939,9 @@ impl Editor {
             thawed.normalize(&next.doc).unwrap_or(thawed)
         });
         self.state = next;
-        self.history.clear_last_tag();
+        if !applied_ops.is_empty() {
+            self.history.clear_last_tag();
+        }
         self.pending_ops.extend(applied_ops);
         Ok(())
     }
