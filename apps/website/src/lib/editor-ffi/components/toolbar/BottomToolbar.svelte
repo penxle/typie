@@ -88,7 +88,7 @@
     ctx.editor?.modifierState?.alignment?.type === 'uniform' ? ctx.editor.modifierState.alignment.value.value : undefined,
   );
 
-  const boldS = $derived(toggleState(ctx.editor?.modifierState?.bold));
+  const boldS = $derived(toggleState(ctx.editor?.modifierState?.effective_bold));
   const italicS = $derived(toggleState(ctx.editor?.modifierState?.italic));
   const strikethroughS = $derived(toggleState(ctx.editor?.modifierState?.strikethrough));
   const underlineS = $derived(toggleState(ctx.editor?.modifierState?.underline));

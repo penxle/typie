@@ -389,6 +389,7 @@ export interface ModifierState {
     block_gap: Tri<BlockGapValue>;
     paragraph_indent: Tri<ParagraphIndentValue>;
     alignment: Tri<AlignmentValue>;
+    effective_bold: Tri<undefined>;
 }
 
 export interface PageRect {

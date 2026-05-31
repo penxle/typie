@@ -49,7 +49,7 @@ pub fn derive_from_discriminant(input: TokenStream) -> TokenStream {
     from_discriminant_macro::codegen::generate(&input).into()
 }
 
-#[proc_macro_derive(ModifierState)]
+#[proc_macro_derive(ModifierState, attributes(modifier_state))]
 pub fn derive_modifier_state(input: TokenStream) -> TokenStream {
     let derive_input = syn::parse_macro_input!(input as syn::DeriveInput);
     let parsed = match modifier_state_macro::parse::ModifierStateInput::from_derive(&derive_input) {

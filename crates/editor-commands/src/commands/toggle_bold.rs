@@ -1,6 +1,9 @@
 use editor_model::{Modifier, ModifierType, NodeId, NodeRef};
 use editor_resource::{Resource, find_bold_target, find_unbold_target};
-use editor_state::{PendingModifier, PendingModifiers, Position, resolve_effective_modifiers_at};
+use editor_state::{
+    PendingModifier, PendingModifiers, Position, is_effective_bold, is_node_bold,
+    resolve_effective_modifiers_at,
+};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
@@ -48,28 +51,6 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     compact_and_restore_selection(tr, &node_ids)?;
 
     Ok(true)
-}
-
-fn is_node_bold(node: &NodeRef) -> bool {
-    if node.modifiers().any(|m| matches!(m, Modifier::Bold)) {
-        return true;
-    }
-    let weight = node
-        .modifiers()
-        .find_map(|m| match m {
-            Modifier::FontWeight { value } => Some(*value),
-            _ => None,
-        })
-        .unwrap_or_else(|| {
-            resolve_inherited_modifiers(node)
-                .iter()
-                .find_map(|m| match m {
-                    Modifier::FontWeight { value } => Some(*value),
-                    _ => None,
-                })
-                .unwrap()
-        });
-    weight >= 700
 }
 
 fn check_range_is_bold(nodes: &[NodeRef]) -> bool {
@@ -211,7 +192,6 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
 
     let effective = resolve_effective_modifiers_at(tr.state(), &pos);
 
-    let has_bold = effective.iter().any(|m| matches!(m, Modifier::Bold));
     let current_weight = effective
         .iter()
         .find_map(|m| match m {
@@ -242,7 +222,7 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
         .ok_or_else(|| {
             CommandError::Corrupted("FontWeight missing in inherited modifiers".into())
         })?;
-    let is_bold = has_bold || current_weight >= 700;
+    let is_bold = is_effective_bold(&effective);
 
     let mut pending: PendingModifiers = tr
         .pending_modifiers()

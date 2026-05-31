@@ -3,6 +3,7 @@ use syn::{Data, DataEnum, DeriveInput, Field, Fields, Variant};
 pub struct ModifierStateInput {
     pub enum_ident: syn::Ident,
     pub variants: Vec<VariantInfo>,
+    pub computed: Vec<syn::Ident>,
 }
 
 pub enum VariantInfo {
@@ -28,9 +29,28 @@ impl ModifierStateInput {
             .iter()
             .map(VariantInfo::from_variant)
             .collect::<syn::Result<Vec<_>>>()?;
+
+        let mut computed = Vec::new();
+        for attr in &input.attrs {
+            if !attr.path().is_ident("modifier_state") {
+                continue;
+            }
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("computed") {
+                    meta.parse_nested_meta(|inner| {
+                        computed.push(inner.path.require_ident()?.clone());
+                        Ok(())
+                    })
+                } else {
+                    Err(meta.error("unknown `modifier_state` option"))
+                }
+            })?;
+        }
+
         Ok(Self {
             enum_ident,
             variants,
+            computed,
         })
     }
 }

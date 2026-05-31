@@ -1,3 +1,4 @@
+use editor_common::Tri;
 use editor_model::{
     Expand, Modifier, ModifierState, ModifierType, Node, NodeId, NodeRef, NodeType, Schema,
 };
@@ -101,6 +102,9 @@ pub fn resolve_modifier_state(state: &State) -> Option<ModifierState> {
         for m in &modifiers {
             out.set_uniform(m);
         }
+        if is_effective_bold(&modifiers) {
+            out.effective_bold = Tri::Uniform { value: () };
+        }
         Some(out)
     } else {
         let from = sel.anchor;
@@ -177,6 +181,8 @@ pub fn resolve_modifier_state_in_range(
         // else: only None-valued nodes saw the context, or none at all → Absent.
     }
 
+    out.effective_bold = aggregate_effective_bold(&nodes);
+
     out
 }
 
@@ -199,6 +205,54 @@ fn effective_modifier_on_node(node: &NodeRef<'_>, ty: ModifierType) -> Option<Mo
         }
     }
     None
+}
+
+pub fn is_node_bold(node: &NodeRef) -> bool {
+    if node.modifiers().any(|m| matches!(m, Modifier::Bold)) {
+        return true;
+    }
+    matches!(
+        effective_modifier_on_node(node, ModifierType::FontWeight),
+        Some(Modifier::FontWeight { value }) if value >= 700
+    )
+}
+
+pub fn is_effective_bold(effective: &[Modifier]) -> bool {
+    effective.iter().any(|m| {
+        matches!(m, Modifier::Bold) || matches!(m, Modifier::FontWeight { value } if *value >= 700)
+    })
+}
+
+fn aggregate_effective_bold(nodes: &[NodeRef<'_>]) -> Tri<()> {
+    let target = &Schema::modifier_spec(ModifierType::Bold).target;
+    let targets = target.rightmost_node_types();
+    let mut any_applicable = false;
+    let mut all_bold = true;
+    let mut any_bold = false;
+    for node in nodes {
+        if !targets.contains(&node.as_type()) {
+            continue;
+        }
+        let path = root_to_node_type_path(node);
+        if !target.matches(&path) {
+            continue;
+        }
+        any_applicable = true;
+        if is_node_bold(node) {
+            any_bold = true;
+        } else {
+            all_bold = false;
+        }
+    }
+    if !any_applicable {
+        Tri::Absent
+    } else if all_bold {
+        Tri::Uniform { value: () }
+    } else if any_bold {
+        Tri::Mixed
+    } else {
+        Tri::Absent
+    }
 }
 
 pub fn resolve_modifier_span_at(
@@ -855,5 +909,86 @@ mod tests {
             .filter(|m| matches!(m, Modifier::Bold))
             .count();
         assert_eq!(bolds, 1);
+    }
+
+    #[test]
+    fn effective_bold_uniform_for_heavy_weight_without_mark() {
+        let (state, ..) = state! {
+            doc { root [font_weight(400)] { paragraph {
+                t1: text("Hello") [font_weight(700)]
+            } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
+        assert_eq!(s.bold, editor_common::Tri::Absent);
+        assert_eq!(s.effective_bold, editor_common::Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn effective_bold_uniform_for_mixed_mark_and_weight() {
+        let (state, ..) = state! {
+            doc { root [font_weight(400)] { paragraph {
+                t1: text("Hello") [bold, font_weight(400)]
+                t2: text("World") [font_weight(800)]
+            } } }
+            selection: (t1, 0) -> (t2, 5)
+        };
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
+        assert_eq!(s.bold, editor_common::Tri::Mixed);
+        assert_eq!(s.effective_bold, editor_common::Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn effective_bold_mixed_when_partial() {
+        let (state, ..) = state! {
+            doc { root [font_weight(400)] { paragraph {
+                t1: text("Hello") [font_weight(700)]
+                t2: text("World") [font_weight(400)]
+            } } }
+            selection: (t1, 0) -> (t2, 5)
+        };
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
+        assert_eq!(s.effective_bold, editor_common::Tri::Mixed);
+    }
+
+    #[test]
+    fn effective_bold_absent_when_no_bold() {
+        let (state, ..) = state! {
+            doc { root [font_weight(400)] { paragraph {
+                t1: text("Hello") [font_weight(400)]
+            } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let sel = state.selection.as_ref().unwrap();
+        let s = resolve_modifier_state_in_range(&state, &sel.anchor, &sel.head);
+        assert_eq!(s.effective_bold, editor_common::Tri::Absent);
+    }
+
+    #[test]
+    fn effective_bold_collapsed_heavy_weight_uniform() {
+        let (state, ..) = state! {
+            doc { root [font_weight(400)] { paragraph {
+                t1: text("Hello") [font_weight(700)]
+            } } }
+            selection: (t1, 3)
+        };
+        let s = resolve_modifier_state(&state).unwrap();
+        assert_eq!(s.bold, editor_common::Tri::Absent);
+        assert_eq!(s.effective_bold, editor_common::Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn effective_bold_collapsed_light_weight_absent() {
+        let (state, ..) = state! {
+            doc { root [font_weight(400)] { paragraph {
+                t1: text("Hello") [font_weight(400)]
+            } } }
+            selection: (t1, 3)
+        };
+        let s = resolve_modifier_state(&state).unwrap();
+        assert_eq!(s.effective_bold, editor_common::Tri::Absent);
     }
 }

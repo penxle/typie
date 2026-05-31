@@ -35,6 +35,7 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[modifier_state(computed(effective_bold))]
 pub enum Modifier {
     #[wire(n(0))]
     #[strum_discriminants(wire(n(0)))]
@@ -246,6 +247,12 @@ impl ModifierState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn modifier_state_default_has_absent_effective_bold() {
+        let s = ModifierState::default();
+        assert_eq!(s.effective_bold, editor_common::Tri::Absent);
+    }
 
     #[test]
     fn as_type_discriminant() {

@@ -50,11 +50,16 @@ fn state_struct(input: &ModifierStateInput) -> TokenStream {
         quote! { pub #field_name: ::editor_common::Tri<#ty_inner> }
     });
 
+    let computed_fields = input.computed.iter().map(|ident| {
+        quote! { pub #ident: ::editor_common::Tri<()> }
+    });
+
     quote! {
         #[::editor_macros::ffi]
         #[derive(Clone, Debug, PartialEq, Eq, ::std::hash::Hash, Default, ::serde::Serialize, ::serde::Deserialize)]
         pub struct #state_ident {
             #(#fields,)*
+            #(#computed_fields,)*
         }
     }
 }
