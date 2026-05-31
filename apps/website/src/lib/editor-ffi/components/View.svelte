@@ -19,6 +19,7 @@
   import LineHighlight from './LineHighlight.svelte';
   import LinkTooltip from './LinkTooltip.svelte';
   import Page from './Page.svelte';
+  import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
@@ -193,6 +194,8 @@
       </CaretPositioned>
 
       <LineHighlight />
+
+      <RepasteAsText />
 
       <ContextMenu />
 

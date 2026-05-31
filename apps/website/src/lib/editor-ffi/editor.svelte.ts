@@ -14,6 +14,7 @@ import type {
   Editor as WasmEditor,
   EditorEvent,
   ExternalElement,
+  HistoryTag,
   Ime,
   InteractiveHit,
   LinkRect,
@@ -109,6 +110,7 @@ export class Editor {
 
   #cursor = $state<CursorMetrics>();
   #selection = $state<Selection | undefined>();
+  #lastHistoryTag = $state<HistoryTag>();
   #pageSizes = $state<Size[]>([]);
   #externalElements = $state<ExternalElement[]>([]);
   #tableOverlays = $state<TableOverlay[]>([]);
@@ -352,6 +354,10 @@ export class Editor {
     return this.#blockState;
   }
 
+  get lastHistoryTag() {
+    return this.#lastHistoryTag;
+  }
+
   get scaleFactor() {
     return this.#viewport.scale_factor;
   }
@@ -453,6 +459,12 @@ export class Editor {
     const result = await readClipboardRich();
     if (!result || result.text === '') return;
     this.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text: result.text } });
+  }
+
+  handleRepasteAsText(): void {
+    if (this.readOnly) return;
+    this.enqueue({ type: 'clipboard', op: { type: 'repaste_as_text' } });
+    this.focus();
   }
 
   get focusable() {
@@ -1310,6 +1322,10 @@ export class Editor {
   }
 
   #stateChangedHandler: EditorEventListener<'state_changed'> = (_, { fields }) => {
+    if (fields.includes('last_history_tag')) {
+      this.#lastHistoryTag = this.#wasm.last_history_tag();
+    }
+
     if (fields.includes('cursor')) {
       this.#cursor = this.#wasm.cursor();
     }

@@ -70,6 +70,12 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.can(message.from_ffi()?)?))
     }
 
+    pub fn last_history_tag(
+        &self,
+    ) -> EditorResult<Option<Complex<editor_transaction::HistoryTag>>> {
+        self.with_inner(|inner| Ok(inner.editor.last_history_tag().cloned().into_ffi()?))
+    }
+
     pub fn tick(&self) -> EditorResult<Vec<Complex<editor_core::EditorEvent>>> {
         self.with_inner(|inner| Ok(inner.editor.tick()?.into_ffi()?))
     }
@@ -761,6 +767,45 @@ mod tests {
         let editor = make_ffi_editor(initial);
         let result = editor.block_state().expect("ffi call returns Ok");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_last_history_tag_reports_repaste_as_text_availability() {
+        let (source, ..) = state! {
+            doc { root { paragraph { t1: text("hello") [bold] } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let payload = editor_clipboard::Slice::extract(&source)
+            .unwrap()
+            .to_payload();
+
+        let (initial, ..) = state! {
+            doc { root { paragraph { t2: text("Hi") } } }
+            selection: (t2, 1)
+        };
+        let editor = make_ffi_editor(initial);
+        let expected_text = payload.text.clone();
+        assert!(
+            editor
+                .last_history_tag()
+                .expect("ffi call returns Ok")
+                .is_none()
+        );
+
+        editor
+            .enqueue(editor_core::Message::Clipboard {
+                op: editor_core::ClipboardOp::Paste {
+                    html: Some(payload.html),
+                    text: payload.text,
+                },
+            })
+            .expect("enqueue paste");
+        let _ = editor.tick().expect("tick");
+
+        assert!(matches!(
+            editor.last_history_tag().expect("ffi call returns Ok"),
+            Some(editor_transaction::HistoryTag::PasteHtml { plain_text }) if plain_text == expected_text
+        ));
     }
 
     #[test]

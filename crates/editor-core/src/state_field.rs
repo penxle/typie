@@ -20,4 +20,5 @@ pub enum StateField {
     Modifiers,
     Block,
     TrackedRanges,
+    LastHistoryTag,
 }

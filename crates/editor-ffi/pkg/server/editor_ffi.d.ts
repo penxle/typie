@@ -697,7 +697,7 @@ export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_f
 
 export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
-export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges";
+export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges" | "last_history_tag";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -746,6 +746,7 @@ declare class Editor {
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;
+    last_history_tag(): HistoryTag | undefined;
     link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
     link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;

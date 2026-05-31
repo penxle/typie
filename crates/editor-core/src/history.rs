@@ -10,6 +10,7 @@ pub struct History {
     undos: Vec<HistoryEntry>,
     redos: Vec<HistoryEntry>,
     last_tag: Option<HistoryTag>,
+    last_tag_revision: u64,
     last_push_time: Option<Instant>,
     merge_interval: Duration,
 }
@@ -20,6 +21,7 @@ impl History {
             undos: Vec::new(),
             redos: Vec::new(),
             last_tag: None,
+            last_tag_revision: 0,
             last_push_time: None,
             merge_interval,
         }
@@ -51,7 +53,7 @@ impl History {
                 tag: None,
             });
         }
-        self.last_tag = None;
+        self.clear_last_tag();
         self.last_push_time = Some(now);
     }
 
@@ -68,7 +70,8 @@ impl History {
         });
 
         self.last_push_time = Some(now);
-        self.last_tag = Some(tag)
+        self.last_tag = Some(tag);
+        self.bump_last_tag_revision();
     }
 
     pub fn undo(&mut self) -> Option<Vec<Step>> {
@@ -92,7 +95,12 @@ impl History {
 
     /// Called after redo so that backspace shortcuts still fire correctly.
     pub fn sync_last_tag_from_top(&mut self) {
-        self.last_tag = self.undos.last().and_then(|e| e.tag.clone());
+        let last_tag = self.undos.last().and_then(|e| e.tag.clone());
+        let should_bump = self.last_tag != last_tag || last_tag.is_some();
+        self.last_tag = last_tag;
+        if should_bump {
+            self.bump_last_tag_revision();
+        }
     }
 
     pub fn can_undo(&self) -> bool {
@@ -107,8 +115,19 @@ impl History {
         self.last_tag.as_ref()
     }
 
+    pub fn last_tag_revision(&self) -> u64 {
+        self.last_tag_revision
+    }
+
     pub fn clear_last_tag(&mut self) {
-        self.last_tag = None
+        if self.last_tag.is_some() {
+            self.last_tag = None;
+            self.bump_last_tag_revision();
+        }
+    }
+
+    fn bump_last_tag_revision(&mut self) {
+        self.last_tag_revision = self.last_tag_revision.wrapping_add(1);
     }
 
     pub fn undos_len(&self) -> usize {

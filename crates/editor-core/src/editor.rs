@@ -405,6 +405,7 @@ impl Editor {
         let old_selection = self.state.selection;
         let old_pending_modifiers = self.state.pending_modifiers.clone();
         let old_composition = self.state.composition;
+        let old_last_history_tag_revision = self.history.last_tag_revision();
 
         let messages = std::mem::take(&mut self.message_queue);
         for msg in messages {
@@ -478,6 +479,10 @@ impl Editor {
 
         if old_composition != self.state.composition {
             fields.insert(StateField::Ime);
+        }
+
+        if old_last_history_tag_revision != self.history.last_tag_revision() {
+            fields.insert(StateField::LastHistoryTag);
         }
 
         if !fields.is_empty() {
@@ -869,7 +874,7 @@ impl Editor {
         self.view.resolve_movement(pos, movement, &resource)
     }
 
-    pub(crate) fn history_last_tag(&self) -> Option<&HistoryTag> {
+    pub fn last_history_tag(&self) -> Option<&HistoryTag> {
         self.history.last_tag()
     }
 

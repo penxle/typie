@@ -49,7 +49,7 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
             })
         }
         ClipboardOp::RepasteAsText => {
-            let Some(HistoryTag::PasteHtml { plain_text }) = editor.history_last_tag() else {
+            let Some(HistoryTag::PasteHtml { plain_text }) = editor.last_history_tag() else {
                 return Ok(());
             };
             let plain_text = plain_text.clone();
@@ -103,6 +103,8 @@ fn slice_has_table(slice: &Slice) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::event::EditorEvent;
+    use crate::state_field::StateField;
     use editor_macros::state;
     use editor_model::ModifierType;
     use editor_state::{DocFlatExt, ResolvedPositionFlatExt, assert_state_eq};
@@ -110,6 +112,12 @@ mod tests {
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
+
+    fn has_state_field(events: &[EditorEvent], field: StateField) -> bool {
+        events.iter().any(|event| {
+            matches!(event, EditorEvent::StateChanged { fields } if fields.contains(&field))
+        })
+    }
 
     #[test]
     fn probe_cut_with_collapsed_selection() {
@@ -711,7 +719,7 @@ mod tests {
             },
         });
 
-        let tag = editor.history_last_tag().cloned();
+        let tag = editor.last_history_tag().cloned();
         assert!(
             matches!(tag, Some(HistoryTag::PasteHtml { ref plain_text }) if plain_text == &payload.text),
             "expected PasteHtml tag with plain_text == payload.text, got {tag:?}"
@@ -731,7 +739,7 @@ mod tests {
                 text: "plain".into(),
             },
         });
-        assert!(editor.history_last_tag().is_none());
+        assert!(editor.last_history_tag().is_none());
     }
 
     #[test]
@@ -747,7 +755,7 @@ mod tests {
                 text: "plain".into(),
             },
         });
-        assert!(editor.history_last_tag().is_none());
+        assert!(editor.last_history_tag().is_none());
     }
 
     #[test]
@@ -779,6 +787,75 @@ mod tests {
             selection: (t3, 6)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn last_history_tag_field_tracks_repaste_as_text_availability() {
+        let (s_source, ..) = state! {
+            doc { root { paragraph { t1: text("hello") [bold] } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let payload = Slice::extract(&s_source).unwrap().to_payload();
+
+        let (s_target, ..) = state! {
+            doc { root { paragraph { t2: text("Hi") } } }
+            selection: (t2, 1)
+        };
+        let mut editor = Editor::new_test(s_target);
+        let expected_text = payload.text.clone();
+
+        let paste_events = editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+        assert!(matches!(
+            editor.last_history_tag(),
+            Some(HistoryTag::PasteHtml { plain_text }) if plain_text == &expected_text
+        ));
+        assert!(has_state_field(&paste_events, StateField::LastHistoryTag));
+
+        let repaste_events = editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+        assert!(editor.last_history_tag().is_none());
+        assert!(has_state_field(&repaste_events, StateField::LastHistoryTag));
+    }
+
+    #[test]
+    fn last_history_tag_field_emits_for_repeated_equal_html_paste() {
+        let (s_source, ..) = state! {
+            doc { root { paragraph { t1: text("hello") [bold] } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let payload = Slice::extract(&s_source).unwrap().to_payload();
+
+        let (s_target, ..) = state! {
+            doc { root { paragraph { t2: text("Hi") } } }
+            selection: (t2, 1)
+        };
+        let mut editor = Editor::new_test(s_target);
+        let html = payload.html.clone();
+        let text = payload.text.clone();
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(html.clone()),
+                text: text.clone(),
+            },
+        });
+        let repeated_events = editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(html),
+                text,
+            },
+        });
+
+        assert!(has_state_field(
+            &repeated_events,
+            StateField::LastHistoryTag
+        ));
     }
 
     #[test]
@@ -1225,7 +1302,11 @@ mod tests {
             },
         });
         editor.receive_remote_changeset(duplicate_cs);
-        editor.tick().unwrap();
+        let remote_events = editor.tick().unwrap();
+        assert!(
+            !has_state_field(&remote_events, StateField::LastHistoryTag),
+            "duplicate remote changeset must not change last history tag"
+        );
         editor.apply(Message::Clipboard {
             op: ClipboardOp::RepasteAsText,
         });
