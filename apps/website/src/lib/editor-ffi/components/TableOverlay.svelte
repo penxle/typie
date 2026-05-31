@@ -79,6 +79,7 @@
   const addTrackThickness = 23;
   const addTrackPadding = 5;
   const addButtonSize = 18;
+  const floatingToolbarOffset = 38;
   const resizeIndicatorThickness = 4;
   const resizeIndicatorHalfThickness = resizeIndicatorThickness / 2;
 
@@ -189,24 +190,9 @@
   let lastWindowPointer = $state<{ clientX: number; clientY: number } | null>(null);
 
   const isActive = $derived(isTableHovered || overlay.is_focused || menuOpen || cellBgMenuOpen || buttonHovered || resizing !== null);
+  const cellSelectionButtonPosition = $derived.by(() => {
+    if (!overlay.is_cell_selection) return null;
 
-  let toolbarFixed = $state<{ left: number; top: number } | null>(null);
-  let cellSelectionButtonFixed = $state<{ left: number; top: number } | null>(null);
-
-  function syncToolbarFixed() {
-    if (!tableOverlayRoot || !isActive) {
-      toolbarFixed = null;
-      return;
-    }
-    const r = tableOverlayRoot.getBoundingClientRect();
-    toolbarFixed = { left: r.left + overlay.bounds.width / 2, top: r.top - 38 };
-  }
-
-  function syncCellSelectionButtonFixed() {
-    if (!tableOverlayRoot || !overlay.is_cell_selection) {
-      cellSelectionButtonFixed = null;
-      return;
-    }
     const colStart = overlay.cell_selection_col_start ?? 0;
     const colEnd = overlay.cell_selection_col_end ?? 0;
     const rowEnd = overlay.cell_selection_row_end ?? 0;
@@ -214,44 +200,9 @@
     const rightEdge = overlay.col_positions[colEnd] ?? overlay.bounds.width;
     const centerX = (leftEdge + rightEdge) / 2;
     const bottomY = overlay.row_positions[rowEnd] ?? overlay.bounds.height;
-    const r = tableOverlayRoot.getBoundingClientRect();
-    cellSelectionButtonFixed = { left: r.left + centerX, top: r.top + bottomY + 4 };
-  }
-
-  function syncFixedPositions() {
-    syncToolbarFixed();
-    syncCellSelectionButtonFixed();
-  }
-
-  $effect(() => {
-    void overlay.bounds;
-    void overlay.is_cell_selection;
-    void overlay.cell_selection_row_end;
-    void overlay.cell_selection_col_start;
-    void overlay.cell_selection_col_end;
-    void isActive;
-    syncFixedPositions();
-
-    const onLayoutChange = () => {
-      syncFixedPositions();
-    };
-
-    window.addEventListener('resize', onLayoutChange);
-
-    const scrollEl = editor?.scrollContainerEl;
-    scrollEl?.addEventListener('scroll', onLayoutChange, { passive: true });
-
-    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(onLayoutChange);
-    if (scrollEl) {
-      resizeObserver?.observe(scrollEl);
-    }
-
-    return () => {
-      window.removeEventListener('resize', onLayoutChange);
-      scrollEl?.removeEventListener('scroll', onLayoutChange);
-      resizeObserver?.disconnect();
-    };
+    return { left: centerX, top: bottomY + 4 };
   });
+
   const isAlignButtonVisible = $derived(!Number.isFinite(overlay.proportion) || overlay.proportion < 1 - 0.001);
 
   const activeColIndex = $derived(
@@ -823,13 +774,13 @@
 
   <!-- Floating toolbar -->
   <div
-    style:left="{toolbarFixed?.left ?? 0}px"
-    style:top="{toolbarFixed?.top ?? 0}px"
+    style:left="{overlay.bounds.x + overlay.bounds.width / 2}px"
+    style:top="{overlay.bounds.y - floatingToolbarOffset}px"
     class={center({
-      position: 'fixed',
+      position: 'absolute',
       width: 'auto',
       height: '30px',
-      display: toolbarFixed ? 'flex' : 'none',
+      display: isActive ? 'flex' : 'none',
       gap: '2px',
       alignItems: 'center',
       translate: 'auto',
@@ -973,12 +924,12 @@
     </Menu>
   </div>
 
-  {#if overlay.is_cell_selection && cellSelectionButtonFixed !== null}
+  {#if cellSelectionButtonPosition !== null}
     <div
-      style:left="{cellSelectionButtonFixed.left}px"
-      style:top="{cellSelectionButtonFixed.top}px"
+      style:left="{overlay.bounds.x + cellSelectionButtonPosition.left}px"
+      style:top="{overlay.bounds.y + cellSelectionButtonPosition.top}px"
       class={center({
-        position: 'fixed',
+        position: 'absolute',
         translate: 'auto',
         translateX: '-1/2',
         zIndex: '50',

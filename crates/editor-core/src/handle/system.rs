@@ -1165,7 +1165,7 @@ mod tests {
     }
 
     #[test]
-    fn resize_continuous_width_change_emits_render_invalidated() {
+    fn resize_continuous_width_change_emits_layout_geometry_fields_and_render_invalidated() {
         let (state, _t1) = state! {
             doc {
                 root (
@@ -1203,6 +1203,24 @@ mod tests {
             has_render_invalidated,
             "continuous mode must emit RenderInvalidated when effective width shrinks"
         );
+
+        let state_changed_fields = events.iter().find_map(|e| match e {
+            EditorEvent::StateChanged { fields } => Some(fields),
+            _ => None,
+        });
+        let fields = state_changed_fields.expect("continuous resize must emit StateChanged");
+        for required in [
+            StateField::Cursor,
+            StateField::PageSizes,
+            StateField::ExternalElements,
+            StateField::TableOverlays,
+            StateField::LinkRects,
+        ] {
+            assert!(
+                fields.contains(&required),
+                "continuous resize StateChanged must include {required:?}"
+            );
+        }
     }
 
     #[test]

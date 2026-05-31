@@ -772,7 +772,13 @@ impl Editor {
         let did_change = self.view.resize(viewport, &self.state.doc);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
-                fields: vec![StateField::PageSizes, StateField::ExternalElements],
+                fields: vec![
+                    StateField::Cursor,
+                    StateField::PageSizes,
+                    StateField::ExternalElements,
+                    StateField::TableOverlays,
+                    StateField::LinkRects,
+                ],
             });
             self.push_event(EditorEvent::RenderInvalidated);
         }
