@@ -215,7 +215,7 @@
                   v2: true,
                 },
               });
-              await goto(`/${resp.createDocument.entity.slug}/v2`);
+              await goto(`/${resp.createDocument.entity.slug}`);
             },
           } satisfies Command,
         ]),
