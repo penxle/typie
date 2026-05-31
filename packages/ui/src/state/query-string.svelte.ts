@@ -46,7 +46,7 @@ export class QueryString<T = string> {
   #parse: (value: string | null) => T;
   #stringify: (value: T) => string | null;
 
-  #update: () => void;
+  #update: { call: () => void; cancel?: () => void };
   #current = $state<T>() as T;
 
   constructor(
@@ -77,7 +77,7 @@ export class QueryString<T = string> {
     this.#current = this.#parse(urlValue);
 
     const update = () => pendingUpdates.set(this.#key, this.#stringify(this.#current));
-    this.#update = this.#debounce > 0 ? debounce(update, this.#debounce) : update;
+    this.#update = this.#debounce > 0 ? debounce(update, this.#debounce) : { call: update };
 
     $effect(() => {
       const newUrlValue = page.url.searchParams.get(this.#key);
@@ -98,7 +98,7 @@ export class QueryString<T = string> {
   set current(value: T) {
     if (this.#current !== value) {
       this.#current = value;
-      this.#update();
+      this.#update.call();
     }
   }
 }

@@ -240,6 +240,8 @@
     initialize();
 
     return () => {
+      scrollToVersion.cancel();
+      updateViewVersion.cancel();
       editor.setReadOnly(wasReadOnly);
       if (editor.isDetached() && !wasDetached) {
         editor.checkoutToLatest();
@@ -266,7 +268,7 @@
         await loadMoreVersions();
       }
 
-      scrollToVersion(currentId);
+      scrollToVersion.call(currentId);
       updateViewVersion.call(currentId);
     });
   });

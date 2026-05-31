@@ -52,7 +52,11 @@ export const tooltip: Action<HTMLElement, Parameter> = (
     void show;
     void forceShow;
 
-    debouncedShouldShow();
+    debouncedShouldShow.call();
+  });
+
+  $effect(() => {
+    return () => debouncedShouldShow.cancel();
   });
 
   let timer = $state<NodeJS.Timeout>();

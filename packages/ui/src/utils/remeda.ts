@@ -1,7 +1,10 @@
 import * as R from 'remeda';
 
-export const debounce = <TArgs extends readonly unknown[]>(fn: (...args: TArgs) => void, delay: number): ((...args: TArgs) => void) => {
-  const { call } = R.funnel(
+export const debounce = <TArgs extends readonly unknown[]>(
+  fn: (...args: TArgs) => void,
+  delay: number,
+): { call: (...args: TArgs) => void; cancel: () => void } => {
+  const { call, cancel } = R.funnel(
     (args: TArgs) => {
       fn(...args);
     },
@@ -11,7 +14,7 @@ export const debounce = <TArgs extends readonly unknown[]>(fn: (...args: TArgs) 
       triggerAt: 'end',
     },
   );
-  return call;
+  return { call, cancel };
 };
 
 export const throttle = <TArgs extends readonly unknown[]>(
