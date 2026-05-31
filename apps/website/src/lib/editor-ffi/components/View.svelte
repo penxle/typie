@@ -5,7 +5,7 @@
   import { onDestroy, tick, untrack } from 'svelte';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
-  import { PAGE_GAP } from '../constants';
+  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, PAGE_GAP } from '../constants';
   import { Editor, getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
@@ -68,6 +68,11 @@
 
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
+  const framePadding = $derived(isPaginated ? 0 : CONTINUOUS_VIEW_PADDING);
+  const editorMinWidth = $derived(isPaginated ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`);
+  const continuousMaxFrameWidth = $derived(
+    layoutMode?.type === 'continuous' ? `${layoutMode.max_width + CONTINUOUS_VIEW_PADDING * 2}px` : undefined,
+  );
 
   const cursor = $derived.by(() => {
     const editor = ctx.editor;
@@ -101,11 +106,14 @@
 
   $effect(() => {
     const editor = ctx.editor;
-    if (status !== 'initialized' || !editor || !clientWidth || !clientHeight) return;
+    const width = clientWidth;
+    const height = clientHeight;
+    const isContinuous = !isPaginated;
+    if (status !== 'initialized' || !editor || !width || !height) return;
+    const effectiveWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
 
     untrack(() => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      editor.resizeViewport(clientWidth!, clientHeight!, window.devicePixelRatio);
+      editor.resizeViewport(effectiveWidth, height, window.devicePixelRatio);
     });
   });
 
@@ -126,7 +134,6 @@
       position: 'relative',
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
       overflow: 'auto',
       scrollbar: 'hidden',
       ...(isPaginated && {
@@ -149,8 +156,10 @@
   {#if ctx.editor && header}
     <div
       style:width={layoutMode?.type === 'paginated' ? `${layoutMode.page_width}px` : '100%'}
-      style:max-width={layoutMode?.type === 'continuous' ? `${layoutMode.max_width}px` : undefined}
-      class={css({ flexShrink: '0' })}
+      style:min-width={isPaginated ? undefined : editorMinWidth}
+      style:max-width={continuousMaxFrameWidth}
+      style:padding-inline={`${framePadding}px`}
+      class={css({ flexShrink: '0', marginX: 'auto' })}
     >
       {@render header()}
     </div>
@@ -159,12 +168,15 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     style:cursor
+    style:min-width={editorMinWidth}
+    style:max-width={continuousMaxFrameWidth}
     class={css({
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       flexGrow: '1',
       width: 'full',
+      marginX: 'auto',
       userSelect: 'none',
       ...(isPaginated && {
         rowGap: 'var(--page-gap)',
@@ -220,8 +232,10 @@
   {#if ctx.editor && footer}
     <div
       style:width={layoutMode?.type === 'paginated' ? `${layoutMode.page_width}px` : '100%'}
-      style:max-width={layoutMode?.type === 'continuous' ? `${layoutMode.max_width}px` : undefined}
-      class={css({ flexShrink: '0' })}
+      style:min-width={isPaginated ? undefined : editorMinWidth}
+      style:max-width={continuousMaxFrameWidth}
+      style:padding-inline={`${framePadding}px`}
+      class={css({ flexShrink: '0', marginX: 'auto' })}
     >
       {@render footer()}
     </div>

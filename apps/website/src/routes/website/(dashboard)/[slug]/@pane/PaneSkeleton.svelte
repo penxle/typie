@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
+  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING } from '$lib/editor/constants';
   import type { LayoutMode } from '$lib/editor/types';
   import type { Pane } from './types';
 
@@ -48,7 +49,9 @@
   });
 
   const isPaginated = $derived(layoutMetrics.isPaginated);
-  const bodyMaxWidth = $derived(`${layoutMetrics.contentWidth}px`);
+  const bodyPaddingInline = $derived(isPaginated ? 0 : CONTINUOUS_VIEW_PADDING);
+  const bodyMinWidth = $derived(isPaginated ? undefined : `${CONTINUOUS_MIN_WIDTH}px`);
+  const bodyMaxWidth = $derived(`${layoutMetrics.contentWidth + bodyPaddingInline * 2}px`);
   const contentMaxWidth = $derived(`${layoutMetrics.contentWidth}px`);
   const paragraphPaddingTop = $derived(`${layoutMetrics.paragraphTopPadding}px`);
 
@@ -229,7 +232,9 @@
     <!-- Body: centered content with constrained width -->
     <div class={flex({ flexGrow: '1', overflow: 'hidden' })}>
       <div
+        style:min-width={bodyMinWidth}
         style:max-width={bodyMaxWidth}
+        style:padding-inline={`${bodyPaddingInline}px`}
         class={flex({
           flexDirection: 'column',
           width: 'full',
