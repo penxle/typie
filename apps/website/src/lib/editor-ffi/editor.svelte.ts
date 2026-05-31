@@ -1,3 +1,4 @@
+import { debounce } from '@typie/ui/utils';
 import { createContext, tick, untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
@@ -62,11 +63,16 @@ export type AiFeedback = {
 };
 
 let wasmInitPromise: Promise<void> | null = null;
+const VIEWPORT_RESIZE_DEBOUNCE_MS = 50;
 
 function ensureWasmInitialized(): Promise<void> {
   return (wasmInitPromise ??= (async () => {
     await initWasm();
   })());
+}
+
+function sameViewport(a: Viewport, b: Viewport): boolean {
+  return a.width === b.width && a.height === b.height && a.scale_factor === b.scale_factor;
 }
 
 export class EditorContext {
@@ -98,6 +104,16 @@ export class Editor {
   #rafId: number | null = null;
 
   #viewport!: Viewport;
+  #appliedViewport!: Viewport;
+  #applyViewportResize = debounce(() => {
+    if (this.#destroyed || sameViewport(this.#appliedViewport, this.#viewport)) return;
+
+    this.#appliedViewport = this.#viewport;
+    this.enqueue({
+      type: 'system',
+      event: { type: 'resize', width: this.#viewport.width, height: this.#viewport.height, scale_factor: this.#viewport.scale_factor },
+    });
+  }, VIEWPORT_RESIZE_DEBOUNCE_MS);
 
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
@@ -199,6 +215,7 @@ export class Editor {
 
     self.#wasm = wasm.create_editor_from_graph(graph, viewport);
     self.#viewport = viewport;
+    self.#appliedViewport = viewport;
     self.#gesture = new TouchGestureController(self);
 
     self.on('state_changed', self.#stateChangedHandler);
@@ -360,6 +377,18 @@ export class Editor {
 
   get scaleFactor() {
     return this.#viewport.scale_factor;
+  }
+
+  resizeViewport(width: number, height: number, scaleFactor: number): void {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(scaleFactor)) return;
+    if (width <= 0 || height <= 0 || scaleFactor <= 0) return;
+
+    const viewport = { width, height, scale_factor: scaleFactor };
+    if (sameViewport(this.#viewport, viewport)) return;
+
+    this.#viewport = viewport;
+    if (sameViewport(this.#appliedViewport, viewport)) return;
+    this.#applyViewportResize.call();
   }
 
   focus() {
@@ -1466,6 +1495,8 @@ export class Editor {
       clearTimeout(this.#characterCountsDebounceTimer);
       this.#characterCountsDebounceTimer = null;
     }
+
+    this.#applyViewportResize.cancel();
 
     this.#gesture?.destroy();
     this.#wasm?.free();

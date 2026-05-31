@@ -100,6 +100,16 @@
   });
 
   $effect(() => {
+    const editor = ctx.editor;
+    if (status !== 'initialized' || !editor || !clientWidth || !clientHeight) return;
+
+    untrack(() => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      editor.resizeViewport(clientWidth!, clientHeight!, window.devicePixelRatio);
+    });
+  });
+
+  $effect(() => {
     ctx.editor?.setThemeVariant(theme.currentThemeVariant);
   });
 
