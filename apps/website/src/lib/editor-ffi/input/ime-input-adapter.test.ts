@@ -670,16 +670,16 @@ describe('ImeInputAdapter', () => {
     });
     ime.syncFromEditor();
 
-    ime.expectInput('\u2028ㅁ\u2029', 2);
+    ime.expectInput('ㅁ', 1);
 
     const duplicateCommittedPreedit = ime.beforeTextInput('ㅁ');
     expect(duplicateCommittedPreedit.preventDefault).toHaveBeenCalledOnce();
     expect(ime.messages).toHaveLength(1);
 
     ime.beforeCompositionInput('ㄴ');
-    ime.applyNativeInput('\u2028ㅁㄴ\u2029', 3);
+    ime.applyNativeInput('ㅁㄴ', 2);
 
-    ime.expectInput('\u2028ㅁㄴ\u2029', 3);
+    ime.expectInput('ㅁㄴ', 2);
 
     ime.setContext({
       text: '\u2028ㅁㄴ\u2029',
@@ -690,10 +690,11 @@ describe('ImeInputAdapter', () => {
     ime.syncFromEditor();
 
     ime.compositionStart();
-    ime.beforeCompositionInput('ㅇ');
-    ime.applyNativeInput('\u2028ㅁㄴㅇ\u2029', 4);
+    ime.compositionUpdate('ㄴㅇ');
+    ime.beforeCompositionInput('ㄴㅇ');
+    ime.applyNativeInput('ㅁㄴㅇ', 3);
 
-    ime.expectInput('\u2028ㅁㄴㅇ\u2029', 4);
+    ime.expectInput('ㅁㄴㅇ', 3);
     expect(ime.messages).toEqual([
       {
         type: 'text_input',
@@ -712,14 +713,14 @@ describe('ImeInputAdapter', () => {
       {
         type: 'text_input',
         ops: [
-          { type: 'set_composition', start: 3, end: 3 },
-          { type: 'compose', text: 'ㅇ' },
+          { type: 'set_composition', start: 2, end: 3 },
+          { type: 'compose', text: 'ㄴㅇ' },
         ],
       },
     ]);
   });
 
-  it('syncs editor-restored structure while composing after replacing a structural selection', () => {
+  it('preserves the native buffer while rebasing an editor-restored structure during composition', () => {
     const ime = createImeHarness({
       text: '\u2028\u2028\u2029\u2029',
       windowStart: 0,
@@ -740,11 +741,12 @@ describe('ImeInputAdapter', () => {
     });
     ime.syncFromEditor();
 
-    ime.expectInput('\u2028\u2028\u2029\u2029\u2028ㅁ\u2029', 6);
+    ime.expectInput('ㅁ', 1);
 
     ime.compositionStart();
-    ime.beforeCompositionInput('ㄴ');
-    ime.applyNativeInput('\u2028\u2028\u2029\u2029\u2028ㅁㄴ\u2029', 7);
+    ime.compositionUpdate('ㅁㄴ');
+    ime.beforeCompositionInput('ㅁㄴ');
+    ime.applyNativeInput('ㅁㄴ', 2);
 
     expect(ime.messages).toEqual([
       {
@@ -757,8 +759,8 @@ describe('ImeInputAdapter', () => {
       {
         type: 'text_input',
         ops: [
-          { type: 'set_composition', start: 6, end: 6 },
-          { type: 'compose', text: 'ㄴ' },
+          { type: 'set_composition', start: 5, end: 6 },
+          { type: 'compose', text: 'ㅁㄴ' },
         ],
       },
     ]);
@@ -786,19 +788,19 @@ describe('ImeInputAdapter', () => {
     });
     ime.syncFromEditor();
 
-    ime.expectInput('\u2028ㅁ\u2029', 2);
+    ime.expectInput('ㅁ', 1);
 
     ime.compositionUpdate('ㅁ');
     ime.beforeCompositionInput('ㅁ');
-    ime.applyNativeInput('\u2028ㅁ\u2029', 2);
+    ime.applyNativeInput('ㅁ', 1);
     ime.compositionEnd();
 
     ime.compositionStart();
     ime.compositionUpdate('ㄴ');
     ime.beforeCompositionInput('ㄴ');
-    ime.applyNativeInput('\u2028ㅁㄴ\u2029', 3);
+    ime.applyNativeInput('ㅁㄴ', 2);
 
-    ime.expectInput('\u2028ㅁㄴ\u2029', 3);
+    ime.expectInput('ㅁㄴ', 2);
 
     ime.setContext({
       text: '\u2028ㅁㄴ\u2029',
@@ -814,9 +816,9 @@ describe('ImeInputAdapter', () => {
     ime.compositionStart();
     ime.compositionUpdate('ㅇ');
     ime.beforeCompositionInput('ㅇ');
-    ime.applyNativeInput('\u2028ㅁㄴㅇ\u2029', 4);
+    ime.applyNativeInput('ㅁㄴㅇ', 3);
 
-    ime.expectInput('\u2028ㅁㄴㅇ\u2029', 4);
+    ime.expectInput('ㅁㄴㅇ', 3);
     expect(ime.messages).toEqual([
       {
         type: 'text_input',
@@ -878,7 +880,7 @@ describe('ImeInputAdapter', () => {
     ime.compositionStart();
     ime.compositionUpdate('ㄴ');
     ime.beforeCompositionInput('ㄴ');
-    ime.applyNativeInput('\u2028ㅁㄴ\u2029', 3);
+    ime.applyNativeInput('ㅁㄴ', 2);
 
     ime.setContext({
       text: '\u2028ㅁㄴ\u2029',
@@ -892,9 +894,9 @@ describe('ImeInputAdapter', () => {
     ime.compositionStart();
     ime.compositionUpdate('ㅇ');
     ime.beforeCompositionInput('ㅇ');
-    ime.applyNativeInput('\u2028ㅁㄴㅇ\u2029', 4);
+    ime.applyNativeInput('ㅁㄴㅇ', 3);
 
-    ime.expectInput('\u2028ㅁㄴㅇ\u2029', 4);
+    ime.expectInput('ㅁㄴㅇ', 3);
     expect(ime.messages).toEqual([
       {
         type: 'text_input',
@@ -916,6 +918,143 @@ describe('ImeInputAdapter', () => {
         ops: [
           { type: 'set_composition', start: 3, end: 3 },
           { type: 'compose', text: 'ㅇ' },
+        ],
+      },
+    ]);
+  });
+
+  it('preserves the native buffer while rebasing a selected empty paragraph during composition', () => {
+    const ime = createImeHarness({
+      text: '\u2028\u2029',
+      windowStart: 0,
+      selection: { start: 0, end: 2 },
+      composing: null,
+    });
+
+    ime.syncFromEditor();
+    ime.compositionStart('\u2028\u2029');
+    ime.compositionUpdate('n');
+    ime.beforeCompositionInput('n');
+    ime.applyNativeInput('n', 1);
+
+    ime.setContext({
+      text: '\u2028n\u2029',
+      windowStart: 0,
+      selection: { start: 2, end: 2 },
+      composing: { start: 1, end: 2 },
+    });
+    ime.syncFromEditor();
+
+    ime.expectInput('n', 1);
+
+    ime.compositionStart();
+    ime.compositionUpdate('に');
+    ime.beforeCompositionInput('に');
+    ime.applyNativeInput('に', 1);
+
+    ime.expectInput('に', 1);
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 0, end: 2 },
+          { type: 'compose', text: 'n' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 2 },
+          { type: 'compose', text: 'に' },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps a romanized IME composition in one native buffer after selected empty paragraph replacement', () => {
+    const ime = createImeHarness({
+      text: '\u2028\u2029',
+      windowStart: 0,
+      selection: { start: 0, end: 2 },
+      composing: null,
+    });
+
+    ime.syncFromEditor();
+    ime.compositionStart('\u2028\u2029');
+    ime.compositionUpdate('n');
+    ime.beforeCompositionInput('n');
+    ime.applyNativeInput('n', 1);
+
+    ime.setContext({
+      text: '\u2028n\u2029',
+      windowStart: 0,
+      selection: { start: 2, end: 2 },
+      composing: { start: 1, end: 2 },
+    });
+    ime.syncFromEditor();
+
+    for (const [text, cursor] of [
+      ['に', 1],
+      ['にh', 2],
+      ['にほ', 2],
+      ['にほn', 3],
+      ['にほんg', 4],
+      ['日本語', 3],
+    ] as const) {
+      ime.compositionUpdate(text);
+      ime.beforeCompositionInput(text);
+      ime.applyNativeInput(text, cursor);
+    }
+
+    ime.expectInput('日本語', 3);
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 0, end: 2 },
+          { type: 'compose', text: 'n' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 2 },
+          { type: 'compose', text: 'に' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 2 },
+          { type: 'compose', text: 'にh' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 3 },
+          { type: 'compose', text: 'にほ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 3 },
+          { type: 'compose', text: 'にほn' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 4 },
+          { type: 'compose', text: 'にほんg' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 1, end: 5 },
+          { type: 'compose', text: '日本語' },
         ],
       },
     ]);

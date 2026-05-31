@@ -76,6 +76,45 @@ const resolveActiveCompositionSyncContext = (local: ImeContext, incoming: ImeCon
   };
 };
 
+const rebaseNativeCompositionContext = (local: ImeContext, incoming: ImeContext, input: ImeTextInput): ImeContext | null => {
+  if (!local.composing) {
+    return null;
+  }
+
+  const syncContext = resolveActiveCompositionSyncContext(local, incoming);
+  if (!syncContext?.composing) {
+    return null;
+  }
+
+  const compositionText = readContextCompositionText(local);
+  if (compositionText == null) {
+    return null;
+  }
+
+  const localStart = local.composing.start - local.windowStart;
+  const compositionLength = codePointLength(compositionText);
+  if (localStart < 0 || localStart + compositionLength > codePointLength(input.value)) {
+    return null;
+  }
+
+  if (codePointSlice(input.value, localStart, localStart + compositionLength) !== compositionText) {
+    return null;
+  }
+
+  const windowStart = syncContext.composing.start - localStart;
+  const composing = {
+    start: syncContext.composing.start,
+    end: syncContext.composing.start + compositionLength,
+  };
+
+  return {
+    text: input.value,
+    windowStart,
+    selection: utf16SelectionToFlatRange(input.value, windowStart, readInputUtf16Selection(input)),
+    composing,
+  };
+};
+
 const readDuplicateCommittedPreeditTarget = (context: ImeContext, input: ImeTextInput, text: string | null): ImeRange | null => {
   if (!context.composing || text == null || readContextCompositionText(context) !== text) {
     return null;
@@ -113,7 +152,6 @@ export class ImeInputAdapter {
     if (this.#compositionActive) {
       if (!this.#context) {
         this.#context = context;
-        syncInputElementToContext(input, context);
         return;
       }
 
@@ -121,10 +159,9 @@ export class ImeInputAdapter {
         return;
       }
 
-      const syncContext = resolveActiveCompositionSyncContext(this.#context, context);
-      if (syncContext) {
-        this.#context = syncContext;
-        syncInputElementToContext(input, syncContext);
+      const rebasedContext = rebaseNativeCompositionContext(this.#context, context, input);
+      if (rebasedContext) {
+        this.#context = rebasedContext;
       }
       return;
     }
@@ -205,7 +242,6 @@ export class ImeInputAdapter {
       this.#handleCompositionInputWithDiff(context, e.currentTarget, diff);
       return;
     }
-
     this.#handleTextInputWithDiff(context, e.currentTarget, diff);
   }
 
@@ -297,11 +333,13 @@ export class ImeInputAdapter {
 
   handleCompositionStart(e: CompositionEvent & { currentTarget: ImeTextInput }): void {
     this.#clearCommitPending();
+    const wasCompositionActive = this.#compositionActive;
+    const pendingTarget = this.#pendingCompositionTarget;
     this.#pendingCompositionText = null;
-    this.#pendingCompositionTarget = null;
     this.#compositionActive = true;
     const context = this.#currentContext(e.currentTarget);
-    this.#pendingCompositionTarget = context?.composing ? { start: context.composing.end, end: context.composing.end } : null;
+    this.#pendingCompositionTarget =
+      pendingTarget ?? (context?.composing && !wasCompositionActive ? { start: context.composing.end, end: context.composing.end } : null);
   }
 
   handleCompositionUpdate(e: CompositionEvent): void {
@@ -364,6 +402,7 @@ export class ImeInputAdapter {
 
     const current = readContextCompositionText(context) ?? '';
     const targetsCurrentComposition = target.start === context.composing.start && target.end === context.composing.end;
+
     if (replacement.text === `${current}${pending}` && current.endsWith(pending) && targetsCurrentComposition) {
       return { target, text: replacement.text };
     }
