@@ -111,6 +111,40 @@ fn is_token(c: char) -> bool {
     c == FLAT_OPEN || c == FLAT_CLOSE
 }
 
+fn balanced_structural_body_range(doc: &Doc, start: usize, end: usize) -> Option<(usize, usize)> {
+    let mut stack = Vec::new();
+    let mut body: Option<(usize, usize)> = None;
+    for (seg_start, seg) in doc.flat_segments() {
+        if seg_start >= end {
+            break;
+        }
+        if seg_start + seg.size() <= start {
+            continue;
+        }
+
+        match seg {
+            FlatSegment::Open { node_id } => stack.push((node_id, seg_start)),
+            FlatSegment::Close { node_id } => {
+                let Some(&(open_id, open_start)) = stack.last() else {
+                    continue;
+                };
+                if open_id != node_id {
+                    continue;
+                }
+                stack.pop();
+                let pair = (open_start, seg_start + seg.size());
+                body = Some(match body {
+                    Some((body_start, body_end)) => (body_start.min(pair.0), body_end.max(pair.1)),
+                    None => pair,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    body
+}
+
 fn utf16_units_to_chars(iter: impl Iterator<Item = char>, utf16_units: usize) -> usize {
     let mut remaining = utf16_units;
     let mut count = 0;
@@ -473,6 +507,14 @@ fn structural_forward(tr: &mut Transaction) -> CommandResult {
     )
 }
 
+fn set_selection_at_flat(tr: &mut Transaction, flat: usize) -> CommandResult {
+    let doc = tr.doc();
+    let Some(pos) = ResolvedPosition::from_flat(&doc, flat) else {
+        return Ok(false);
+    };
+    commands::set_selection(tr, Selection::collapsed((&pos).into()))
+}
+
 struct FlatDelta {
     start_tokens: usize,
     replace_start: usize,
@@ -484,6 +526,7 @@ struct FlatDelta {
 }
 
 fn analyze_delta(
+    doc: &Doc,
     chars: &[char],
     del_start: usize,
     del_end: usize,
@@ -492,42 +535,30 @@ fn analyze_delta(
 ) -> FlatDelta {
     let del = &chars[del_start..del_end];
     let ins_text: String = ins.iter().collect();
-
-    if !ins_text.is_empty() && !del.is_empty() && del.iter().all(|c| is_token(*c)) {
-        // Keep the structural range intact so replace_text_range can create a
-        // paragraph before inserting into a selected empty block.
-        return FlatDelta {
-            start_tokens: 0,
-            replace_start: del_start,
-            replace_end: del_end,
-            end_tokens: 0,
-            ins_text,
-            composition_text_start: Some(del_start),
-        };
-    }
-
-    let first_text = del.iter().position(|c| !is_token(*c));
-    let last_text = del.iter().rposition(|c| !is_token(*c));
-
-    let (replace_start, replace_end, left_tokens, right_tokens) = match (first_text, last_text) {
-        (Some(first), Some(last)) => {
-            let left = &del[..first];
-            let right = &del[last + 1..];
-            (del_start + first, del_start + last + 1, left, right)
-        }
-        _ => {
-            let cursor_offset = cursor.clamp(del_start, del_end) - del_start;
-            let left = &del[..cursor_offset];
-            let right = &del[cursor_offset..];
-            (
-                del_start + cursor_offset,
-                del_start + cursor_offset,
-                left,
-                right,
-            )
-        }
+    let text_body = del
+        .iter()
+        .position(|c| !is_token(*c))
+        .zip(del.iter().rposition(|c| !is_token(*c)))
+        .map(|(first, last)| (del_start + first, del_start + last + 1));
+    let structural_body = balanced_structural_body_range(doc, del_start, del_end);
+    let replace_body = match (text_body, structural_body) {
+        (Some((text_start, text_end)), Some((structural_start, structural_end))) => Some((
+            text_start.min(structural_start),
+            text_end.max(structural_end),
+        )),
+        (Some(body), None) | (None, Some(body)) => Some(body),
+        (None, None) => None,
     };
 
+    let (replace_start, replace_end) = if let Some((start, end)) = replace_body {
+        (start, end)
+    } else {
+        let cursor = cursor.clamp(del_start, del_end);
+        (cursor, cursor)
+    };
+
+    let left_tokens = &chars[del_start..replace_start];
+    let right_tokens = &chars[replace_end..del_end];
     let backward_count = count_opens(left_tokens).max(count_closes(left_tokens));
     let forward_count = count_opens(right_tokens).max(count_closes(right_tokens));
 
@@ -537,7 +568,10 @@ fn analyze_delta(
         replace_end,
         end_tokens: forward_count,
         ins_text,
-        composition_text_start: None,
+        composition_text_start: chars[replace_start..replace_end]
+            .iter()
+            .any(|c| is_token(*c))
+            .then_some(replace_start),
     }
 }
 
@@ -600,6 +634,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         }
 
         let delta = analyze_delta(
+            &editor.state().doc,
             &initial.text,
             text_change.replace_start,
             text_change.replace_end,
@@ -615,110 +650,116 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                 .as_ref()
                 .is_some_and(|selection| selection.is_unit_node_selection(&editor.state().doc));
         let has_text_delta = !del.is_empty() || !text_change.insert.is_empty();
+        let has_structural_seams = delta.start_tokens > 0 || delta.end_tokens > 0;
 
-        if should_insert_after_unit_selection || (delta.start_tokens == 0 && delta.end_tokens == 0)
-        {
-            if has_text_delta || result.comp.is_some() || editor.state().composition.is_some() {
-                editor.transact(|tr| {
-                    if has_text_delta {
-                        commands::first!(
+        if has_text_delta || result.comp.is_some() || editor.state().composition.is_some() {
+            editor.transact(|tr| {
+                let mut composition_text_start = delta.composition_text_start;
+
+                if has_text_delta {
+                    if should_insert_after_unit_selection {
+                        commands::chain!(
                             tr,
-                            |tr| {
-                                if !should_insert_after_unit_selection {
-                                    return Ok(false);
-                                }
-                                commands::chain!(
-                                    tr,
-                                    commands::insert_paragraph_after_unit_selection(),
-                                    commands::insert_text(&delta.ins_text),
-                                )
-                            },
-                            |tr| replace_text_range(
-                                tr,
+                            commands::insert_paragraph_after_unit_selection(),
+                            commands::insert_text(&delta.ins_text),
+                        )?;
+                        composition_text_start = Some(text_change.replace_start);
+                    } else if has_structural_seams {
+                        let deletes_body = delta.replace_start != delta.replace_end;
+                        let replacement_modifiers = if !delta.ins_text.is_empty() {
+                            let doc = tr.doc();
+                            uniform_text_modifiers_in_range(
+                                &doc,
                                 delta.replace_start,
                                 delta.replace_end,
+                            )
+                        } else {
+                            None
+                        };
+
+                        if deletes_body {
+                            replace_text_range(tr, delta.replace_start, delta.replace_end, "")?;
+                        }
+
+                        if delta.end_tokens > 0 {
+                            if !deletes_body {
+                                set_selection_at_flat(tr, delta.replace_end)?;
+                            }
+                            for _ in 0..delta.end_tokens {
+                                structural_forward(tr)?;
+                            }
+                        }
+
+                        if delta.start_tokens > 0 {
+                            let selection_ready = if deletes_body {
+                                true
+                            } else {
+                                set_selection_at_flat(tr, delta.replace_start)?
+                            };
+
+                            if selection_ready {
+                                let previous_selection = tr.selection();
+                                for _ in 0..delta.start_tokens {
+                                    if !structural_backward(tr)? {
+                                        tr.set_selection(previous_selection)?;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if !delta.ins_text.is_empty() {
+                            apply_replacement_modifiers(
+                                tr,
                                 &delta.ins_text,
-                            ),
+                                replacement_modifiers.as_deref(),
+                            )?;
+                            commands::insert_text(tr, &delta.ins_text)?;
+                        }
+                        composition_text_start = Some(text_change.replace_start);
+                    } else {
+                        replace_text_range(
+                            tr,
+                            delta.replace_start,
+                            delta.replace_end,
+                            &delta.ins_text,
                         )?;
                     }
-
-                    let composition_text_start = should_insert_after_unit_selection
-                        .then_some(text_change.replace_start)
-                        .or(delta.composition_text_start);
-                    let composition = match (result.comp, composition_text_start) {
-                        (Some((start, end)), Some(text_start)) => {
-                            let invalid = || {
-                                EditorError::General {
-                            msg: "invariant violated: flat IME token-only composition remap failed"
-                                .into(),
-                        }
-                            };
-                            let inserted_len = delta.ins_text.char_count();
-                            let relative_start =
-                                start.checked_sub(text_start).ok_or_else(invalid)?;
-                            let relative_end = end.checked_sub(text_start).ok_or_else(invalid)?;
-                            if relative_start > relative_end || relative_end > inserted_len {
-                                return Err(invalid());
-                            }
-
-                            let doc = tr.doc();
-                            let inserted_start = tr
-                                .selection()
-                                .and_then(|selection| selection.head.resolve(&doc))
-                                .and_then(|head| head.to_flat().checked_sub(inserted_len))
-                                .ok_or_else(invalid)?;
-
-                            Some(Composition {
-                                start: inserted_start + relative_start,
-                                end: inserted_start + relative_end,
-                            })
-                        }
-                        (Some((start, end)), None) => Some(Composition { start, end }),
-                        (None, _) => None,
-                    };
-                    let composition = composition.filter(|composition| {
-                        composition_range_valid(&tr.doc(), composition.start, composition.end)
-                    });
-
-                    if composition.is_some() || tr.composition().is_some() {
-                        tr.set_composition(composition)?;
-                    }
-                    Ok(())
-                })?;
-            }
-        } else {
-            editor.transact(|tr| {
-                if delta.end_tokens > 0 {
-                    let doc = tr.doc();
-                    if let Some(pos) = ResolvedPosition::from_flat(&doc, delta.replace_end) {
-                        commands::set_selection(tr, Selection::collapsed((&pos).into()))?;
-                    }
-                    for _ in 0..delta.end_tokens {
-                        structural_forward(tr)?;
-                    }
                 }
 
-                if delta.replace_start != delta.replace_end || !delta.ins_text.is_empty() {
-                    replace_text_range(
-                        tr,
-                        delta.replace_start,
-                        delta.replace_end,
-                        &delta.ins_text,
-                    )?;
-                }
-
-                if delta.start_tokens > 0 {
-                    let doc = tr.doc();
-                    if let Some(pos) = ResolvedPosition::from_flat(&doc, delta.replace_start) {
-                        let previous_selection = tr.selection();
-                        commands::set_selection(tr, Selection::collapsed((&pos).into()))?;
-                        for _ in 0..delta.start_tokens {
-                            if !structural_backward(tr)? {
-                                tr.set_selection(previous_selection)?;
-                                break;
-                            }
+                let composition = match (result.comp, composition_text_start) {
+                    (Some((start, end)), Some(text_start)) => {
+                        let invalid = || EditorError::General {
+                            msg: "invariant violated: flat IME composition remap failed".into(),
+                        };
+                        let inserted_len = delta.ins_text.char_count();
+                        let relative_start = start.checked_sub(text_start).ok_or_else(invalid)?;
+                        let relative_end = end.checked_sub(text_start).ok_or_else(invalid)?;
+                        if relative_start > relative_end || relative_end > inserted_len {
+                            return Err(invalid());
                         }
+
+                        let doc = tr.doc();
+                        let inserted_start = tr
+                            .selection()
+                            .and_then(|selection| selection.head.resolve(&doc))
+                            .and_then(|head| head.to_flat().checked_sub(inserted_len))
+                            .ok_or_else(invalid)?;
+
+                        Some(Composition {
+                            start: inserted_start + relative_start,
+                            end: inserted_start + relative_end,
+                        })
                     }
+                    (Some((start, end)), None) => Some(Composition { start, end }),
+                    (None, _) => None,
+                };
+                let composition = composition.filter(|composition| {
+                    composition_range_valid(&tr.doc(), composition.start, composition.end)
+                });
+
+                if composition.is_some() || tr.composition().is_some() {
+                    tr.set_composition(composition)?;
                 }
 
                 Ok(())
@@ -1661,7 +1702,7 @@ mod tests {
     }
 
     #[test]
-    fn flat_ime_replace_nested_full_selection_keeps_cursor_after_inserted_text() {
+    fn flat_ime_replace_nested_full_selection_removes_structure() {
         let (s, ..) = state! {
             doc { root { blockquote { paragraph { t1: text("a") } } } }
             selection: (t1, 1)
@@ -1674,7 +1715,7 @@ mod tests {
             ],
         );
         let (expected, ..) = state! {
-            doc { root { blockquote { paragraph { t1: text("a") } } } }
+            doc { root { paragraph { t1: text("a") } } }
             selection: (t1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
@@ -1860,6 +1901,147 @@ mod tests {
     }
 
     #[test]
+    fn flat_ime_replace_mixed_seam_and_table_body_removes_body() {
+        let (s, ..) = state! {
+            doc { root {
+                paragraph { t1: text("aa") }
+                table(proportion: 21) {
+                    table_row {
+                        table_cell(col_width: Some(40)) {
+                            paragraph {}
+                        }
+                        table_cell(col_width: Some(515)) {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { t2: text("cc") }
+            } }
+            selection: (t2, 0, <) -> (t1, 2, >)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "d".into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("aadcc") } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_delete_mixed_seam_and_table_body_removes_body() {
+        let (s, ..) = state! {
+            doc { root {
+                paragraph { t1: text("aa") }
+                table(proportion: 21) {
+                    table_row {
+                        table_cell(col_width: Some(40)) {
+                            paragraph {}
+                        }
+                        table_cell(col_width: Some(515)) {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { t2: text("cc") }
+            } }
+            selection: (t2, 0, <) -> (t1, 2, >)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "".into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("aacc") } } }
+            selection: (t1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_compose_mixed_seam_and_table_body_sets_composition() {
+        let (s, ..) = state! {
+            doc { root {
+                paragraph { t1: text("aa") }
+                table(proportion: 21) {
+                    table_row {
+                        table_cell(col_width: Some(40)) {
+                            paragraph {}
+                        }
+                        table_cell(col_width: Some(515)) {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { t2: text("cc") }
+            } }
+            selection: (t2, 0, <) -> (t1, 2, >)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("aaㅎcc") } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 3, end: 4 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_compose_nested_seam_and_table_body_sets_composition() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote {
+                    blockquote {
+                        paragraph { t1: text("aa") }
+                    }
+                }
+                table(proportion: 21) {
+                    table_row {
+                        table_cell(col_width: Some(40)) {
+                            paragraph {}
+                        }
+                        table_cell(col_width: Some(515)) {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { t2: text("cc") }
+            } }
+            selection: (t2, 0, <) -> (t1, 2, >)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote {
+                    blockquote {
+                        paragraph { t1: text("aaㅎcc") }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 5, end: 6 })
+        );
+    }
+
+    #[test]
     fn flat_ime_compose_preserves_unit_selection_inserts_after() {
         let (s, ..) = state! {
             doc { r: root {
@@ -1934,6 +2116,56 @@ mod tests {
         assert_eq!(
             editor.state().composition,
             Some(Composition { start: 2, end: 3 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_composition_replaces_full_structural_selection_with_text() {
+        let (s, ..) = state! {
+            doc {
+                r1: root {
+                    paragraph { text("a") }
+                    table(proportion: 21) {
+                        table_row {
+                            table_cell(col_width: Some(40)) {
+                                paragraph {}
+                            }
+                            table_cell(col_width: Some(515)) {
+                                paragraph {}
+                            }
+                        }
+                        table_row {
+                            table_cell(col_width: Some(40)) {
+                                paragraph {}
+                            }
+                            table_cell(col_width: Some(515)) {
+                                paragraph {}
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 3, <)
+        };
+        let mut editor = editor_with_resource(s);
+        let end = editor.state().doc.flat_size();
+
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition { start: 0, end },
+                FlatImeOp::Compose { text: "ㅁ".into() },
+            ],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅁ") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
         );
     }
 
@@ -2126,7 +2358,7 @@ mod tests {
                 blockquote { paragraph { t1: text("hello") } }
                 paragraph { t2: text("world") }
             } }
-            selection: (t2, 0)
+            selection: (t2, 1)
         };
         let mut editor = editor_with_resource(s);
         editor.apply(Message::TextInput {
@@ -2199,6 +2431,258 @@ mod tests {
                 paragraph {}
             } }
             selection: (t1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_bulk_delete_single_open_token_through_first_text() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 9, end: 11 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote {
+                    paragraph { t1: text("hello") }
+                    paragraph { t2: text("orld") }
+                }
+                paragraph {}
+            } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_bulk_delete_close_open_pair_through_first_text() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 8, end: 11 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote {
+                    paragraph { t1: text("hello") }
+                    paragraph { t2: text("orld") }
+                }
+                paragraph {}
+            } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_bulk_delete_two_boundaries_through_first_text() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 7, end: 11 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("helloorld") } }
+                paragraph {}
+            } }
+            selection: (t1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_single_open_token_through_first_text() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 9, end: 11 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote {
+                    paragraph { t1: text("hello") }
+                    paragraph { t2: text("aorld") }
+                }
+                paragraph {}
+            } }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_close_open_pair_through_first_text() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 8, end: 11 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote {
+                    paragraph { t1: text("hello") }
+                    paragraph { t2: text("aorld") }
+                }
+                paragraph {}
+            } }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_two_boundaries_through_first_text() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 7, end: 11 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("helloaorld") } }
+                paragraph {}
+            } }
+            selection: (t1, 6)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_single_open_token_inserts_at_boundary() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 9, end: 10 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote {
+                    paragraph { t1: text("hello") }
+                    paragraph { t2: text("aworld") }
+                }
+                paragraph {}
+            } }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_close_open_pair_inserts_at_boundary() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 8, end: 10 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote {
+                    paragraph { t1: text("hello") }
+                    paragraph { t2: text("aworld") }
+                }
+                paragraph {}
+            } }
+            selection: (t2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_replace_two_boundaries_inserts_at_join() {
+        let (s, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("hello") } }
+                paragraph { t2: text("world") }
+            } }
+            selection: (t2, 0)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 7, end: 10 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote { paragraph { t1: text("helloaworld") } }
+                paragraph {}
+            } }
+            selection: (t1, 6)
         };
         assert_state_eq!(editor.state(), &expected);
     }

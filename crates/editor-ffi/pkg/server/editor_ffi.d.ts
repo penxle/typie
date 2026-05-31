@@ -5,7 +5,7 @@
  * `chain.last().node_id` is the host of the binding (text node for `Char`,
  * container for `Child` and `ContainerStart`).
  */
-export type StablePosition = { kind: "char"; chain: ChainLink[]; char_dot: Dot; bind: Bind; affinity: Affinity } | { kind: "child"; chain: ChainLink[]; child_dot: Dot; bind: Bind; affinity: Affinity } | { kind: "container_start"; chain: ChainLink[]; affinity: Affinity };
+export type StablePosition = { kind: "char"; chain: ChainLink[]; char_dot: Dot; offset: number; bind: Bind; affinity: Affinity } | { kind: "child"; chain: ChainLink[]; child_dot: Dot; offset: number; bind: Bind; affinity: Affinity } | { kind: "container_start"; chain: ChainLink[]; affinity: Affinity };
 
 /**
  * A document position: the triple `(node_id, offset, affinity)`.
