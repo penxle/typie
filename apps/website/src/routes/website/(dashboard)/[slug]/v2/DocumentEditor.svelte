@@ -224,6 +224,20 @@
     ctx.paneFocused = focused;
   });
 
+  const paginatedHeaderPaddingLeft = $derived.by(() => {
+    const editor = ctx.editor;
+    const layoutMode = editor?.rootAttrs?.layout_mode;
+    if (!editor || layoutMode?.type !== 'paginated') return '0';
+    return `${layoutMode.page_margin_left * editor.safeDisplayZoom()}px`;
+  });
+
+  const paginatedHeaderPaddingRight = $derived.by(() => {
+    const editor = ctx.editor;
+    const layoutMode = editor?.rootAttrs?.layout_mode;
+    if (!editor || layoutMode?.type !== 'paginated') return '0';
+    return `${layoutMode.page_margin_right * editor.safeDisplayZoom()}px`;
+  });
+
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
@@ -922,6 +936,7 @@
                 {/if}
 
                 <EditorComponent
+                  active={focused}
                   document$key={document}
                   graph={document.state ? Uint8Array.fromBase64(document.state.graph) : new Uint8Array()}
                   onReady={handleEditorReady}
@@ -937,12 +952,8 @@
                       })}
                     >
                       <div
-                        style:padding-left={ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
-                          ? `${(ctx.editor.rootAttrs.layout_mode as { page_margin_left: number }).page_margin_left}px`
-                          : '0'}
-                        style:padding-right={ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
-                          ? `${(ctx.editor.rootAttrs.layout_mode as { page_margin_right: number }).page_margin_right}px`
-                          : '0'}
+                        style:padding-left={paginatedHeaderPaddingLeft}
+                        style:padding-right={paginatedHeaderPaddingRight}
                         class={flex({
                           flexDirection: 'column',
                           flexShrink: '0',

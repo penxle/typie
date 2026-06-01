@@ -1,5 +1,7 @@
 export const PAGE_GAP = 24;
 export const CROP_MARKER_SIZE = 32;
+export const PAGINATED_HEADER_FOOTER_MIN_WIDTH = 320;
+export const PAGINATED_HEADER_FOOTER_MIN_SCALE = 0.75;
 export const CONTINUOUS_MIN_WIDTH = 300;
 export const CONTINUOUS_VIEW_PADDING = 20;
 

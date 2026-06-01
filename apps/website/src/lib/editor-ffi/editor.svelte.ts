@@ -8,6 +8,7 @@ import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { register, snapshot, unregister } from './registry';
+import { zoomDiffers } from './zoom';
 import type {
   BlockState,
   ClipboardPayload,
@@ -118,6 +119,8 @@ export class Editor {
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
   scrollContainerEl = $state<HTMLDivElement>();
+  displayZoom = $state(1);
+  renderZoom = $state(1);
 
   readOnly = $state(false);
 
@@ -379,6 +382,10 @@ export class Editor {
     return this.#viewport.scale_factor;
   }
 
+  get surfaceScaleFactor() {
+    return this.#viewport.scale_factor * this.renderZoom;
+  }
+
   resizeViewport(width: number, height: number, scaleFactor: number): void {
     if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(scaleFactor)) return;
     if (width <= 0 || height <= 0 || scaleFactor <= 0) return;
@@ -389,6 +396,13 @@ export class Editor {
     this.#viewport = viewport;
     if (sameViewport(this.#appliedViewport, viewport)) return;
     this.#applyViewportResize.call();
+  }
+
+  setRenderZoom(renderZoom: number): void {
+    const safeRenderZoom = Number.isFinite(renderZoom) && renderZoom > 0 ? renderZoom : 1;
+    if (zoomDiffers(this.renderZoom, safeRenderZoom)) {
+      this.renderZoom = safeRenderZoom;
+    }
   }
 
   focus() {
@@ -532,21 +546,53 @@ export class Editor {
     return link ? { link, page: local.page } : undefined;
   }
 
+  safeDisplayZoom(): number {
+    const zoom = this.#rootAttrs?.layout_mode.type === 'paginated' ? this.displayZoom : 1;
+    return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  }
+
+  clientDeltaToLocalDelta(delta: number): number {
+    return delta / this.safeDisplayZoom();
+  }
+
   localToOffset(page: number, x: number, y: number) {
     const el = this.pageEls[page];
     if (!el) {
       return null;
     }
+    const zoom = this.safeDisplayZoom();
+    const container = this.scrollContainerEl;
+
+    if (container) {
+      const pageRect = el.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      return {
+        x: pageRect.left - containerRect.left + container.scrollLeft + x * zoom,
+        y: pageRect.top - containerRect.top + container.scrollTop + y * zoom,
+      };
+    }
 
     return {
-      x: el.offsetLeft + x,
-      y: el.offsetTop + y,
+      x: el.offsetLeft + x * zoom,
+      y: el.offsetTop + y * zoom,
     };
+  }
+
+  localRectToClientRect(page: number, rect: { x: number; y: number; width: number; height: number }): DOMRect | null {
+    const el = this.pageEls[page];
+    if (!el) {
+      return null;
+    }
+
+    const zoom = this.safeDisplayZoom();
+    const pageRect = el.getBoundingClientRect();
+    return new DOMRect(pageRect.left + rect.x * zoom, pageRect.top + rect.y * zoom, rect.width * zoom, rect.height * zoom);
   }
 
   clientToLocal(clientX: number, clientY: number) {
     const pages = this.#pageSizes;
     if (pages.length === 0) return null;
+    const zoom = this.safeDisplayZoom();
 
     let lo = 0;
     let hi = pages.length - 1;
@@ -563,7 +609,7 @@ export class Editor {
     const el = this.pageEls[lo];
     if (!el) return null;
     let rect = el.getBoundingClientRect();
-    let localY = clientY - rect.top;
+    let localY = (clientY - rect.top) / zoom;
 
     if (localY < 0 && lo > 0) {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -578,7 +624,7 @@ export class Editor {
     }
 
     const size = pages[lo];
-    const localX = Math.max(0, Math.min(clientX - rect.left, size.width));
+    const localX = Math.max(0, Math.min((clientX - rect.left) / zoom, size.width));
     localY = Math.max(0, Math.min(localY, size.height));
     return { page: lo, x: localX, y: localY };
   }
@@ -688,7 +734,7 @@ export class Editor {
   }
 
   attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number): void {
-    this.#wasm.attach_surface(page, canvas, width, height, this.#viewport.scale_factor);
+    this.#wasm.attach_surface(page, canvas, width, height, this.surfaceScaleFactor);
   }
 
   detachSurface(page: number): void {
@@ -700,7 +746,7 @@ export class Editor {
   }
 
   resizeSurface(page: number, width: number, height: number): void {
-    this.#wasm.resize_surface(page, width, height, this.#viewport.scale_factor);
+    this.#wasm.resize_surface(page, width, height, this.surfaceScaleFactor);
   }
 
   setExternalElementHeight(nodeId: string, height: number): void {
@@ -1456,10 +1502,11 @@ export class Editor {
     const container = this.scrollContainerEl;
     if (!pageEl || !container) return;
 
+    const zoom = this.safeDisplayZoom();
     const pageRect = pageEl.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    const top = pageRect.top - containerRect.top + container.scrollTop + rect.y;
-    const bottom = top + rect.height;
+    const top = pageRect.top - containerRect.top + container.scrollTop + rect.y * zoom;
+    const bottom = top + rect.height * zoom;
     const viewTop = container.scrollTop;
     const viewBottom = viewTop + container.clientHeight;
 

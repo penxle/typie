@@ -75,13 +75,19 @@
   const isLastColumnHovered = $derived(
     hoveredColIndex === overlay.col_widths_as_px.length - 1 || addColButtonHovered || addBothButtonHovered,
   );
+  const safeDisplayZoom = $derived.by(() => {
+    if (!editor) return 1;
+    return editor.safeDisplayZoom();
+  });
+  const inverseDisplayZoom = $derived(1 / safeDisplayZoom);
+  const fixedControlTransform = $derived(safeDisplayZoom === 1 ? undefined : `scale(${inverseDisplayZoom})`);
 
-  const addTrackThickness = 23;
-  const addTrackPadding = 5;
-  const addButtonSize = 18;
-  const floatingToolbarOffset = 38;
-  const resizeIndicatorThickness = 4;
-  const resizeIndicatorHalfThickness = resizeIndicatorThickness / 2;
+  const addTrackThickness = $derived(23 / safeDisplayZoom);
+  const addTrackPadding = $derived(5 / safeDisplayZoom);
+  const addButtonSize = $derived(18 / safeDisplayZoom);
+  const floatingToolbarOffset = $derived(38 / safeDisplayZoom);
+  const resizeIndicatorThickness = $derived(4 / safeDisplayZoom);
+  const resizeIndicatorHalfThickness = $derived(resizeIndicatorThickness / 2);
 
   function getVisualColX(colIndex: number, baseX: number): number {
     if (!resizing || resizing.colIndex !== colIndex) return baseX;
@@ -151,13 +157,14 @@
   function updateHoveredPointerFromClient(clientX: number, clientY: number): void {
     if (!tableOverlayRoot) return;
     const rect = tableOverlayRoot.getBoundingClientRect();
-    hoveredPointer = { x: clientX - rect.left, y: clientY - rect.top };
+    hoveredPointer = { x: (clientX - rect.left) / safeDisplayZoom, y: (clientY - rect.top) / safeDisplayZoom };
   }
 
   function isClientInTableInteractionArea(clientX: number, clientY: number): boolean {
     if (!tableOverlayRoot) return false;
     const targetEl = document.elementFromPoint(clientX, clientY);
     if (targetEl instanceof Node && tableOverlayRoot.contains(targetEl)) return true;
+    if (targetEl instanceof Node && !editor?.scrollContainerEl?.contains(targetEl)) return false;
     const rect = tableOverlayRoot.getBoundingClientRect();
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
   }
@@ -231,7 +238,7 @@
   $effect(() => {
     const pointer = lastWindowPointer;
     const root = tableOverlayRoot;
-    const overlayRevision = `${overlay.bounds.x}:${overlay.bounds.y}:${overlay.bounds.width}:${overlay.bounds.height}:${overlay.col_widths_as_px.length}:${overlay.row_heights.length}:${menuOpenColIndex ?? -1}:${menuOpenRowIndex ?? -1}`;
+    const overlayRevision = `${overlay.bounds.x}:${overlay.bounds.y}:${overlay.bounds.width}:${overlay.bounds.height}:${overlay.col_widths_as_px.length}:${overlay.row_heights.length}:${menuOpenColIndex ?? -1}:${menuOpenRowIndex ?? -1}:${safeDisplayZoom}`;
 
     if (!pointer || !root || overlayRevision.length === 0) return;
 
@@ -326,128 +333,130 @@
         onpointerdown={(e) => e.stopPropagation()}
         role="presentation"
       >
-        <Menu
-          offset={4}
-          onopen={() => {
-            menuOpenColIndex = activeColIndex;
-            editor?.enqueue({
-              type: 'node',
-              op: {
-                type: 'table',
-                id: overlay.table_id,
-                op: { type: 'select_axis', axis: 'vertical', index: activeColIndex ?? undefined },
-              },
-            });
-          }}
-          ontransitionend={() => (menuOpenColIndex = null)}
-          placement="bottom-start"
-        >
-          {#snippet button({ open })}
-            <button
-              class={center({
-                display: open || activeColIndex !== null ? 'flex' : 'none',
-                width: '24px',
-                height: '18px',
-                backgroundColor: open ? 'interactive.hover' : 'surface.default',
-                borderWidth: '1px',
-                borderColor: 'border.strong',
-                borderRadius: '4px',
-                color: open ? 'text.default' : 'text.faint',
-                boxShadow: 'small',
-                cursor: 'pointer',
-                _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
-              })}
-              aria-pressed={open}
-              type="button"
-            >
-              <Icon icon={EllipsisIcon} size={14} />
-            </button>
-          {/snippet}
-          {#snippet children({ close })}
-            {#if activeColIndex > 0}
-              <MenuItem
-                onclick={() => {
-                  close();
-                  moveAxis('vertical', activeColIndex, activeColIndex - 1);
-                }}
+        <div style:transform={fixedControlTransform} style:transform-origin="center center">
+          <Menu
+            offset={4}
+            onopen={() => {
+              menuOpenColIndex = activeColIndex;
+              editor?.enqueue({
+                type: 'node',
+                op: {
+                  type: 'table',
+                  id: overlay.table_id,
+                  op: { type: 'select_axis', axis: 'vertical', index: activeColIndex ?? undefined },
+                },
+              });
+            }}
+            ontransitionend={() => (menuOpenColIndex = null)}
+            placement="bottom-start"
+          >
+            {#snippet button({ open })}
+              <button
+                class={center({
+                  display: open || activeColIndex !== null ? 'flex' : 'none',
+                  width: '24px',
+                  height: '18px',
+                  backgroundColor: open ? 'interactive.hover' : 'surface.default',
+                  borderWidth: '1px',
+                  borderColor: 'border.strong',
+                  borderRadius: '4px',
+                  color: open ? 'text.default' : 'text.faint',
+                  boxShadow: 'small',
+                  cursor: 'pointer',
+                  _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+                })}
+                aria-pressed={open}
+                type="button"
               >
-                <Icon icon={MoveLeftIcon} size={14} />
-                <span>왼쪽으로 이동</span>
-              </MenuItem>
-            {/if}
-            {#if activeColIndex < overlay.col_widths_as_px.length - 1}
-              <MenuItem
-                onclick={() => {
-                  close();
-                  moveAxis('vertical', activeColIndex, activeColIndex + 1);
-                }}
-              >
-                <Icon icon={MoveRightIcon} size={14} />
-                <span>오른쪽으로 이동</span>
-              </MenuItem>
-            {/if}
-            <MenuItem
-              onclick={() => {
-                close();
-                insertAxis('vertical', activeColIndex, true);
-              }}
-            >
-              <Icon icon={ArrowLeftToLineIcon} size={14} />
-              <span>왼쪽에 열 추가</span>
-            </MenuItem>
-            <MenuItem
-              onclick={() => {
-                close();
-                insertAxis('vertical', activeColIndex, false);
-              }}
-            >
-              <Icon icon={ArrowRightToLineIcon} size={14} />
-              <span>오른쪽에 열 추가</span>
-            </MenuItem>
-            <HorizontalDivider />
-            <Submenu icon={PaintBucketIcon} label="배경색 설정" listStyle={css.raw({ minWidth: 'auto', padding: '0' })}>
-              <li>
-                <ToolbarColorGrid
-                  columns={8}
-                  currentValue={overlay.col_background_colors[activeColIndex] ?? 'none'}
-                  items={cellBackgroundColors}
-                  onClose={close}
-                  onSelect={(value) => {
+                <Icon icon={EllipsisIcon} size={14} />
+              </button>
+            {/snippet}
+            {#snippet children({ close })}
+              {#if activeColIndex > 0}
+                <MenuItem
+                  onclick={() => {
                     close();
-                    enqueueTableOp({
-                      type: 'node',
-                      op: {
-                        type: 'table',
-                        id: overlay.table_id,
-                        op: {
-                          type: 'set_axis_background_color',
-                          axis: 'vertical',
-                          index: activeColIndex,
-                          color: value === 'none' ? undefined : value,
-                        },
-                      },
-                    });
+                    moveAxis('vertical', activeColIndex, activeColIndex - 1);
                   }}
-                />
-              </li>
-            </Submenu>
-            <HorizontalDivider />
-            <MenuItem
-              onclick={() => {
-                close();
-                if (overlay.col_widths_as_px.length <= 1) {
-                  enqueueTableOp({ type: 'node', op: { type: 'delete', id: overlay.table_id } });
-                } else {
-                  deleteAxis('vertical', activeColIndex);
-                }
-              }}
-              variant="danger"
-            >
-              <Icon icon={Trash2Icon} size={14} />
-              <span>{overlay.col_widths_as_px.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
-            </MenuItem>
-          {/snippet}
-        </Menu>
+                >
+                  <Icon icon={MoveLeftIcon} size={14} />
+                  <span>왼쪽으로 이동</span>
+                </MenuItem>
+              {/if}
+              {#if activeColIndex < overlay.col_widths_as_px.length - 1}
+                <MenuItem
+                  onclick={() => {
+                    close();
+                    moveAxis('vertical', activeColIndex, activeColIndex + 1);
+                  }}
+                >
+                  <Icon icon={MoveRightIcon} size={14} />
+                  <span>오른쪽으로 이동</span>
+                </MenuItem>
+              {/if}
+              <MenuItem
+                onclick={() => {
+                  close();
+                  insertAxis('vertical', activeColIndex, true);
+                }}
+              >
+                <Icon icon={ArrowLeftToLineIcon} size={14} />
+                <span>왼쪽에 열 추가</span>
+              </MenuItem>
+              <MenuItem
+                onclick={() => {
+                  close();
+                  insertAxis('vertical', activeColIndex, false);
+                }}
+              >
+                <Icon icon={ArrowRightToLineIcon} size={14} />
+                <span>오른쪽에 열 추가</span>
+              </MenuItem>
+              <HorizontalDivider />
+              <Submenu icon={PaintBucketIcon} label="배경색 설정" listStyle={css.raw({ minWidth: 'auto', padding: '0' })}>
+                <li>
+                  <ToolbarColorGrid
+                    columns={8}
+                    currentValue={overlay.col_background_colors[activeColIndex] ?? 'none'}
+                    items={cellBackgroundColors}
+                    onClose={close}
+                    onSelect={(value) => {
+                      close();
+                      enqueueTableOp({
+                        type: 'node',
+                        op: {
+                          type: 'table',
+                          id: overlay.table_id,
+                          op: {
+                            type: 'set_axis_background_color',
+                            axis: 'vertical',
+                            index: activeColIndex,
+                            color: value === 'none' ? undefined : value,
+                          },
+                        },
+                      });
+                    }}
+                  />
+                </li>
+              </Submenu>
+              <HorizontalDivider />
+              <MenuItem
+                onclick={() => {
+                  close();
+                  if (overlay.col_widths_as_px.length <= 1) {
+                    enqueueTableOp({ type: 'node', op: { type: 'delete', id: overlay.table_id } });
+                  } else {
+                    deleteAxis('vertical', activeColIndex);
+                  }
+                }}
+                variant="danger"
+              >
+                <Icon icon={Trash2Icon} size={14} />
+                <span>{overlay.col_widths_as_px.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
+              </MenuItem>
+            {/snippet}
+          </Menu>
+        </div>
       </div>
     {/if}
 
@@ -469,128 +478,130 @@
         onpointerdown={(e) => e.stopPropagation()}
         role="presentation"
       >
-        <Menu
-          offset={4}
-          onopen={() => {
-            menuOpenRowIndex = activeRowIndex;
-            editor?.enqueue({
-              type: 'node',
-              op: {
-                type: 'table',
-                id: overlay.table_id,
-                op: { type: 'select_axis', axis: 'horizontal', index: activeRowIndex ?? undefined },
-              },
-            });
-          }}
-          ontransitionend={() => (menuOpenRowIndex = null)}
-          placement="right-start"
-        >
-          {#snippet button({ open })}
-            <button
-              class={center({
-                display: open || activeRowIndex !== null ? 'flex' : 'none',
-                width: '18px',
-                height: '24px',
-                backgroundColor: open ? 'interactive.hover' : 'surface.default',
-                borderWidth: '1px',
-                borderColor: 'border.strong',
-                borderRadius: '4px',
-                color: open ? 'text.default' : 'text.faint',
-                boxShadow: 'small',
-                cursor: 'pointer',
-                _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
-              })}
-              aria-pressed={open}
-              type="button"
-            >
-              <Icon icon={EllipsisVerticalIcon} size={14} />
-            </button>
-          {/snippet}
-          {#snippet children({ close })}
-            {#if activeRowIndex > 0}
-              <MenuItem
-                onclick={() => {
-                  close();
-                  moveAxis('horizontal', activeRowIndex, activeRowIndex - 1);
-                }}
+        <div style:transform={fixedControlTransform} style:transform-origin="center center">
+          <Menu
+            offset={4}
+            onopen={() => {
+              menuOpenRowIndex = activeRowIndex;
+              editor?.enqueue({
+                type: 'node',
+                op: {
+                  type: 'table',
+                  id: overlay.table_id,
+                  op: { type: 'select_axis', axis: 'horizontal', index: activeRowIndex ?? undefined },
+                },
+              });
+            }}
+            ontransitionend={() => (menuOpenRowIndex = null)}
+            placement="right-start"
+          >
+            {#snippet button({ open })}
+              <button
+                class={center({
+                  display: open || activeRowIndex !== null ? 'flex' : 'none',
+                  width: '18px',
+                  height: '24px',
+                  backgroundColor: open ? 'interactive.hover' : 'surface.default',
+                  borderWidth: '1px',
+                  borderColor: 'border.strong',
+                  borderRadius: '4px',
+                  color: open ? 'text.default' : 'text.faint',
+                  boxShadow: 'small',
+                  cursor: 'pointer',
+                  _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+                })}
+                aria-pressed={open}
+                type="button"
               >
-                <Icon icon={MoveUpIcon} size={14} />
-                <span>위로 이동</span>
-              </MenuItem>
-            {/if}
-            {#if activeRowIndex < overlay.row_heights.length - 1}
-              <MenuItem
-                onclick={() => {
-                  close();
-                  moveAxis('horizontal', activeRowIndex, activeRowIndex + 1);
-                }}
-              >
-                <Icon icon={MoveDownIcon} size={14} />
-                <span>아래로 이동</span>
-              </MenuItem>
-            {/if}
-            <MenuItem
-              onclick={() => {
-                close();
-                insertAxis('horizontal', activeRowIndex, true);
-              }}
-            >
-              <Icon icon={ArrowUpToLineIcon} size={14} />
-              <span>위에 행 추가</span>
-            </MenuItem>
-            <MenuItem
-              onclick={() => {
-                close();
-                insertAxis('horizontal', activeRowIndex, false);
-              }}
-            >
-              <Icon icon={ArrowDownToLineIcon} size={14} />
-              <span>아래에 행 추가</span>
-            </MenuItem>
-            <HorizontalDivider />
-            <Submenu icon={PaintBucketIcon} label="배경색 설정" listStyle={css.raw({ minWidth: 'auto', padding: '0' })}>
-              <li>
-                <ToolbarColorGrid
-                  columns={8}
-                  currentValue={overlay.row_background_colors[activeRowIndex] ?? 'none'}
-                  items={cellBackgroundColors}
-                  onClose={close}
-                  onSelect={(value) => {
+                <Icon icon={EllipsisVerticalIcon} size={14} />
+              </button>
+            {/snippet}
+            {#snippet children({ close })}
+              {#if activeRowIndex > 0}
+                <MenuItem
+                  onclick={() => {
                     close();
-                    enqueueTableOp({
-                      type: 'node',
-                      op: {
-                        type: 'table',
-                        id: overlay.table_id,
-                        op: {
-                          type: 'set_axis_background_color',
-                          axis: 'horizontal',
-                          index: activeRowIndex,
-                          color: value === 'none' ? undefined : value,
-                        },
-                      },
-                    });
+                    moveAxis('horizontal', activeRowIndex, activeRowIndex - 1);
                   }}
-                />
-              </li>
-            </Submenu>
-            <HorizontalDivider />
-            <MenuItem
-              onclick={() => {
-                close();
-                if (overlay.row_heights.length <= 1) {
-                  enqueueTableOp({ type: 'node', op: { type: 'delete', id: overlay.table_id } });
-                } else {
-                  deleteAxis('horizontal', activeRowIndex);
-                }
-              }}
-              variant="danger"
-            >
-              <Icon icon={Trash2Icon} size={14} />
-              <span>{overlay.row_heights.length <= 1 ? '테이블 삭제' : '행 삭제'}</span>
-            </MenuItem>
-          {/snippet}
-        </Menu>
+                >
+                  <Icon icon={MoveUpIcon} size={14} />
+                  <span>위로 이동</span>
+                </MenuItem>
+              {/if}
+              {#if activeRowIndex < overlay.row_heights.length - 1}
+                <MenuItem
+                  onclick={() => {
+                    close();
+                    moveAxis('horizontal', activeRowIndex, activeRowIndex + 1);
+                  }}
+                >
+                  <Icon icon={MoveDownIcon} size={14} />
+                  <span>아래로 이동</span>
+                </MenuItem>
+              {/if}
+              <MenuItem
+                onclick={() => {
+                  close();
+                  insertAxis('horizontal', activeRowIndex, true);
+                }}
+              >
+                <Icon icon={ArrowUpToLineIcon} size={14} />
+                <span>위에 행 추가</span>
+              </MenuItem>
+              <MenuItem
+                onclick={() => {
+                  close();
+                  insertAxis('horizontal', activeRowIndex, false);
+                }}
+              >
+                <Icon icon={ArrowDownToLineIcon} size={14} />
+                <span>아래에 행 추가</span>
+              </MenuItem>
+              <HorizontalDivider />
+              <Submenu icon={PaintBucketIcon} label="배경색 설정" listStyle={css.raw({ minWidth: 'auto', padding: '0' })}>
+                <li>
+                  <ToolbarColorGrid
+                    columns={8}
+                    currentValue={overlay.row_background_colors[activeRowIndex] ?? 'none'}
+                    items={cellBackgroundColors}
+                    onClose={close}
+                    onSelect={(value) => {
+                      close();
+                      enqueueTableOp({
+                        type: 'node',
+                        op: {
+                          type: 'table',
+                          id: overlay.table_id,
+                          op: {
+                            type: 'set_axis_background_color',
+                            axis: 'horizontal',
+                            index: activeRowIndex,
+                            color: value === 'none' ? undefined : value,
+                          },
+                        },
+                      });
+                    }}
+                  />
+                </li>
+              </Submenu>
+              <HorizontalDivider />
+              <MenuItem
+                onclick={() => {
+                  close();
+                  if (overlay.row_heights.length <= 1) {
+                    enqueueTableOp({ type: 'node', op: { type: 'delete', id: overlay.table_id } });
+                  } else {
+                    deleteAxis('horizontal', activeRowIndex);
+                  }
+                }}
+                variant="danger"
+              >
+                <Icon icon={Trash2Icon} size={14} />
+                <span>{overlay.row_heights.length <= 1 ? '테이블 삭제' : '행 삭제'}</span>
+              </MenuItem>
+            {/snippet}
+          </Menu>
+        </div>
       </div>
     {/if}
 
@@ -626,8 +637,9 @@
 
           const onMove = (me: PointerEvent) => {
             if (!target.hasPointerCapture(me.pointerId)) return;
+            const deltaX = (me.clientX - startX) / safeDisplayZoom;
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            resizing = { ...resizing!, deltaX: me.clientX - startX };
+            resizing = { ...resizing!, deltaX };
           };
 
           const onUp = (ue: PointerEvent) => {
@@ -698,7 +710,9 @@
       onclick={() => insertAxis('vertical', overlay.col_widths_as_px.length - 1, false)}
       type="button"
     >
-      <Icon icon={PlusIcon} size={14} />
+      <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+        <Icon icon={PlusIcon} size={14} />
+      </span>
     </button>
   </div>
 
@@ -731,7 +745,9 @@
       onclick={() => insertAxis('horizontal', overlay.row_heights.length - 1, false)}
       type="button"
     >
-      <Icon icon={PlusIcon} size={14} />
+      <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+        <Icon icon={PlusIcon} size={14} />
+      </span>
     </button>
   </div>
 
@@ -768,7 +784,9 @@
       }}
       type="button"
     >
-      <Icon icon={PlusIcon} size={14} />
+      <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+        <Icon icon={PlusIcon} size={14} />
+      </span>
     </button>
   </div>
 
@@ -776,6 +794,8 @@
   <div
     style:left="{overlay.bounds.x + overlay.bounds.width / 2}px"
     style:top="{overlay.bounds.y - floatingToolbarOffset}px"
+    style:transform={fixedControlTransform}
+    style:transform-origin="top center"
     class={center({
       position: 'absolute',
       width: 'auto',

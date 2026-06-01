@@ -36,12 +36,17 @@
   function mostVisiblePage(
     scrollTop: number,
     clientHeight: number,
+    scrollContainer: HTMLElement,
     pageEls: Record<number, HTMLDivElement | undefined>,
     sizes: Size[],
+    displayZoom: number,
   ): number {
     if (sizes.length === 0) return 0;
     const viewportTop = scrollTop;
     const viewportBottom = scrollTop + clientHeight;
+    const containerRect = scrollContainer.getBoundingClientRect();
+
+    const pageTopInScrollContent = (el: HTMLElement) => el.getBoundingClientRect().top - containerRect.top + scrollTop;
 
     let lo = 0;
     let hi = sizes.length - 1;
@@ -49,7 +54,7 @@
       const mid = (lo + hi) >>> 1;
       const el = pageEls[mid];
       if (!el) return 0;
-      if (el.offsetTop + sizes[mid].height <= viewportTop) lo = mid + 1;
+      if (pageTopInScrollContent(el) + sizes[mid].height * displayZoom <= viewportTop) lo = mid + 1;
       else hi = mid;
     }
 
@@ -58,11 +63,12 @@
     for (let i = lo; i < sizes.length; i++) {
       const el = pageEls[i];
       if (!el) break;
-      const pageTop = el.offsetTop;
-      const pageBottom = pageTop + sizes[i].height;
+      const pageTop = pageTopInScrollContent(el);
+      const pageHeight = sizes[i].height * displayZoom;
+      const pageBottom = pageTop + pageHeight;
       if (pageTop >= viewportBottom) break;
       const inter = Math.max(0, Math.min(pageBottom, viewportBottom) - Math.max(pageTop, viewportTop));
-      const ratio = inter / sizes[i].height;
+      const ratio = inter / pageHeight;
       if (ratio > bestRatio) {
         bestRatio = ratio;
         bestPage = i;
@@ -117,7 +123,15 @@
     if (!editor) return '';
     if (isPaginated) {
       if (editor.pageSizes.length === 0) return '';
-      const page = mostVisiblePage(metrics.scrollTop, metrics.clientHeight, editor.pageEls, editor.pageSizes);
+      if (!scrollContainer) return '';
+      const page = mostVisiblePage(
+        metrics.scrollTop,
+        metrics.clientHeight,
+        scrollContainer,
+        editor.pageEls,
+        editor.pageSizes,
+        editor.safeDisplayZoom(),
+      );
       return `${page + 1}/${editor.pageSizes.length}`;
     }
     return `${Math.round(y.ratio * 100)}%`;

@@ -11,14 +11,23 @@
 
   const { editor } = getEditorContext();
 
+  const pageContainer = $derived(editor?.cursor ? editor.pageEls[editor.cursor.page_idx] : undefined);
+  let element = $state<HTMLDivElement>();
+
   const point = $derived.by(() => {
     if (editor?.cursor) {
       const local = editor.cursor.caret;
-      return editor.localToOffset(editor.cursor.page_idx, local.x, local.y);
+      return { x: local.x, y: local.y };
+    }
+  });
+
+  $effect(() => {
+    if (pageContainer && element && element.parentElement !== pageContainer) {
+      pageContainer.append(element);
     }
   });
 </script>
 
-<div style:top={`${point?.y ?? -9999}px`} style:left={`${point?.x ?? -9999}px`} class={css({ position: 'absolute' })}>
+<div bind:this={element} style:top={`${point?.y ?? -9999}px`} style:left={`${point?.x ?? -9999}px`} class={css({ position: 'absolute' })}>
   {@render children()}
 </div>

@@ -228,7 +228,9 @@
     const { boundsWidth } = initialResizeData;
     if (boundsWidth <= 0) return;
 
-    const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
+    const dx =
+      (ctx.editor?.clientDeltaToLocalDelta(event.clientX - initialResizeData.x) ?? event.clientX - initialResizeData.x) *
+      (initialResizeData.reverse ? -1 : 1);
     const newWidth = clampWidth(initialResizeData.width + dx * 2, boundsWidth);
     proportion = (newWidth / boundsWidth) * 100;
   };

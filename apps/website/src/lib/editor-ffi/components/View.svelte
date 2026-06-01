@@ -5,7 +5,13 @@
   import { onDestroy, tick, untrack } from 'svelte';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
-  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, PAGE_GAP } from '../constants';
+  import {
+    CONTINUOUS_MIN_WIDTH,
+    CONTINUOUS_VIEW_PADDING,
+    PAGE_GAP,
+    PAGINATED_HEADER_FOOTER_MIN_SCALE,
+    PAGINATED_HEADER_FOOTER_MIN_WIDTH,
+  } from '../constants';
   import { Editor, getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
@@ -21,6 +27,7 @@
   import Page from './Page.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
+  import EditorZoom from './ui/EditorZoom.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
@@ -28,6 +35,7 @@
   type Props = {
     document$key: Editor_document$key;
     graph: Uint8Array;
+    active?: boolean;
     style?: SystemStyleObject;
     onReady?: () => void;
     header?: Snippet;
@@ -35,7 +43,7 @@
     children?: Snippet;
   };
 
-  let { document$key, graph, style, onReady, header, footer, children }: Props = $props();
+  let { document$key, graph, active = true, style, onReady, header, footer, children }: Props = $props();
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
@@ -68,11 +76,29 @@
 
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
+  const pageWidth = $derived(ctx.editor?.pageSizes[0]?.width ?? 0);
+  const displayZoom = $derived(isPaginated ? (ctx.editor?.displayZoom ?? 1) : 1);
+  const pageGap = $derived(PAGE_GAP * displayZoom);
   const framePadding = $derived(isPaginated ? 0 : CONTINUOUS_VIEW_PADDING);
   const editorMinWidth = $derived(isPaginated ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`);
   const continuousMaxFrameWidth = $derived(
     layoutMode?.type === 'continuous' ? `${layoutMode.max_width + CONTINUOUS_VIEW_PADDING * 2}px` : undefined,
   );
+  const paginatedContentWidth = $derived(pageWidth * displayZoom + framePadding * 2);
+  const paginatedHeaderFooterMinContentWidth = $derived(
+    Math.max(PAGINATED_HEADER_FOOTER_MIN_WIDTH * displayZoom, PAGINATED_HEADER_FOOTER_MIN_WIDTH * PAGINATED_HEADER_FOOTER_MIN_SCALE),
+  );
+  const paginatedHeaderFooterHorizontalInset = $derived(
+    layoutMode?.type === 'paginated' ? (layoutMode.page_margin_left + layoutMode.page_margin_right) * displayZoom + framePadding * 2 : 0,
+  );
+  const paginatedHeaderFooterMaxContentWidth = $derived(Math.max(0, (clientWidth ?? 0) - paginatedHeaderFooterHorizontalInset));
+  const paginatedHeaderFooterTargetWidth = $derived(
+    paginatedHeaderFooterHorizontalInset + Math.min(paginatedHeaderFooterMinContentWidth, paginatedHeaderFooterMaxContentWidth),
+  );
+  const paginatedHeaderFooterWidth = $derived(
+    layoutMode?.type === 'paginated' ? Math.max(paginatedContentWidth, paginatedHeaderFooterTargetWidth) : 0,
+  );
+  const headerFooterMinWidth = $derived(isPaginated && !(ctx.editor?.readOnly ?? false) ? 'max-content' : editorMinWidth);
 
   const cursor = $derived.by(() => {
     const editor = ctx.editor;
@@ -128,118 +154,143 @@
 </script>
 
 <div
-  style:--page-gap={isPaginated ? `${PAGE_GAP}px` : undefined}
   class={css(
     {
       position: 'relative',
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'auto',
-      scrollbar: 'hidden',
+      minHeight: '0',
+      overflow: 'hidden',
       ...(isPaginated && {
         backgroundColor: 'surface.subtle',
       }),
     },
     style,
   )}
-  {@attach (el) => {
-    if (!ctx.editor) return;
-    ctx.editor.scrollContainerEl = el;
-    return () => {
-      if (ctx.editor) ctx.editor.scrollContainerEl = undefined;
-    };
-  }}
-  onscroll={() => ctx.editor?.refreshPointerStyle()}
-  bind:clientWidth
-  bind:clientHeight
 >
-  {#if ctx.editor && header}
-    <div
-      style:width={layoutMode?.type === 'paginated' ? `${layoutMode.page_width}px` : '100%'}
-      style:min-width={isPaginated ? undefined : editorMinWidth}
-      style:max-width={continuousMaxFrameWidth}
-      style:padding-inline={`${framePadding}px`}
-      class={css({ flexShrink: '0', marginX: 'auto' })}
-    >
-      {@render header()}
-    </div>
-  {/if}
-
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    style:cursor
-    style:min-width={editorMinWidth}
-    style:max-width={continuousMaxFrameWidth}
+    style:--page-gap={isPaginated ? `${pageGap}px` : undefined}
     class={css({
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
       flexGrow: '1',
-      width: 'full',
-      marginX: 'auto',
-      userSelect: 'none',
-      ...(isPaginated && {
-        rowGap: 'var(--page-gap)',
-      }),
+      minHeight: '0',
+      overflow: 'auto',
+      overflowAnchor: 'none',
+      position: 'relative',
+      scrollbar: 'hidden',
     })}
-    draggable={ctx.editor && !ctx.editor.isSelectionCollapsed ? true : undefined}
-    onclick={handle(ctx.editor, handleClick)}
-    oncontextmenu={handle(ctx.editor, handleContextMenu)}
-    ondragend={() => handleDragEnd(ctx)}
-    ondragenter={(event) => handleDragEnter(ctx, event)}
-    ondragleave={(event) => handleDragLeave(ctx, event)}
-    ondragover={(event) => handleDragOver(ctx, event)}
-    ondragstart={(event) => handleDragStart(ctx, event)}
-    ondrop={(event) => handleDrop(ctx, event)}
-    onfocusin={() => ctx.editor?.focus()}
-    onfocusout={(event) => {
-      if (!window.document.hasFocus()) return;
-      if (event.relatedTarget === ctx.editor?.inputEl) return;
-      ctx.editor?.blur();
+    {@attach (el) => {
+      const teardown = $effect.root(() => {
+        $effect(() => {
+          const editor = ctx.editor;
+          if (!editor) return;
+
+          editor.scrollContainerEl = el;
+          return () => {
+            if (editor.scrollContainerEl === el) {
+              editor.scrollContainerEl = undefined;
+            }
+          };
+        });
+      });
+
+      return () => teardown();
     }}
-    onpointercancel={handle(ctx.editor, handlePointerCancel)}
-    onpointerdown={handle(ctx.editor, handlePointerDown)}
-    onpointerleave={() => ctx.editor?.clearLinkHover()}
-    onpointermove={handle(ctx.editor, handlePointerMove)}
-    onpointerup={handle(ctx.editor, handlePointerUp)}
-    role="textbox"
-    tabindex={0}
+    onscroll={() => ctx.editor?.refreshPointerStyle()}
+    bind:clientWidth
+    bind:clientHeight
   >
+    {#if ctx.editor && header}
+      <div
+        style:width={layoutMode?.type === 'paginated' ? `${paginatedHeaderFooterWidth}px` : '100%'}
+        style:min-width={headerFooterMinWidth}
+        style:max-width={continuousMaxFrameWidth}
+        style:padding-inline={`${framePadding}px`}
+        class={css({ flexShrink: '0', marginX: 'auto' })}
+      >
+        {@render header()}
+      </div>
+    {/if}
+
     {#if ctx.editor}
-      {#each ctx.editor.pageSizes as { width, height }, i (i)}
-        <Page {height} page={i} {width} />
-      {/each}
+      <EditorZoom {active} editor={ctx.editor} {isPaginated} {pageWidth} viewportWidth={clientWidth ?? 0}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+          style:cursor
+          style:min-width={editorMinWidth}
+          style:max-width={continuousMaxFrameWidth}
+          class={css({
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            flexGrow: '1',
+            width: 'full',
+            marginX: 'auto',
+            userSelect: 'none',
+            ...(isPaginated && {
+              rowGap: 'var(--page-gap)',
+            }),
+          })}
+          draggable={ctx.editor.isSelectionCollapsed ? undefined : true}
+          onclick={handle(ctx.editor, handleClick)}
+          oncontextmenu={handle(ctx.editor, handleContextMenu)}
+          ondragend={() => handleDragEnd(ctx)}
+          ondragenter={(event) => handleDragEnter(ctx, event)}
+          ondragleave={(event) => handleDragLeave(ctx, event)}
+          ondragover={(event) => handleDragOver(ctx, event)}
+          ondragstart={(event) => handleDragStart(ctx, event)}
+          ondrop={(event) => handleDrop(ctx, event)}
+          onfocusin={() => ctx.editor?.focus()}
+          onfocusout={(event) => {
+            if (!window.document.hasFocus()) return;
+            if (event.relatedTarget === ctx.editor?.inputEl) return;
+            ctx.editor?.blur();
+          }}
+          onpointercancel={handle(ctx.editor, handlePointerCancel)}
+          onpointerdown={handle(ctx.editor, handlePointerDown)}
+          onpointerleave={() => ctx.editor?.clearLinkHover()}
+          onpointermove={handle(ctx.editor, handlePointerMove)}
+          onpointerup={handle(ctx.editor, handlePointerUp)}
+          role="textbox"
+          tabindex={0}
+        >
+          {#each ctx.editor.pageSizes as { width, height }, i (i)}
+            <Page {height} page={i} {width} />
+          {/each}
 
-      <CaretPositioned>
-        <Caret />
-        <Input />
-      </CaretPositioned>
+          <CaretPositioned>
+            <Caret />
+            <Input />
+          </CaretPositioned>
 
-      <LineHighlight />
+          <LineHighlight />
 
-      <RepasteAsText />
+          <RepasteAsText />
 
-      <ContextMenu />
+          <ContextMenu />
 
-      <LinkTooltip />
+          <LinkTooltip />
 
-      {#if children}
-        {@render children()}
-      {/if}
+          {#if children}
+            {@render children()}
+          {/if}
+        </div>
+      </EditorZoom>
+    {/if}
+
+    {#if ctx.editor && footer}
+      <div
+        style:width={layoutMode?.type === 'paginated' ? `${paginatedHeaderFooterWidth}px` : '100%'}
+        style:min-width={headerFooterMinWidth}
+        style:max-width={continuousMaxFrameWidth}
+        style:padding-inline={`${framePadding}px`}
+        class={css({ flexShrink: '0', marginX: 'auto' })}
+      >
+        {@render footer()}
+      </div>
     {/if}
   </div>
-
-  {#if ctx.editor && footer}
-    <div
-      style:width={layoutMode?.type === 'paginated' ? `${layoutMode.page_width}px` : '100%'}
-      style:min-width={isPaginated ? undefined : editorMinWidth}
-      style:max-width={continuousMaxFrameWidth}
-      style:padding-inline={`${framePadding}px`}
-      class={css({ flexShrink: '0', marginX: 'auto' })}
-    >
-      {@render footer()}
-    </div>
-  {/if}
 
   {#if ctx.editor}
     <Scrollbar />

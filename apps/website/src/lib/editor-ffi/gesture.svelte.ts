@@ -34,17 +34,15 @@ export const computeTouchContextMenuPosition = ({
   const toPageRect = pageRects[endpoints.to.page_idx];
   if (!fromPageRect || !toPageRect) return null;
 
-  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const fromLeft = fromPageRect.left + endpoints.from.rect.x * zoom;
+  const fromRight = fromLeft + endpoints.from.rect.width * zoom;
+  const fromTop = fromPageRect.top + endpoints.from.rect.y * zoom;
+  const fromBottom = fromTop + endpoints.from.rect.height * zoom;
 
-  const fromLeft = fromPageRect.left + endpoints.from.rect.x * safeZoom;
-  const fromRight = fromLeft + endpoints.from.rect.width * safeZoom;
-  const fromTop = fromPageRect.top + endpoints.from.rect.y * safeZoom;
-  const fromBottom = fromTop + endpoints.from.rect.height * safeZoom;
-
-  const toLeft = toPageRect.left + endpoints.to.rect.x * safeZoom;
-  const toRight = toLeft + endpoints.to.rect.width * safeZoom;
-  const toTop = toPageRect.top + endpoints.to.rect.y * safeZoom;
-  const toBottom = toTop + endpoints.to.rect.height * safeZoom;
+  const toLeft = toPageRect.left + endpoints.to.rect.x * zoom;
+  const toRight = toLeft + endpoints.to.rect.width * zoom;
+  const toTop = toPageRect.top + endpoints.to.rect.y * zoom;
+  const toBottom = toTop + endpoints.to.rect.height * zoom;
 
   const selLeft = Math.min(fromLeft, toLeft);
   const selRight = Math.max(fromRight, toRight);
@@ -242,7 +240,7 @@ export class TouchGestureController {
       height: visualViewport?.height ?? (typeof window === 'undefined' ? 0 : window.innerHeight),
     };
 
-    const position = computeTouchContextMenuPosition({ endpoints, pageRects, zoom: 1, viewport });
+    const position = computeTouchContextMenuPosition({ endpoints, pageRects, zoom: this.#editor.safeDisplayZoom(), viewport });
     if (!position) {
       this.#openTouchMenuAtFallback(fallbackPoint);
       return;
