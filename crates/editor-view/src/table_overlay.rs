@@ -10,7 +10,7 @@ fn cell_background_color(doc: &Doc, cell_id: NodeId) -> Option<String> {
             _ => None,
         })
 }
-use editor_state::{ResolvedSelection, Selection};
+use editor_state::{Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
 
 use crate::page::LayoutPage;
@@ -224,7 +224,10 @@ fn build_overlay<'a>(
         (rect.table.id() == table_id).then_some(rect)
     });
 
-    let is_cell_selection = cell_rect.is_some();
+    let is_cross_boundary = cell_rect.is_none()
+        && selection.is_some_and(|sel| is_table_boundary_selection(sel, doc, table_id));
+
+    let is_cell_selection = cell_rect.is_some() || is_cross_boundary;
 
     let cell_selection_background_color = cell_rect.as_ref().and_then(|rect| {
         let mut common: Option<Option<String>> = None;
@@ -239,10 +242,40 @@ fn build_overlay<'a>(
         common.flatten()
     });
 
-    let cell_selection_row_start = cell_rect.as_ref().map(|r| *r.rows.start());
-    let cell_selection_row_end = cell_rect.as_ref().map(|r| *r.rows.end());
-    let cell_selection_col_start = cell_rect.as_ref().map(|r| *r.cols.start());
-    let cell_selection_col_end = cell_rect.as_ref().map(|r| *r.cols.end());
+    let (
+        cell_selection_row_start,
+        cell_selection_row_end,
+        cell_selection_col_start,
+        cell_selection_col_end,
+    ) = if is_cross_boundary {
+        let row_count = doc_node
+            .children()
+            .filter(|r| matches!(r.node(), Node::TableRow(_)))
+            .count();
+        let max_cols = doc_node
+            .children()
+            .filter(|r| matches!(r.node(), Node::TableRow(_)))
+            .map(|r| {
+                r.children()
+                    .filter(|c| matches!(c.node(), Node::TableCell(_)))
+                    .count()
+            })
+            .max()
+            .unwrap_or(0);
+        (
+            Some(0usize),
+            row_count.checked_sub(1),
+            Some(0usize),
+            max_cols.checked_sub(1),
+        )
+    } else {
+        (
+            cell_rect.as_ref().map(|r| *r.rows.start()),
+            cell_rect.as_ref().map(|r| *r.rows.end()),
+            cell_rect.as_ref().map(|r| *r.cols.start()),
+            cell_rect.as_ref().map(|r| *r.cols.end()),
+        )
+    };
 
     TableOverlay {
         table_id,
@@ -268,6 +301,23 @@ fn build_overlay<'a>(
         cell_selection_col_start,
         cell_selection_col_end,
     }
+}
+
+fn is_table_boundary_selection(sel: &ResolvedSelection<'_>, doc: &Doc, table_id: NodeId) -> bool {
+    let Some(table) = doc.node(table_id) else {
+        return false;
+    };
+    let Some(parent) = table.parent() else {
+        return false;
+    };
+    let Some(table_idx) = table.index() else {
+        return false;
+    };
+    let parent_id = parent.id();
+    let from = Position::from(sel.from());
+    let to = Position::from(sel.to());
+    (from.node_id == parent_id && from.offset == table_idx)
+        || (to.node_id == parent_id && to.offset == table_idx + 1)
 }
 
 fn is_inside_table(node_id: NodeId, doc: &Doc, table_id: NodeId) -> bool {

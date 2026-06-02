@@ -427,6 +427,34 @@ impl View {
         query::search::nearest_node_box(&result.tree, page, x, y, ids)
     }
 
+    pub fn node_box_contains(&self, page_idx: usize, x: f32, y: f32, id: NodeId) -> bool {
+        let Some(ref result) = self.layout else {
+            return false;
+        };
+        let Some(page) = result.pages.get(page_idx) else {
+            return false;
+        };
+        let Some(node) = query::search::find_box_by_node_id(&result.tree.root, id) else {
+            return false;
+        };
+        let abs_y = y + page.y_start;
+        query::hit_test::rect_distance_sq(&node.rect, x, abs_y) == 0.0
+    }
+
+    pub fn is_below_node_box(&self, page_idx: usize, x: f32, y: f32, id: NodeId) -> bool {
+        let Some(ref result) = self.layout else {
+            return false;
+        };
+        let Some(page) = result.pages.get(page_idx) else {
+            return false;
+        };
+        let Some(node) = query::search::find_box_by_node_id(&result.tree.root, id) else {
+            return false;
+        };
+        let abs_y = y + page.y_start;
+        abs_y > node.rect.y + node.rect.height
+    }
+
     pub fn composition_rects(
         &self,
         from: &Position,

@@ -2,9 +2,9 @@ use editor_commands::{self as commands};
 use editor_model::NodeId;
 use editor_state::{
     PendingModifiers, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    cell_rect_selection, enclosing_table_cell, farther_endpoint,
+    cell_rect_selection, enclosing_table, enclosing_table_cell, farther_endpoint,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
-    resolve_word_selection_expansion, table_cell_ids,
+    resolve_word_selection_expansion, table_cell_ids, table_parent_boundary,
 };
 use editor_transaction::HistoryMeta;
 
@@ -175,21 +175,41 @@ fn resolve_extend_to_selection(
 ) -> Option<Selection> {
     let doc = &editor.state().doc;
     if let Some(anchor_cell) = drag_anchor_cell(editor, &anchor) {
-        let cells = table_cell_ids(doc, anchor_cell);
-        if let Some(head_cell) = editor
-            .view
-            .nearest_node_box(head_page, head_x, head_y, &cells)
-        {
-            let is_cell_mode = editor
-                .state
-                .selection
-                .as_ref()
-                .and_then(|selection| selection.resolve(doc))
-                .is_some_and(|resolved| resolved.as_cell_rect().is_some());
-            if (head_cell != anchor_cell || is_cell_mode)
-                && let Some(selection) = cell_rect_selection(doc, anchor_cell, head_cell)
-            {
-                return Some(selection);
+        if let Some(table_id) = enclosing_table(doc, anchor_cell) {
+            let head_inside_table = editor
+                .view
+                .node_box_contains(head_page, head_x, head_y, table_id);
+
+            if head_inside_table {
+                let cells = table_cell_ids(doc, anchor_cell);
+                if let Some(head_cell) = editor
+                    .view
+                    .nearest_node_box(head_page, head_x, head_y, &cells)
+                {
+                    let is_cell_mode = editor
+                        .state
+                        .selection
+                        .as_ref()
+                        .and_then(|selection| selection.resolve(doc))
+                        .is_some_and(|resolved| resolved.as_cell_rect().is_some());
+                    if (head_cell != anchor_cell || is_cell_mode)
+                        && let Some(selection) = cell_rect_selection(doc, anchor_cell, head_cell)
+                    {
+                        return Some(selection);
+                    }
+                }
+            } else {
+                let head_hit = editor.view.hit_test_extending(head_page, head_x, head_y)?;
+                let head_is_below = editor
+                    .view
+                    .is_below_node_box(head_page, head_x, head_y, table_id);
+                if let Some(boundary) = table_parent_boundary(doc, anchor_cell, head_is_below) {
+                    let head_pos = farther_endpoint(doc, anchor, head_hit.anchor, head_hit.head);
+                    let selection = Selection::new(boundary, head_pos);
+                    if !selection.is_collapsed() {
+                        return Some(selection);
+                    }
+                }
             }
         }
     }
