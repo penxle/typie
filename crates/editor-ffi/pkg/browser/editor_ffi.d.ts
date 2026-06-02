@@ -759,6 +759,7 @@ declare class Editor {
     selection(): Selection | undefined;
     selection_endpoints(): SelectionEndpoints | undefined;
     selection_hit_test(page: number, x: number, y: number): boolean;
+    set_doc(plain: PlainDoc): void;
     style_divergence(): boolean;
     style_entries(): StyleInfo[];
     table_overlays(): TableOverlay[];

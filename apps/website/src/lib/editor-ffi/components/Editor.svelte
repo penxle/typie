@@ -8,7 +8,6 @@
 
   type Props = {
     document$key: Editor_document$key;
-    graph: Uint8Array;
     active?: boolean;
     style?: SystemStyleObject;
     header?: Snippet;
@@ -17,11 +16,11 @@
     onReady?: () => void;
   };
 
-  let { document$key, graph, active = true, style, header, footer, children, onReady }: Props = $props();
+  let { document$key, active = true, style, header, footer, children, onReady }: Props = $props();
 </script>
 
 <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowY: 'hidden' })}>
-  <View style={css.raw({ flex: '1' }, style)} {active} {document$key} {footer} {graph} {header} {onReady}>
+  <View style={css.raw({ flex: '1' }, style)} {active} {document$key} {footer} {header} {onReady}>
     {#if children}
       {@render children()}
     {/if}

@@ -232,7 +232,9 @@
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'note'}
       <DocumentPanelNote entity$key={document.data.entity} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
-      <DocumentPanelTimeline document$key={document.data} editor={ctx.editor} />
+      {#if ctx.editor}
+        <DocumentPanelTimeline document$key={document.data} />
+      {/if}
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
       {#if user.data.subscription}
         <DocumentPanelSpellcheck document$key={document.data} editor={ctx.editor} user$key={user.data} />

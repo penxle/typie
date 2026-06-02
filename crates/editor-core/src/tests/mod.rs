@@ -1,4 +1,5 @@
 mod can_invariants;
+mod set_doc;
 mod state_changed_tracked_ranges;
 mod tracked_decoration_integration;
 mod tracked_range_hit_test;

@@ -337,6 +337,13 @@ impl Editor {
         })
     }
 
+    pub fn set_doc(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<()> {
+        self.with_inner(|inner| {
+            inner.editor.set_doc(plain.from_ffi()?);
+            Ok(())
+        })
+    }
+
     pub fn materialize_at(&self, heads: Vec<u8>) -> EditorResult<Complex<editor_model::PlainDoc>> {
         self.with_inner(|inner| {
             let heads_vec = editor_crdt::wire::decode_dots(&heads[..])

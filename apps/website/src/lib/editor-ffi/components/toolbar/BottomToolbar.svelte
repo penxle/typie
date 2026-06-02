@@ -100,8 +100,10 @@
   const isRubyMixed = $derived(ctx.editor?.modifierState?.ruby?.type === 'mixed');
 
   const isCollapsed = $derived(ctx.editor?.isSelectionCollapsed ?? true);
+  const editingDisabled = $derived(ctx.editor !== undefined && ctx.editor !== ctx.liveEditor);
 
   const enqueue = (message: Message) => {
+    if (editingDisabled) return;
     ctx.editor?.enqueue(message);
     ctx.editor?.focus();
   };
@@ -128,6 +130,8 @@
       position: 'relative',
       zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor',
       backgroundColor: 'surface.default',
+      opacity: editingDisabled ? '50' : '100',
+      pointerEvents: editingDisabled ? 'none' : 'auto',
     },
     style,
   )}

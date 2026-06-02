@@ -4,7 +4,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Helmet, HorizontalDivider, Icon, Menu } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
+  import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Tip, Toast } from '@typie/ui/notification';
   import { LocalStore } from '@typie/ui/state';
   import dayjs from 'dayjs';
@@ -21,7 +21,7 @@
   import XIcon from '~icons/lucide/x';
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/editor-ffi/components';
   import { IS_MAC } from '$lib/editor-ffi/constants';
-  import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
@@ -218,6 +218,7 @@
   const dragPaneProps = $derived({ paneGroup, paneId: pane.id });
 
   const ctx = getEditorContext();
+  const theme = getThemeContext();
   ctx.user = query.data.me;
 
   $effect(() => {
@@ -245,6 +246,37 @@
   const assets = $derived(document?.assets);
 
   const fontFamilies = $derived(document?.fontFamilies ?? []);
+
+  let liveEditorCreated = false;
+  let destroyed = false;
+
+  $effect(() => {
+    const doc = document;
+    if (!doc || liveEditorCreated) return;
+
+    liveEditorCreated = true;
+    const graph = doc.state ? Uint8Array.fromBase64(doc.state.graph) : new Uint8Array();
+
+    untrack(async () => {
+      try {
+        const liveEditor = await Editor.create(
+          graph,
+          { width: 1, height: 1, scale_factor: window.devicePixelRatio },
+          theme.currentThemeVariant,
+        );
+
+        if (destroyed) {
+          liveEditor.destroy();
+          return;
+        }
+
+        ctx.editor = liveEditor;
+        ctx.liveEditor = liveEditor;
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  });
 
   $effect(() => {
     const editor = ctx.editor;
@@ -331,9 +363,9 @@
       heads: untrack(() => lastConfirmedHeads?.toBase64() ?? ''),
     }),
     () => ({
-      skip: ctx.editor === undefined || !hasHeads || !documentId,
+      skip: ctx.liveEditor === undefined || !hasHeads || !documentId,
       onData: (data) => {
-        const editor = ctx.editor;
+        const editor = ctx.liveEditor;
         if (!editor) return;
         const payload = Uint8Array.fromBase64(data.documentChangesetsUpdated.changesets);
         if (payload.length > 0) {
@@ -345,7 +377,7 @@
   );
 
   $effect(() => {
-    const editor = ctx.editor;
+    const editor = ctx.liveEditor;
     if (!editor) return;
 
     const initialHeads = editor.currentHeads();
@@ -381,7 +413,7 @@
     });
 
     const pollIntervalId = setInterval(async () => {
-      const ed = ctx.editor;
+      const ed = ctx.liveEditor;
       const heads = lastConfirmedHeads;
       if (!ed || heads === null) return;
       const result = await pullDocumentChangesets({
@@ -521,7 +553,7 @@
   const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && pane.id === paneGroup.state.current.focusedPaneId);
 
   $effect(() => {
-    const editor = ctx.editor;
+    const editor = ctx.liveEditor;
     if (editor) {
       editor.readOnly = document?.locked ?? false;
     }
@@ -572,7 +604,7 @@
   let editorReady = false;
 
   $effect(() => {
-    const editor = ctx.editor;
+    const editor = ctx.liveEditor;
     if (!editor) return;
 
     return editor.on('state_changed', (_, { fields }) => {
@@ -641,9 +673,13 @@
   }
 
   onDestroy(() => {
+    destroyed = true;
     pusher?.stop();
     flushTitleUpdate();
     flushSubtitleUpdate();
+    ctx.liveEditor?.destroy();
+    ctx.editor = undefined;
+    ctx.liveEditor = undefined;
   });
 </script>
 
@@ -935,129 +971,126 @@
                   </div>
                 {/if}
 
-                <EditorComponent
-                  active={focused}
-                  document$key={document}
-                  graph={document.state ? Uint8Array.fromBase64(document.state.graph) : new Uint8Array()}
-                  onReady={handleEditorReady}
-                >
-                  {#snippet header()}
-                    <div
-                      class={flex({
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        paddingTop: '60px',
-                        width: 'full',
-                        ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
-                      })}
-                    >
+                {#key ctx.editor}
+                  <EditorComponent active={focused} document$key={document} onReady={handleEditorReady}>
+                    {#snippet header()}
                       <div
-                        style:padding-left={paginatedHeaderPaddingLeft}
-                        style:padding-right={paginatedHeaderPaddingRight}
                         class={flex({
                           flexDirection: 'column',
-                          flexShrink: '0',
+                          alignItems: 'center',
+                          paddingTop: '60px',
                           width: 'full',
+                          ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
                         })}
                       >
-                        <textarea
-                          bind:this={titleEl}
-                          class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                          autocapitalize="off"
-                          autocomplete="off"
-                          maxlength={100}
-                          onblur={() => {
-                            titleFocused = false;
-                            flushTitleUpdate();
-                          }}
-                          onfocus={() => {
-                            titleFocused = true;
-                            if (documentId) {
-                              selectionsStore.current = {
-                                ...selectionsStore.current,
-                                [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
-                              };
-                            }
-                          }}
-                          oninput={handleTitleChanged}
-                          onkeydown={(e) => {
-                            if (e.isComposing) {
-                              return;
-                            }
-
-                            if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
-                              e.preventDefault();
-                              subtitleEl?.focus();
-                            }
-                          }}
-                          placeholder="제목을 입력하세요"
-                          rows={1}
-                          spellcheck="false"
-                          bind:value={localTitle}
-                          use:autosize
-                        ></textarea>
-
-                        <textarea
-                          bind:this={subtitleEl}
-                          class={css({
-                            marginTop: '4px',
+                        <div
+                          style:padding-left={paginatedHeaderPaddingLeft}
+                          style:padding-right={paginatedHeaderPaddingRight}
+                          class={flex({
+                            flexDirection: 'column',
+                            flexShrink: '0',
                             width: 'full',
-                            fontSize: '16px',
-                            fontWeight: 'medium',
-                            overflow: 'hidden',
-                            resize: 'none',
                           })}
-                          autocapitalize="off"
-                          autocomplete="off"
-                          maxlength={100}
-                          onblur={() => {
-                            subtitleFocused = false;
-                            flushSubtitleUpdate();
-                          }}
-                          onfocus={() => {
-                            subtitleFocused = true;
-                            if (documentId) {
-                              selectionsStore.current = {
-                                ...selectionsStore.current,
-                                [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
-                              };
-                            }
-                          }}
-                          oninput={handleSubtitleChanged}
-                          onkeydown={(e) => {
-                            if (e.isComposing) {
-                              return;
-                            }
+                        >
+                          <textarea
+                            bind:this={titleEl}
+                            class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                            autocapitalize="off"
+                            autocomplete="off"
+                            maxlength={100}
+                            onblur={() => {
+                              titleFocused = false;
+                              flushTitleUpdate();
+                            }}
+                            onfocus={() => {
+                              titleFocused = true;
+                              if (documentId) {
+                                selectionsStore.current = {
+                                  ...selectionsStore.current,
+                                  [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
+                                };
+                              }
+                            }}
+                            oninput={handleTitleChanged}
+                            onkeydown={(e) => {
+                              if (e.isComposing) {
+                                return;
+                              }
 
-                            if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !localSubtitle)) {
-                              e.preventDefault();
-                              titleEl?.focus();
-                            }
+                              if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
+                                e.preventDefault();
+                                subtitleEl?.focus();
+                              }
+                            }}
+                            placeholder="제목을 입력하세요"
+                            rows={1}
+                            spellcheck="false"
+                            bind:value={localTitle}
+                            use:autosize
+                          ></textarea>
 
-                            if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
-                              e.preventDefault();
-                              ctx.editor?.focus();
-                              ctx.editor?.enqueue({
-                                type: 'navigation',
-                                op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false },
-                              });
-                            }
-                          }}
-                          placeholder="부제목을 입력하세요"
-                          rows={1}
-                          spellcheck="false"
-                          bind:value={localSubtitle}
-                          use:autosize
-                        ></textarea>
+                          <textarea
+                            bind:this={subtitleEl}
+                            class={css({
+                              marginTop: '4px',
+                              width: 'full',
+                              fontSize: '16px',
+                              fontWeight: 'medium',
+                              overflow: 'hidden',
+                              resize: 'none',
+                            })}
+                            autocapitalize="off"
+                            autocomplete="off"
+                            maxlength={100}
+                            onblur={() => {
+                              subtitleFocused = false;
+                              flushSubtitleUpdate();
+                            }}
+                            onfocus={() => {
+                              subtitleFocused = true;
+                              if (documentId) {
+                                selectionsStore.current = {
+                                  ...selectionsStore.current,
+                                  [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
+                                };
+                              }
+                            }}
+                            oninput={handleSubtitleChanged}
+                            onkeydown={(e) => {
+                              if (e.isComposing) {
+                                return;
+                              }
 
-                        {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
-                          <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
-                        {/if}
+                              if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !localSubtitle)) {
+                                e.preventDefault();
+                                titleEl?.focus();
+                              }
+
+                              if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
+                                e.preventDefault();
+                                ctx.editor?.focus();
+                                ctx.editor?.enqueue({
+                                  type: 'navigation',
+                                  op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false },
+                                });
+                              }
+                            }}
+                            placeholder="부제목을 입력하세요"
+                            rows={1}
+                            spellcheck="false"
+                            bind:value={localSubtitle}
+                            use:autosize
+                          ></textarea>
+
+                          {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
+                            <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                          {/if}
+                        </div>
                       </div>
-                    </div>
-                  {/snippet}
-                  <CommentPopover />
-                </EditorComponent>
+                    {/snippet}
+                    <CommentPopover />
+                  </EditorComponent>
+                {/key}
                 {#if showFindReplace}
                   <DocumentFindReplace close={() => (showFindReplace = false)} />
                 {/if}

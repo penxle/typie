@@ -44,8 +44,10 @@
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const blockState = $derived(ctx.editor?.blockState);
+  const editingDisabled = $derived(ctx.editor !== undefined && ctx.editor !== ctx.liveEditor);
 
   const enqueue = (message: Message) => {
+    if (editingDisabled) return;
     ctx.editor?.enqueue(message);
     ctx.editor?.focus();
   };
@@ -82,6 +84,8 @@
     class={flex({
       alignItems: 'center',
       gap: '4px',
+      opacity: editingDisabled ? '50' : '100',
+      pointerEvents: editingDisabled ? 'none' : 'auto',
     })}
   >
     <ToolbarButton

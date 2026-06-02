@@ -2,8 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
-  import { onDestroy, tick, untrack } from 'svelte';
-  import { initWasm } from '$lib/wasm-ffi.svelte';
+  import { tick, untrack } from 'svelte';
   import { graphql } from '$mearie';
   import {
     CONTINUOUS_MIN_WIDTH,
@@ -12,7 +11,7 @@
     PAGINATED_HEADER_FOOTER_MIN_SCALE,
     PAGINATED_HEADER_FOOTER_MIN_WIDTH,
   } from '../constants';
-  import { Editor, getEditorContext } from '../editor.svelte';
+  import { getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handleContextMenu } from '../handlers/contextmenu';
@@ -35,7 +34,6 @@
 
   type Props = {
     document$key: Editor_document$key;
-    graph: Uint8Array;
     active?: boolean;
     style?: SystemStyleObject;
     onReady?: () => void;
@@ -44,7 +42,7 @@
     children?: Snippet;
   };
 
-  let { document$key, graph, active = true, style, onReady, header, footer, children }: Props = $props();
+  let { document$key, active = true, style, onReady, header, footer, children }: Props = $props();
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
@@ -72,7 +70,6 @@
     () => document$key,
   );
 
-  let status = $state<'uninitialized' | 'initializing' | 'initialized' | 'error'>('uninitialized');
   let clientWidth = $state<number>();
   let clientHeight = $state<number>();
 
@@ -109,49 +106,30 @@
     return editor.pointerStyle;
   });
 
-  const init = async (width: number, height: number) => {
-    status = 'initializing';
-    try {
-      await initWasm();
-      loadFonts(document.data.editorFontFamilies);
-      ctx.editor = await Editor.create(graph, { width, height, scale_factor: window.devicePixelRatio }, theme.currentThemeVariant);
-      status = 'initialized';
-      await tick();
-      onReady?.();
-      ctx.editor?.focus();
-    } catch (err) {
-      console.error(err);
-      status = 'error';
-    }
-  };
-
-  $effect(() => {
-    if (status === 'uninitialized' && clientWidth && clientHeight) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      untrack(() => init(clientWidth!, clientHeight!));
-    }
-  });
+  let readyFired = false;
 
   $effect(() => {
     const editor = ctx.editor;
     const width = clientWidth;
     const height = clientHeight;
     const isContinuous = !isPaginated;
-    if (status !== 'initialized' || !editor || !width || !height) return;
+    if (!editor || !width || !height) return;
     const effectiveWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
 
     untrack(() => {
       editor.resizeViewport(effectiveWidth, height, window.devicePixelRatio);
+
+      if (!readyFired && editor.viewportResized) {
+        readyFired = true;
+        loadFonts(document.data.editorFontFamilies);
+        onReady?.();
+        void tick().then(() => editor.focus());
+      }
     });
   });
 
   $effect(() => {
     ctx.editor?.setThemeVariant(theme.currentThemeVariant);
-  });
-
-  onDestroy(() => {
-    ctx.editor?.destroy();
-    ctx.editor = undefined;
   });
 </script>
 

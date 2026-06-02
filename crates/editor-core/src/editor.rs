@@ -978,6 +978,17 @@ impl Editor {
         Ok(())
     }
 
+    pub fn set_doc(&mut self, plain: editor_model::PlainDoc) {
+        let (doc, graph) = editor_model::Doc::from_plain(plain);
+        self.state = State::new(doc, graph, None);
+        crate::font::reresolve_fonts(self).ok();
+        self.view.layout(&self.state.doc);
+        self.push_event(EditorEvent::StateChanged {
+            fields: StateField::iter().collect(),
+        });
+        self.push_event(EditorEvent::RenderInvalidated);
+    }
+
     pub(crate) fn run_initialize(&mut self) -> Result<(), EditorError> {
         if matches!(self.mode, Mode::Probe { .. }) {
             return Ok(());

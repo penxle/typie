@@ -71,16 +71,40 @@
     autocapitalize="off"
     autocomplete="off"
     autocorrect="off"
-    onbeforeinput={(e) => inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput })}
-    oncompositionend={() => inputAdapter.handleCompositionEnd()}
-    oncompositionstart={(e) => inputAdapter.handleCompositionStart(e as CompositionEvent & { currentTarget: ImeTextInput })}
-    oncompositionupdate={(e) => inputAdapter.handleCompositionUpdate(e)}
+    onbeforeinput={(e) => {
+      if (editor.readOnly) return;
+      inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput });
+    }}
+    oncompositionend={() => {
+      if (editor.readOnly) return;
+      inputAdapter.handleCompositionEnd();
+    }}
+    oncompositionstart={(e) => {
+      if (editor.readOnly) return;
+      inputAdapter.handleCompositionStart(e as CompositionEvent & { currentTarget: ImeTextInput });
+    }}
+    oncompositionupdate={(e) => {
+      if (editor.readOnly) return;
+      inputAdapter.handleCompositionUpdate(e);
+    }}
     oncopy={handle(editor, handleCopy)}
-    oncut={handle(editor, handleCut)}
+    oncut={(e) => {
+      if (editor.readOnly) return;
+      handleCut(editor, e);
+    }}
     onfocus={syncInput}
-    oninput={(e) => inputAdapter.handleInput(e)}
-    onkeydown={handle(editor, handleKeyDown)}
-    onpaste={handle(editor, handlePaste)}
+    oninput={(e) => {
+      if (editor.readOnly) return;
+      inputAdapter.handleInput(e);
+    }}
+    onkeydown={(e) => {
+      if (editor.readOnly) return;
+      handleKeyDown(editor, e);
+    }}
+    onpaste={(e) => {
+      if (editor.readOnly) return;
+      handlePaste(editor, e);
+    }}
     spellcheck={false}
   ></textarea>
 {/if}

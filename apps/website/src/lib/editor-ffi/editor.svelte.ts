@@ -24,6 +24,7 @@ import type {
   Modifier,
   ModifierState,
   PageRect,
+  PlainDoc,
   PlainRootNode,
   PointerStyle,
   Position,
@@ -88,6 +89,7 @@ function samePosition(a: Position, b: Position): boolean {
 export class EditorContext {
   editor = $state<Editor>();
   scroll = $state<EditorScrollScope>();
+  liveEditor = $state<Editor>();
   fileAssets = $state(new SvelteMap<string, FileAsset>());
   // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음
   user = $state<unknown>();
@@ -117,15 +119,20 @@ export class Editor {
 
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
+  #firstResizeApplied = false;
   #applyViewportResize = debounce(() => {
     if (this.#destroyed || sameViewport(this.#appliedViewport, this.#viewport)) return;
 
-    this.#appliedViewport = this.#viewport;
+    this.#applyViewport(this.#viewport);
+  }, VIEWPORT_RESIZE_DEBOUNCE_MS);
+
+  #applyViewport(viewport: Viewport): void {
+    this.#appliedViewport = viewport;
     this.enqueue({
       type: 'system',
-      event: { type: 'resize', width: this.#viewport.width, height: this.#viewport.height, scale_factor: this.#viewport.scale_factor },
+      event: { type: 'resize', width: viewport.width, height: viewport.height, scale_factor: viewport.scale_factor },
     });
-  }, VIEWPORT_RESIZE_DEBOUNCE_MS);
+  }
 
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
@@ -226,50 +233,45 @@ export class Editor {
     // no-op
   }
 
-  static async create(graph: Uint8Array, viewport: Viewport, themeVariant: ThemeVariant = 'light-white') {
-    await ensureWasmInitialized();
+  #initInstance(viewport: Viewport): void {
+    this.#viewport = viewport;
+    this.#appliedViewport = viewport;
+    this.#gesture = new TouchGestureController(this);
 
-    const self = new this();
-
-    self.#wasm = wasm.create_editor_from_graph(graph, viewport);
-    self.#viewport = viewport;
-    self.#appliedViewport = viewport;
-    self.#gesture = new TouchGestureController(self);
-
-    self.on('state_changed', self.#stateChangedHandler);
-    self.on('font_data_missing', fontDataMissingHandler);
-    self.on('tracked_range_replace_result', (_, { id, outcome }) => {
+    this.on('state_changed', this.#stateChangedHandler);
+    this.on('font_data_missing', fontDataMissingHandler);
+    this.on('tracked_range_replace_result', (_, { id, outcome }) => {
       if (id.startsWith('search-match:')) {
-        self.#handleSearchReplaceResult(id, outcome);
-      } else if (self.spellcheckErrors.some((e) => e.id === id)) {
-        self.#handleSpellcheckReplaceResult(id);
+        this.#handleSearchReplaceResult(id, outcome);
+      } else if (this.spellcheckErrors.some((e) => e.id === id)) {
+        this.#handleSpellcheckReplaceResult(id);
       }
     });
 
-    register(self);
+    register(this);
 
-    self.#effectCleanup = $effect.root(() => {
+    this.#effectCleanup = $effect.root(() => {
       $effect(() => {
-        const el = self.inputEl;
+        const el = this.inputEl;
         if (!el) {
-          untrack(() => self.#setFocused(false));
+          untrack(() => this.#setFocused(false));
           return;
         }
 
         const onFocus = () => {
-          self.#setFocused(true);
+          this.#setFocused(true);
         };
         const onBlur = () => {
-          if (self.#nativeDragAdmissionRetainsFocus) {
+          if (this.#nativeDragAdmissionRetainsFocus) {
             return;
           }
 
-          self.#setFocused(false);
+          this.#setFocused(false);
         };
 
         el.addEventListener('focus', onFocus);
         el.addEventListener('blur', onBlur);
-        untrack(() => self.#setFocused(document.activeElement === el));
+        untrack(() => this.#setFocused(document.activeElement === el));
 
         return () => {
           el.removeEventListener('focus', onFocus);
@@ -280,10 +282,10 @@ export class Editor {
       $effect(() => {
         const isHeld = (e: KeyboardEvent) => (IS_MAC ? e.metaKey : e.ctrlKey);
         const onKey = (e: KeyboardEvent) => {
-          self.#modifierHeld = isHeld(e);
+          this.#modifierHeld = isHeld(e);
         };
         const onBlur = () => {
-          self.#modifierHeld = false;
+          this.#modifierHeld = false;
         };
         window.addEventListener('keydown', onKey);
         window.addEventListener('keyup', onKey);
@@ -295,6 +297,15 @@ export class Editor {
         };
       });
     });
+  }
+
+  static async create(graph: Uint8Array, viewport: Viewport, themeVariant: ThemeVariant = 'light-white') {
+    await ensureWasmInitialized();
+
+    const self = new this();
+
+    self.#wasm = wasm.create_editor_from_graph(graph, viewport);
+    self.#initInstance(viewport);
 
     wasm.set_theme_variant(themeVariant);
     self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
@@ -332,6 +343,31 @@ export class Editor {
     });
 
     return self;
+  }
+
+  static async createFromDoc(plain: PlainDoc, viewport: Viewport, themeVariant: ThemeVariant = 'light-white'): Promise<Editor> {
+    await ensureWasmInitialized();
+
+    const self = new this();
+
+    self.#wasm = wasm.create_editor_from_doc(plain, viewport);
+    self.#initInstance(viewport);
+
+    wasm.set_theme_variant(themeVariant);
+    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
+    self.enqueue({ type: 'system', event: { type: 'initialize' } });
+
+    return self;
+  }
+
+  setDoc(plain: PlainDoc): void {
+    if (this.#destroyed) return;
+    this.#wasm.set_doc(plain);
+    this.#scheduleTick();
+  }
+
+  materializeAt(heads: Uint8Array): PlainDoc {
+    return this.#wasm.materialize_at(heads);
   }
 
   get cursor() {
@@ -412,6 +448,10 @@ export class Editor {
     return this.#viewport.scale_factor * this.renderZoom;
   }
 
+  get viewportResized(): boolean {
+    return this.#firstResizeApplied;
+  }
+
   resizeViewport(width: number, height: number, scaleFactor: number): void {
     if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(scaleFactor)) return;
     if (width <= 0 || height <= 0 || scaleFactor <= 0) return;
@@ -421,6 +461,13 @@ export class Editor {
 
     this.#viewport = viewport;
     if (sameViewport(this.#appliedViewport, viewport)) return;
+
+    if (!this.#firstResizeApplied) {
+      this.#firstResizeApplied = true;
+      this.#applyViewport(viewport);
+      return;
+    }
+
     this.#applyViewportResize.call();
   }
 
@@ -804,18 +851,22 @@ export class Editor {
   }
 
   attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number): void {
+    if (this.#destroyed) return;
     this.#wasm.attach_surface(page, canvas, width, height, this.surfaceScaleFactor);
   }
 
   detachSurface(page: number): void {
+    if (this.#destroyed) return;
     this.#wasm.detach_surface(page);
   }
 
   renderSurface(page: number): void {
+    if (this.#destroyed) return;
     this.#wasm.render_surface(page);
   }
 
   resizeSurface(page: number, width: number, height: number): void {
+    if (this.#destroyed) return;
     this.#wasm.resize_surface(page, width, height, this.surfaceScaleFactor);
   }
 
