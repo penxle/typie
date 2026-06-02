@@ -564,16 +564,17 @@ const createMapRangeForDocument = (
 
     const { rangeStart, rangeEnd } = range;
     const startMapping = findMapping(rangeStart);
-    const endMapping = findMapping(rangeEnd - 1);
 
-    if (!startMapping || !endMapping || startMapping.nodeId !== endMapping.nodeId) {
+    if (!startMapping) {
       return null;
     }
+
+    const clampedRangeEnd = Math.min(rangeEnd, startMapping.textEnd);
 
     return {
       nodeId: startMapping.nodeId,
       startOffset: startMapping.blockOffset + (rangeStart - startMapping.textStart),
-      endOffset: startMapping.blockOffset + (rangeEnd - startMapping.textStart),
+      endOffset: startMapping.blockOffset + (clampedRangeEnd - startMapping.textStart),
     };
   };
 };
