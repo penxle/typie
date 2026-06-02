@@ -751,6 +751,7 @@ declare class Editor {
     link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
     link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
+    materialize_at(heads: Uint8Array): PlainDoc;
     modifier_state(): ModifierState | undefined;
     page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];
@@ -806,6 +807,7 @@ declare class EditorServer {
      * Returns the total ops count in a Changesets bundle. Used by push light validation.
      */
     peek_changeset_ops_count(bundle: Uint8Array): number;
+    revert(graph: Uint8Array, target_heads: Uint8Array): Uint8Array;
     to_graph(plain: PlainDoc): Uint8Array;
     to_plain(changeset_payloads: Uint8Array): PlainDoc;
     /**

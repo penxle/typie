@@ -75,4 +75,7 @@ pub enum ModelError {
         anchor: Dot,
         kind: AnchorKind,
     },
+
+    #[error("head dot not present in graph: {dot:?}")]
+    InvalidHead { dot: Dot },
 }

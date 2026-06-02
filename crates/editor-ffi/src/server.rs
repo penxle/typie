@@ -210,6 +210,32 @@ impl EditorServer {
         Ok(bytes)
     }
 
+    pub fn revert(&self, graph: Vec<u8>, target_heads: Vec<u8>) -> EditorResult<Vec<u8>> {
+        let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&graph[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let target_vec = editor_crdt::wire::decode_dots(&target_heads[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let target_set: hashbrown::HashSet<editor_crdt::Dot> = target_vec.into_iter().collect();
+
+        let state = editor_state::State::from_changesets(css, None)
+            .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
+        let current_heads: hashbrown::HashSet<editor_crdt::Dot> =
+            state.graph.current_heads().copied().collect();
+
+        let target_doc = editor_model::Doc::from_op_graph_at(&state.graph, &target_set)?;
+
+        let tr = editor_transaction::build_revert_transaction(&state, &target_doc)
+            .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
+        let (new_state, ..) = tr.commit();
+
+        let revert_css = new_state.graph.local_changesets_since(&current_heads)?;
+
+        let bytes = editor_crdt::wire::encode(&revert_css)
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        Ok(bytes)
+    }
+
     /// Returns the total ops count in a Changesets bundle. Used by push light validation.
     pub fn peek_changeset_ops_count(&self, bundle: Vec<u8>) -> EditorResult<u32> {
         let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
@@ -542,5 +568,392 @@ mod tests {
         let server = EditorServer;
         let result = server.outline_text_to_svg(vec![0, 1, 2, 3], "A".to_string());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn revert_produces_changeset_that_restores_past_state() {
+        use editor_crdt::OpGraph;
+        use editor_model::{Doc, DocOp};
+
+        let mut g: OpGraph<DocOp> = OpGraph::with_actor(1);
+        let root = NodeId::ROOT;
+        let para = NodeId::new();
+        let txt = NodeId::new();
+        let add = |g: &mut OpGraph<DocOp>, p: DocOp| {
+            let (ng, op) = g.clone().add(p).unwrap();
+            *g = ng;
+            op.id
+        };
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: root,
+                op: editor_crdt::OrMapOp::Set {
+                    key: root,
+                    value: NodeType::Root,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: para,
+                op: editor_crdt::OrMapOp::Set {
+                    key: para,
+                    value: NodeType::Paragraph,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: para,
+                op: editor_crdt::LwwRegOp::Set { value: Some(root) },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Children {
+                node_id: root,
+                op: editor_crdt::RgaOp::Insert {
+                    after: None,
+                    value: para,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: txt,
+                op: editor_crdt::OrMapOp::Set {
+                    key: txt,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: txt,
+                op: editor_crdt::LwwRegOp::Set { value: Some(para) },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Children {
+                node_id: para,
+                op: editor_crdt::RgaOp::Insert {
+                    after: None,
+                    value: txt,
+                },
+            },
+        );
+        let a_dot = add(
+            &mut g,
+            DocOp::Text {
+                node_id: txt,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        let _b = add(
+            &mut g,
+            DocOp::Text {
+                node_id: txt,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: Some(a_dot),
+                    ch: 'b',
+                },
+            },
+        );
+        let g = g.commit();
+
+        let graph_bytes = editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap();
+        let target_heads = editor_crdt::wire::encode_dots(&[a_dot]).unwrap();
+
+        let server = EditorServer;
+        let revert_bytes = server.revert(graph_bytes.clone(), target_heads).unwrap();
+
+        let merged = server.apply(graph_bytes, revert_bytes).unwrap();
+        let merged_cs: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&merged).unwrap();
+        let merged_graph = OpGraph::from_changesets(merged_cs).unwrap();
+        let doc = Doc::from_op_graph(&merged_graph).unwrap();
+        assert_eq!(doc.extract_text(), "a");
+    }
+
+    #[test]
+    fn revert_to_current_heads_is_empty_noop() {
+        use editor_crdt::OpGraph;
+        use editor_model::DocOp;
+        let mut g: OpGraph<DocOp> = OpGraph::with_actor(1);
+        let root = NodeId::ROOT;
+        let (ng, _op) = g
+            .clone()
+            .add(DocOp::Presence {
+                node_id: root,
+                op: editor_crdt::OrMapOp::Set {
+                    key: root,
+                    value: NodeType::Root,
+                },
+            })
+            .unwrap();
+        g = ng;
+        let g = g.commit();
+        let graph_bytes = editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap();
+        let heads_now = EditorServer.heads(graph_bytes.clone()).unwrap();
+        let server = EditorServer;
+        let revert_bytes = server.revert(graph_bytes, heads_now).unwrap();
+        let revert_cs: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&revert_bytes).unwrap();
+        assert!(
+            revert_cs.is_empty(),
+            "revert to current heads must be empty (no-op)"
+        );
+    }
+
+    #[test]
+    fn revert_revives_deleted_node_ignoring_concurrent_edits() {
+        use editor_crdt::{Changeset, Dot, Op, OpGraph};
+        use editor_model::{Doc, DocOp};
+
+        // actor 1: root > [p1("a"), p2("b")]. p2 alive at THIS point = revert target.
+        let mut g: OpGraph<DocOp> = OpGraph::with_actor(1);
+        let root = NodeId::ROOT;
+        let p1 = NodeId::new();
+        let t1 = NodeId::new();
+        let p2 = NodeId::new();
+        let t2 = NodeId::new();
+        let add = |g: &mut OpGraph<DocOp>, p: DocOp| {
+            let (ng, op) = g.clone().add(p).unwrap();
+            *g = ng;
+            op.id
+        };
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: root,
+                op: editor_crdt::OrMapOp::Set {
+                    key: root,
+                    value: NodeType::Root,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: p1,
+                op: editor_crdt::OrMapOp::Set {
+                    key: p1,
+                    value: NodeType::Paragraph,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: p1,
+                op: editor_crdt::LwwRegOp::Set { value: Some(root) },
+            },
+        );
+        let p1_children_dot = add(
+            &mut g,
+            DocOp::Children {
+                node_id: root,
+                op: editor_crdt::RgaOp::Insert {
+                    after: None,
+                    value: p1,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: t1,
+                op: editor_crdt::OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: t1,
+                op: editor_crdt::LwwRegOp::Set { value: Some(p1) },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Children {
+                node_id: p1,
+                op: editor_crdt::RgaOp::Insert {
+                    after: None,
+                    value: t1,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Text {
+                node_id: t1,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        let p2_presence_dot = add(
+            &mut g,
+            DocOp::Presence {
+                node_id: p2,
+                op: editor_crdt::OrMapOp::Set {
+                    key: p2,
+                    value: NodeType::Paragraph,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: p2,
+                op: editor_crdt::LwwRegOp::Set { value: Some(root) },
+            },
+        );
+        let p2_children_dot = add(
+            &mut g,
+            DocOp::Children {
+                node_id: root,
+                op: editor_crdt::RgaOp::Insert {
+                    after: Some(p1_children_dot),
+                    value: p2,
+                },
+            },
+        );
+        let t2_presence_dot = add(
+            &mut g,
+            DocOp::Presence {
+                node_id: t2,
+                op: editor_crdt::OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: t2,
+                op: editor_crdt::LwwRegOp::Set { value: Some(p2) },
+            },
+        );
+        let t2_children_dot = add(
+            &mut g,
+            DocOp::Children {
+                node_id: p2,
+                op: editor_crdt::RgaOp::Insert {
+                    after: None,
+                    value: t2,
+                },
+            },
+        );
+        let t2_a = add(
+            &mut g,
+            DocOp::Text {
+                node_id: t2,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'b',
+                },
+            },
+        );
+        let g = g.commit();
+
+        let target_heads: Vec<Dot> = g.current_heads().copied().collect();
+
+        // actor 1: delete p2 like remove_subtree (teardown subtree + presence + children link).
+        let mut g = g;
+        add(
+            &mut g,
+            DocOp::Text {
+                node_id: t2,
+                op: editor_crdt::TextOp::RemoveChar { observed: t2_a },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Children {
+                node_id: p2,
+                op: editor_crdt::RgaOp::Remove {
+                    observed: t2_children_dot,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: t2,
+                op: editor_crdt::OrMapOp::Unset {
+                    observed: vec![t2_presence_dot],
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: p2,
+                op: editor_crdt::OrMapOp::Unset {
+                    observed: vec![p2_presence_dot],
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Children {
+                node_id: root,
+                op: editor_crdt::RgaOp::Remove {
+                    observed: p2_children_dot,
+                },
+            },
+        );
+        let g = g.commit();
+
+        // actor 2: concurrent insert 'Z' into t2 (parent = t2_a). merged in.
+        let concurrent = Op {
+            id: Dot::new(2, 0),
+            parents: vec![t2_a],
+            payload: DocOp::Text {
+                node_id: t2,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: Some(t2_a),
+                    ch: 'Z',
+                },
+            },
+        };
+        let g = g
+            .receive_changeset(Changeset {
+                ops: vec![concurrent],
+            })
+            .unwrap();
+
+        let graph_bytes = editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap();
+        let target_bytes = editor_crdt::wire::encode_dots(&target_heads).unwrap();
+
+        let server = EditorServer;
+        let revert_bytes = server.revert(graph_bytes.clone(), target_bytes).unwrap();
+        let merged = server.apply(graph_bytes, revert_bytes).unwrap();
+        let merged_cs: Vec<Changeset<DocOp>> = editor_crdt::wire::decode(&merged).unwrap();
+        let merged_graph = OpGraph::from_changesets(merged_cs).unwrap();
+
+        let target_set: hashbrown::HashSet<Dot> = target_heads.into_iter().collect();
+        let expected = Doc::from_op_graph_at(&merged_graph, &target_set).unwrap();
+        let actual = Doc::from_op_graph(&merged_graph).unwrap();
+        assert_eq!(
+            actual.to_plain(),
+            expected.to_plain(),
+            "revert result must equal target point (p2 alive, t2=\"b\"); concurrent 'Z' dropped"
+        );
     }
 }

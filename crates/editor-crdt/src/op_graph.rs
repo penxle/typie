@@ -123,6 +123,22 @@ impl<P> OpGraph<P> {
         self.ops.len() != self.self_contained.len()
     }
 
+    pub fn ancestry_of(&self, heads: &HashSet<Dot>) -> HashSet<Dot> {
+        let mut seen: HashSet<Dot> = HashSet::new();
+        let mut stack: Vec<Dot> = heads.iter().copied().collect();
+        while let Some(dot) = stack.pop() {
+            if !self.ops.contains_key(&dot) {
+                continue;
+            }
+            if seen.insert(dot)
+                && let Some(op) = self.ops.get(&dot)
+            {
+                stack.extend(op.parents.iter().copied());
+            }
+        }
+        seen
+    }
+
     /// Test-only — drop a single op to model server-side data loss
     /// (replica failover with stale snapshot, point-in-time recovery, etc.).
     /// Leaves descendants intact with dangling parent references; the
@@ -1000,6 +1016,91 @@ mod tests {
             })
             .unwrap();
         assert!(!g.has_dangling());
+    }
+
+    #[test]
+    fn ancestry_of_collects_causal_past_inclusive() {
+        // a -> b -> c (linear), d (separate root)
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let (g, b) = g.add(2).unwrap();
+        let (g, c) = g.add(3).unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![Op {
+                    id: Dot::new(9, 0),
+                    parents: vec![],
+                    payload: 99,
+                }],
+            })
+            .unwrap();
+
+        // heads = {b} ancestry = {a, b} (excludes c, d)
+        let heads: HashSet<Dot> = [b.id].into_iter().collect();
+        let anc = g.ancestry_of(&heads);
+        let expected: HashSet<Dot> = [a.id, b.id].into_iter().collect();
+        assert_eq!(anc, expected);
+        assert!(!anc.contains(&c.id));
+        assert!(!anc.contains(&Dot::new(9, 0)));
+    }
+
+    #[test]
+    fn ancestry_of_skips_unknown_heads() {
+        let g: OpGraph<u32> = OpGraph::with_actor(1);
+        let (g, a) = g.add(1).unwrap();
+        let unknown = Dot::new(42, 7);
+        let heads: HashSet<Dot> = [a.id, unknown].into_iter().collect();
+        let anc = g.ancestry_of(&heads);
+        assert_eq!(anc, [a.id].into_iter().collect::<HashSet<Dot>>());
+    }
+
+    #[test]
+    fn ancestry_of_dedups_diamond_merge() {
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
+        let a = Op {
+            id: Dot::new(9, 0),
+            parents: vec![],
+            payload: 0,
+        };
+        let b = Op {
+            id: Dot::new(1, 0),
+            parents: vec![a.id],
+            payload: 1,
+        };
+        let c = Op {
+            id: Dot::new(2, 0),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let m = Op {
+            id: Dot::new(3, 0),
+            parents: vec![b.id, c.id],
+            payload: 3,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![b.clone()],
+            })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![c.clone()],
+            })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![m.clone()],
+            })
+            .unwrap();
+        let heads: HashSet<Dot> = [m.id].into_iter().collect();
+        let anc = g.ancestry_of(&heads);
+        let expected: HashSet<Dot> = [a.id, b.id, c.id, m.id].into_iter().collect();
+        assert_eq!(anc, expected);
     }
 
     #[test]

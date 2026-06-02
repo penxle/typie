@@ -726,6 +726,7 @@ declare class Editor {
     link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
     link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
+    materialize_at(heads: Uint8Array): PlainDoc;
     modifier_state(): ModifierState | undefined;
     page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];

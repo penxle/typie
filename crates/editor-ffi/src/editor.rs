@@ -323,6 +323,17 @@ impl Editor {
         })
     }
 
+    pub fn materialize_at(&self, heads: Vec<u8>) -> EditorResult<Complex<editor_model::PlainDoc>> {
+        self.with_inner(|inner| {
+            let heads_vec = editor_crdt::wire::decode_dots(&heads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
+            let graph = &inner.editor.state().graph;
+            let doc = editor_model::Doc::from_op_graph_at(graph, &heads_set)?;
+            Ok(doc.to_plain().into_ffi()?)
+        })
+    }
+
     pub fn freeze_selection(
         &self,
         selection: Complex<editor_state::Selection>,

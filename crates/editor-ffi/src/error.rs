@@ -6,6 +6,9 @@ pub enum FfiError {
     #[error("serialization failed: {0}")]
     Serialization(String),
 
+    #[error("revert build failed: {0}")]
+    RevertFailed(String),
+
     #[error(
         "server apply: causal-order violation; first op {first_op:?} has parents not in existing log or earlier-accepted changesets"
     )]

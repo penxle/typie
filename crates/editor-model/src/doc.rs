@@ -30,6 +30,21 @@ impl Doc {
         Ok(doc)
     }
 
+    pub fn from_op_graph_at(
+        graph: &OpGraph<DocOp>,
+        heads: &HashSet<Dot>,
+    ) -> Result<Self, ModelError> {
+        if let Some(missing) = heads.iter().find(|d| !graph.contains(d)) {
+            return Err(ModelError::InvalidHead { dot: *missing });
+        }
+        let ancestry = graph.ancestry_of(heads);
+        let mut doc = Doc::empty();
+        for op in graph.topo_sort(&ancestry) {
+            doc = apply_doc_op(doc, &op)?;
+        }
+        Ok(doc)
+    }
+
     pub fn node(&self, id: NodeId) -> Option<NodeRef<'_>> {
         self.get_entry(id).map(|_| NodeRef::new(self, id))
     }
@@ -295,6 +310,129 @@ mod tests {
             "expected newline between blocks: {:?}",
             between
         );
+    }
+
+    #[test]
+    fn from_op_graph_at_materializes_past_point() {
+        use crate::doc_op::DocOp;
+        use editor_crdt::Dot;
+        use hashbrown::HashSet;
+
+        let mut g: OpGraph<DocOp> = OpGraph::with_actor(1);
+        let root = NodeId::ROOT;
+        let para = NodeId::new();
+        let txt = NodeId::new();
+
+        let add = |g: &mut OpGraph<DocOp>, payload: DocOp| {
+            let (ng, op) = g.clone().add(payload).unwrap();
+            *g = ng;
+            op.id
+        };
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: root,
+                op: editor_crdt::OrMapOp::Set {
+                    key: root,
+                    value: NodeType::Root,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: para,
+                op: editor_crdt::OrMapOp::Set {
+                    key: para,
+                    value: NodeType::Paragraph,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: para,
+                op: editor_crdt::LwwRegOp::Set { value: Some(root) },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Children {
+                node_id: root,
+                op: editor_crdt::RgaOp::Insert {
+                    after: None,
+                    value: para,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Presence {
+                node_id: txt,
+                op: editor_crdt::OrMapOp::Set {
+                    key: txt,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Parent {
+                node_id: txt,
+                op: editor_crdt::LwwRegOp::Set { value: Some(para) },
+            },
+        );
+        add(
+            &mut g,
+            DocOp::Children {
+                node_id: para,
+                op: editor_crdt::RgaOp::Insert {
+                    after: None,
+                    value: txt,
+                },
+            },
+        );
+        let a_dot = add(
+            &mut g,
+            DocOp::Text {
+                node_id: txt,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        let heads_at_a: HashSet<Dot> = [a_dot].into_iter().collect();
+        let _b_dot = add(
+            &mut g,
+            DocOp::Text {
+                node_id: txt,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: Some(a_dot),
+                    ch: 'b',
+                },
+            },
+        );
+
+        let now = Doc::from_op_graph(&g).unwrap();
+        assert_eq!(now.extract_text(), "ab");
+
+        let past = Doc::from_op_graph_at(&g, &heads_at_a).unwrap();
+        assert_eq!(past.extract_text(), "a");
+    }
+
+    #[test]
+    fn from_op_graph_at_rejects_unknown_head() {
+        use crate::doc_op::DocOp;
+        use editor_crdt::Dot;
+        use hashbrown::HashSet;
+
+        let g: OpGraph<DocOp> = OpGraph::with_actor(1);
+        let unknown: HashSet<Dot> = [Dot::new(42, 7)].into_iter().collect();
+        assert!(matches!(
+            Doc::from_op_graph_at(&g, &unknown),
+            Err(ModelError::InvalidHead { .. })
+        ));
     }
 
     #[test]
