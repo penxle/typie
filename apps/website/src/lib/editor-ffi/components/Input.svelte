@@ -14,8 +14,13 @@
   const enqueueMessages = (messages: Message[]) => {
     if (!editor) return;
 
+    let enqueued = false;
     for (const message of messages) {
       editor.enqueue(message);
+      enqueued = true;
+    }
+    if (enqueued) {
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
     }
   };
 

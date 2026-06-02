@@ -600,7 +600,7 @@ export type DndOp = { type: "start_internal_selection" } | { type: "enter_extern
 
 export type Dot = string;
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "scroll"; rect: PageRect } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -680,8 +680,6 @@ export type PointerStyle = "default" | "text" | "pointer";
 
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
-export type ScrollTarget = { type: "tracked_item"; id: string } | { type: "selection" };
-
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
 export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_at"; page: number; x: number; y: number } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor: Position; head_page: number; head_x: number; head_y: number; base_selection: Selection | undefined } | { type: "select_unit_at"; page: number; x: number; y: number; unit: SelectionPointUnit } | { type: "expand"; unit: SelectionExpansionUnit };
@@ -716,7 +714,7 @@ export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type
 
 export type UnderlineStyle = "solid" | "dashed" | "wavy";
 
-export type ViewOp = { type: "toggle_fold"; id: NodeId } | { type: "scroll_into_view"; target: ScrollTarget };
+export type ViewOp = { type: "toggle_fold"; id: NodeId };
 
 
 declare class Editor {

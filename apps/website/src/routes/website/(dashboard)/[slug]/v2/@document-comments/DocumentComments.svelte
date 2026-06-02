@@ -4,17 +4,16 @@
   import { onDestroy } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { reconcileComments } from '$lib/editor-ffi/comments';
+  import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { setupCommentContext } from './context.svelte';
-  import type { StableSelection } from '@typie/editor-ffi/browser';
+  import type { PageRect, StableSelection } from '@typie/editor-ffi/browser';
   import type { Snippet } from 'svelte';
-  import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { CommentComposerV2_user$key } from '$mearie';
   import type { CommentAnchor, CommentThread } from './context.svelte';
 
   type Props = {
-    editor: Editor | undefined;
     documentId: string;
     entityId: string;
     myId: string;
@@ -22,16 +21,16 @@
     me$key: CommentComposerV2_user$key;
     children: Snippet;
   };
-  let { editor, documentId, entityId, myId, isOwner, me$key, children }: Props = $props();
+  let { documentId, entityId, myId, isOwner, me$key, children }: Props = $props();
 
+  const ctx = getEditorContext();
   const clientId = crypto.randomUUID();
+  const editor = $derived(ctx.editor);
 
   let activeThreadId = $state<string | null>(null);
   let activeAnchor = $state<CommentAnchor | null>(null);
   let composing = $state(false);
   let showResolved = $state(false);
-  let pendingScrollOpenId: string | null = null;
-  let pendingComposeAnchor = false;
   let composeFrozen: StableSelection | null = null;
   let pendingThread = $state<CommentThread | null>(null);
   const justCreated = new SvelteSet<string>();
@@ -181,20 +180,12 @@
     };
   });
 
-  $effect(() => {
-    if (!editor) return;
-    return editor.on('scroll', (_e, { rect: { page_idx, rect } }) => {
-      if (pendingComposeAnchor) {
-        pendingComposeAnchor = false;
-        activeAnchor = { page: page_idx, x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-        return;
-      }
-      if (!pendingScrollOpenId) return;
-      const id = pendingScrollOpenId;
-      pendingScrollOpenId = null;
-      activeThreadId = id;
-      activeAnchor = { page: page_idx, x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-    });
+  const anchorFromPageRect = ({ page_idx, rect }: PageRect): CommentAnchor => ({
+    page: page_idx,
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
   });
 
   function isLocatable(id: string): boolean {
@@ -215,9 +206,9 @@
     if (editor.cursor) {
       activeAnchor = { page: editor.cursor.page_idx, x: editor.cursor.caret.x, y: editor.cursor.caret.y, width: 0, height: 0 };
     } else {
-      activeAnchor = null;
-      pendingComposeAnchor = true;
-      editor.scrollIntoView({ type: 'selection' });
+      const rect = editor.selectionHeadRect();
+      activeAnchor = rect ? anchorFromPageRect(rect) : null;
+      ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
     }
   }
 
@@ -228,7 +219,6 @@
 
   function openThread(id: string, anchor?: CommentAnchor) {
     composing = false;
-    pendingComposeAnchor = false;
     clearCompose();
     if (pendingThread && pendingThread.id !== id) pendingThread = null;
     activeThreadId = id;
@@ -242,14 +232,18 @@
       return;
     }
     composing = false;
-    pendingComposeAnchor = false;
-    pendingScrollOpenId = id;
-    editor.scrollIntoView({ type: 'tracked_item', id });
+    const rect = editor.trackedItemRect(id);
+    if (!rect) {
+      Toast.error('원문에서 위치를 찾을 수 없는 코멘트예요');
+      return;
+    }
+    activeThreadId = id;
+    activeAnchor = anchorFromPageRect(rect);
+    ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id } });
   }
 
   function close(refocus = true) {
     composing = false;
-    pendingComposeAnchor = false;
     clearCompose();
     pendingThread = null;
     justCreated.clear();

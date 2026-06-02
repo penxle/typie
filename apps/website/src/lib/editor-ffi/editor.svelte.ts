@@ -23,9 +23,10 @@ import type {
   Message,
   Modifier,
   ModifierState,
+  PageRect,
   PlainRootNode,
   PointerStyle,
-  ScrollTarget,
+  Position,
   Selection,
   SelectionEndpoints,
   Size,
@@ -38,6 +39,7 @@ import type {
   Tri,
   Viewport,
 } from '@typie/editor-ffi/browser';
+import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
 import type {
   ArchivedAsset,
   ContextMenuContributor,
@@ -79,8 +81,13 @@ function sameViewport(a: Viewport, b: Viewport): boolean {
   return a.width === b.width && a.height === b.height && a.scale_factor === b.scale_factor;
 }
 
+function samePosition(a: Position, b: Position): boolean {
+  return a.node_id === b.node_id && a.offset === b.offset && a.affinity === b.affinity;
+}
+
 export class EditorContext {
   editor = $state<Editor>();
+  scroll = $state<EditorScrollScope>();
   fileAssets = $state(new SvelteMap<string, FileAsset>());
   // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음
   user = $state<unknown>();
@@ -106,9 +113,10 @@ export class Editor {
 
   #queued = false;
   #rafId: number | null = null;
+  tickRevision = $state(0);
 
-  #viewport!: Viewport;
-  #appliedViewport!: Viewport;
+  #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
+  #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
   #applyViewportResize = debounce(() => {
     if (this.#destroyed || sameViewport(this.#appliedViewport, this.#viewport)) return;
 
@@ -147,6 +155,7 @@ export class Editor {
   #focused = $state(false);
   #nativeDragAdmissionRetainsFocus = false;
   #effectCleanup: (() => void) | null = null;
+  #scrollIntoView: ((options: EditorScrollIntoViewOptions) => void) | null = null;
 
   #pointerStyle = $state<PointerStyle>('default');
   #lastPointerClient: { x: number; y: number } | null = null;
@@ -229,7 +238,6 @@ export class Editor {
 
     self.on('state_changed', self.#stateChangedHandler);
     self.on('font_data_missing', fontDataMissingHandler);
-    self.on('scroll', self.#scrollHandler);
     self.on('tracked_range_replace_result', (_, { id, outcome }) => {
       if (id.startsWith('search-match:')) {
         self.#handleSearchReplaceResult(id, outcome);
@@ -532,6 +540,18 @@ export class Editor {
     return !!this.inputEl;
   }
 
+  get viewport() {
+    return this.#viewport;
+  }
+
+  get hasQueuedTick() {
+    return this.#queued;
+  }
+
+  get destroyed() {
+    return this.#destroyed;
+  }
+
   get focused() {
     return this.#focused;
   }
@@ -605,6 +625,37 @@ export class Editor {
     const zoom = this.safeDisplayZoom();
     const pageRect = el.getBoundingClientRect();
     return new DOMRect(pageRect.left + rect.x * zoom, pageRect.top + rect.y * zoom, rect.width * zoom, rect.height * zoom);
+  }
+
+  #currentCursorLineRect(): PageRect | null {
+    const cursor = this.#cursor;
+    if (cursor) {
+      return { page_idx: cursor.page_idx, rect: cursor.line };
+    }
+    return null;
+  }
+
+  selectionHeadRect(): PageRect | null {
+    const selection = this.#selection;
+    if (!selection) return this.#currentCursorLineRect();
+
+    const endpoints = this.selectionEndpoints();
+    if (!endpoints) return this.#currentCursorLineRect();
+    return samePosition(selection.head, endpoints.to_position) ? endpoints.to : endpoints.from;
+  }
+
+  trackedItemRect(id: string): PageRect | null {
+    const range = this.trackedRanges.find((r) => r.id === id);
+    if (!range || range.invalid) return null;
+    return range.rects[0] ?? null;
+  }
+
+  registerScrollIntoView(handler: ((options: EditorScrollIntoViewOptions) => void) | null): void {
+    this.#scrollIntoView = handler;
+  }
+
+  scrollIntoView(options: EditorScrollIntoViewOptions): void {
+    this.#scrollIntoView?.(options);
   }
 
   clientToLocal(clientX: number, clientY: number) {
@@ -739,6 +790,7 @@ export class Editor {
     for (const event of events) {
       this.#emit(event);
     }
+    this.tickRevision += 1;
   }
 
   #scheduleTick(): void {
@@ -1002,7 +1054,7 @@ export class Editor {
     if (idx === undefined) return;
     const match = this.#searchMatches[idx];
     if (!match) return;
-    this.enqueue({ type: 'view', op: { type: 'scroll_into_view', target: { type: 'tracked_item', id: match.id } } });
+    this.scrollIntoView({ target: { type: 'tracked_item', id: match.id } });
   }
 
   #handleSearchReplaceResult(id: string, outcome: string): void {
@@ -1121,7 +1173,7 @@ export class Editor {
         this.activeSpellcheckErrorId = null;
         return;
       }
-      this.scrollIntoView({ type: 'tracked_item', id });
+      this.scrollIntoView({ target: { type: 'tracked_item', id } });
     }
   }
 
@@ -1315,7 +1367,11 @@ export class Editor {
     this.activeCommentId = id;
     if (id !== null) {
       const ok = move(id, 'comment-active');
-      if (!ok) this.activeCommentId = null;
+      if (ok) {
+        this.scrollIntoView({ target: { type: 'tracked_item', id } });
+      } else {
+        this.activeCommentId = null;
+      }
     }
   }
 
@@ -1359,7 +1415,7 @@ export class Editor {
         this.activeAiFeedbackId = null;
         return;
       }
-      this.scrollIntoView({ type: 'tracked_item', id });
+      this.scrollIntoView({ target: { type: 'tracked_item', id } });
     }
   }
 
@@ -1402,6 +1458,7 @@ export class Editor {
       for (const event of events) {
         this.#emit(event);
       }
+      this.tickRevision += 1;
     }
   };
 
@@ -1522,34 +1579,6 @@ export class Editor {
 
   #handleSpellcheckReplaceResult(id: string): void {
     this.removeSpellcheckError(id);
-  }
-
-  #scrollHandler: EditorEventListener<'scroll'> = (_, { rect: { page_idx, rect } }) => {
-    const pageEl = this.pageEls[page_idx];
-    const container = this.scrollContainerEl;
-    if (!pageEl || !container) return;
-
-    const zoom = this.safeDisplayZoom();
-    const pageRect = pageEl.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const top = pageRect.top - containerRect.top + container.scrollTop + rect.y * zoom;
-    const bottom = top + rect.height * zoom;
-    const viewTop = container.scrollTop;
-    const viewBottom = viewTop + container.clientHeight;
-
-    let nextTop: number | null = null;
-    if (top < viewTop) {
-      nextTop = top;
-    } else if (bottom > viewBottom) {
-      nextTop = bottom - container.clientHeight;
-    }
-    if (nextTop !== null) {
-      container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
-    }
-  };
-
-  scrollIntoView(target: ScrollTarget): void {
-    this.enqueue({ type: 'view', op: { type: 'scroll_into_view', target } });
   }
 
   destroy(): void {

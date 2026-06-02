@@ -18,6 +18,7 @@
   import { handleContextMenu } from '../handlers/contextmenu';
   import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from '../handlers/dnd';
   import { handleClick, handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
+  import { setupEditorScroll } from '../scroll.svelte';
   import Caret from './Caret.svelte';
   import CaretPositioned from './CaretPositioned.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -47,6 +48,7 @@
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
+  setupEditorScroll(ctx);
 
   const document = createFragment(
     graphql(`
@@ -114,8 +116,8 @@
       loadFonts(document.data.editorFontFamilies);
       ctx.editor = await Editor.create(graph, { width, height, scale_factor: window.devicePixelRatio }, theme.currentThemeVariant);
       status = 'initialized';
-      onReady?.();
       await tick();
+      onReady?.();
       ctx.editor?.focus();
     } catch (err) {
       console.error(err);
@@ -220,6 +222,7 @@
           style:cursor
           style:min-width={editorMinWidth}
           style:max-width={continuousMaxFrameWidth}
+          style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
           class={css({
             display: 'flex',
             flexDirection: 'column',

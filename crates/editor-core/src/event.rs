@@ -1,5 +1,4 @@
 use editor_macros::ffi;
-use editor_view::PageRect;
 use serde::{Deserialize, Serialize};
 
 use crate::state_field::StateField;
@@ -38,9 +37,6 @@ pub enum EditorEvent {
         prefetch: Vec<FontData>,
     },
     CursorExitedDocumentStart,
-    Scroll {
-        rect: PageRect,
-    },
     TrackedRangeReplaceResult {
         id: String,
         outcome: TrackedRangeReplaceOutcome,

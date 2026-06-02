@@ -2,6 +2,7 @@ import { runEscapeStack } from '@typie/ui/utils';
 import type { Message, Movement } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { ImeTextInput } from '../input/ime-context';
+import type { EditorScrollIntoViewOptions } from '../scroll.svelte';
 import type { EditorEventHandler } from '../types';
 
 type KeyBindingModifier = 'shift' | 'mod' | 'ctrl' | 'alt';
@@ -10,6 +11,7 @@ type KeyBinding = {
   key: string | string[];
   modifiers?: KeyBindingModifier[];
   predicate?: (e: KeyboardEvent) => boolean;
+  reveal?: () => EditorScrollIntoViewOptions;
   action: (editor: Editor, e: KeyboardEvent) => void;
 };
 
@@ -19,164 +21,176 @@ const word: KeyBindingModifier[] = isMac ? ['alt'] : ['ctrl'];
 const wordShift: KeyBindingModifier[] = isMac ? ['shift', 'alt'] : ['shift', 'ctrl'];
 const macOnly = () => isMac;
 
+const currentSelectionHeadTypewriterReveal = (): EditorScrollIntoViewOptions => ({
+  target: { type: 'current_selection_head' },
+  mode: 'typewriter',
+});
+
+const withCurrentSelectionHeadReveal = (bindings: KeyBinding[]): KeyBinding[] =>
+  bindings.map((binding) => ({ ...binding, reveal: currentSelectionHeadTypewriterReveal }));
+
 // NOTE: Plain Backspace, Delete, and Enter also arrive through beforeinput in Input.svelte
 // as deleteContentBackward, deleteContentForward, insertParagraph, or insertLineBreak.
 // These bindings own the hardware-key path; beforeinput remains the browser input fallback.
 const bindings: KeyBinding[] = [
-  { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, false)) },
-  { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, true)) },
-  { key: 'ArrowLeft', modifiers: word, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'backward' }, false)) },
-  { key: 'ArrowLeft', modifiers: wordShift, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'backward' }, true)) },
-  {
-    key: 'ArrowLeft',
-    modifiers: ['mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, false)),
-  },
-  {
-    key: 'ArrowLeft',
-    modifiers: ['shift', 'mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, true)),
-  },
+  ...withCurrentSelectionHeadReveal([
+    { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, false)) },
+    { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, true)) },
+    { key: 'ArrowLeft', modifiers: word, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'backward' }, false)) },
+    { key: 'ArrowLeft', modifiers: wordShift, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'backward' }, true)) },
+    {
+      key: 'ArrowLeft',
+      modifiers: ['mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, false)),
+    },
+    {
+      key: 'ArrowLeft',
+      modifiers: ['shift', 'mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, true)),
+    },
 
-  { key: 'ArrowRight', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, false)) },
-  { key: 'ArrowRight', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, true)) },
-  { key: 'ArrowRight', modifiers: word, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'forward' }, false)) },
-  { key: 'ArrowRight', modifiers: wordShift, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'forward' }, true)) },
-  {
-    key: 'ArrowRight',
-    modifiers: ['mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, false)),
-  },
-  {
-    key: 'ArrowRight',
-    modifiers: ['shift', 'mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, true)),
-  },
+    { key: 'ArrowRight', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, false)) },
+    { key: 'ArrowRight', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, true)) },
+    { key: 'ArrowRight', modifiers: word, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'forward' }, false)) },
+    { key: 'ArrowRight', modifiers: wordShift, action: (ed) => ed.enqueue(move({ type: 'word', direction: 'forward' }, true)) },
+    {
+      key: 'ArrowRight',
+      modifiers: ['mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, false)),
+    },
+    {
+      key: 'ArrowRight',
+      modifiers: ['shift', 'mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, true)),
+    },
 
-  { key: 'ArrowUp', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, false)) },
-  {
-    key: 'ArrowUp',
-    modifiers: ['shift'],
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, true)),
-  },
-  { key: 'ArrowUp', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'backward' }, false)) },
-  {
-    key: 'ArrowUp',
-    modifiers: ['shift', 'alt'],
-    action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'backward' }, true)),
-  },
-  {
-    key: 'ArrowUp',
-    modifiers: ['mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, false)),
-  },
-  {
-    key: 'ArrowUp',
-    modifiers: ['shift', 'mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, true)),
-  },
+    { key: 'ArrowUp', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, false)) },
+    {
+      key: 'ArrowUp',
+      modifiers: ['shift'],
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, true)),
+    },
+    { key: 'ArrowUp', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'backward' }, false)) },
+    {
+      key: 'ArrowUp',
+      modifiers: ['shift', 'alt'],
+      action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'backward' }, true)),
+    },
+    {
+      key: 'ArrowUp',
+      modifiers: ['mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, false)),
+    },
+    {
+      key: 'ArrowUp',
+      modifiers: ['shift', 'mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, true)),
+    },
 
-  { key: 'ArrowDown', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, false)) },
-  {
-    key: 'ArrowDown',
-    modifiers: ['shift'],
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, true)),
-  },
-  { key: 'ArrowDown', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'forward' }, false)) },
-  {
-    key: 'ArrowDown',
-    modifiers: ['shift', 'alt'],
-    action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'forward' }, true)),
-  },
-  {
-    key: 'ArrowDown',
-    modifiers: ['mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, false)),
-  },
-  {
-    key: 'ArrowDown',
-    modifiers: ['shift', 'mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, true)),
-  },
+    { key: 'ArrowDown', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, false)) },
+    {
+      key: 'ArrowDown',
+      modifiers: ['shift'],
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, true)),
+    },
+    { key: 'ArrowDown', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'forward' }, false)) },
+    {
+      key: 'ArrowDown',
+      modifiers: ['shift', 'alt'],
+      action: (ed) => ed.enqueue(move({ type: 'sentence', direction: 'forward' }, true)),
+    },
+    {
+      key: 'ArrowDown',
+      modifiers: ['mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, false)),
+    },
+    {
+      key: 'ArrowDown',
+      modifiers: ['shift', 'mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, true)),
+    },
 
-  { key: 'Home', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, false)) },
-  {
-    key: 'Home',
-    modifiers: ['shift'],
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, true)),
-  },
-  { key: 'Home', modifiers: ['mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, false)) },
-  {
-    key: 'Home',
-    modifiers: ['shift', 'mod'],
-    action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, true)),
-  },
+    { key: 'Home', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, false)) },
+    {
+      key: 'Home',
+      modifiers: ['shift'],
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, true)),
+    },
+    { key: 'Home', modifiers: ['mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, false)) },
+    {
+      key: 'Home',
+      modifiers: ['shift', 'mod'],
+      action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, true)),
+    },
 
-  { key: 'End', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, false)) },
-  {
-    key: 'End',
-    modifiers: ['shift'],
-    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, true)),
-  },
-  { key: 'End', modifiers: ['mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, false)) },
-  {
-    key: 'End',
-    modifiers: ['shift', 'mod'],
-    action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, true)),
-  },
+    { key: 'End', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, false)) },
+    {
+      key: 'End',
+      modifiers: ['shift'],
+      action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, true)),
+    },
+    { key: 'End', modifiers: ['mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, false)) },
+    {
+      key: 'End',
+      modifiers: ['shift', 'mod'],
+      action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, true)),
+    },
 
-  { key: 'PageUp', action: (ed) => ed.enqueue(move({ type: 'page', direction: 'backward' }, false)) },
-  { key: 'PageUp', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'page', direction: 'backward' }, true)) },
+    { key: 'PageUp', action: (ed) => ed.enqueue(move({ type: 'page', direction: 'backward' }, false)) },
+    { key: 'PageUp', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'page', direction: 'backward' }, true)) },
 
-  { key: 'PageDown', action: (ed) => ed.enqueue(move({ type: 'page', direction: 'forward' }, false)) },
-  { key: 'PageDown', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'page', direction: 'forward' }, true)) },
+    { key: 'PageDown', action: (ed) => ed.enqueue(move({ type: 'page', direction: 'forward' }, false)) },
+    { key: 'PageDown', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'page', direction: 'forward' }, true)) },
 
-  { key: 'Enter', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'enter' } }) },
-  {
-    key: 'Enter',
-    modifiers: ['shift'],
-    action: (ed) => ed.enqueue({ type: 'key', event: { key: 'enter', modifiers: { shift: true } } }),
-  },
-  {
-    key: 'Enter',
-    modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'insertion', op: { type: 'break', kind: 'page' } }),
-  },
+    { key: 'Enter', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'enter' } }) },
+    {
+      key: 'Enter',
+      modifiers: ['shift'],
+      action: (ed) => ed.enqueue({ type: 'key', event: { key: 'enter', modifiers: { shift: true } } }),
+    },
+    {
+      key: 'Enter',
+      modifiers: ['mod'],
+      action: (ed) => ed.enqueue({ type: 'insertion', op: { type: 'break', kind: 'page' } }),
+    },
 
-  { key: 'Tab', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'tab' } }) },
-  {
-    key: 'Tab',
-    modifiers: ['shift'],
-    action: (ed) => ed.enqueue({ type: 'key', event: { key: 'tab', modifiers: { shift: true } } }),
-  },
+    { key: 'Tab', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'tab' } }) },
+    {
+      key: 'Tab',
+      modifiers: ['shift'],
+      action: (ed) => ed.enqueue({ type: 'key', event: { key: 'tab', modifiers: { shift: true } } }),
+    },
+  ]),
 
   { key: 'Escape', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'escape' } }) },
 
-  { key: 'Backspace', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'backspace' } }) },
-  { key: 'Backspace', modifiers: word, action: (ed) => ed.enqueue(del({ type: 'word', direction: 'backward' })) },
-  {
-    key: 'Backspace',
-    modifiers: ['mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(del({ type: 'line', direction: 'backward', axis: 'horizontal' })),
-  },
+  ...withCurrentSelectionHeadReveal([
+    { key: 'Backspace', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'backspace' } }) },
+    { key: 'Backspace', modifiers: word, action: (ed) => ed.enqueue(del({ type: 'word', direction: 'backward' })) },
+    {
+      key: 'Backspace',
+      modifiers: ['mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(del({ type: 'line', direction: 'backward', axis: 'horizontal' })),
+    },
 
-  { key: 'Delete', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'delete' } }) },
-  { key: 'Delete', modifiers: word, action: (ed) => ed.enqueue(del({ type: 'word', direction: 'forward' })) },
-  {
-    key: 'Delete',
-    modifiers: ['mod'],
-    predicate: macOnly,
-    action: (ed) => ed.enqueue(del({ type: 'line', direction: 'forward', axis: 'horizontal' })),
-  },
+    { key: 'Delete', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'delete' } }) },
+    { key: 'Delete', modifiers: word, action: (ed) => ed.enqueue(del({ type: 'word', direction: 'forward' })) },
+    {
+      key: 'Delete',
+      modifiers: ['mod'],
+      predicate: macOnly,
+      action: (ed) => ed.enqueue(del({ type: 'line', direction: 'forward', axis: 'horizontal' })),
+    },
+  ]),
 
   {
     key: 'a',
@@ -261,5 +275,7 @@ export const handleKeyDown: EditorEventHandler<ImeTextInput, KeyboardEvent> = (e
     e.preventDefault();
     e.stopPropagation();
     binding.action(editor, e);
+    const reveal = binding.reveal?.();
+    if (reveal) editor.scrollIntoView(reveal);
   }
 };

@@ -417,6 +417,7 @@ export interface PlainCalloutNode {
 
 export interface PlainDoc {
     nodes: Record<NodeId, PlainNodeEntry>;
+    styles?: Record<string, PlainStyleEntry>;
 }
 
 export interface PlainEmbedNode {
@@ -450,6 +451,7 @@ export interface PlainNodeEntry {
     parent: NodeId | undefined;
     children: NodeId[];
     modifiers: Record<ModifierType, Modifier>;
+    style?: string | undefined;
     node: PlainNode;
 }
 
@@ -461,6 +463,11 @@ export interface PlainParagraphNode {}
 
 export interface PlainRootNode {
     layout_mode: LayoutMode;
+}
+
+export interface PlainStyleEntry {
+    name: string;
+    modifiers: Modifier[];
 }
 
 export interface PlainTableCellNode {
@@ -516,6 +523,16 @@ export interface Size {
 export interface StableSelection {
     anchor: StablePosition;
     head: StablePosition;
+}
+
+export interface StyleInfo {
+    id: string;
+    name: string;
+    modifiers: Modifier[];
+}
+
+export interface StyleRefValue {
+    value: string;
 }
 
 export interface TableOverlay {
@@ -610,7 +627,7 @@ export type DndOp = { type: "start_internal_selection" } | { type: "enter_extern
 
 export type Dot = string;
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "scroll"; rect: PageRect } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -660,8 +677,6 @@ export type ListItemNodeAttr = void;
 
 export type Message = { type: "key"; event: KeyEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "style"; op: StyleOp } | { type: "node"; op: NodeOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "dnd"; op: DndOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent } | { type: "tracked_range"; op: TrackedRangeOp };
 
-export type StyleOp = { type: "apply"; node_id: NodeId; style_id: string } | { type: "unapply"; node_id: NodeId; style_id: string } | { type: "apply_to_selection"; style_id: string } | { type: "unset_in_selection" } | { type: "create_from_selection"; style_id: string; name: string } | { type: "update_from_selection" } | { type: "define"; style_id: string; name: string; modifiers: Modifier[] } | { type: "delete"; style_id: string } | { type: "rename"; style_id: string; name: string } | { type: "set_modifier"; style_id: string; modifier: Modifier } | { type: "unset_modifier"; style_id: string; modifier_type: ModifierType };
-
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 
 export type ModifierOp = { type: "toggle"; modifier_type: ModifierType } | { type: "set"; modifier: Modifier } | { type: "set_on_node"; id: NodeId; modifier: Modifier } | { type: "edit"; modifier_type: ModifierType; modifier: Modifier | undefined } | { type: "clear_all" };
@@ -692,8 +707,6 @@ export type PointerStyle = "default" | "text" | "pointer";
 
 export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
-export type ScrollTarget = { type: "tracked_item"; id: string } | { type: "selection" };
-
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
 export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_at"; page: number; x: number; y: number } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor: Position; head_page: number; head_x: number; head_y: number; base_selection: Selection | undefined } | { type: "select_unit_at"; page: number; x: number; y: number; unit: SelectionPointUnit } | { type: "expand"; unit: SelectionExpansionUnit };
@@ -702,15 +715,7 @@ export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "styles" | "tracked_ranges" | "last_history_tag";
 
-export interface StyleInfo {
-    id: string;
-    name: string;
-    modifiers: Modifier[];
-}
-
-export interface StyleRefValue {
-    value: string;
-}
+export type StyleOp = { type: "apply"; node_id: NodeId; style_id: string } | { type: "unapply"; node_id: NodeId; style_id: string } | { type: "apply_to_selection"; style_id: string } | { type: "unset_in_selection" } | { type: "create_from_selection"; style_id: string; name: string } | { type: "update_from_selection" } | { type: "define"; style_id: string; name: string; modifiers: Modifier[] } | { type: "delete"; style_id: string } | { type: "rename"; style_id: string; name: string } | { type: "set_modifier"; style_id: string; modifier: Modifier } | { type: "unset_modifier"; style_id: string; modifier_type: ModifierType };
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
@@ -736,13 +741,14 @@ export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type
 
 export type UnderlineStyle = "solid" | "dashed" | "wavy";
 
-export type ViewOp = { type: "toggle_fold"; id: NodeId } | { type: "scroll_into_view"; target: ScrollTarget };
+export type ViewOp = { type: "toggle_fold"; id: NodeId };
 
 
 declare class Editor {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
+    applied_style(): Tri;
     block_state(): BlockState | undefined;
     can(message: Message): boolean;
     character_counts(): CharacterCounts;
@@ -777,9 +783,8 @@ declare class Editor {
     selection(): Selection | undefined;
     selection_endpoints(): SelectionEndpoints | undefined;
     selection_hit_test(page: number, x: number, y: number): boolean;
-    style_entries(): StyleInfo[];
-    applied_style(): Tri<StyleRefValue>;
     style_divergence(): boolean;
+    style_entries(): StyleInfo[];
     table_overlays(): TableOverlay[];
     tick(): EditorEvent[];
     tracked_ranges(group?: string | null): TrackedRange[];

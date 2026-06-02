@@ -38,6 +38,7 @@ export const handleCut: EditorEventHandler<ImeTextInput, ClipboardEvent> = (edit
   }
   e.preventDefault();
   editor.enqueue({ type: 'clipboard', op: { type: 'cut' } });
+  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
 };
 
 export const handlePaste: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
@@ -50,6 +51,7 @@ export const handlePaste: EditorEventHandler<ImeTextInput, ClipboardEvent> = (ed
 
   e.preventDefault();
   editor.enqueue({ type: 'clipboard', op: { type: 'paste', text, html } });
+  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
 };
 
 export const writeClipboardPayload = async (html: string, text: string): Promise<void> => {

@@ -608,7 +608,7 @@
           selection: saved.selection,
         },
       });
-      ctx.editor?.scrollIntoView({ type: 'selection' });
+      ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
       if (focused) {
         ctx.editor?.focus();
       }
@@ -839,7 +839,7 @@
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         {#if document && documentId && entity}
-          <DocumentComments {documentId} editor={ctx.editor} entityId={entity.id} {isOwner} me$key={query.data.me} myId={query.data.me.id}>
+          <DocumentComments {documentId} entityId={entity.id} {isOwner} me$key={query.data.me} myId={query.data.me.id}>
             <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
               <BottomToolbar
                 {fontFamilies}

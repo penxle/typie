@@ -90,6 +90,7 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
       });
     }
     editor.flush();
+    editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
   }
   state.markPointerDown(editor, e.pointerId, !nativeDragCandidate, { page, x, y }, count, modifiers, nativeDragCandidate);
 };
@@ -266,6 +267,7 @@ class PointerState {
     this.#flushDragPending(editor);
     if (session.nativeDragCandidate && !session.nativeDragStarted) {
       editor.enqueue({ type: 'selection', op: { type: 'set_at', page: session.down.page, x: session.down.x, y: session.down.y } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
     }
     this.#session = null;
   }

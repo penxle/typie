@@ -4,7 +4,6 @@ use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
-use crate::event::EditorEvent;
 use crate::message::*;
 
 pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError> {
@@ -28,52 +27,7 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
             editor.toggle_fold(id);
             Ok(())
         }
-        ViewOp::ScrollIntoView { target } => handle_scroll_into_view(editor, target),
     }
-}
-
-fn handle_scroll_into_view(editor: &mut Editor, target: ScrollTarget) -> Result<(), EditorError> {
-    let selection = match target {
-        ScrollTarget::TrackedItem { id } => {
-            let Some(range) = editor.tracked_ranges().get(&id).cloned() else {
-                return Ok(());
-            };
-            if range.explicitly_invalid {
-                return Ok(());
-            }
-            let sel = range.selection.thaw(&editor.state.doc);
-            if sel.is_collapsed() {
-                return Ok(());
-            }
-            sel
-        }
-        ScrollTarget::Selection => {
-            let Some(sel) = editor.state.selection else {
-                return Ok(());
-            };
-            if sel.is_collapsed() {
-                return Ok(());
-            }
-            sel
-        }
-    };
-
-    let endpoints = selection
-        .resolve(&editor.state.doc)
-        .and_then(|resolved| editor.view.selection_endpoints(&resolved));
-    let Some(endpoints) = endpoints else {
-        return Ok(());
-    };
-
-    if editor.is_probing() {
-        editor.mark_probed_change(true);
-        return Ok(());
-    }
-
-    editor.push_event(EditorEvent::Scroll {
-        rect: endpoints.from,
-    });
-    Ok(())
 }
 
 // Legacy parity: collapse hides fold-content, so a caret/anchor inside it is

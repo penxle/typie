@@ -72,6 +72,7 @@ const createEditor = ({
     endNativeDragAdmission: vi.fn(),
     enqueue: vi.fn(),
     flush: vi.fn(),
+    scrollIntoView: vi.fn(),
     gesture: {
       handlePointerDown: vi.fn(),
       handlePointerMove: vi.fn(),
@@ -82,6 +83,7 @@ const createEditor = ({
   } as unknown as Editor & {
     enqueue: ReturnType<typeof vi.fn>;
     flush: ReturnType<typeof vi.fn>;
+    scrollIntoView: ReturnType<typeof vi.fn>;
     selectionHitTest: ReturnType<typeof vi.fn>;
   };
 };
@@ -109,6 +111,7 @@ describe('pointer native drag admission', () => {
 
     expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: true });
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
+    expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
     expect(editor.flush).toHaveBeenCalledTimes(1);
   });
 
@@ -142,6 +145,7 @@ describe('pointer native drag admission', () => {
     handlePointerUp(editor, createPointerEvent({ target }));
 
     expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.scrollIntoView).not.toHaveBeenCalled();
     expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: true });
   });
 
@@ -156,5 +160,6 @@ describe('pointer native drag admission', () => {
     expect(target.setPointerCapture).toHaveBeenCalledWith(1);
     expect(target.releasePointerCapture).toHaveBeenCalledWith(1);
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
+    expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
   });
 });
