@@ -441,7 +441,7 @@ impl View {
         query::hit_test::rect_distance_sq(&node.rect, x, abs_y) == 0.0
     }
 
-    pub fn is_below_node_box(&self, page_idx: usize, x: f32, y: f32, id: NodeId) -> bool {
+    pub fn is_below_node_box(&self, page_idx: usize, _x: f32, y: f32, id: NodeId) -> bool {
         let Some(ref result) = self.layout else {
             return false;
         };
