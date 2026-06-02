@@ -294,8 +294,12 @@ fn line_has_trailing_non_text(line: &LayoutLine) -> bool {
     range.end.saturating_sub(range.start) > text_child_count
 }
 
+fn ruby_band(line: &LayoutLine) -> f32 {
+    crate::measure::text::ruby::ruby_extra_top(line.baseline, line.ascent, &line.ruby_annotations)
+}
+
 fn text_area_height(line: &LayoutLine) -> f32 {
-    let height = (line.ascent + line.descent).max(0.0);
+    let height = (line.ascent + line.descent - ruby_band(line)).max(0.0);
     if height > 0.0 {
         height
     } else if !line.glyph_runs.is_empty() {
@@ -406,27 +410,23 @@ fn visit_line(
     };
 
     if let Some(page_idx) = page_for_y(pages, node.rect.y) {
-        rects.line_box_rects.push(PageRect::with_meta(
-            page_idx,
-            Rect::from_xywh(
-                node.rect.x + x_start,
-                node.rect.y - pages[page_idx].y_start,
-                width,
-                node.rect.height,
-            ),
-            SelectionRectKind::Text,
-        ));
-        rects.text_rects.push(PageRect::with_meta(
-            page_idx,
-            Rect::from_xywh(
-                node.rect.x + x_start,
-                node.rect.y + ((node.rect.height - text_area_height(line)).max(0.0) * 0.5)
-                    - pages[page_idx].y_start,
-                width,
-                text_area_height(line),
-            ),
-            SelectionRectKind::Text,
-        ));
+        let band = ruby_band(line);
+        let box_height = (node.rect.height - band).max(0.0);
+        let x = node.rect.x + x_start;
+        let box_top = node.rect.y + band - pages[page_idx].y_start;
+        let push = |rects: &mut Vec<SelectionRect>, top: f32, height: f32| {
+            rects.push(PageRect::with_meta(
+                page_idx,
+                Rect::from_xywh(x, top, width, height),
+                SelectionRectKind::Text,
+            ));
+        };
+
+        push(&mut rects.line_box_rects, box_top, box_height);
+
+        let text_height = text_area_height(line);
+        let text_top = box_top + (box_height - text_height).max(0.0) * 0.5;
+        push(&mut rects.text_rects, text_top, text_height);
     }
 }
 
@@ -638,6 +638,73 @@ mod tests {
         assert!((text_rect.height - expected_height).abs() < 0.01);
         assert!((line_box_rect.x - text_rect.x).abs() < 0.01);
         assert!((line_box_rect.width - text_rect.width).abs() < 0.01);
+    }
+
+    #[test]
+    fn selection_highlight_excludes_ruby_band() {
+        // The rendered selection highlight uses `selection_rects` (line box).
+        // Ruby inflates the line box upward; that band must be excluded so the
+        // highlight never covers the ruby drawn above the text. (TR-222)
+        let (plain_doc, p) = doc! { root { paragraph { p: text("ABCD") } } };
+        let (ruby_doc, r) = doc! {
+            root { paragraph { r: text("ABCD") [ruby(text: "xy".to_string())] } }
+        };
+        let plain = layout(&plain_doc);
+        let ruby = layout(&ruby_doc);
+
+        let plain_box = {
+            let sel = Selection::new(Position::new(p, 0), Position::new(p, 4));
+            plain.selection_rects(&sel.resolve(&plain_doc).unwrap())[0].rect
+        };
+        let resolved = Selection::new(Position::new(r, 0), Position::new(r, 4))
+            .resolve(&ruby_doc)
+            .unwrap();
+        let ruby_box = ruby.selection_rects(&resolved)[0].rect;
+
+        let ruby_tree = ruby.layout_tree_for_test().unwrap();
+        let (ruby_node, ruby_line) = first_line(&ruby_tree.root).expect("line must exist");
+        let band = ruby_band(ruby_line);
+
+        // Ruby actually inflated this line (else the test is vacuous).
+        assert!(band > 0.0, "ruby must reserve space above the text");
+        // The rendered highlight excludes the ruby band: same height as the
+        // plain (ruby-free, v1-equivalent) line, not the inflated line box.
+        assert!(
+            (ruby_box.height - plain_box.height).abs() < 0.5,
+            "ruby must not enlarge the selection highlight: plain={}, ruby={}",
+            plain_box.height,
+            ruby_box.height,
+        );
+        assert!(
+            (ruby_box.height - (ruby_node.rect.height - band)).abs() < 0.01,
+            "highlight height must be line box minus the ruby band",
+        );
+        // ...and the highlight starts below the reserved ruby band, not at the
+        // inflated line-box top.
+        let page_start = ruby.pages()[0].y_start;
+        assert!(ruby_box.y >= ruby_node.rect.y + band - page_start - 0.01);
+    }
+
+    #[test]
+    fn selection_text_rect_matches_v1_metric_height_without_ruby() {
+        // Without ruby the text rect height equals the v1 formula `ascent +
+        // descent` (v1 `metric.height`).
+        let (doc, t) = doc! { root { paragraph { t: text("ABCD") } } };
+        let view = layout(&doc);
+        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 4))
+            .resolve(&doc)
+            .unwrap();
+        let text_rect = view.selection_text_rects(&resolved)[0].rect;
+
+        let tree = view.layout_tree_for_test().unwrap();
+        let (_, line) = first_line(&tree.root).expect("line must exist");
+        let v1_height = line.ascent + line.descent;
+        assert!(
+            (text_rect.height - v1_height).abs() < 0.01,
+            "text rect height must equal v1 metric.height: rect={}, ascent+descent={}",
+            text_rect.height,
+            v1_height,
+        );
     }
 
     #[test]

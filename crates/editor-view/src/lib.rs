@@ -23,6 +23,7 @@ pub struct TableLayoutInfo {
 
 pub use dnd::*;
 pub use external::*;
+pub use measure::text::ruby::ruby_extra_top;
 pub use page::*;
 pub use query::*;
 pub use table_overlay::*;

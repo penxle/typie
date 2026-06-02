@@ -15,6 +15,29 @@ pub(crate) const RUBY_FONT_SIZE_RATIO: f32 = 0.5;
 pub(crate) const RUBY_FONT_SIZE_MIN_PX: f32 = 12.0;
 pub(crate) const RUBY_GAP: f32 = 2.0;
 
+/// Space ruby reserves above the base text, inflating the line's `ascent` and
+/// `baseline` (see `measure_inline_text`); 0 without ruby. Subtract from
+/// `ascent` for the base-text ascent so backgrounds/selection skip the ruby.
+///
+/// Takes the already-inflated `baseline`/`ascent`: their difference is
+/// invariant under the inflation, so this recovers what the measure pass added.
+pub fn ruby_extra_top(baseline: f32, ascent: f32, ruby_annotations: &[RubyAnnotation]) -> f32 {
+    if ruby_annotations.is_empty() {
+        return 0.0;
+    }
+    let max_ruby_ascent = ruby_annotations
+        .iter()
+        .map(|r| r.ascent)
+        .fold(0.0, f32::max);
+    let max_ruby_descent = ruby_annotations
+        .iter()
+        .map(|r| r.descent)
+        .fold(0.0, f32::max);
+    let required_top = max_ruby_ascent + max_ruby_descent + RUBY_GAP;
+    let available_top = (baseline - ascent).max(0.0);
+    (required_top - available_top).max(0.0)
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RubyGroup {
     pub text: String,
