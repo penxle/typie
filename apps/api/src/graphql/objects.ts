@@ -56,6 +56,7 @@ export const CreditCode = createObjectRef('CreditCode', T.CreditCodes);
 export const Document = createObjectRef('Document', T.Documents);
 export const DocumentArchivedNode = createObjectRef('DocumentArchivedNode', T.DocumentArchivedNodes);
 export const DocumentState = createObjectRef('DocumentState', T.DocumentStates);
+export const DocumentHead = createObjectRef('DocumentHead', T.DocumentHeads);
 export const Embed = createObjectRef('Embed', T.Embeds);
 export const Entity = createObjectRef('Entity', T.Entities);
 export const File = createObjectRef('File', T.Files);

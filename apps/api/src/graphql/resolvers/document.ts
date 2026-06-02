@@ -28,6 +28,8 @@ import {
   DocumentArchivedNodes,
   DocumentCharacterCountChanges,
   DocumentContents,
+  DocumentHeadContributors,
+  DocumentHeads,
   DocumentReactions,
   Documents,
   DocumentStates,
@@ -53,6 +55,7 @@ import * as slack from '#/external/slack.ts';
 import * as spellcheck from '#/external/spellcheck.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
+import { readMergedGraph } from '#/utils/changeset.ts';
 import { compressZstd, decompressZstd } from '#/utils/compression.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters, derivePlainRootFromPreset, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
@@ -76,6 +79,7 @@ import {
   Document,
   DocumentArchivedNode,
   DocumentFontFamily,
+  DocumentHead,
   DocumentReaction,
   DocumentVersion,
   DocumentView,
@@ -86,6 +90,7 @@ import {
   IDocument,
   Image,
   isTypeOf,
+  User,
 } from '../objects.ts';
 import type { Context } from '#/context.ts';
 import type { TemplatePreset } from '#/utils/entity.ts';
@@ -448,6 +453,12 @@ Document.implement({
           .orderBy(asc(DocumentVersions.createdAt));
       },
     }),
+
+    heads: t.field({
+      type: [DocumentHead],
+      resolve: async (self) =>
+        db.select().from(DocumentHeads).where(eq(DocumentHeads.documentId, self.id)).orderBy(desc(DocumentHeads.updatedAt)),
+    }),
   }),
 });
 
@@ -719,6 +730,35 @@ DocumentVersion.implement({
     id: t.exposeID('id'),
     version: t.field({ type: 'Binary', resolve: async (self) => decompressZstd(self.version) }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+  }),
+});
+
+DocumentHead.implement({
+  isTypeOf: isTypeOf(TableCode.DOCUMENT_HEADS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+    characterCount: t.exposeInt('characterCount'),
+    heads: t.field({ type: 'Binary', resolve: (self) => self.heads }),
+    contributors: t.field({
+      type: [User],
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'DocumentHead.contributors',
+          many: true,
+          load: async (ids: string[]) =>
+            db
+              .select({ headId: DocumentHeadContributors.headId, user: Users })
+              .from(DocumentHeadContributors)
+              .innerJoin(Users, eq(DocumentHeadContributors.userId, Users.id))
+              .where(inArray(DocumentHeadContributors.headId, ids)),
+          key: ({ headId }: { headId: string }) => headId,
+        });
+
+        const rows = await loader.load(self.id);
+        return rows.map((row) => row.user);
+      },
+    }),
   }),
 });
 
@@ -1371,6 +1411,67 @@ builder.mutationFields((t) => ({
       }
 
       return [];
+    },
+  }),
+
+  revertDocument: t.withAuth({ session: true }).fieldWithInput({
+    type: builder.simpleObject('RevertDocumentPayload', {
+      fields: (t) => ({
+        heads: t.field({ type: 'Binary' }),
+      }),
+    }),
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      headId: t.input.id({ validate: validateDbId(TableCode.DOCUMENT_HEADS) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const docEntity = await db
+        .select({ siteId: Entities.siteId })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({ userId: ctx.session.userId, siteId: docEntity.siteId });
+
+      const head = await db
+        .select({ heads: DocumentHeads.heads })
+        .from(DocumentHeads)
+        .where(and(eq(DocumentHeads.id, input.headId), eq(DocumentHeads.documentId, input.documentId)))
+        .then(firstOrThrow);
+
+      const graph = await readMergedGraph(input.documentId);
+
+      const { revert, opsCount, currentHeads } = await wasmFfi.use((host) => {
+        const revert = host.revert(graph, head.heads);
+        return { revert, opsCount: host.peek_changeset_ops_count(revert), currentHeads: host.heads(graph) };
+      });
+
+      if (opsCount === 0) {
+        return { heads: currentHeads };
+      }
+
+      await redis.lpush(
+        `document:changesets:pending:${input.documentId}`,
+        JSON.stringify({
+          userId: ctx.session.userId,
+          deviceId: ctx.session.deviceId,
+          changesets: revert.toBase64(),
+        }),
+      );
+
+      const mergedGraph = await readMergedGraph(input.documentId);
+      const heads = await wasmFfi.use((host) => host.heads(mergedGraph));
+
+      pubsub.publish('document:changesets', input.documentId, {
+        target: '*',
+        changesets: revert.toBase64(),
+        heads: heads.toBase64(),
+      });
+
+      await enqueueJob('document:changesets:collect', input.documentId);
+
+      return { heads };
     },
   }),
 

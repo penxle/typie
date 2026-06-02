@@ -603,6 +603,13 @@
       "when": 1780135261252,
       "tag": "0085_black_princess_powerful",
       "breakpoints": false
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1780320052689,
+      "tag": "0086_milky_hercules",
+      "breakpoints": false
     }
   ]
 }

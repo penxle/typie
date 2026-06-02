@@ -689,6 +689,47 @@ export const DocumentStates = pgTable('document_states', {
     .default(sql`now()`),
 });
 
+export const DocumentHeads = pgTable(
+  'document_heads',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_HEADS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    bucket: datetime('bucket').notNull(),
+    heads: bytea('heads').notNull(),
+    characterCount: integer('character_count').notNull().default(0),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.documentId, t.bucket), index().on(t.documentId, t.createdAt)],
+);
+
+export const DocumentHeadContributors = pgTable(
+  'document_head_contributors',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_HEAD_CONTRIBUTORS)),
+    headId: text('head_id')
+      .notNull()
+      .references(() => DocumentHeads.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.headId, t.userId)],
+);
+
 export const DocumentCommentThreads = pgTable(
   'document_comment_threads',
   {

@@ -209,6 +209,7 @@ type Document implements IDocument {
   excerpt: String!
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   generation: Int!
+  heads: [DocumentHead!]!
   id: ID!
   layoutMode: JSON!
   locked: Boolean!
@@ -316,6 +317,14 @@ type DocumentFontFamily {
   id: ID!
   source: FontFamilySource!
   state: FontFamilyState!
+}
+
+type DocumentHead {
+  characterCount: Int!
+  contributors: [User!]!
+  heads: Binary!
+  id: ID!
+  updatedAt: DateTime!
 }
 
 type DocumentLiteraryAnalysisPayload {
@@ -866,6 +875,7 @@ type Mutation {
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
   resolveDocumentCommentThread(input: ResolveDocumentCommentThreadInput!): DocumentCommentThread!
+  revertDocument(input: RevertDocumentInput!): RevertDocumentPayload!
   revokeUserDevice(input: RevokeUserDeviceInput!): UserDevice!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
   scheduleSubscriptionCancellation: Subscription_!
@@ -1246,6 +1256,15 @@ input ResetPasswordInput {
 input ResolveDocumentCommentThreadInput {
   clientId: String!
   threadId: ID!
+}
+
+input RevertDocumentInput {
+  documentId: ID!
+  headId: ID!
+}
+
+type RevertDocumentPayload {
+  heads: Binary!
 }
 
 input RevokeUserDeviceInput {

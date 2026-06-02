@@ -6,6 +6,8 @@ import {
   db,
   DocumentChangesetsDeadLetter,
   DocumentCharacterCountChanges,
+  DocumentHeadContributors,
+  DocumentHeads,
   Documents,
   DocumentStates,
   Entities,
@@ -17,6 +19,11 @@ import { calculateBlobSizeFromAssetIds, countCharacters, extractAssetIdsFromPlai
 import { wasm } from '#/utils/wasm-ffi.ts';
 import { enqueueJob } from '../index.ts';
 import { defineCron, defineJob } from '../types.ts';
+import type { Dayjs } from 'dayjs';
+
+const HEAD_BUCKET_SECONDS = 10 * 60;
+
+const headBucket = (ts: Dayjs): Dayjs => dayjs.unix(Math.floor(ts.unix() / HEAD_BUCKET_SECONDS) * HEAD_BUCKET_SECONDS);
 
 export const DocumentChangesetsCollectJob = defineJob('document:changesets:collect', async (documentId: string) => {
   const lock = new Lock(`document:changesets:${documentId}`);
@@ -45,6 +52,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
 
     const failed: { userId: string; deviceId: string; payload: Uint8Array; error: string }[] = [];
     const perUserDelta = new Map<string, number>();
+    const contributorIds = new Set<string>();
 
     const result = await wasm.use((host) => {
       let merged = existing;
@@ -64,6 +72,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
 
           merged = candidate;
           mergedChanged = true;
+          contributorIds.add(userId);
         } catch (err) {
           failed.push({ userId: parsedUpdates[i].userId, deviceId: parsedUpdates[i].deviceId, payload: bundle, error: String(err) });
         }
@@ -76,7 +85,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       const plain = host.to_plain(merged);
       const text = host.extract_text(plain);
       const characterCount = countCharacters(text);
-      return { graph: merged, plain, text, characterCount };
+      return { graph: merged, plain, text, characterCount, heads: host.heads(merged) };
     });
 
     if (result || failed.length > 0) {
@@ -131,6 +140,24 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
                   deletions: net < 0 ? sql`${DocumentCharacterCountChanges.deletions} + ${-net}` : undefined,
                 },
               });
+          }
+
+          const headBucketAt = headBucket(updatedAt);
+          const headRow = await tx
+            .insert(DocumentHeads)
+            .values({ documentId, bucket: headBucketAt, heads: result.heads, characterCount })
+            .onConflictDoUpdate({
+              target: [DocumentHeads.documentId, DocumentHeads.bucket],
+              set: { heads: result.heads, characterCount, updatedAt },
+            })
+            .returning({ id: DocumentHeads.id })
+            .then(firstOrThrow);
+
+          for (const userId of contributorIds) {
+            await tx
+              .insert(DocumentHeadContributors)
+              .values({ headId: headRow.id, userId })
+              .onConflictDoNothing({ target: [DocumentHeadContributors.headId, DocumentHeadContributors.userId] });
           }
         }
 
