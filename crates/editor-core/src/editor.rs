@@ -544,19 +544,19 @@ impl Editor {
             let Some(resolved) = sel.resolve(&self.state.doc) else {
                 continue;
             };
-            let rects: Vec<PageRect> = self
+            let selection_rects: Vec<PageRect> = self
                 .view
                 .selection_rects(&resolved)
                 .iter()
                 .map(|r| r.without_meta())
                 .collect();
-            if rects.is_empty() {
+            if selection_rects.is_empty() {
                 continue;
             }
-            entries.push((group.z_index, group, rects));
+            entries.push((group.z_index, group, selection_rects));
         }
         entries.sort_by_key(|(z, _, _)| *z);
-        for (_, group, rects) in entries {
+        for (_, group, selection_rects) in entries {
             if let Some(theme_key) = group.style.background.clone() {
                 marks.push(Mark {
                     data: MarkData::TrackedBackground {
@@ -564,13 +564,13 @@ impl Editor {
                         border_radius: group.style.background_radius.unwrap_or(0.0),
                         vertical_inset: group.style.background_inset.unwrap_or(0.0),
                     },
-                    rects: rects.clone(),
+                    rects: selection_rects.clone(),
                 });
             }
             if let Some(underline) = group.style.underline.clone() {
                 marks.push(Mark {
                     data: MarkData::TrackedUnderline { underline },
-                    rects,
+                    rects: selection_rects,
                 });
             }
         }

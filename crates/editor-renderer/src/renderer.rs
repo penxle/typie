@@ -331,6 +331,12 @@ fn underline_rect(m: LineMetrics, run_x: f32, run_width: f32) -> Rect {
     )
 }
 
+fn text_background_rect(line_rect: Rect, m: LineMetrics, run_x: f32, run_width: f32) -> Rect {
+    let text_height = (m.ascent + m.descent).max(0.0);
+    let text_top = (line_rect.height - text_height).max(0.0) * 0.5;
+    Rect::from_xywh(run_x, text_top, run_width, text_height)
+}
+
 fn strikethrough_rect(m: LineMetrics, run_x: f32, run_width: f32) -> Rect {
     Rect::from_xywh(
         run_x,
@@ -1216,7 +1222,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             for run in glyph_runs {
                 if let Some(ref bg_token) = run.background_color {
                     let bg_color = self.theme.color(bg_token);
-                    let run_rect = Rect::from_xywh(run.x, 0.0, run.width, local_rect.height);
+                    let run_rect = text_background_rect(local_rect, metrics, run.x, run.width);
                     self.sink.fill_rect(run_rect, bg_color, t);
                 }
             }
@@ -1717,6 +1723,104 @@ mod tests {
         assert!((r.y - 59.0).abs() < 0.01); // 80 - 70 * 0.3
         assert!((r.width - 50.0).abs() < 0.01);
         assert!((r.height - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn text_background_rect_matches_v1_formula_and_differs_from_selection_height() {
+        let line_rect = Rect::from_xywh(0.0, 0.0, 120.0, 100.0);
+        let m = LineMetrics {
+            baseline: 65.0,
+            ascent: 45.0,
+            descent: 15.0,
+        };
+
+        let r = text_background_rect(line_rect, m, 12.0, 34.0);
+        let v1_text_height = m.ascent + m.descent;
+        let selection_height = line_rect.height;
+        let line_top = (selection_height - v1_text_height) * 0.5;
+
+        assert!((r.x - 12.0).abs() < 0.01);
+        assert!((r.y - line_top).abs() < 0.01);
+        assert!((r.width - 34.0).abs() < 0.01);
+        assert!((r.height - v1_text_height).abs() < 0.01);
+        assert!((selection_height - 100.0).abs() < 0.01);
+        assert!(r.height < selection_height);
+    }
+
+    #[test]
+    fn line_background_color_fill_uses_text_area_not_line_box_height() {
+        use editor_view::glyph_run::{GlyphRun, Synthesis, TextDecoration};
+
+        #[derive(Default)]
+        struct RecordingSink {
+            rects: Vec<Rect>,
+        }
+        impl RenderSink for RecordingSink {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, r: Rect, _c: Color, _t: Transform) {
+                self.rects.push(r);
+            }
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {}
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_glyph_run(
+                &mut self,
+                _r: &editor_view::glyph_run::GlyphRun,
+                _c: Color,
+                _t: Transform,
+                _f: &editor_resource::FontRegistry,
+            ) {
+            }
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+        }
+
+        let resource = Arc::new(Mutex::new(Resource::new_test()));
+        let doc = Doc::empty();
+        let mut renderer = Renderer::new(resource);
+        let mut sink = RecordingSink::default();
+        let mut visitor = renderer.page_visitor(
+            &mut sink,
+            &doc,
+            1.0,
+            LayerSet::of(&[RenderLayer::Background]),
+        );
+
+        let run = GlyphRun {
+            family_id: 0,
+            weight: 400,
+            font_size: 16.0,
+            synthesis: Synthesis::default(),
+            color: "text.black".to_string(),
+            background_color: Some("bg.yellow".to_string()),
+            glyphs: vec![],
+            decoration: TextDecoration::default(),
+            node_id: NodeId::ROOT,
+            offset: 0,
+            text: "abc".to_string(),
+            x: 8.0,
+            width: 24.0,
+            graphemes: vec![],
+        };
+
+        visitor.line(
+            NodeId::ROOT,
+            Rect::from_xywh(0.0, 0.0, 120.0, 100.0),
+            LineMetrics {
+                baseline: 65.0,
+                ascent: 45.0,
+                descent: 15.0,
+            },
+            &[run],
+            &[],
+        );
+
+        assert_eq!(sink.rects.len(), 1);
+        let rect = sink.rects[0];
+        assert!((rect.x - 8.0).abs() < 0.01);
+        assert!((rect.y - 20.0).abs() < 0.01);
+        assert!((rect.width - 24.0).abs() < 0.01);
+        assert!((rect.height - 60.0).abs() < 0.01);
     }
 
     fn export_page_to_vector_page(doc: &Doc) -> VectorPage {

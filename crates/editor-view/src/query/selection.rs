@@ -18,6 +18,12 @@ pub enum SelectionRectKind {
 
 pub type SelectionRect = PageRect<SelectionRectKind>;
 
+#[derive(Debug, Clone, PartialEq)]
+struct SelectionRectSets {
+    pub line_box_rects: Vec<SelectionRect>,
+    pub text_rects: Vec<SelectionRect>,
+}
+
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -33,13 +39,36 @@ pub fn selection_rects(
     pages: &[LayoutPage],
     selection: &editor_state::ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
+    selection_rect_sets(tree, pages, selection).line_box_rects
+}
+
+pub fn selection_text_rects(
+    tree: &LayoutTree,
+    pages: &[LayoutPage],
+    selection: &editor_state::ResolvedSelection<'_>,
+) -> Vec<SelectionRect> {
+    selection_rect_sets(tree, pages, selection).text_rects
+}
+
+fn selection_rect_sets(
+    tree: &LayoutTree,
+    pages: &[LayoutPage],
+    selection: &editor_state::ResolvedSelection<'_>,
+) -> SelectionRectSets {
     if selection.is_collapsed() {
-        return vec![];
+        return SelectionRectSets {
+            line_box_rects: vec![],
+            text_rects: vec![],
+        };
     }
 
     if let Some(cell_rect) = selection.as_cell_rect() {
         let ids: Vec<_> = cell_rect.cells().map(|cell| cell.id()).collect();
-        return super::search::node_box_rects(tree, pages, &ids);
+        let rects = super::search::node_box_rects(tree, pages, &ids);
+        return SelectionRectSets {
+            line_box_rects: rects.clone(),
+            text_rects: rects,
+        };
     }
 
     let from = Position::from(selection.from());
@@ -57,7 +86,10 @@ pub fn selection_rects(
     let from_owner = super::search::find_line_at(tree, &from).filter(|n| attached(n, &from));
     let to_owner = super::search::find_line_at(tree, &to).filter(|n| attached(n, &to));
     let mut phase = Phase::Before;
-    let mut rects = Vec::new();
+    let mut rects = SelectionRectSets {
+        line_box_rects: Vec::new(),
+        text_rects: Vec::new(),
+    };
 
     visit_node(
         &tree.root,
@@ -262,6 +294,17 @@ fn line_has_trailing_non_text(line: &LayoutLine) -> bool {
     range.end.saturating_sub(range.start) > text_child_count
 }
 
+fn text_area_height(line: &LayoutLine) -> f32 {
+    let height = (line.ascent + line.descent).max(0.0);
+    if height > 0.0 {
+        height
+    } else if !line.glyph_runs.is_empty() {
+        (line.cursor_ascent + line.cursor_descent).max(0.0)
+    } else {
+        0.0
+    }
+}
+
 fn visit_node(
     node: &LayoutNode,
     from: &Position,
@@ -269,7 +312,7 @@ fn visit_node(
     from_owner: Option<&LayoutNode>,
     to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
-    rects: &mut Vec<SelectionRect>,
+    rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
     doc: &Doc,
 ) {
@@ -293,7 +336,7 @@ fn visit_line(
     from_owner: Option<&LayoutNode>,
     to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
-    rects: &mut Vec<SelectionRect>,
+    rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
 ) {
     let contains_from = from_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
@@ -363,13 +406,24 @@ fn visit_line(
     };
 
     if let Some(page_idx) = page_for_y(pages, node.rect.y) {
-        rects.push(PageRect::with_meta(
+        rects.line_box_rects.push(PageRect::with_meta(
             page_idx,
             Rect::from_xywh(
                 node.rect.x + x_start,
                 node.rect.y - pages[page_idx].y_start,
                 width,
                 node.rect.height,
+            ),
+            SelectionRectKind::Text,
+        ));
+        rects.text_rects.push(PageRect::with_meta(
+            page_idx,
+            Rect::from_xywh(
+                node.rect.x + x_start,
+                node.rect.y + ((node.rect.height - text_area_height(line)).max(0.0) * 0.5)
+                    - pages[page_idx].y_start,
+                width,
+                text_area_height(line),
             ),
             SelectionRectKind::Text,
         ));
@@ -382,7 +436,7 @@ fn visit_atom(
     from: &Position,
     to: &Position,
     phase: &mut Phase,
-    rects: &mut Vec<SelectionRect>,
+    rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
     doc: &Doc,
 ) {
@@ -401,7 +455,7 @@ fn visit_atom(
     // layer must not paint a rect over them.
     let is_external = doc.node(atom.node_id).is_some_and(|n| n.spec().external);
     if !is_external && let Some(page_idx) = page_for_y(pages, node.rect.y) {
-        rects.push(PageRect::with_meta(
+        let rect = PageRect::with_meta(
             page_idx,
             Rect::from_xywh(
                 node.rect.x,
@@ -410,7 +464,9 @@ fn visit_atom(
                 node.rect.height,
             ),
             SelectionRectKind::Atom,
-        ));
+        );
+        rects.line_box_rects.push(rect.clone());
+        rects.text_rects.push(rect);
     }
 
     if is_to {
@@ -426,7 +482,7 @@ fn visit_box(
     from_owner: Option<&LayoutNode>,
     to_owner: Option<&LayoutNode>,
     phase: &mut Phase,
-    rects: &mut Vec<SelectionRect>,
+    rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
     doc: &Doc,
 ) {
@@ -446,7 +502,8 @@ fn visit_box(
     // envelopes the box from an ancestor's perspective rather than anchoring
     // inside it.
     let entry_phase = *phase;
-    let rects_before = rects.len();
+    let line_box_rects_before = rects.line_box_rects.len();
+    let text_rects_before = rects.text_rects.len();
     let mut has_content_child = false;
     let mut content_idx = 0usize;
 
@@ -481,7 +538,8 @@ fn visit_box(
     let fully = has_content_child && entry_phase == Phase::Inside && *phase == Phase::Inside;
 
     if fully && bx.style.monolithic {
-        rects.truncate(rects_before);
+        rects.line_box_rects.truncate(line_box_rects_before);
+        rects.text_rects.truncate(text_rects_before);
         let node_top = node.rect.y;
         let node_bottom = node_top + node.rect.height;
         for (page_idx, page) in pages.iter().enumerate() {
@@ -490,7 +548,7 @@ fn visit_box(
             }
             let top = node_top.max(page.y_start);
             let bottom = node_bottom.min(page.y_end);
-            rects.push(PageRect::with_meta(
+            let rect = PageRect::with_meta(
                 page_idx,
                 Rect::from_xywh(
                     node.rect.x,
@@ -499,7 +557,9 @@ fn visit_box(
                     bottom - top,
                 ),
                 SelectionRectKind::Block,
-            ));
+            );
+            rects.line_box_rects.push(rect.clone());
+            rects.text_rects.push(rect);
         }
     }
 }
@@ -517,6 +577,14 @@ mod tests {
         let mut view = View::new_test();
         view.layout(doc);
         view
+    }
+
+    fn first_line<'a>(node: &'a LayoutNode) -> Option<(&'a LayoutNode, &'a LayoutLine)> {
+        match &node.content {
+            LayoutContent::Line(line) => Some((node, line)),
+            LayoutContent::Box(bx) => bx.children.iter().find_map(first_line),
+            LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
+        }
     }
 
     #[test]
@@ -542,6 +610,98 @@ mod tests {
         assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
         assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
+    fn selection_text_rect_uses_centered_text_area_height() {
+        let (doc, t) = doc! {
+            root {
+                paragraph [line_height(300)] { t: text("hello") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(t, 1), Position::new(t, 4));
+        let resolved = sel.resolve(&doc).unwrap();
+        let line_box_rect = view.selection_rects(&resolved)[0].rect;
+        let text_rect = view.selection_text_rects(&resolved)[0].rect;
+
+        let tree = view.layout_tree_for_test().unwrap();
+        let page_start = view.pages()[0].y_start;
+        let (line_node, line) = first_line(&tree.root).expect("line must exist");
+        let expected_height = text_area_height(line);
+        let expected_y =
+            line_node.rect.y + (line_node.rect.height - expected_height) * 0.5 - page_start;
+
+        assert!(line_box_rect.height > text_rect.height);
+        assert!((text_rect.y - expected_y).abs() < 0.01);
+        assert!((text_rect.height - expected_height).abs() < 0.01);
+        assert!((line_box_rect.x - text_rect.x).abs() < 0.01);
+        assert!((line_box_rect.width - text_rect.width).abs() < 0.01);
+    }
+
+    #[test]
+    fn selection_rects_match_v1_height_formulas_on_mixed_font_line() {
+        let (doc, small, big) = doc! {
+            root {
+                paragraph [line_height(200)] {
+                    small: text("a")
+                    big: text("A") [font_size(4800)]
+                }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(small, 0), Position::new(big, 1));
+        let resolved = sel.resolve(&doc).unwrap();
+        let line_box_rect = view.selection_rects(&resolved)[0].rect;
+        let text_rect = view.selection_text_rects(&resolved)[0].rect;
+
+        let tree = view.layout_tree_for_test().unwrap();
+        let page_start = view.pages()[0].y_start;
+        let (line_node, line) = first_line(&tree.root).expect("line must exist");
+
+        let expected_text_height = text_area_height(line);
+        let expected_text_y =
+            line_node.rect.y + (line_node.rect.height - expected_text_height) * 0.5 - page_start;
+        let expected_line_box_height = line_node.rect.height;
+        let cursor_height = line.cursor_ascent + line.cursor_descent;
+
+        assert!(
+            text_rect.height > cursor_height,
+            "mixed-font line must follow v1-like line ascent/descent, not base cursor strut: text={}, cursor={}",
+            text_rect.height,
+            cursor_height,
+        );
+        assert!((text_rect.y - expected_text_y).abs() < 0.01);
+        assert!((text_rect.height - expected_text_height).abs() < 0.01);
+        assert!((line_box_rect.height - expected_line_box_height).abs() < 0.01);
+        assert!(line_box_rect.height > text_rect.height);
+    }
+
+    #[test]
+    fn selection_text_rects_preserve_line_box_rect_order_and_horizontal_span() {
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph [line_height(300)] { t1: text("hello") }
+                paragraph [line_height(300)] { t2: text("world") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(t1, 1), Position::new(t2, 4));
+        let resolved = sel.resolve(&doc).unwrap();
+        let line_box_rects = view.selection_rects(&resolved);
+        let text_rects = view.selection_text_rects(&resolved);
+
+        assert_eq!(line_box_rects.len(), text_rects.len());
+        for (line_box, text) in line_box_rects.iter().zip(text_rects.iter()) {
+            assert_eq!(line_box.page_idx, text.page_idx);
+            assert_eq!(line_box.meta, text.meta);
+            assert!((line_box.rect.x - text.rect.x).abs() < 0.01);
+            assert!((line_box.rect.width - text.rect.width).abs() < 0.01);
+            assert!(line_box.rect.height > text.rect.height);
+        }
     }
 
     #[test]

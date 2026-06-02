@@ -383,6 +383,13 @@ impl View {
         query::selection::selection_rects(&result.tree, &result.pages, selection)
     }
 
+    pub fn selection_text_rects(&self, selection: &ResolvedSelection) -> Vec<SelectionRect> {
+        let Some(ref result) = self.layout else {
+            return vec![];
+        };
+        query::selection::selection_text_rects(&result.tree, &result.pages, selection)
+    }
+
     pub fn selection_endpoints(&self, selection: &ResolvedSelection) -> Option<SelectionEndpoints> {
         let result = self.layout.as_ref()?;
         query::selection::selection_endpoints(&result.tree, &result.pages, selection)

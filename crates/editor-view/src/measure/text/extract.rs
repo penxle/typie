@@ -23,6 +23,13 @@ pub struct LineHeightConfig {
     pub base_font_size: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct LineTypographyMetrics {
+    ascent: f32,
+    descent: f32,
+    max_run_font_size: f32,
+}
+
 const ITALIC_SKEW_DEGREES: f32 = 14.0;
 
 fn resolve_synthesis(doc: &Doc, node_id: NodeId) -> Synthesis {
@@ -136,6 +143,45 @@ fn segment_graphemes(
     spans
 }
 
+fn max_run_font_size(line: &parley::layout::Line<TextBrush>, base_font_size: f32) -> f32 {
+    line.items()
+        .filter_map(|item| match item {
+            parley::PositionedLayoutItem::GlyphRun(gr) => Some(gr.run().font_size()),
+            _ => None,
+        })
+        .fold(base_font_size, f32::max)
+}
+
+fn resolve_line_typography_metrics(
+    metrics: parley::layout::LineMetrics,
+    strut: &StrutMetrics,
+    base_font_size: f32,
+    max_run_font_size: f32,
+) -> LineTypographyMetrics {
+    let safe_base_font_size = base_font_size.max(1.0);
+    let line_font_size = max_run_font_size.max(safe_base_font_size);
+
+    let mut ascent = (strut.ascent.max(0.0) / safe_base_font_size) * line_font_size;
+    let mut descent = (strut.descent.max(0.0) / safe_base_font_size) * line_font_size;
+
+    if ascent <= 0.0 && descent <= 0.0 {
+        ascent = strut.ascent.max(0.0);
+        descent = strut.descent.max(0.0);
+    }
+    if (!ascent.is_finite() || ascent <= 0.0) && metrics.ascent > 0.0 {
+        ascent = metrics.ascent;
+    }
+    if (!descent.is_finite() || descent <= 0.0) && metrics.descent > 0.0 {
+        descent = metrics.descent;
+    }
+
+    LineTypographyMetrics {
+        ascent,
+        descent,
+        max_run_font_size,
+    }
+}
+
 pub fn extract_lines(
     doc: &Doc,
     text: &str,
@@ -154,19 +200,17 @@ pub fn extract_lines(
 
     for line in layout.lines() {
         let metrics = line.metrics();
-
-        let ascent = metrics.ascent.max(strut.ascent);
-        let descent = metrics.descent.max(strut.descent);
-        let content_height = ascent + descent;
-
-        let max_run_font_size = line
-            .items()
-            .filter_map(|item| match item {
-                parley::PositionedLayoutItem::GlyphRun(gr) => Some(gr.run().font_size()),
-                _ => None,
-            })
-            .fold(base_font_size, f32::max);
-        let line_box_height = (max_run_font_size * line_height_ratio).max(content_height);
+        let typography = resolve_line_typography_metrics(
+            *metrics,
+            strut,
+            base_font_size,
+            max_run_font_size(&line, base_font_size),
+        );
+        let ascent = typography.ascent;
+        let descent = typography.descent;
+        let content_height = (ascent + descent).max(0.0);
+        let line_box_height =
+            (typography.max_run_font_size * line_height_ratio).max(content_height);
         let leading = (line_box_height - content_height).max(0.0);
         let baseline = leading / 2.0 + ascent;
 
