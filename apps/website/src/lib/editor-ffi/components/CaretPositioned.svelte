@@ -11,23 +11,30 @@
 
   const { editor } = getEditorContext();
 
-  const pageContainer = $derived(editor?.cursor ? editor.pageEls[editor.cursor.page_idx] : undefined);
-  let element = $state<HTMLDivElement>();
-
-  const point = $derived.by(() => {
-    if (editor?.cursor) {
-      const local = editor.cursor.caret;
-      return { x: local.x, y: local.y };
-    }
-  });
+  let point = $state<{ x: number; y: number } | null>(null);
 
   $effect(() => {
-    if (pageContainer && element && element.parentElement !== pageContainer) {
-      pageContainer.append(element);
+    const cursor = editor?.cursor;
+    if (!editor || !cursor) {
+      point = null;
+      return;
     }
+
+    const { page_idx, caret } = cursor;
+    point = editor.localToOffset(page_idx, caret.x, caret.y);
+  });
+
+  const transform = $derived.by(() => {
+    const scale = editor?.safeDisplayZoom() ?? 1;
+    return scale === 1 ? undefined : `scale(${scale})`;
   });
 </script>
 
-<div bind:this={element} style:top={`${point?.y ?? -9999}px`} style:left={`${point?.x ?? -9999}px`} class={css({ position: 'absolute' })}>
+<div
+  style:left={`${point?.x ?? -9999}px`}
+  style:top={`${point?.y ?? -9999}px`}
+  style:transform
+  class={css({ position: 'absolute', transformOrigin: 'top left' })}
+>
   {@render children()}
 </div>

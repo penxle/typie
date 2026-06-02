@@ -7,12 +7,17 @@
   const ctx = getEditorContext();
 
   let show = $derived(ctx.editor !== undefined && !ctx.editor.readOnly && ctx.editor.lastHistoryTag?.type === 'paste_html');
-  const point = $derived.by(() => {
+  let point = $state<{ x: number; y: number } | null>(null);
+
+  $effect(() => {
     const editor = ctx.editor;
-    if (!show || !editor?.cursor) return null;
+    if (!show || !editor?.cursor) {
+      point = null;
+      return;
+    }
 
     const { page_idx, caret } = editor.cursor;
-    return editor.localToOffset(page_idx, caret.x, caret.y + caret.height + 4);
+    point = editor.localToOffset(page_idx, caret.x, caret.y + caret.height + 4);
   });
 
   $effect(() => {

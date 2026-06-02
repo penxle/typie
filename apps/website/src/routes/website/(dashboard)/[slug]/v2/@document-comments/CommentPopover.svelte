@@ -48,9 +48,15 @@
   const thread = $derived(threadFragment.data);
   const anchor = $derived(comments.activeAnchor);
 
-  const point = $derived.by(() => {
-    if (!editor || !anchor) return;
-    return editor.localToOffset(anchor.page, anchor.x, anchor.y + anchor.height);
+  let point = $state<{ x: number; y: number } | null>(null);
+
+  $effect(() => {
+    if (!open || !editor || !anchor) {
+      point = null;
+      return;
+    }
+
+    point = editor.localToOffset(anchor.page, anchor.x, anchor.y + anchor.height);
   });
 
   let composerDirty = $state(false);
