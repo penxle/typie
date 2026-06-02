@@ -144,6 +144,20 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.block_state().into_ffi()?))
     }
 
+    pub fn style_entries(&self) -> EditorResult<Vec<Complex<editor_core::StyleInfo>>> {
+        self.with_inner(|inner| Ok(inner.editor.style_entries().into_ffi()?))
+    }
+
+    pub fn applied_style(
+        &self,
+    ) -> EditorResult<Complex<editor_common::Tri<editor_core::StyleRefValue>>> {
+        self.with_inner(|inner| Ok(inner.editor.applied_style().into_ffi()?))
+    }
+
+    pub fn style_divergence(&self) -> EditorResult<bool> {
+        self.with_inner(|inner| Ok(inner.editor.style_divergence()))
+    }
+
     pub fn character_counts(&self) -> EditorResult<Complex<CharacterCounts>> {
         self.with_inner(|inner| {
             let (doc, sel) = inner.editor.character_counts();

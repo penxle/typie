@@ -48,7 +48,21 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
                 .cloned()
                 .collect()
         }
-        Node::Paragraph(_) => node.modifiers().cloned().collect(),
+        Node::Paragraph(_) => {
+            let mut seen: Vec<ModifierType> = Vec::new();
+            node.modifiers_with_style()
+                .filter(|m| {
+                    let t = m.as_type();
+                    if seen.contains(&t) {
+                        false
+                    } else {
+                        seen.push(t);
+                        true
+                    }
+                })
+                .cloned()
+                .collect()
+        }
         _ => vec![],
     }
 }
@@ -56,7 +70,7 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
 fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
     let mut found = Vec::new();
     for ancestor in node.ancestors().skip(1) {
-        for modifier in ancestor.modifiers() {
+        for modifier in ancestor.modifiers_with_style() {
             let t = modifier.as_type();
             if !found.iter().any(|m: &Modifier| m.as_type() == t) {
                 found.push(modifier.clone());
@@ -193,14 +207,14 @@ fn root_to_node_type_path(node: &NodeRef<'_>) -> Vec<NodeType> {
 }
 
 fn effective_modifier_on_node(node: &NodeRef<'_>, ty: ModifierType) -> Option<Modifier> {
-    if let Some(m) = node.modifiers().find(|m| m.as_type() == ty) {
+    if let Some(m) = node.modifiers_with_style().find(|m| m.as_type() == ty) {
         return Some(m.clone());
     }
     if !Schema::modifier_spec(ty).inheritable {
         return None;
     }
     for ancestor in node.ancestors().skip(1) {
-        if let Some(m) = ancestor.modifiers().find(|m| m.as_type() == ty) {
+        if let Some(m) = ancestor.modifiers_with_style().find(|m| m.as_type() == ty) {
             return Some(m.clone());
         }
     }

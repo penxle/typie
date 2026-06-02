@@ -13,6 +13,7 @@ mod node_ref;
 mod nodes;
 mod plain;
 mod schema;
+mod style;
 mod subtree;
 mod validate;
 
@@ -33,6 +34,7 @@ pub use node_ref::*;
 pub use nodes::*;
 pub use plain::*;
 pub use schema::*;
+pub use style::*;
 pub use subtree::*;
 pub use validate::*;
 

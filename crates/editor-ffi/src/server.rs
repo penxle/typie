@@ -71,6 +71,7 @@ impl EditorServer {
                 parent: None,
                 children: vec![paragraph_id],
                 modifiers: modifier_map,
+                style: None,
                 node: editor_model::PlainNode::Root(root),
             },
         );
@@ -80,10 +81,15 @@ impl EditorServer {
                 parent: Some(editor_model::NodeId::ROOT),
                 children: vec![],
                 modifiers: Default::default(),
+                style: None,
                 node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
             },
         );
-        Ok(editor_model::PlainDoc { nodes }.into_ffi()?)
+        Ok(editor_model::PlainDoc {
+            nodes,
+            styles: Default::default(),
+        }
+        .into_ffi()?)
     }
 
     pub fn apply(&self, existing: Vec<u8>, new: Vec<u8>) -> EditorResult<Vec<u8>> {

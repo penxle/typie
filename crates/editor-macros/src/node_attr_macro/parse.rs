@@ -5,10 +5,16 @@ use syn::{
     Type, punctuated::Punctuated,
 };
 
+pub enum FieldKind {
+    LwwReg { inner: Type },
+    OrMap { key: Type, value: Type },
+    OrSet { elem: Type },
+}
+
 pub struct FieldSpec {
     pub name: syn::Ident,
     pub variant: syn::Ident,
-    pub inner_ty: Type,
+    pub kind: FieldKind,
     pub default: Option<TokenStream>,
     pub plain_attrs: Vec<Meta>,
 }
@@ -58,22 +64,31 @@ impl NodeAttrInput {
                 Some(n) => n.clone(),
                 None => continue,
             };
-            let inner = match lwwreg_inner(&f.ty) {
-                Some(i) => i.clone(),
+            let kind = match detect_kind(&f.ty) {
+                Some(k) => k,
                 None => {
                     return Err(syn::Error::new_spanned(
                         f,
-                        format!("NodeAttr field `{}` must be `LwwReg<T>`", name),
+                        format!(
+                            "NodeAttr field `{}` must be `LwwReg<T>`, `OrMap<K, V>`, or `OrSet<T>`",
+                            name
+                        ),
                     ));
                 }
             };
             let variant = format_ident!("{}", heck::AsPascalCase(name.to_string()).to_string());
             let default = parse_default_attr(&f.attrs)?;
+            if default.is_some() && !matches!(kind, FieldKind::LwwReg { .. }) {
+                return Err(syn::Error::new_spanned(
+                    f,
+                    "`#[node_attr(default = ...)]` is only supported on `LwwReg<T>` fields",
+                ));
+            }
             let plain_attrs = parse_plain_attrs(&f.attrs)?;
             fields.push(FieldSpec {
                 name,
                 variant,
-                inner_ty: inner,
+                kind,
                 default,
                 plain_attrs,
             });
@@ -88,20 +103,40 @@ impl NodeAttrInput {
     }
 }
 
-fn lwwreg_inner(ty: &Type) -> Option<&Type> {
+fn detect_kind(ty: &Type) -> Option<FieldKind> {
     let Type::Path(tp) = ty else { return None };
     let last = tp.path.segments.last()?;
-    if last.ident != "LwwReg" {
-        return None;
-    }
     let PathArguments::AngleBracketed(args) = &last.arguments else {
         return None;
     };
-    if args.args.len() != 1 {
-        return None;
-    }
-    match args.args.first()? {
-        GenericArgument::Type(t) => Some(t),
+    let ident = last.ident.to_string();
+    match (ident.as_str(), args.args.len()) {
+        ("LwwReg", 1) => {
+            let inner = match args.args.first()? {
+                GenericArgument::Type(t) => t.clone(),
+                _ => return None,
+            };
+            Some(FieldKind::LwwReg { inner })
+        }
+        ("OrMap", 2) => {
+            let mut iter = args.args.iter();
+            let key = match iter.next()? {
+                GenericArgument::Type(t) => t.clone(),
+                _ => return None,
+            };
+            let value = match iter.next()? {
+                GenericArgument::Type(t) => t.clone(),
+                _ => return None,
+            };
+            Some(FieldKind::OrMap { key, value })
+        }
+        ("OrSet", 1) => {
+            let elem = match args.args.first()? {
+                GenericArgument::Type(t) => t.clone(),
+                _ => return None,
+            };
+            Some(FieldKind::OrSet { elem })
+        }
         _ => None,
     }
 }

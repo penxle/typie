@@ -31,7 +31,7 @@ pub fn resolve_text_style(node: &NodeRef<'_>) -> ResolvedTextStyle {
         if resolved_count >= TOTAL_PROPERTIES {
             break;
         }
-        for m in ancestor.modifiers() {
+        for m in ancestor.modifiers_with_style() {
             match m {
                 Modifier::FontFamily { value } if font_family.is_none() => {
                     font_family = Some(value.clone());
@@ -103,7 +103,9 @@ pub fn resolve_paragraph_indent(node: &NodeRef<'_>) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use editor_macros::{doc, state};
+    use editor_model::PlainStyleEntry;
+    use editor_transaction::Transaction;
 
     use super::*;
 
@@ -139,6 +141,68 @@ mod tests {
 
         assert!((style.font_size - 21.333).abs() < 0.01);
         assert!((style.line_height - 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn resolve_text_style_picks_up_textblock_style_modifiers() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "h1".into(),
+            Some(PlainStyleEntry {
+                name: "Heading".into(),
+                modifiers: vec![
+                    Modifier::FontSize { value: 1800 },
+                    Modifier::FontWeight { value: 700 },
+                ]
+                .into_iter()
+                .collect(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        let (next, ..) = tr.commit();
+
+        let para = next.doc.node(p1).unwrap();
+        let text = para.children().next().unwrap();
+        let style = resolve_text_style(&text);
+
+        // 18pt * (96/72) = 24px
+        assert!((style.font_size - 24.0).abs() < 0.01);
+        assert_eq!(style.font_weight, 700);
+    }
+
+    #[test]
+    fn resolve_text_style_own_overrides_style_modifier() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("hello") [font_size(1200)] } } }
+            selection: (t1, 0)
+        };
+
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "h1".into(),
+            Some(PlainStyleEntry {
+                name: "Heading".into(),
+                modifiers: vec![Modifier::FontSize { value: 1800 }]
+                    .into_iter()
+                    .collect(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        let (next, ..) = tr.commit();
+
+        let para = next.doc.node(p1).unwrap();
+        let text = para.children().next().unwrap();
+        let style = resolve_text_style(&text);
+
+        // 12pt * (96/72) = 16px (text node's own wins over style)
+        assert!((style.font_size - 16.0).abs() < 0.01);
     }
 
     #[test]

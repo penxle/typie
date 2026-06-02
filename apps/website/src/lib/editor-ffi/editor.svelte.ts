@@ -30,9 +30,12 @@ import type {
   SelectionEndpoints,
   Size,
   StableSelection,
+  StyleInfo,
+  StyleRefValue,
   TableOverlay,
   ThemeVariant,
   TrackedRange,
+  Tri,
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type {
@@ -138,6 +141,9 @@ export class Editor {
   #modifierState = $state<ModifierState | undefined>();
   #rootModifiers = $state<Modifier[]>();
   #blockState = $state<BlockState | undefined>();
+  #styleEntries = $state<StyleInfo[]>([]);
+  #appliedStyle = $state<Tri<StyleRefValue>>({ type: 'absent' });
+  #styleDivergence = $state(false);
   #focused = $state(false);
   #nativeDragAdmissionRetainsFocus = false;
   #effectCleanup: (() => void) | null = null;
@@ -376,6 +382,18 @@ export class Editor {
 
   get lastHistoryTag() {
     return this.#lastHistoryTag;
+  }
+
+  get styleEntries() {
+    return this.#styleEntries;
+  }
+
+  get appliedStyle() {
+    return this.#appliedStyle;
+  }
+
+  get styleDivergence() {
+    return this.#styleDivergence;
   }
 
   get scaleFactor() {
@@ -1446,6 +1464,15 @@ export class Editor {
 
     if (fields.includes('block')) {
       this.#blockState = this.#wasm.block_state();
+    }
+
+    if (fields.includes('styles')) {
+      this.#styleEntries = this.#wasm.style_entries();
+      this.#appliedStyle = this.#wasm.applied_style();
+    }
+
+    if (fields.includes('styles') || fields.includes('modifiers')) {
+      this.#styleDivergence = this.#wasm.style_divergence();
     }
 
     if (fields.includes('tracked_ranges')) {

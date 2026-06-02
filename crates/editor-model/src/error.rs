@@ -44,6 +44,11 @@ pub enum ModelError {
     #[error("presence outer node_id {node_id:?} disagrees with inner OrMapOp::Set key {key:?}")]
     PresenceKeyMismatch { node_id: NodeId, key: NodeId },
 
+    #[error(
+        "style presence outer style_id {style_id:?} disagrees with inner OrMapOp::Set key {key:?}"
+    )]
+    StylePresenceKeyMismatch { style_id: String, key: String },
+
     #[error(transparent)]
     Crdt(#[from] CrdtError),
 

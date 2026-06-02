@@ -9,11 +9,14 @@ use crate::error::ModelError;
 use crate::id::NodeId;
 use crate::node_ref::NodeRef;
 use crate::nodes::{Node, NodeType};
+use crate::style::StyleEntry;
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Doc {
     pub(crate) nodes: OrMap<NodeId, NodeType>,
     pub(crate) entries: imbl::HashMap<NodeId, NodeEntry>,
+    pub(crate) styles: OrMap<String, ()>,
+    pub(crate) style_entries: imbl::HashMap<String, StyleEntry>,
 }
 
 impl Doc {
@@ -61,6 +64,29 @@ impl Doc {
             return None;
         }
         self.entries.get(&id)
+    }
+
+    pub fn style_entry(&self, style_id: &str) -> Option<&StyleEntry> {
+        self.style_entries.get(style_id)
+    }
+
+    pub fn style_entries_iter(&self) -> impl Iterator<Item = (&String, &StyleEntry)> + '_ {
+        self.style_entries.iter()
+    }
+
+    pub fn style_present(&self, style_id: &str) -> bool {
+        self.styles.contains_key(&style_id.to_string())
+    }
+
+    pub fn styles_iter(&self) -> impl Iterator<Item = (&String, &())> + '_ {
+        self.styles.iter()
+    }
+
+    pub fn styles_tags_for<'a>(
+        &'a self,
+        style_id: &'a String,
+    ) -> impl Iterator<Item = &'a Dot> + 'a {
+        self.styles.tags_for(style_id)
     }
 
     pub fn nodes_iter(&self) -> impl Iterator<Item = (&NodeId, &NodeType)> + '_ {

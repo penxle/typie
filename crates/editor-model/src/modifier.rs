@@ -11,6 +11,8 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     Clone,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Hash,
     Serialize,
     Deserialize,

@@ -270,7 +270,7 @@ pub fn measure_table(
     let collapsed_height = (row_count + 1) as f32 * TABLE_BORDER_WIDTH + row_inner_heights_sum;
 
     let align = node
-        .modifiers()
+        .modifiers_with_style()
         .find_map(|m| match m {
             Modifier::Alignment { value } => Some(*value),
             _ => None,

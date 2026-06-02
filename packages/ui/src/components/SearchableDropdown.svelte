@@ -41,6 +41,18 @@
 
   let anchorElement: HTMLDivElement | undefined = $state();
   let floatingElement: HTMLDivElement | undefined = $state();
+  let anchorWidth = $state(0);
+
+  $effect(() => {
+    if (!opened || !anchorElement) return;
+    const update = () => {
+      anchorWidth = anchorElement?.getBoundingClientRect().width ?? 0;
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(anchorElement);
+    return () => ro.disconnect();
+  });
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
     placement: 'bottom-start',
@@ -80,6 +92,9 @@
   });
 
   const open = () => {
+    if (anchorElement) {
+      anchorWidth = anchorElement.getBoundingClientRect().width;
+    }
     opened = true;
   };
 
@@ -252,6 +267,7 @@
 {#if opened}
   <div
     bind:this={floatingElement}
+    style:width="{anchorWidth}px"
     class={css({
       borderWidth: '1px',
       borderColor: 'border.subtle',

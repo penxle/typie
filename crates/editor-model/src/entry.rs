@@ -9,6 +9,7 @@ pub struct NodeEntry {
     pub parent: LwwReg<Option<NodeId>>,
     pub children: Rga<NodeId>,
     pub modifiers: OrMap<ModifierType, Modifier>,
+    pub style: LwwReg<Option<String>>,
     pub node: Node,
 }
 
@@ -18,6 +19,7 @@ impl NodeEntry {
             parent: LwwReg::with_value(None),
             children: Rga::new(),
             modifiers: OrMap::new(),
+            style: LwwReg::with_value(None),
             node,
         }
     }
@@ -34,5 +36,6 @@ mod tests {
         assert!(entry.parent.get().is_none());
         assert!(entry.children.is_empty());
         assert!(entry.modifiers.is_empty());
+        assert!(entry.style.get().is_none());
     }
 }

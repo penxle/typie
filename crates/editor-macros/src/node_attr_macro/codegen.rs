@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use super::parse::NodeAttrInput;
+use super::parse::{FieldKind, NodeAttrInput};
 
 pub fn generate(input: &NodeAttrInput) -> TokenStream {
     let struct_ident = &input.struct_ident;
@@ -10,35 +10,64 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
 
     let attr_variants = input.fields.iter().enumerate().map(|(i, s)| {
         let v = &s.variant;
-        let t = &s.inner_ty;
         let i_u8 = i as u8;
-        quote! { #[wire(n(#i_u8))] #v(#[wire(n(0))] #t) }
+        let payload = match &s.kind {
+            FieldKind::LwwReg { inner } => quote! { #inner },
+            FieldKind::OrMap { key, value } => {
+                quote! { ::editor_crdt::OrMapOp<#key, #value> }
+            }
+            FieldKind::OrSet { elem } => quote! { ::editor_crdt::OrSetOp<#elem> },
+        };
+        quote! { #[wire(n(#i_u8))] #v(#[wire(n(0))] #payload) }
     });
 
     let plain_fields = input.fields.iter().map(|s| {
         let n = &s.name;
-        let t = &s.inner_ty;
         let attrs = &s.plain_attrs;
+        let plain_ty = match &s.kind {
+            FieldKind::LwwReg { inner } => quote! { #inner },
+            FieldKind::OrMap { key, value } => {
+                quote! { ::std::collections::BTreeMap<#key, #value> }
+            }
+            FieldKind::OrSet { elem } => quote! { ::std::collections::BTreeSet<#elem> },
+        };
         quote! {
             #( #[#attrs] )*
-            pub #n: #t
+            pub #n: #plain_ty
         }
     });
 
     let struct_default_assigns = input.fields.iter().map(|s| {
         let n = &s.name;
-        match &s.default {
-            Some(expr) => quote! { #n: ::editor_crdt::LwwReg::with_value(#expr) },
-            None => quote! { #n: ::editor_crdt::LwwReg::default() },
+        match &s.kind {
+            FieldKind::LwwReg { .. } => match &s.default {
+                Some(expr) => quote! { #n: ::editor_crdt::LwwReg::with_value(#expr) },
+                None => quote! { #n: ::editor_crdt::LwwReg::default() },
+            },
+            FieldKind::OrMap { .. } => quote! { #n: ::editor_crdt::OrMap::default() },
+            FieldKind::OrSet { .. } => quote! { #n: ::editor_crdt::OrSet::default() },
         }
     });
 
     let plain_default_assigns = input.fields.iter().map(|s| {
         let n = &s.name;
-        let t = &s.inner_ty;
-        match &s.default {
-            Some(expr) => quote! { #n: #expr },
-            None => quote! { #n: <#t as ::std::default::Default>::default() },
+        match &s.kind {
+            FieldKind::LwwReg { inner } => match &s.default {
+                Some(expr) => quote! { #n: #expr },
+                None => quote! { #n: <#inner as ::std::default::Default>::default() },
+            },
+            FieldKind::OrMap { key, value } => {
+                quote! {
+                    #n: <::std::collections::BTreeMap<#key, #value>
+                        as ::std::default::Default>::default()
+                }
+            }
+            FieldKind::OrSet { elem } => {
+                quote! {
+                    #n: <::std::collections::BTreeSet<#elem>
+                        as ::std::default::Default>::default()
+                }
+            }
         }
     });
 
@@ -53,14 +82,22 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
         let arms = input.fields.iter().map(|s| {
             let n = &s.name;
             let v = &s.variant;
-            quote! {
-                #attr_ident::#v(value) => {
-                    self.#n = self.#n.apply(
-                        id,
-                        ::editor_crdt::LwwRegOp::Set { value: value.clone() },
-                    )?;
-                    Ok(())
-                }
+            match &s.kind {
+                FieldKind::LwwReg { .. } => quote! {
+                    #attr_ident::#v(value) => {
+                        self.#n = self.#n.apply(
+                            id,
+                            ::editor_crdt::LwwRegOp::Set { value: value.clone() },
+                        )?;
+                        Ok(())
+                    }
+                },
+                FieldKind::OrMap { .. } | FieldKind::OrSet { .. } => quote! {
+                    #attr_ident::#v(op) => {
+                        self.#n = self.#n.apply(id, op.clone())?;
+                        Ok(())
+                    }
+                },
             }
         });
         quote! { match attr { #(#arms),* } }
@@ -69,12 +106,37 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
     let to_attrs_body = if input.fields.is_empty() {
         quote! { ::std::vec::Vec::<#attr_ident>::new() }
     } else {
-        let entries = input.fields.iter().map(|s| {
+        let pushes = input.fields.iter().map(|s| {
             let n = &s.name;
             let v = &s.variant;
-            quote! { #attr_ident::#v(self.#n.clone()) }
+            match &s.kind {
+                FieldKind::LwwReg { .. } => quote! {
+                    out.push(#attr_ident::#v(self.#n.clone()));
+                },
+                FieldKind::OrMap { .. } => quote! {
+                    for (key, value) in self.#n.iter() {
+                        out.push(#attr_ident::#v(::editor_crdt::OrMapOp::Set {
+                            key: key.clone(),
+                            value: value.clone(),
+                        }));
+                    }
+                },
+                FieldKind::OrSet { .. } => quote! {
+                    for elem in self.#n.iter() {
+                        out.push(#attr_ident::#v(::editor_crdt::OrSetOp::Add {
+                            elem: elem.clone(),
+                        }));
+                    }
+                },
+            }
         });
-        quote! { ::std::vec![#(#entries),*] }
+        quote! {
+            {
+                let mut out = ::std::vec::Vec::<#attr_ident>::new();
+                #(#pushes)*
+                out
+            }
+        }
     };
 
     quote! {

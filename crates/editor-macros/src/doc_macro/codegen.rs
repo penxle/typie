@@ -61,6 +61,7 @@ pub(crate) fn emit_doc_construction(parts: &CodegenParts) -> TokenStream {
                 #(#plain_entries)*
                 __m
             },
+            styles: BTreeMap::new(),
         };
         let (doc, _op_graph) = Doc::from_plain(__plain);
     }
@@ -134,6 +135,7 @@ fn collect_node(
             parent: #parent_expr,
             children: #children_expr,
             modifiers: #modifiers_expr,
+            style: None,
             node: #plain_node_with_text,
         });
     });

@@ -1201,6 +1201,7 @@ mod tests {
                 parent: None,
                 children: vec![para_id],
                 modifiers: root_modifiers,
+                style: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -1210,6 +1211,7 @@ mod tests {
                 parent: Some(NodeId::ROOT),
                 children: vec![text_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1219,12 +1221,16 @@ mod tests {
                 parent: Some(para_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: String::new(),
                 }),
             },
         );
-        let plain = PlainDoc { nodes };
+        let plain = PlainDoc {
+            nodes,
+            styles: BTreeMap::new(),
+        };
 
         let (doc, graph) = Doc::from_plain(plain);
         let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));

@@ -28,6 +28,7 @@
   import ToolbarIcon from './ToolbarIcon.svelte';
   import ToolbarLink from './ToolbarLink.svelte';
   import ToolbarRuby from './ToolbarRuby.svelte';
+  import ToolbarStyleSelect from './ToolbarStyleSelect.svelte';
   import type { Message, ModifierType, Tri } from '@typie/editor-ffi/browser';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ThemeVariant } from '$lib/editor-ffi/theme';
@@ -152,7 +153,9 @@
   </div>
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
-
+  <div class={flex({ alignItems: 'center', gap: '4px' })}>
+    <ToolbarStyleSelect />
+  </div>
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton chevron label="글씨 색" onEscape={() => ctx.editor?.focus()} placement="bottom-start" size="small">
       {#snippet anchor()}

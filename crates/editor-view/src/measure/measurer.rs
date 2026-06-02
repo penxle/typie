@@ -62,13 +62,28 @@ impl Measurer {
             invalidated = self.invalidate_with_ancestors(old_doc, *id) || invalidated;
         }
         for op in ops {
-            if let DocOp::Modifier { node_id, .. } = &op.payload {
-                let doc_for_subtree = if new_doc.node(*node_id).is_some() {
-                    new_doc
-                } else {
-                    old_doc
-                };
-                invalidated = self.invalidate_descendants(doc_for_subtree, *node_id) || invalidated;
+            match &op.payload {
+                DocOp::Modifier { node_id, .. } => {
+                    let doc_for_subtree = if new_doc.node(*node_id).is_some() {
+                        new_doc
+                    } else {
+                        old_doc
+                    };
+                    invalidated =
+                        self.invalidate_descendants(doc_for_subtree, *node_id) || invalidated;
+                }
+                DocOp::Style { .. } => {
+                    for id in affected_node_ids_for_doc_op(&op.payload, old_doc) {
+                        let doc_for_subtree = if new_doc.node(id).is_some() {
+                            new_doc
+                        } else {
+                            old_doc
+                        };
+                        invalidated =
+                            self.invalidate_descendants(doc_for_subtree, id) || invalidated;
+                    }
+                }
+                _ => {}
             }
         }
         invalidated
@@ -119,9 +134,21 @@ fn affected_node_ids_for_doc_op(op: &DocOp, old_doc: &Doc) -> Vec<NodeId> {
     match op {
         DocOp::Text { node_id, .. }
         | DocOp::Modifier { node_id, .. }
-        | DocOp::Attr { node_id, .. } => {
+        | DocOp::Attr { node_id, .. }
+        | DocOp::NodeStyle { node_id, .. } => {
             vec![*node_id]
         }
+        DocOp::Style { style_id, .. } => old_doc
+            .nodes_iter()
+            .filter_map(|(node_id, _)| {
+                let entry = old_doc.get_entry(*node_id)?;
+                if entry.style.get().as_deref() == Some(style_id.as_str()) {
+                    Some(*node_id)
+                } else {
+                    None
+                }
+            })
+            .collect(),
         DocOp::Presence { node_id, op } => {
             let mut ids = vec![*node_id];
             if let OrMapOp::Unset { .. } = op
@@ -454,6 +481,70 @@ mod tests {
         assert!(
             measurer.cache.get(t).is_none(),
             "descendant text must be invalidated"
+        );
+    }
+
+    #[test]
+    fn doc_ops_style_invalidates_styled_node_and_descendants() {
+        use editor_crdt::{Dot, OrSetOp};
+        use editor_macros::state;
+        use editor_model::{DocOp, Modifier, PlainStyleEntry, StyleOp};
+        use editor_transaction::Transaction;
+
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "h1".into(),
+            Some(PlainStyleEntry {
+                name: "Heading".into(),
+                modifiers: vec![Modifier::FontFamily {
+                    value: "Pretendard".into(),
+                }]
+                .into_iter()
+                .collect(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        let (state_with_style, ..) = tr.commit();
+        let doc = state_with_style.doc;
+
+        let t1 = doc.node(p1).unwrap().children().next().unwrap().id();
+
+        let mut measurer = Measurer::new_test();
+        measurer.cache.insert(NodeId::ROOT, dummy());
+        measurer.cache.insert(p1, dummy());
+        measurer.cache.insert(t1, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(99, 0),
+            DocOp::Style {
+                style_id: "h1".into(),
+                op: StyleOp::Modifiers(OrSetOp::Add {
+                    elem: Modifier::FontFamily {
+                        value: "Arial".into(),
+                    },
+                }),
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(p1).is_none(),
+            "styled paragraph should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(NodeId::ROOT).is_none(),
+            "root (ancestor) should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(t1).is_none(),
+            "descendant text node must be invalidated so cascading font_family takes effect"
         );
     }
 

@@ -88,7 +88,7 @@ fn resolve_text_color(node_ref: &NodeRef<'_>) -> String {
     let mut ancestors = node_ref.ancestors();
     if let Some(self_node) = ancestors.next() {
         if let Some(Modifier::TextColor { value }) = self_node
-            .modifiers()
+            .modifiers_with_style()
             .find(|m| matches!(m, Modifier::TextColor { .. }))
         {
             return format!("text.{value}");
@@ -99,7 +99,7 @@ fn resolve_text_color(node_ref: &NodeRef<'_>) -> String {
     }
     for ancestor in ancestors {
         if let Some(Modifier::TextColor { value }) = ancestor
-            .modifiers()
+            .modifiers_with_style()
             .find(|m| matches!(m, Modifier::TextColor { .. }))
         {
             return format!("text.{value}");

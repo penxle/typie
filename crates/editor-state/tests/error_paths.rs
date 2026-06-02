@@ -20,10 +20,14 @@ fn rooted_state() -> State {
             parent: None,
             children: vec![],
             modifiers: BTreeMap::new(),
+            style: None,
             node: PlainNode::Root(PlainRootNode::default()),
         },
     );
-    let plain = PlainDoc { nodes };
+    let plain = PlainDoc {
+        nodes,
+        styles: BTreeMap::new(),
+    };
     let (doc, op_graph) = Doc::from_plain(plain);
     let sel = Selection::collapsed(Position::new(root_id, 0));
     State::new(doc, op_graph, Some(sel))

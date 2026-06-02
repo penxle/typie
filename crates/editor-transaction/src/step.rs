@@ -1,5 +1,5 @@
 use editor_crdt::Op;
-use editor_model::{DocOp, Modifier, ModifierType, NodeId, PlainNode, Subtree};
+use editor_model::{DocOp, Modifier, ModifierType, NodeId, PlainNode, PlainStyleEntry, Subtree};
 use editor_state::{BatchedState, Composition, PendingModifiers, StableSelection, State};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
@@ -79,6 +79,16 @@ pub enum Step {
         node_id: NodeId,
         modifier: Modifier,
     },
+    SetNodeStyle {
+        node_id: NodeId,
+        old: Option<String>,
+        new: Option<String>,
+    },
+    SetStyle {
+        style_id: String,
+        old: Option<PlainStyleEntry>,
+        new: Option<PlainStyleEntry>,
+    },
     SetSelection {
         old: Option<StableSelection>,
         new: Option<StableSelection>,
@@ -134,7 +144,10 @@ impl Step {
             | Step::RemoveText { node_id, .. }
             | Step::SetNode { node_id, .. }
             | Step::AddModifier { node_id, .. }
-            | Step::RemoveModifier { node_id, .. } => StepScope::Node(*node_id),
+            | Step::RemoveModifier { node_id, .. }
+            | Step::SetNodeStyle { node_id, .. } => StepScope::Node(*node_id),
+
+            Step::SetStyle { .. } => StepScope::Node(NodeId::ROOT),
 
             Step::InsertSubtree { parent_id, .. } | Step::RemoveSubtree { parent_id, .. } => {
                 StepScope::Children { parent: *parent_id }
@@ -228,6 +241,12 @@ impl Step {
             Step::RemoveModifier { node_id, modifier } => {
                 steps::remove_modifier::apply_to(batched, validations, *node_id, modifier)
             }
+            Step::SetNodeStyle { node_id, new, .. } => {
+                steps::set_node_style::apply_to(batched, validations, *node_id, new.clone())
+            }
+            Step::SetStyle { style_id, new, .. } => {
+                steps::set_style::apply_to(batched, validations, style_id, new.clone())
+            }
             Step::SetSelection { old, new } => {
                 steps::set_selection::apply_to(batched, validations, old.clone(), new.clone())
             }
@@ -295,6 +314,12 @@ impl Step {
             }
             Step::RemoveModifier { node_id, modifier } => {
                 steps::remove_modifier::inverse(*node_id, modifier.clone())
+            }
+            Step::SetNodeStyle { node_id, old, new } => {
+                steps::set_node_style::inverse(*node_id, old.clone(), new.clone())
+            }
+            Step::SetStyle { style_id, old, new } => {
+                steps::set_style::inverse(style_id.clone(), old.clone(), new.clone())
             }
             Step::SetSelection { old, new } => {
                 steps::set_selection::inverse(old.clone(), new.clone())

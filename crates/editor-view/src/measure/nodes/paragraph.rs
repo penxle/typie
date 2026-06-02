@@ -20,7 +20,7 @@ pub fn measure_paragraph(
     view_state: &ViewState,
 ) -> MeasuredNode {
     let align = node
-        .modifiers()
+        .modifiers_with_style()
         .find_map(|m| match m {
             Modifier::Alignment { value } => Some(*value),
             _ => None,

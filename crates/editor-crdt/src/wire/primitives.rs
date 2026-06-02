@@ -96,6 +96,15 @@ impl Wire for bool {
     }
 }
 
+impl Wire for () {
+    fn encode(&self, _ctx: &EncCtx, _out: &mut Vec<u8>) -> WireResult<()> {
+        Ok(())
+    }
+    fn decode(_ctx: &DecCtx, _input: &mut &[u8]) -> WireResult<Self> {
+        Ok(())
+    }
+}
+
 impl Wire for String {
     fn encode(&self, ctx: &EncCtx, out: &mut Vec<u8>) -> WireResult<()> {
         let bytes = self.as_bytes();

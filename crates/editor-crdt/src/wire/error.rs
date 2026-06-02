@@ -15,6 +15,9 @@ pub enum WireError {
     #[error("Presence op key ({key:#x}) does not match outer node_id ({node_id:#x})")]
     PresenceKeyMismatch { key: u64, node_id: u64 },
 
+    #[error("Style presence op key ({key}) does not match outer style_id ({style_id})")]
+    StylePresenceKeyMismatch { style_id: String, key: String },
+
     #[error("clock {clock} below baseline {baseline} for actor {actor:#x}")]
     BaselineUnderflow {
         actor: u64,

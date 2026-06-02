@@ -21,6 +21,10 @@ impl<'a> NodeRef<'a> {
         self.id
     }
 
+    pub fn doc(&self) -> &'a Doc {
+        self.doc
+    }
+
     pub fn entry(&self) -> &'a NodeEntry {
         self.doc
             .get_entry(self.id)
@@ -48,6 +52,25 @@ impl<'a> NodeRef<'a> {
     // for the undo log, and deciding which modifiers to remove/replace.
     pub fn explicit_modifiers(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
         self.entry().modifiers.iter().map(|(_, v)| v)
+    }
+
+    // Explicit modifiers, then the applied style entry's modifiers, then the
+    // node type's implicit modifiers. First-wins lookups get explicit → style
+    // → implicit precedence — so a named style can override node-type defaults
+    // (e.g. FoldTitle's implicit FontSize) while still leaving implicits
+    // visible when no style/explicit overrides them.
+    pub fn modifiers_with_style(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
+        let style_iter: Box<dyn Iterator<Item = &'a Modifier> + 'a> =
+            match self.entry().style.get().as_ref() {
+                Some(id) => match self.doc.style_entry(id) {
+                    Some(s) => Box::new(s.modifiers.iter()),
+                    None => Box::new(std::iter::empty()),
+                },
+                None => Box::new(std::iter::empty()),
+            };
+        self.explicit_modifiers()
+            .chain(style_iter)
+            .chain(self.node().implicit_modifiers().iter())
     }
 
     pub fn parent(&self) -> Option<NodeRef<'a>> {

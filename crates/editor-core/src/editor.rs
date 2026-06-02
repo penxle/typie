@@ -203,6 +203,18 @@ impl Editor {
         crate::block_state::resolve_block_state(&self.state)
     }
 
+    pub fn style_entries(&self) -> Vec<crate::style_state::StyleInfo> {
+        crate::style_state::resolve_style_entries(&self.state.doc)
+    }
+
+    pub fn applied_style(&self) -> editor_common::Tri<crate::style_state::StyleRefValue> {
+        crate::style_state::resolve_applied_style(&self.state)
+    }
+
+    pub fn style_divergence(&self) -> bool {
+        crate::style_state::resolve_style_divergence(&self.state)
+    }
+
     pub fn character_counts(&self) -> (CharacterCount, CharacterCount) {
         let doc_text = self.state.doc.extract_text();
         let selection_text = Slice::extract(&self.state)
@@ -455,6 +467,13 @@ impl Editor {
             }
         }
 
+        if ops
+            .iter()
+            .any(|op| matches!(&op.payload, DocOp::Style { .. } | DocOp::NodeStyle { .. }))
+        {
+            fields.insert(StateField::Styles);
+        }
+
         if ops.iter().any(
             |op| matches!(&op.payload, DocOp::Attr { node_id, .. } if *node_id == NodeId::ROOT),
         ) {
@@ -470,6 +489,7 @@ impl Editor {
             fields.insert(StateField::Selection);
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
+            fields.insert(StateField::Styles);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
@@ -635,6 +655,7 @@ impl Editor {
             Message::Insertion { op } => handle::handle_insertion_op(self, op)?,
             Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
+            Message::Style { op } => handle::handle_style_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
             Message::View { op } => handle::handle_view_op(self, op)?,
@@ -1180,6 +1201,7 @@ mod tests {
                 parent: None,
                 children: vec![para_id],
                 modifiers: root_default_font_modifiers(),
+                style: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -1189,6 +1211,7 @@ mod tests {
                 parent: Some(NodeId::ROOT),
                 children: vec![text_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1198,12 +1221,19 @@ mod tests {
                 parent: Some(para_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: "hi".to_string(),
                 }),
             },
         );
-        (PlainDoc { nodes }, text_id)
+        (
+            PlainDoc {
+                nodes,
+                styles: BTreeMap::new(),
+            },
+            text_id,
+        )
     }
 
     fn plain_doc_with_two_paragraphs() -> (PlainDoc, NodeId, NodeId, NodeId) {
@@ -1219,6 +1249,7 @@ mod tests {
                 parent: None,
                 children: vec![para1_id, para2_id],
                 modifiers: root_default_font_modifiers(),
+                style: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -1228,6 +1259,7 @@ mod tests {
                 parent: Some(NodeId::ROOT),
                 children: vec![text1_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1237,6 +1269,7 @@ mod tests {
                 parent: Some(para1_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: String::new(),
                 }),
@@ -1248,6 +1281,7 @@ mod tests {
                 parent: Some(NodeId::ROOT),
                 children: vec![text2_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1257,12 +1291,21 @@ mod tests {
                 parent: Some(para2_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: String::new(),
                 }),
             },
         );
-        (PlainDoc { nodes }, para1_id, para2_id, text2_id)
+        (
+            PlainDoc {
+                nodes,
+                styles: BTreeMap::new(),
+            },
+            para1_id,
+            para2_id,
+            text2_id,
+        )
     }
 
     fn build_state(doc: editor_model::Doc, head: Position, pending: PendingModifiers) -> State {

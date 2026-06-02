@@ -12,6 +12,7 @@ mod ime;
 mod message;
 mod search;
 mod state_field;
+mod style_state;
 mod tracked_range;
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -33,4 +34,5 @@ pub use ime::*;
 pub use message::*;
 pub use search::find_matches;
 pub use state_field::*;
+pub use style_state::*;
 pub use tracked_range::*;

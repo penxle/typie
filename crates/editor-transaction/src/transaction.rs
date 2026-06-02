@@ -1,5 +1,7 @@
 use editor_crdt::Op;
-use editor_model::{Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainNode, Subtree};
+use editor_model::{
+    Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainNode, PlainStyleEntry, Subtree,
+};
 use editor_state::{Composition, PendingModifiers, Selection, StableSelection, State};
 
 use crate::{Effect, Step, StepError, TransactionMeta, Validation, validate};
@@ -300,6 +302,43 @@ impl Transaction {
         self.apply_step(Step::RemoveModifier { node_id, modifier })
     }
 
+    pub fn set_node_style(
+        &mut self,
+        node_id: NodeId,
+        style: Option<String>,
+    ) -> Result<(), StepError> {
+        let old = self
+            .state
+            .doc
+            .get_entry(node_id)
+            .map(|e| e.style.get().clone())
+            .unwrap_or(None);
+        if old == style {
+            return Ok(());
+        }
+        self.apply_step(Step::SetNodeStyle {
+            node_id,
+            old,
+            new: style,
+        })
+    }
+
+    pub fn set_style(
+        &mut self,
+        style_id: String,
+        entry: Option<PlainStyleEntry>,
+    ) -> Result<(), StepError> {
+        let old = capture_style_entry(&self.state.doc, &style_id);
+        if old == entry {
+            return Ok(());
+        }
+        self.apply_step(Step::SetStyle {
+            style_id,
+            old,
+            new: entry,
+        })
+    }
+
     pub fn set_selection(&mut self, selection: Option<Selection>) -> Result<(), StepError> {
         // Normalize through the current doc. If normalization fails (an endpoint
         // doesn't resolve against the live doc), drop the request rather than
@@ -528,6 +567,17 @@ fn dedupe_validations(validations: &[Validation]) -> Vec<Validation> {
         }
     }
     result
+}
+
+fn capture_style_entry(doc: &Doc, style_id: &str) -> Option<PlainStyleEntry> {
+    if !doc.style_present(style_id) {
+        return None;
+    }
+    let entry = doc.style_entry(style_id)?;
+    Some(PlainStyleEntry {
+        name: entry.name.get().clone(),
+        modifiers: entry.modifiers.iter().cloned().collect(),
+    })
 }
 
 #[cfg(test)]

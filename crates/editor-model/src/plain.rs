@@ -1,15 +1,26 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use editor_crdt::{Dot, LwwRegOp, OpGraph, OrMapOp, RgaOp, TextOp, ToPlain};
+use editor_crdt::{Dot, LwwRegOp, OpGraph, OrMapOp, OrSetOp, RgaOp, TextOp, ToPlain};
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-use crate::{Doc, DocOp, Modifier, ModifierType, NodeId, PlainNode, PlainTextNode, apply_doc_op};
+use crate::{
+    Doc, DocOp, Modifier, ModifierType, NodeId, PlainNode, PlainTextNode, StyleOp, apply_doc_op,
+};
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct PlainDoc {
     pub nodes: BTreeMap<NodeId, PlainNodeEntry>,
+    #[serde(default)]
+    pub styles: BTreeMap<String, PlainStyleEntry>,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct PlainStyleEntry {
+    pub name: String,
+    pub modifiers: BTreeSet<Modifier>,
 }
 
 #[ffi]
@@ -18,6 +29,8 @@ pub struct PlainNodeEntry {
     pub parent: Option<NodeId>,
     pub children: Vec<NodeId>,
     pub modifiers: BTreeMap<ModifierType, Modifier>,
+    #[serde(default)]
+    pub style: Option<String>,
     pub node: PlainNode,
 }
 
@@ -31,13 +44,28 @@ impl Doc {
                     parent: entry.parent.to_plain(),
                     children: entry.children.to_plain(),
                     modifiers: entry.modifiers.to_plain(),
+                    style: entry.style.to_plain(),
                     node: entry.node.to_plain(),
                 };
                 (*id, plain_entry)
             })
             .collect();
 
-        PlainDoc { nodes }
+        let styles: BTreeMap<String, PlainStyleEntry> = self
+            .styles_iter()
+            .map(|(id, _)| {
+                let entry = self.style_entry(id).cloned().unwrap_or_default();
+                (
+                    id.clone(),
+                    PlainStyleEntry {
+                        name: entry.name.to_plain(),
+                        modifiers: entry.modifiers.to_plain(),
+                    },
+                )
+            })
+            .collect();
+
+        PlainDoc { nodes, styles }
     }
 
     pub fn from_plain(plain: PlainDoc) -> (Self, OpGraph<DocOp>) {
@@ -67,6 +95,8 @@ impl Doc {
                 queue.push(child_id);
             }
         }
+
+        emit_style_entries(&mut graph, &mut doc, &plain);
 
         let graph = graph.commit();
         (doc, graph)
@@ -174,6 +204,55 @@ fn emit_node(
             },
         );
     }
+
+    if entry.style.is_some() {
+        apply_and_record(
+            graph,
+            doc,
+            DocOp::NodeStyle {
+                node_id: id,
+                op: LwwRegOp::Set {
+                    value: entry.style.clone(),
+                },
+            },
+        );
+    }
+}
+
+fn emit_style_entries(graph: &mut OpGraph<DocOp>, doc: &mut Doc, plain: &PlainDoc) {
+    for (style_id, entry) in plain.styles.iter() {
+        apply_and_record(
+            graph,
+            doc,
+            DocOp::Style {
+                style_id: style_id.clone(),
+                op: StyleOp::Presence(OrMapOp::Set {
+                    key: style_id.clone(),
+                    value: (),
+                }),
+            },
+        );
+        apply_and_record(
+            graph,
+            doc,
+            DocOp::Style {
+                style_id: style_id.clone(),
+                op: StyleOp::Name(LwwRegOp::Set {
+                    value: entry.name.clone(),
+                }),
+            },
+        );
+        for m in entry.modifiers.iter() {
+            apply_and_record(
+                graph,
+                doc,
+                DocOp::Style {
+                    style_id: style_id.clone(),
+                    op: StyleOp::Modifiers(OrSetOp::Add { elem: m.clone() }),
+                },
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -211,6 +290,7 @@ mod tests {
                 parent: None,
                 children: vec![para_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -220,6 +300,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![text_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -229,13 +310,17 @@ mod tests {
                 parent: Some(para_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: "hi".to_string(),
                 }),
             },
         );
 
-        PlainDoc { nodes }
+        PlainDoc {
+            nodes,
+            styles: BTreeMap::new(),
+        }
     }
 
     #[test]
@@ -299,6 +384,7 @@ mod tests {
                 parent: None,
                 children: root_children,
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Root(PlainRootNode {
                     layout_mode: LayoutMode::Continuous { max_width: 1234 },
                 }),
@@ -310,6 +396,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Blockquote(PlainBlockquoteNode {
                     variant: BlockquoteVariant::LeftQuote,
                 }),
@@ -321,6 +408,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Callout(PlainCalloutNode {
                     variant: CalloutVariant::Warning,
                 }),
@@ -332,6 +420,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::HorizontalRule(PlainHorizontalRuleNode {
                     variant: HorizontalRuleVariant::DashedLine,
                 }),
@@ -343,6 +432,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![table_row_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Table(PlainTableNode {
                     border_style: TableBorderStyle::Dashed,
                     proportion: 75,
@@ -355,6 +445,7 @@ mod tests {
                 parent: Some(table_id),
                 children: vec![table_cell_id],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::TableRow(PlainTableRowNode {}),
             },
         );
@@ -364,6 +455,7 @@ mod tests {
                 parent: Some(table_row_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::TableCell(PlainTableCellNode {
                     col_width: Some(120),
                     background_color: None,
@@ -376,6 +468,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Archived(PlainArchivedNode {
                     id: Some("arc-001".to_string()),
                 }),
@@ -387,6 +480,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Embed(PlainEmbedNode {
                     id: Some("emb-001".to_string()),
                 }),
@@ -398,6 +492,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::File(PlainFileNode {
                     id: Some("file-001".to_string()),
                 }),
@@ -409,6 +504,7 @@ mod tests {
                 parent: Some(root_id),
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Image(PlainImageNode {
                     id: Some("img-001".to_string()),
                     proportion: 50,
@@ -416,7 +512,10 @@ mod tests {
             },
         );
 
-        PlainDoc { nodes }
+        PlainDoc {
+            nodes,
+            styles: BTreeMap::new(),
+        }
     }
 
     #[test]
@@ -441,11 +540,15 @@ mod tests {
                 parent: None,
                 children: vec![],
                 modifiers,
+                style: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
 
-        let plain = PlainDoc { nodes };
+        let plain = PlainDoc {
+            nodes,
+            styles: BTreeMap::new(),
+        };
         let (doc, _) = Doc::from_plain(plain.clone());
         let result = doc.to_plain();
         assert_eq!(result, plain);
@@ -461,10 +564,14 @@ mod tests {
                 parent: None,
                 children: vec![],
                 modifiers: BTreeMap::new(),
+                style: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
-        let plain = PlainDoc { nodes };
+        let plain = PlainDoc {
+            nodes,
+            styles: BTreeMap::new(),
+        };
         let (_doc, graph) = Doc::from_plain(plain);
         assert!(
             graph.pending().is_empty(),

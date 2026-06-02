@@ -1,9 +1,9 @@
-use editor_crdt::{LwwRegOp, Op, OrMapOp, RgaOp, TextOp};
+use editor_crdt::{LwwRegOp, Op, OrMapOp, OrSetOp, RgaOp, TextOp};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     AnchorKind, Doc, ModelError, Modifier, ModifierType, Node, NodeAttr, NodeEntry, NodeId,
-    NodeType,
+    NodeType, StyleEntry,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
@@ -51,6 +51,31 @@ pub enum DocOp {
         #[wire(n(1))]
         op: NodeAttr,
     },
+    #[wire(n(6))]
+    NodeStyle {
+        #[wire(n(0))]
+        node_id: NodeId,
+        #[wire(n(1))]
+        op: LwwRegOp<Option<String>>,
+    },
+    #[wire(n(7))]
+    Style {
+        #[wire(n(0))]
+        style_id: String,
+        #[wire(n(1))]
+        op: StyleOp,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StyleOp {
+    #[wire(n(0))]
+    Name(#[wire(n(0))] LwwRegOp<String>),
+    #[wire(n(1))]
+    Modifiers(#[wire(n(0))] OrSetOp<Modifier>),
+    #[wire(n(2))]
+    Presence(#[wire(n(0))] OrMapOp<String, ()>),
 }
 
 pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
@@ -195,6 +220,61 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 .get_mut(node_id)
                 .ok_or(ModelError::NodeNotFound(*node_id))?;
             entry.node.apply_attr(op.id, node_attr)?;
+        }
+        DocOp::NodeStyle {
+            node_id,
+            op: lww_op,
+        } => {
+            let entry = doc
+                .entries
+                .get_mut(node_id)
+                .ok_or(ModelError::NodeNotFound(*node_id))?;
+            entry.style = entry
+                .style
+                .apply(op.id, lww_op.clone())
+                .expect("local apply");
+        }
+        DocOp::Style {
+            style_id,
+            op: style_op,
+        } => {
+            if let StyleOp::Presence(OrMapOp::Set { key, .. }) = style_op
+                && key != style_id
+            {
+                return Err(ModelError::StylePresenceKeyMismatch {
+                    style_id: style_id.clone(),
+                    key: key.clone(),
+                });
+            }
+
+            match style_op {
+                StyleOp::Presence(presence_op) => {
+                    doc.styles = doc
+                        .styles
+                        .apply(op.id, presence_op.clone())
+                        .expect("local apply");
+                }
+                StyleOp::Name(lww_op) => {
+                    let entry = doc
+                        .style_entries
+                        .entry(style_id.clone())
+                        .or_insert_with(StyleEntry::new);
+                    entry.name = entry
+                        .name
+                        .apply(op.id, lww_op.clone())
+                        .expect("local apply");
+                }
+                StyleOp::Modifiers(orset_op) => {
+                    let entry = doc
+                        .style_entries
+                        .entry(style_id.clone())
+                        .or_insert_with(StyleEntry::new);
+                    entry.modifiers = entry
+                        .modifiers
+                        .apply(op.id, orset_op.clone())
+                        .expect("local apply");
+                }
+            }
         }
     }
     Ok(doc)
@@ -698,6 +778,8 @@ const VARIANT_CHILDREN: u8 = 2;
 const VARIANT_TEXT: u8 = 3;
 const VARIANT_MODIFIER: u8 = 4;
 const VARIANT_ATTR: u8 = 5;
+const VARIANT_NODE_STYLE: u8 = 6;
+const VARIANT_STYLE: u8 = 7;
 
 const ENTRY_TAG_RUN_BIT: u8 = 0b1000_0000;
 const ENTRY_TAG_NODE_ID_EXPLICIT: u8 = 0b0100_0000;
@@ -1023,6 +1105,23 @@ fn describe_doc_op(p: &DocOp) -> (u8, u8, NodeId) {
             (VARIANT_MODIFIER, sub, *node_id)
         }
         DocOp::Attr { node_id, .. } => (VARIANT_ATTR, 0, *node_id),
+        DocOp::NodeStyle { node_id, op } => {
+            let editor_crdt::LwwRegOp::Set { value } = op;
+            let sub = if value.is_some() { 0 } else { 1 };
+            (VARIANT_NODE_STYLE, sub, *node_id)
+        }
+        DocOp::Style { op, .. } => {
+            // Style variant carries its own style_id (String) inside the payload,
+            // so the entry-level node_id slot is unused — use NodeId::ROOT as sentinel.
+            let sub = match op {
+                StyleOp::Name(_) => 0,
+                StyleOp::Modifiers(editor_crdt::OrSetOp::Add { .. }) => 1,
+                StyleOp::Modifiers(editor_crdt::OrSetOp::Remove { .. }) => 2,
+                StyleOp::Presence(editor_crdt::OrMapOp::Set { .. }) => 3,
+                StyleOp::Presence(editor_crdt::OrMapOp::Unset { .. }) => 4,
+            };
+            (VARIANT_STYLE, sub, NodeId::ROOT)
+        }
     }
 }
 
@@ -1087,6 +1186,37 @@ fn encode_doc_op_payload(
         },
         DocOp::Attr { op, .. } => {
             <NodeAttr as Wire>::encode(op, ctx, out)?;
+        }
+        DocOp::NodeStyle { op, .. } => {
+            let editor_crdt::LwwRegOp::Set { value } = op;
+            if let Some(v) = value {
+                <String as Wire>::encode(v, ctx, out)?;
+            }
+        }
+        DocOp::Style { style_id, op } => {
+            <String as Wire>::encode(style_id, ctx, out)?;
+            match op {
+                StyleOp::Name(editor_crdt::LwwRegOp::Set { value }) => {
+                    <String as Wire>::encode(value, ctx, out)?;
+                }
+                StyleOp::Modifiers(editor_crdt::OrSetOp::Add { elem }) => {
+                    <Modifier as Wire>::encode(elem, ctx, out)?;
+                }
+                StyleOp::Modifiers(editor_crdt::OrSetOp::Remove { observed }) => {
+                    <Dot as Wire>::encode(observed, ctx, out)?;
+                }
+                StyleOp::Presence(editor_crdt::OrMapOp::Set { key, .. }) => {
+                    if key != style_id {
+                        return Err(WireError::StylePresenceKeyMismatch {
+                            style_id: style_id.clone(),
+                            key: key.clone(),
+                        });
+                    }
+                }
+                StyleOp::Presence(editor_crdt::OrMapOp::Unset { observed }) => {
+                    <Vec<Dot> as Wire>::encode(observed, ctx, out)?;
+                }
+            }
         }
     }
     Ok(())
@@ -1201,6 +1331,44 @@ fn decode_doc_op_payload(
         VARIANT_ATTR => {
             let attr = <NodeAttr as Wire>::decode(ctx, input)?;
             Ok(DocOp::Attr { node_id, op: attr })
+        }
+        VARIANT_NODE_STYLE => {
+            let value = if subflag & 1 == 0 {
+                Some(<String as Wire>::decode(ctx, input)?)
+            } else {
+                None
+            };
+            Ok(DocOp::NodeStyle {
+                node_id,
+                op: editor_crdt::LwwRegOp::Set { value },
+            })
+        }
+        VARIANT_STYLE => {
+            let style_id = <String as Wire>::decode(ctx, input)?;
+            let op = match subflag {
+                0 => {
+                    let value = <String as Wire>::decode(ctx, input)?;
+                    StyleOp::Name(editor_crdt::LwwRegOp::Set { value })
+                }
+                1 => {
+                    let elem = <Modifier as Wire>::decode(ctx, input)?;
+                    StyleOp::Modifiers(editor_crdt::OrSetOp::Add { elem })
+                }
+                2 => {
+                    let observed = <Dot as Wire>::decode(ctx, input)?;
+                    StyleOp::Modifiers(editor_crdt::OrSetOp::Remove { observed })
+                }
+                3 => StyleOp::Presence(editor_crdt::OrMapOp::Set {
+                    key: style_id.clone(),
+                    value: (),
+                }),
+                4 => {
+                    let observed = <Vec<Dot> as Wire>::decode(ctx, input)?;
+                    StyleOp::Presence(editor_crdt::OrMapOp::Unset { observed })
+                }
+                _ => return Err(WireError::UnknownPayloadVariant { tag: variant }),
+            };
+            Ok(DocOp::Style { style_id, op })
         }
         n => Err(WireError::UnknownPayloadVariant { tag: n }),
     }

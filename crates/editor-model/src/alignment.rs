@@ -3,7 +3,18 @@ use serde::{Deserialize, Serialize};
 
 #[ffi]
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, editor_macros::Wire,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Default,
+    Serialize,
+    Deserialize,
+    editor_macros::Wire,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Alignment {
