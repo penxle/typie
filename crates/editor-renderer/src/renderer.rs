@@ -1,9 +1,11 @@
 use editor_common::{Rect, Underline, UnderlineStyle};
-use editor_model::{Doc, Modifier, Node, NodeId, TableBorderStyle};
+use editor_model::{Doc, Modifier, Node, TableBorderStyle};
 use editor_resource::{Resource, Theme};
-use editor_view::glyph_run::RubyAnnotation;
-use editor_view::style::{BoxStyle, DecorationData};
-use editor_view::{Edges, LineMetrics, PageRect, PageVisitor, TableLayoutInfo};
+use editor_view::style::DecorationData;
+use editor_view::{
+    Edges, LineMetrics, PageFragmentAtom, PageFragmentBox, PageFragmentDecoration,
+    PageFragmentLine, PageFragmentNode, PageRect, PageVisitor,
+};
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{
@@ -733,7 +735,6 @@ struct BoxFrame {
     border: editor_common::EdgeInsets,
     edges: Edges<bool>,
     node: Option<Node>,
-    table_info: Option<TableLayoutInfo>,
 }
 
 pub struct RenderVisitor<'a> {
@@ -885,104 +886,129 @@ const TABLE_BORDER_WIDTH: f32 = 1.0;
 
 fn draw_table_grid(
     sink: &mut dyn RenderSink,
-    border_style: TableBorderStyle,
-    col_widths: &[f32],
-    row_heights: &[f32],
     table_rect: Rect,
+    table_box: &PageFragmentBox,
+    border_style: TableBorderStyle,
     color: Color,
     t: Transform,
 ) {
+    if border_style == TableBorderStyle::None {
+        return;
+    }
+
     let bw = TABLE_BORDER_WIDTH;
-    let table_w = table_rect.width;
-    let table_h = table_rect.height;
+    let mut x_positions = Vec::new();
+    let mut y_positions = Vec::new();
+    let mut x_start = f32::INFINITY;
+    let mut x_end = f32::NEG_INFINITY;
+    let mut y_start = f32::INFINITY;
+    let mut y_end = f32::NEG_INFINITY;
 
-    let mut x_positions: Vec<f32> = Vec::with_capacity(col_widths.len() + 1);
-    let mut x = 0.0_f32;
-    x_positions.push(x);
-    for &cw in col_widths {
-        x += bw + cw;
-        x_positions.push(x);
+    for row_node in &table_box.children {
+        let Some(row_box) = row_node.as_box() else {
+            continue;
+        };
+
+        let mut last_cell_right = None;
+        for cell_node in &row_box.children {
+            if cell_node.as_box().is_none() {
+                continue;
+            }
+            let cell_left = cell_node.rect.x - table_rect.x;
+            let cell_right = cell_node.rect.right() - table_rect.x;
+            last_cell_right = Some(cell_right);
+            x_positions.push(cell_left);
+            x_start = x_start.min(cell_left);
+            x_end = x_end.max(cell_right);
+        }
+
+        if let Some(last_cell_right) = last_cell_right {
+            let row_top = row_node.rect.y - table_rect.y;
+            let row_bottom = row_node.rect.bottom() - table_rect.y;
+            x_positions.push(last_cell_right - bw);
+            y_start = y_start.min(row_top);
+            y_end = y_end.max(row_bottom);
+            if row_box.edges.top {
+                y_positions.push(row_top);
+            }
+            if row_box.edges.bottom {
+                y_positions.push(row_bottom - bw);
+            }
+        }
     }
 
-    let mut y_positions: Vec<f32> = Vec::with_capacity(row_heights.len() + 1);
-    let mut y = 0.0_f32;
-    y_positions.push(y);
-    for &rh in row_heights {
-        y += bw + rh;
-        y_positions.push(y);
+    if x_positions.is_empty()
+        || !x_start.is_finite()
+        || !x_end.is_finite()
+        || !y_start.is_finite()
+        || !y_end.is_finite()
+        || x_end <= x_start
+        || y_end <= y_start
+    {
+        return;
     }
 
-    match border_style {
-        TableBorderStyle::Dashed => {
-            let dash = 6.0_f32;
-            let gap = 4.0_f32;
-            let period = dash + gap;
-            for &x_pos in &x_positions {
-                let mut y0 = 0.0_f32;
-                while y0 < table_h {
-                    let h = dash.min(table_h - y0);
-                    sink.fill_path(&Path::rect(Rect::from_xywh(x_pos, y0, bw, h)), color, t);
-                    y0 += period;
-                }
-            }
-            for &y_pos in &y_positions {
-                let mut x0 = 0.0_f32;
-                while x0 < table_w {
-                    let w = dash.min(table_w - x0);
-                    sink.fill_path(&Path::rect(Rect::from_xywh(x0, y_pos, w, bw)), color, t);
-                    x0 += period;
-                }
-            }
+    x_positions.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    x_positions.dedup_by(|a, b| (*a - *b).abs() <= 0.01);
+    y_positions.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    y_positions.dedup_by(|a, b| (*a - *b).abs() <= 0.01);
+
+    let mut draw_segment = |rect: Rect, vertical: bool| {
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            return;
         }
-        TableBorderStyle::Dotted => {
-            let dot = 2.0_f32;
-            let gap = 2.0_f32;
-            let period = dot + gap;
-            for &x_pos in &x_positions {
-                let mut y0 = 0.0_f32;
-                while y0 < table_h {
-                    let h = dot.min(table_h - y0);
-                    sink.fill_path(&Path::rect(Rect::from_xywh(x_pos, y0, bw, h)), color, t);
-                    y0 += period;
+
+        match border_style {
+            TableBorderStyle::Solid => sink.fill_path(&Path::rect(rect), color, t),
+            TableBorderStyle::Dashed | TableBorderStyle::Dotted => {
+                let (dash, gap) = match border_style {
+                    TableBorderStyle::Dashed => (6.0_f32, 4.0_f32),
+                    TableBorderStyle::Dotted => (2.0_f32, 2.0_f32),
+                    TableBorderStyle::Solid | TableBorderStyle::None => unreachable!(),
+                };
+                let period = dash + gap;
+                if vertical {
+                    let mut y = 0.0_f32;
+                    while y < rect.height {
+                        let h = dash.min(rect.height - y);
+                        sink.fill_path(
+                            &Path::rect(Rect::from_xywh(rect.x, rect.y + y, rect.width, h)),
+                            color,
+                            t,
+                        );
+                        y += period;
+                    }
+                } else {
+                    let mut x = 0.0_f32;
+                    while x < rect.width {
+                        let w = dash.min(rect.width - x);
+                        sink.fill_path(
+                            &Path::rect(Rect::from_xywh(rect.x + x, rect.y, w, rect.height)),
+                            color,
+                            t,
+                        );
+                        x += period;
+                    }
                 }
             }
-            for &y_pos in &y_positions {
-                let mut x0 = 0.0_f32;
-                while x0 < table_w {
-                    let w = dot.min(table_w - x0);
-                    sink.fill_path(&Path::rect(Rect::from_xywh(x0, y_pos, w, bw)), color, t);
-                    x0 += period;
-                }
-            }
+            TableBorderStyle::None => {}
         }
-        _ => {
-            for &x_pos in &x_positions {
-                sink.fill_path(
-                    &Path::rect(Rect::from_xywh(x_pos, 0.0, bw, table_h)),
-                    color,
-                    t,
-                );
-            }
-            for &y_pos in &y_positions {
-                sink.fill_path(
-                    &Path::rect(Rect::from_xywh(0.0, y_pos, table_w, bw)),
-                    color,
-                    t,
-                );
-            }
-        }
+    };
+
+    for x in x_positions {
+        draw_segment(Rect::from_xywh(x, y_start, bw, y_end - y_start), true);
+    }
+    for y in y_positions {
+        draw_segment(Rect::from_xywh(x_start, y, x_end - x_start, bw), false);
     }
 }
 
 impl<'a> PageVisitor for RenderVisitor<'a> {
-    fn box_enter(
-        &mut self,
-        node_id: NodeId,
-        local_rect: Rect,
-        style: &BoxStyle,
-        edges: Edges<bool>,
-        table_info: Option<&TableLayoutInfo>,
-    ) {
+    fn box_enter(&mut self, node: &PageFragmentNode, fragment: &PageFragmentBox) {
+        let node_id = fragment.node_id;
+        let local_rect = node.rect;
+        let style = &fragment.style;
+        let edges = fragment.edges;
         let node = self.doc.node(node_id).map(|n| n.node().clone());
 
         if self.on(RenderLayer::Background) {
@@ -1078,11 +1104,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             border: style.border,
             edges,
             node,
-            table_info: table_info.cloned(),
         });
     }
 
-    fn box_exit(&mut self) {
+    fn box_exit(&mut self, node: &PageFragmentNode, fragment: &PageFragmentBox) {
         let Some(frame) = self.box_stack.pop() else {
             return;
         };
@@ -1146,26 +1171,23 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             return;
         }
 
-        // Table draws the complete grid; Row and Cell draw nothing.
-        if matches!(&frame.node, Some(Node::TableRow(_) | Node::TableCell(_))) {
-            return;
-        }
         if let Some(Node::Table(table)) = &frame.node {
             let border_style = *table.border_style.get();
             if border_style != TableBorderStyle::None {
-                if let Some(ref info) = frame.table_info {
-                    let border_color = self.theme.color("ui.border.default");
-                    draw_table_grid(
-                        self.sink,
-                        border_style,
-                        &info.col_inner_widths,
-                        &info.row_inner_heights,
-                        frame.local_rect,
-                        border_color,
-                        t,
-                    );
-                }
+                let border_color = self.theme.color("ui.border.default");
+                draw_table_grid(
+                    self.sink,
+                    node.rect,
+                    fragment,
+                    border_style,
+                    border_color,
+                    t,
+                );
             }
+            return;
+        }
+
+        if matches!(&frame.node, Some(Node::TableRow(_) | Node::TableCell(_))) {
             return;
         }
 
@@ -1215,14 +1237,15 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         }
     }
 
-    fn line(
-        &mut self,
-        _node_id: NodeId,
-        local_rect: Rect,
-        metrics: LineMetrics,
-        glyph_runs: &[editor_view::glyph_run::GlyphRun],
-        ruby_annotations: &[RubyAnnotation],
-    ) {
+    fn line(&mut self, node: &PageFragmentNode, fragment: &PageFragmentLine) {
+        let local_rect = node.rect;
+        let metrics = LineMetrics {
+            baseline: fragment.baseline,
+            ascent: fragment.ascent,
+            descent: fragment.descent,
+        };
+        let glyph_runs = &fragment.glyph_runs;
+        let ruby_annotations = &fragment.ruby_annotations;
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
 
         if self.on(RenderLayer::Background) {
@@ -1265,11 +1288,13 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         self.render_ruby_annotations(ruby_annotations, t);
     }
 
-    fn atom(&mut self, node_id: NodeId, local_rect: Rect) {
+    fn atom(&mut self, node: &PageFragmentNode, fragment: &PageFragmentAtom) {
         if !self.on(RenderLayer::Content) {
             return;
         }
 
+        let node_id = fragment.node_id;
+        let local_rect = node.rect;
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
         let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
@@ -1412,11 +1437,13 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         }
     }
 
-    fn decoration(&mut self, local_rect: Rect, data: &DecorationData) {
+    fn decoration(&mut self, decoration: &PageFragmentDecoration) {
         if !self.on(RenderLayer::Content) {
             return;
         }
 
+        let local_rect = decoration.rect;
+        let data = &decoration.data;
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
         let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
@@ -1493,7 +1520,236 @@ mod tests {
     use super::*;
     use crate::vector::export::VectorSink;
     use crate::vector::types::{VectorOp, VectorPage};
+    use editor_common::EdgeInsets;
+    use editor_model::NodeId;
     use editor_resource::ThemeVariant;
+    use editor_view::PageFragmentContent;
+    use editor_view::glyph_run::RubyAnnotation;
+    use editor_view::style::{Alignment, BorderMode, BoxStyle, Direction};
+
+    #[derive(Default)]
+    struct PathFillCounter {
+        count: usize,
+    }
+
+    impl RenderSink for PathFillCounter {
+        fn pixel_size(&self) -> (u32, u32) {
+            (1000, 1000)
+        }
+
+        fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+
+        fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
+            self.count += 1;
+        }
+
+        fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+
+        fn draw_glyph_run(
+            &mut self,
+            _r: &editor_view::glyph_run::GlyphRun,
+            _c: Color,
+            _t: Transform,
+            _f: &editor_resource::FontRegistry,
+        ) {
+        }
+
+        fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+    }
+
+    #[derive(Default)]
+    struct PathRecorder {
+        paths: Vec<Path>,
+    }
+
+    impl RenderSink for PathRecorder {
+        fn pixel_size(&self) -> (u32, u32) {
+            (1000, 1000)
+        }
+
+        fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+
+        fn fill_path(&mut self, p: &Path, _c: Color, _t: Transform) {
+            self.paths.push(p.clone());
+        }
+
+        fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+
+        fn draw_glyph_run(
+            &mut self,
+            _r: &editor_view::glyph_run::GlyphRun,
+            _c: Color,
+            _t: Transform,
+            _f: &editor_resource::FontRegistry,
+        ) {
+        }
+
+        fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+    }
+
+    fn black() -> Color {
+        Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        }
+    }
+
+    fn all_edges() -> Edges<bool> {
+        Edges {
+            top: true,
+            bottom: true,
+            left: true,
+            right: true,
+        }
+    }
+
+    fn table_box_style(direction: Direction) -> BoxStyle {
+        BoxStyle {
+            direction,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::all(TABLE_BORDER_WIDTH),
+            border_mode: BorderMode::Collapse,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![],
+            monolithic: false,
+        }
+    }
+
+    fn table_fragment(row_fragments: &[(Rect, Edges<bool>, Vec<Rect>)]) -> PageFragmentBox {
+        PageFragmentBox {
+            node_id: NodeId::new(),
+            style: table_box_style(Direction::Vertical),
+            edges: all_edges(),
+            decorations: vec![],
+            children: row_fragments
+                .iter()
+                .map(|(row_rect, row_edges, cells)| PageFragmentNode {
+                    rect: *row_rect,
+                    content: PageFragmentContent::Box(PageFragmentBox {
+                        node_id: NodeId::new(),
+                        style: table_box_style(Direction::Horizontal),
+                        edges: *row_edges,
+                        decorations: vec![],
+                        children: cells
+                            .iter()
+                            .map(|cell_rect| PageFragmentNode {
+                                rect: *cell_rect,
+                                content: PageFragmentContent::Box(PageFragmentBox {
+                                    node_id: NodeId::new(),
+                                    style: table_box_style(Direction::Vertical),
+                                    edges: all_edges(),
+                                    decorations: vec![],
+                                    children: vec![],
+                                    nav: None,
+                                }),
+                            })
+                            .collect(),
+                        nav: None,
+                    }),
+                })
+                .collect(),
+            nav: None,
+        }
+    }
+
+    fn two_by_two_table_fragment() -> PageFragmentBox {
+        let edges = all_edges();
+        table_fragment(&[
+            (
+                Rect::from_xywh(0.0, 0.0, 203.0, 32.0),
+                edges,
+                vec![
+                    Rect::from_xywh(0.0, 0.0, 102.0, 32.0),
+                    Rect::from_xywh(101.0, 0.0, 102.0, 32.0),
+                ],
+            ),
+            (
+                Rect::from_xywh(0.0, 31.0, 203.0, 32.0),
+                edges,
+                vec![
+                    Rect::from_xywh(0.0, 31.0, 102.0, 32.0),
+                    Rect::from_xywh(101.0, 31.0, 102.0, 32.0),
+                ],
+            ),
+        ])
+    }
+
+    fn clipped_two_cell_table_fragment() -> PageFragmentBox {
+        let clipped_edges = Edges {
+            top: false,
+            bottom: false,
+            left: true,
+            right: true,
+        };
+        table_fragment(&[(
+            Rect::from_xywh(0.0, 0.0, 203.0, 20.0),
+            clipped_edges,
+            vec![
+                Rect::from_xywh(0.0, 0.0, 102.0, 20.0),
+                Rect::from_xywh(101.0, 0.0, 102.0, 20.0),
+            ],
+        )])
+    }
+
+    fn path_start(path: &Path) -> Option<(f32, f32)> {
+        match path.elements.first() {
+            Some(PathElement::MoveTo { x, y }) => Some((*x, *y)),
+            _ => None,
+        }
+    }
+
+    fn fragment_box(
+        node_id: NodeId,
+        rect: Rect,
+        style: BoxStyle,
+        edges: Edges<bool>,
+    ) -> PageFragmentNode {
+        PageFragmentNode {
+            rect,
+            content: PageFragmentContent::Box(PageFragmentBox {
+                node_id,
+                style,
+                edges,
+                decorations: vec![],
+                children: vec![],
+                nav: None,
+            }),
+        }
+    }
+
+    fn fragment_line(
+        rect: Rect,
+        metrics: LineMetrics,
+        glyph_runs: Vec<editor_view::glyph_run::GlyphRun>,
+        ruby_annotations: Vec<RubyAnnotation>,
+    ) -> PageFragmentNode {
+        PageFragmentNode {
+            rect,
+            content: PageFragmentContent::Line(PageFragmentLine {
+                node_id: NodeId::ROOT,
+                baseline: metrics.baseline,
+                ascent: metrics.ascent,
+                descent: metrics.descent,
+                cursor_ascent: metrics.ascent,
+                cursor_descent: metrics.descent,
+                glyph_runs,
+                ruby_annotations,
+                empty_caret_x: 0.0,
+                child_range: None,
+                tab_gaps: vec![],
+            }),
+        }
+    }
+
+    fn line_fragment(node: &PageFragmentNode) -> &PageFragmentLine {
+        match &node.content {
+            PageFragmentContent::Line(fragment) => fragment,
+            _ => unreachable!("expected line fragment"),
+        }
+    }
 
     #[test]
     fn circle_path_has_four_curves_and_close() {
@@ -1911,17 +2167,17 @@ mod tests {
             graphemes: vec![],
         };
 
-        visitor.line(
-            NodeId::ROOT,
+        let line_node = fragment_line(
             Rect::from_xywh(0.0, 0.0, 120.0, 100.0),
             LineMetrics {
                 baseline: 65.0,
                 ascent: 45.0,
                 descent: 15.0,
             },
-            &[run],
-            &[],
+            vec![run],
+            vec![],
         );
+        visitor.line(&line_node, line_fragment(&line_node));
 
         assert_eq!(sink.rects.len(), 1);
         let rect = sink.rects[0];
@@ -2086,17 +2342,17 @@ mod tests {
             width: 10.0,
         };
 
-        v.line(
-            editor_model::NodeId::ROOT,
+        let line_node = fragment_line(
             Rect::from_xywh(0.0, 0.0, 100.0, 20.0),
             LineMetrics {
                 baseline: 16.0,
                 ascent: 14.0,
                 descent: 4.0,
             },
-            &[],
-            &[ruby],
+            vec![],
+            vec![ruby],
         );
+        v.line(&line_node, line_fragment(&line_node));
 
         // Pretendard outline glyph 는 SVG path glyph 로 캐시되어 fill_path 경로로 렌더되어야 한다.
         assert!(
@@ -2171,7 +2427,7 @@ mod tests {
     }
 
     #[test]
-    fn fold_title_background_drawn_on_every_page_fragment() {
+    fn fold_title_background_drawn_on_every_visible_page_piece() {
         use editor_common::EdgeInsets;
         use editor_macros::doc;
         use editor_view::style::{Alignment, BorderMode, Decoration, Direction};
@@ -2244,34 +2500,37 @@ mod tests {
                 LayerSet::of(&[RenderLayer::Background]),
             );
 
-            v.box_enter(
+            let first_node = fragment_box(
                 ft,
                 Rect::from_xywh(0.0, 500.0, 300.0, 80.0),
-                &style,
+                style.clone(),
                 Edges {
                     top: true,
                     bottom: false,
                     left: true,
                     right: true,
                 },
-                None,
             );
-            v.decoration(icon_rect, &DecorationData::Bool(true));
-            v.box_exit();
+            v.box_enter(&first_node, first_node.as_box().unwrap());
+            v.decoration(&PageFragmentDecoration {
+                rect: icon_rect,
+                data: DecorationData::Bool(true),
+            });
+            v.box_exit(&first_node, first_node.as_box().unwrap());
 
-            v.box_enter(
+            let second_node = fragment_box(
                 ft,
                 Rect::from_xywh(0.0, -40.0, 300.0, 80.0),
-                &style,
+                style.clone(),
                 Edges {
                     top: false,
                     bottom: true,
                     left: true,
                     right: true,
                 },
-                None,
             );
-            v.box_exit();
+            v.box_enter(&second_node, second_node.as_box().unwrap());
+            v.box_exit(&second_node, second_node.as_box().unwrap());
         }
 
         let muted_fills = sink.fills.iter().filter(|c| **c == muted).count();
@@ -2283,84 +2542,17 @@ mod tests {
 
     #[test]
     fn table_solid_grid_draws_correct_line_count() {
-        use editor_common::EdgeInsets;
-        use editor_macros::doc;
-        use editor_view::TableLayoutInfo;
-        use editor_view::style::{Alignment, BorderMode, Direction};
+        let table = two_by_two_table_fragment();
+        let mut sink = PathFillCounter::default();
+        draw_table_grid(
+            &mut sink,
+            Rect::from_xywh(0.0, 0.0, 203.0, 63.0),
+            &table,
+            TableBorderStyle::Solid,
+            black(),
+            Transform::IDENTITY,
+        );
 
-        #[derive(Default)]
-        struct FillCounter {
-            count: usize,
-        }
-        impl RenderSink for FillCounter {
-            fn pixel_size(&self) -> (u32, u32) {
-                (1000, 1000)
-            }
-            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
-            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
-                self.count += 1;
-            }
-            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
-            fn draw_glyph_run(
-                &mut self,
-                _r: &editor_view::glyph_run::GlyphRun,
-                _c: Color,
-                _t: Transform,
-                _f: &editor_resource::FontRegistry,
-            ) {
-            }
-            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
-        }
-
-        let (doc, t1) = doc! {
-            root {
-                t1: table {
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
-                    }
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
-                    }
-                }
-            }
-        };
-
-        let style = BoxStyle {
-            direction: Direction::Vertical,
-            padding: EdgeInsets::ZERO,
-            border: EdgeInsets::all(1.0),
-            border_mode: BorderMode::Collapse,
-            alignment: Alignment::Start,
-            scope: false,
-            decorations: vec![],
-            monolithic: false,
-        };
-        let table_info = TableLayoutInfo {
-            col_inner_widths: vec![100.0, 100.0],
-            row_inner_heights: vec![30.0, 30.0],
-        };
-
-        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
-        let mut sink = FillCounter::default();
-        {
-            let mut v =
-                renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Border]));
-            v.box_enter(
-                t1,
-                Rect::from_xywh(0.0, 0.0, 203.0, 63.0),
-                &style,
-                Edges {
-                    top: true,
-                    bottom: true,
-                    left: true,
-                    right: true,
-                },
-                Some(&table_info),
-            );
-            v.box_exit();
-        }
         assert_eq!(
             sink.count, 6,
             "solid 2×2 table should produce 6 fill_path calls, got {}",
@@ -2370,85 +2562,28 @@ mod tests {
 
     #[test]
     fn table_none_border_draws_nothing() {
-        use editor_common::EdgeInsets;
-        use editor_macros::doc;
-        use editor_view::TableLayoutInfo;
-        use editor_view::style::{Alignment, BorderMode, Direction};
+        let edges = all_edges();
+        let table = table_fragment(&[(
+            Rect::from_xywh(0.0, 0.0, 102.0, 32.0),
+            edges,
+            vec![Rect::from_xywh(0.0, 0.0, 102.0, 32.0)],
+        )]);
+        let mut sink = PathFillCounter::default();
+        draw_table_grid(
+            &mut sink,
+            Rect::from_xywh(0.0, 0.0, 102.0, 32.0),
+            &table,
+            TableBorderStyle::None,
+            black(),
+            Transform::IDENTITY,
+        );
 
-        #[derive(Default)]
-        struct FillCounter {
-            count: usize,
-        }
-        impl RenderSink for FillCounter {
-            fn pixel_size(&self) -> (u32, u32) {
-                (1000, 1000)
-            }
-            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
-            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
-                self.count += 1;
-            }
-            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
-            fn draw_glyph_run(
-                &mut self,
-                _r: &editor_view::glyph_run::GlyphRun,
-                _c: Color,
-                _t: Transform,
-                _f: &editor_resource::FontRegistry,
-            ) {
-            }
-            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
-        }
-
-        let (doc, t1) = doc! {
-            root {
-                t1: table(border_style: TableBorderStyle::None) {
-                    table_row { table_cell { paragraph } }
-                }
-            }
-        };
-
-        let style = BoxStyle {
-            direction: Direction::Vertical,
-            padding: EdgeInsets::ZERO,
-            border: EdgeInsets::all(1.0),
-            border_mode: BorderMode::Collapse,
-            alignment: Alignment::Start,
-            scope: false,
-            decorations: vec![],
-            monolithic: false,
-        };
-        let table_info = TableLayoutInfo {
-            col_inner_widths: vec![100.0],
-            row_inner_heights: vec![30.0],
-        };
-
-        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
-        let mut sink = FillCounter::default();
-        {
-            let mut v =
-                renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Border]));
-            v.box_enter(
-                t1,
-                Rect::from_xywh(0.0, 0.0, 102.0, 32.0),
-                &style,
-                Edges {
-                    top: true,
-                    bottom: true,
-                    left: true,
-                    right: true,
-                },
-                Some(&table_info),
-            );
-            v.box_exit();
-        }
         assert_eq!(sink.count, 0, "TableBorderStyle::None must draw nothing");
     }
 
     #[test]
     fn table_row_and_cell_draw_no_border() {
-        use editor_common::EdgeInsets;
         use editor_macros::doc;
-        use editor_view::style::{Alignment, BorderMode, Direction};
 
         #[derive(Default)]
         struct FillCounter {
@@ -2493,58 +2628,37 @@ mod tests {
             row.children().next().unwrap().id()
         };
 
-        let row_style = BoxStyle {
-            direction: Direction::Horizontal,
-            padding: EdgeInsets::ZERO,
-            border: EdgeInsets::all(1.0),
-            border_mode: BorderMode::Collapse,
-            alignment: Alignment::Start,
-            scope: false,
-            decorations: vec![],
-            monolithic: false,
-        };
-        let cell_style = BoxStyle {
-            direction: Direction::Vertical,
-            padding: EdgeInsets::ZERO,
-            border: EdgeInsets::all(1.0),
-            border_mode: BorderMode::Collapse,
-            alignment: Alignment::Start,
-            scope: false,
-            decorations: vec![],
-            monolithic: false,
-        };
-
         let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
         let mut sink = FillCounter::default();
         {
             let mut v =
                 renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Border]));
-            v.box_enter(
+            let row_node = fragment_box(
                 row_id,
                 Rect::from_xywh(0.0, 0.0, 102.0, 32.0),
-                &row_style,
+                table_box_style(Direction::Horizontal),
                 Edges {
                     top: true,
                     bottom: true,
                     left: true,
                     right: true,
                 },
-                None,
             );
-            v.box_exit();
-            v.box_enter(
+            v.box_enter(&row_node, row_node.as_box().unwrap());
+            v.box_exit(&row_node, row_node.as_box().unwrap());
+            let cell_node = fragment_box(
                 cell_id,
                 Rect::from_xywh(0.0, 0.0, 100.0, 30.0),
-                &cell_style,
+                table_box_style(Direction::Vertical),
                 Edges {
                     top: true,
                     bottom: true,
                     left: true,
                     right: true,
                 },
-                None,
             );
-            v.box_exit();
+            v.box_enter(&cell_node, cell_node.as_box().unwrap());
+            v.box_exit(&cell_node, cell_node.as_box().unwrap());
         }
         assert_eq!(
             sink.count, 0,
@@ -2553,127 +2667,75 @@ mod tests {
     }
 
     #[test]
+    fn table_clipped_row_draws_no_page_edge_horizontal_border() {
+        let table = clipped_two_cell_table_fragment();
+        let mut sink = PathFillCounter::default();
+        draw_table_grid(
+            &mut sink,
+            Rect::from_xywh(0.0, 0.0, 203.0, 20.0),
+            &table,
+            TableBorderStyle::Solid,
+            black(),
+            Transform::IDENTITY,
+        );
+
+        assert_eq!(
+            sink.count, 3,
+            "clipped row should draw only vertical grid lines, got {} fills",
+            sink.count
+        );
+    }
+
+    #[test]
+    fn table_grid_uses_table_local_coordinates_for_offset_fragment() {
+        let edges = all_edges();
+        let table = table_fragment(&[(
+            Rect::from_xywh(40.0, 60.0, 203.0, 32.0),
+            edges,
+            vec![
+                Rect::from_xywh(40.0, 60.0, 102.0, 32.0),
+                Rect::from_xywh(141.0, 60.0, 102.0, 32.0),
+            ],
+        )]);
+        let mut sink = PathRecorder::default();
+
+        draw_table_grid(
+            &mut sink,
+            Rect::from_xywh(40.0, 60.0, 203.0, 32.0),
+            &table,
+            TableBorderStyle::Solid,
+            black(),
+            Transform::IDENTITY,
+        );
+
+        assert_eq!(path_start(&sink.paths[0]), Some((0.0, 0.0)));
+        assert_eq!(path_start(&sink.paths[1]), Some((101.0, 0.0)));
+        assert_eq!(path_start(&sink.paths[2]), Some((202.0, 0.0)));
+    }
+
+    #[test]
     fn table_dashed_produces_more_draws_than_solid() {
-        use editor_common::EdgeInsets;
-        use editor_macros::doc;
-        use editor_view::TableLayoutInfo;
-        use editor_view::style::{Alignment, BorderMode, Direction};
+        let solid_table = two_by_two_table_fragment();
+        let dashed_table = two_by_two_table_fragment();
+        let mut solid_sink = PathFillCounter::default();
+        let mut dashed_sink = PathFillCounter::default();
 
-        #[derive(Default)]
-        struct FillCounter {
-            count: usize,
-        }
-        impl RenderSink for FillCounter {
-            fn pixel_size(&self) -> (u32, u32) {
-                (1000, 1000)
-            }
-            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
-            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {
-                self.count += 1;
-            }
-            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
-            fn draw_glyph_run(
-                &mut self,
-                _r: &editor_view::glyph_run::GlyphRun,
-                _c: Color,
-                _t: Transform,
-                _f: &editor_resource::FontRegistry,
-            ) {
-            }
-            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
-        }
-
-        let (doc_solid, t_solid) = doc! {
-            root {
-                t_solid: table {
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
-                    }
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
-                    }
-                }
-            }
-        };
-        let (doc_dashed, t_dashed) = doc! {
-            root {
-                t_dashed: table(border_style: TableBorderStyle::Dashed) {
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
-                    }
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
-                    }
-                }
-            }
-        };
-
-        let style = BoxStyle {
-            direction: Direction::Vertical,
-            padding: EdgeInsets::ZERO,
-            border: EdgeInsets::all(1.0),
-            border_mode: BorderMode::Collapse,
-            alignment: Alignment::Start,
-            scope: false,
-            decorations: vec![],
-            monolithic: false,
-        };
-        let table_info = TableLayoutInfo {
-            col_inner_widths: vec![200.0, 200.0],
-            row_inner_heights: vec![100.0, 100.0],
-        };
-
-        let mut solid_sink = FillCounter::default();
-        let mut dashed_sink = FillCounter::default();
-
-        let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
-
-        {
-            let mut v = renderer.page_visitor(
-                &mut solid_sink,
-                &doc_solid,
-                1.0,
-                LayerSet::of(&[RenderLayer::Border]),
-            );
-            v.box_enter(
-                t_solid,
-                Rect::from_xywh(0.0, 0.0, 403.0, 203.0),
-                &style,
-                Edges {
-                    top: true,
-                    bottom: true,
-                    left: true,
-                    right: true,
-                },
-                Some(&table_info),
-            );
-            v.box_exit();
-        }
-        {
-            let mut v = renderer.page_visitor(
-                &mut dashed_sink,
-                &doc_dashed,
-                1.0,
-                LayerSet::of(&[RenderLayer::Border]),
-            );
-            v.box_enter(
-                t_dashed,
-                Rect::from_xywh(0.0, 0.0, 403.0, 203.0),
-                &style,
-                Edges {
-                    top: true,
-                    bottom: true,
-                    left: true,
-                    right: true,
-                },
-                Some(&table_info),
-            );
-            v.box_exit();
-        }
+        draw_table_grid(
+            &mut solid_sink,
+            Rect::from_xywh(0.0, 0.0, 203.0, 63.0),
+            &solid_table,
+            TableBorderStyle::Solid,
+            black(),
+            Transform::IDENTITY,
+        );
+        draw_table_grid(
+            &mut dashed_sink,
+            Rect::from_xywh(0.0, 0.0, 203.0, 63.0),
+            &dashed_table,
+            TableBorderStyle::Dashed,
+            black(),
+            Transform::IDENTITY,
+        );
 
         assert!(
             dashed_sink.count > solid_sink.count,

@@ -79,7 +79,6 @@ pub(super) fn expand_first_line(
                             content: MeasuredContent::Box(MeasuredBox {
                                 node_id: b.node_id,
                                 style: b.style.clone(),
-                                table_info: b.table_info.clone(),
                                 children: new_children,
                                 page_break_policy: b.page_break_policy,
                             }),

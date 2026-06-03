@@ -66,7 +66,6 @@ fn make_box_node(
                 decorations: vec![],
                 monolithic: false,
             },
-            table_info: None,
             children,
             nav: None,
         }),
@@ -94,7 +93,6 @@ fn make_box_node_with_style(
                 decorations: vec![],
                 monolithic: false,
             },
-            table_info: None,
             children,
             nav: None,
         }),
@@ -102,11 +100,11 @@ fn make_box_node_with_style(
 }
 
 fn make_page(y_start: f32, y_end: f32) -> LayoutPage {
-    LayoutPage {
+    LayoutPage::new(
         y_start,
         y_end,
-        size: editor_common::Size::new(440.0, y_end - y_start),
-    }
+        editor_common::Size::new(440.0, y_end - y_start),
+    )
 }
 
 #[test]
@@ -364,7 +362,6 @@ fn exact_hit_in_monolithic_box_returns_leaf() {
                 decorations: vec![],
                 monolithic: true,
             },
-            table_info: None,
             children: vec![line],
             nav: None,
         }),
@@ -414,7 +411,6 @@ fn hit_test_in_empty_trailing_line_returns_paragraph_offset() {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children: vec![
                     LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
@@ -453,11 +449,7 @@ fn hit_test_in_empty_trailing_line_returns_paragraph_offset() {
             }),
         },
     };
-    let page = LayoutPage {
-        y_start: 0.0,
-        y_end: 800.0,
-        size: Size::new(200.0, 800.0),
-    };
+    let page = LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0));
     let hit = HitTester::for_page(&tree, &page, 50.0, 30.0);
     let sel = hit.closest_target().unwrap().selection(hit.target_x());
     assert_eq!(sel.head.node_id, p1);

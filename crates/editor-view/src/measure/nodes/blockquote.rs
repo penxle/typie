@@ -139,7 +139,6 @@ pub fn measure_blockquote(
                         decorations: vec![],
                         monolithic: node.spec().monolithic,
                     },
-                    table_info: None,
                     children,
                     page_break_policy: PageBreakPolicy::Auto,
                 }),

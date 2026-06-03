@@ -2,10 +2,18 @@ use editor_common::Rect;
 use editor_model::NodeId;
 use std::ops::Range;
 
-use crate::TableLayoutInfo;
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::measure::TabGap;
+use crate::page::LayoutPage;
+use crate::page_fragment::PageFragmentTree;
 use crate::style::BoxStyle;
+
+#[derive(Debug)]
+pub struct PaginatedLayout {
+    pub tree: LayoutTree,
+    pub pages: Vec<LayoutPage>,
+    pub page_fragments: Vec<PageFragmentTree>,
+}
 
 #[derive(Debug)]
 pub struct LayoutTree {
@@ -42,7 +50,6 @@ pub struct NavUnit {
 pub struct LayoutBox {
     pub node_id: NodeId,
     pub style: BoxStyle,
-    pub table_info: Option<Box<TableLayoutInfo>>,
     pub children: Vec<LayoutNode>,
     pub nav: Option<NavUnit>,
 }

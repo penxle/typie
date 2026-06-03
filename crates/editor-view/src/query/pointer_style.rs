@@ -100,11 +100,7 @@ mod tests {
     use crate::paginate::*;
 
     fn page(y_start: f32) -> LayoutPage {
-        LayoutPage {
-            y_start,
-            y_end: y_start + 1000.0,
-            size: Size::new(800.0, 1000.0),
-        }
+        LayoutPage::new(y_start, y_start + 1000.0, Size::new(800.0, 1000.0))
     }
 
     fn line_node(id: NodeId, x: f32, y: f32, w: f32, h: f32) -> LayoutNode {
@@ -162,7 +158,6 @@ mod tests {
                     ..Default::default()
                 },
                 nav: None,
-                table_info: None,
                 children,
             }),
         }

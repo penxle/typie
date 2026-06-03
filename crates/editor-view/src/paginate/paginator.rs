@@ -5,6 +5,7 @@ use editor_model::NodeId;
 
 use crate::measure::*;
 use crate::page::LayoutPage;
+use crate::page_fragment::build_page_fragment_trees;
 use crate::style::*;
 
 use super::types::*;
@@ -59,10 +60,16 @@ impl Paginator {
         }
     }
 
-    pub fn paginate(mut self, tree: MeasuredTree) -> (LayoutTree, Vec<LayoutPage>) {
+    pub fn paginate(mut self, tree: MeasuredTree) -> PaginatedLayout {
         let root = self.place_node(&tree.root, NodeId::ROOT, 0);
         let pages = self.finish();
-        (LayoutTree { root }, pages)
+        let tree = LayoutTree { root };
+        let page_fragments = build_page_fragment_trees(&tree, &pages);
+        PaginatedLayout {
+            tree,
+            pages,
+            page_fragments,
+        }
     }
 
     fn place_node(
@@ -239,7 +246,6 @@ impl Paginator {
             content: LayoutContent::Box(LayoutBox {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
-                table_info: measured.table_info.clone(),
                 children,
                 nav: None,
             }),
@@ -293,7 +299,6 @@ impl Paginator {
             content: LayoutContent::Box(LayoutBox {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
-                table_info: measured.table_info.clone(),
                 children,
                 nav: None,
             }),
@@ -357,11 +362,13 @@ impl Paginator {
         if self.paginated {
             let page_start = self.page_content_top - self.margins.top;
             let page_end = self.page_content_bottom + self.margins.bottom;
-            self.pages.push(LayoutPage {
-                y_start: page_start,
-                y_end: page_end,
-                size: Size::new(self.page_width(), self.page_height),
-            });
+            self.pages.push(LayoutPage::with_content(
+                page_start,
+                page_end,
+                self.page_content_top,
+                self.page_content_bottom,
+                Size::new(self.page_width(), self.page_height),
+            ));
             self.page_content_top = page_end + self.margins.top;
             self.page_content_bottom = self.page_content_top + self.content_height;
             self.accumulated_y = self.page_content_top;
@@ -373,11 +380,11 @@ impl Paginator {
                 self.page_content_top
             };
             let page_end = self.accumulated_y;
-            self.pages.push(LayoutPage {
-                y_start: page_start,
-                y_end: page_end,
-                size: Size::new(self.page_width(), page_end - page_start),
-            });
+            self.pages.push(LayoutPage::new(
+                page_start,
+                page_end,
+                Size::new(self.page_width(), page_end - page_start),
+            ));
             self.page_content_top = self.accumulated_y;
             self.page_content_bottom = self.page_content_top + self.content_height;
         }
@@ -388,11 +395,13 @@ impl Paginator {
             if self.paginated {
                 let page_start = self.page_content_top - self.margins.top;
                 let page_end = self.page_content_top + self.content_height + self.margins.bottom;
-                self.pages.push(LayoutPage {
-                    y_start: page_start,
-                    y_end: page_end,
-                    size: Size::new(self.page_width(), self.page_height),
-                });
+                self.pages.push(LayoutPage::with_content(
+                    page_start,
+                    page_end,
+                    self.page_content_top,
+                    self.page_content_top + self.content_height,
+                    Size::new(self.page_width(), self.page_height),
+                ));
             } else {
                 let is_first_page = self.pages.is_empty();
                 let page_start = if is_first_page {
@@ -401,30 +410,33 @@ impl Paginator {
                     self.page_content_top
                 };
                 let page_end = self.accumulated_y + self.margins.bottom;
-                self.pages.push(LayoutPage {
-                    y_start: page_start,
-                    y_end: page_end,
-                    size: Size::new(self.page_width(), page_end - page_start),
-                });
+                self.pages.push(LayoutPage::new(
+                    page_start,
+                    page_end,
+                    Size::new(self.page_width(), page_end - page_start),
+                ));
             }
         } else if self.pages.is_empty() {
             if self.paginated {
-                self.pages.push(LayoutPage {
-                    y_start: 0.0,
-                    y_end: self.page_height,
-                    size: Size::new(self.page_width(), self.page_height),
-                });
+                self.pages.push(LayoutPage::with_content(
+                    0.0,
+                    self.page_height,
+                    self.margins.top,
+                    self.page_height - self.margins.bottom,
+                    Size::new(self.page_width(), self.page_height),
+                ));
             } else {
-                self.pages.push(LayoutPage {
-                    y_start: 0.0,
-                    y_end: self.margins.top + self.margins.bottom,
-                    size: Size::new(self.page_width(), self.margins.top + self.margins.bottom),
-                });
+                self.pages.push(LayoutPage::new(
+                    0.0,
+                    self.margins.top + self.margins.bottom,
+                    Size::new(self.page_width(), self.margins.top + self.margins.bottom),
+                ));
             }
         } else if !self.paginated
             && let Some(page) = self.pages.last_mut()
         {
             page.y_end += self.margins.bottom;
+            page.content_y_end += self.margins.bottom;
             page.size.height += self.margins.bottom;
         }
         self.pages
@@ -497,7 +509,6 @@ fn place_node_at(
                 content: LayoutContent::Box(LayoutBox {
                     node_id: b.node_id,
                     style: b.style.clone(),
-                    table_info: b.table_info.clone(),
                     children,
                     nav: if b.style.monolithic {
                         Some(NavUnit {
@@ -595,7 +606,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children,
                 page_break_policy: PageBreakPolicy::Auto,
             }),
@@ -630,7 +640,9 @@ mod tests {
         max_h: f32,
         margin: f32,
     ) -> (LayoutTree, Vec<LayoutPage>) {
-        Paginator::continuous(vw, max_h, EdgeInsets::all(margin)).paginate(into_tree(root))
+        let paginated =
+            Paginator::continuous(vw, max_h, EdgeInsets::all(margin)).paginate(into_tree(root));
+        (paginated.tree, paginated.pages)
     }
 
     fn paginate_p(
@@ -639,7 +651,8 @@ mod tests {
         ph: f32,
         margins: EdgeInsets,
     ) -> (LayoutTree, Vec<LayoutPage>) {
-        Paginator::paginated(pw, ph, margins).paginate(into_tree(root))
+        let paginated = Paginator::paginated(pw, ph, margins).paginate(into_tree(root));
+        (paginated.tree, paginated.pages)
     }
 
     #[test]
@@ -667,7 +680,7 @@ mod tests {
     #[test]
     fn root_box_positioned_at_margin() {
         let root = make_box(vec![make_line(20.0)]);
-        let (tree, _) = Paginator::continuous(
+        let paginated = Paginator::continuous(
             1024.0,
             1024.0,
             EdgeInsets {
@@ -678,6 +691,7 @@ mod tests {
             },
         )
         .paginate(into_tree(root));
+        let tree = paginated.tree;
         // Root box y should be at margin_top
         assert_eq!(tree.root.rect.y, 10.0);
         // Root box x should be at margin_left
@@ -687,7 +701,7 @@ mod tests {
     #[test]
     fn line_inherits_current_x() {
         let root = make_box(vec![make_line(20.0)]);
-        let (tree, _) = Paginator::continuous(
+        let paginated = Paginator::continuous(
             1024.0,
             1024.0,
             EdgeInsets {
@@ -698,6 +712,7 @@ mod tests {
             },
         )
         .paginate(into_tree(root));
+        let tree = paginated.tree;
         // The line inside the box should have x = margin_left (box has no border/padding)
         if let LayoutContent::Box(b) = &tree.root.content {
             assert_eq!(b.children[0].rect.x, 25.0);
@@ -721,7 +736,7 @@ mod tests {
     #[test]
     fn spacing_advances_y() {
         let root = make_box(vec![make_spacing(10.0), make_line(20.0)]);
-        let (tree, _) = Paginator::continuous(
+        let paginated = Paginator::continuous(
             1024.0,
             1024.0,
             EdgeInsets {
@@ -732,6 +747,7 @@ mod tests {
             },
         )
         .paginate(into_tree(root));
+        let tree = paginated.tree;
         if let LayoutContent::Box(b) = &tree.root.content {
             // spacing at y=10 (margin_top), height=10
             assert_eq!(b.children[0].rect.y, 10.0);
@@ -774,7 +790,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children: vec![make_line(20.0)],
                 page_break_policy: PageBreakPolicy::Auto,
             }),
@@ -795,13 +810,12 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children: vec![inner],
                 page_break_policy: PageBreakPolicy::Auto,
             }),
         };
 
-        let (tree, _) = Paginator::continuous(
+        let paginated = Paginator::continuous(
             1024.0,
             1024.0,
             EdgeInsets {
@@ -812,6 +826,7 @@ mod tests {
             },
         )
         .paginate(into_tree(root));
+        let tree = paginated.tree;
 
         if let LayoutContent::Box(outer) = &tree.root.content {
             let inner_node = &outer.children[0];
@@ -906,8 +921,10 @@ mod tests {
         let mut measurer = Measurer::new_test();
         let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &ViewState::new());
 
-        let (tree, pages) =
+        let paginated =
             Paginator::paginated(400.0, 130.0, EdgeInsets::all(10.0)).paginate(measured_tree(root));
+        let tree = paginated.tree;
+        let pages = paginated.pages;
 
         assert_eq!(pages.len(), 2);
         let table = find_node(&tree.root, t1).expect("table box in layout");
@@ -1021,8 +1038,10 @@ mod tests {
         let vs = ViewState::new();
         let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
 
-        let (tree, pages) = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
+        let paginated = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
             .paginate(measured_tree(root));
+        let tree = paginated.tree;
+        let pages = paginated.pages;
 
         assert_eq!(
             pages.len(),
@@ -1047,8 +1066,10 @@ mod tests {
         let vs = ViewState::new();
         let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
 
-        let (tree, pages) = Paginator::continuous(400.0, 1024.0, EdgeInsets::all(10.0))
+        let paginated = Paginator::continuous(400.0, 1024.0, EdgeInsets::all(10.0))
             .paginate(measured_tree(root));
+        let tree = paginated.tree;
+        let pages = paginated.pages;
 
         assert_eq!(
             pages.len(),
@@ -1079,8 +1100,10 @@ mod tests {
         let vs = ViewState::new();
         let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
 
-        let (tree, pages) = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
+        let paginated = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
             .paginate(measured_tree(root));
+        let tree = paginated.tree;
+        let pages = paginated.pages;
 
         assert_eq!(
             pages.len(),
@@ -1129,8 +1152,10 @@ mod tests {
         let vs = ViewState::new();
         let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
 
-        let (tree, pages) = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
+        let paginated = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
             .paginate(measured_tree(root));
+        let tree = paginated.tree;
+        let pages = paginated.pages;
 
         assert_eq!(
             pages.len(),
@@ -1202,8 +1227,8 @@ mod tests {
         let mut measurer = Measurer::new_test();
         let root = measurer.measure(&doc, NodeId::ROOT, 500.0, &ViewState::new());
         let tree = into_tree(Arc::unwrap_or_clone(root));
-        let (layout, _) =
-            Paginator::continuous(540.0, 1024.0, EdgeInsets::all(20.0)).paginate(tree);
+        let paginated = Paginator::continuous(540.0, 1024.0, EdgeInsets::all(20.0)).paginate(tree);
+        let layout = paginated.tree;
 
         let table = find_node(&layout.root, t1).expect("table box in layout");
         let rows = box_children(table);

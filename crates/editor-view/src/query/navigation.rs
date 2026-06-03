@@ -832,7 +832,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children,
                 nav: None,
             }),
@@ -2642,7 +2641,7 @@ mod tests {
     fn word_forward_stops_at_tab_boundary() {
         use crate::view::View;
         use editor_macros::doc;
-        let (doc, _p1, t1, t2) =
+        let (doc, _p1, t1, _t2) =
             doc! { root { p1: paragraph { t1: text("foo") tab {} t2: text("bar") } } };
         let mut view = View::new_test();
         view.layout(&doc);
@@ -2666,7 +2665,7 @@ mod tests {
     fn word_backward_stops_at_tab_boundary() {
         use crate::view::View;
         use editor_macros::doc;
-        let (doc, _p1, t1, t2) =
+        let (doc, _p1, _t1, t2) =
             doc! { root { p1: paragraph { t1: text("foo") tab {} t2: text("bar") } } };
         let mut view = View::new_test();
         view.layout(&doc);

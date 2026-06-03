@@ -88,7 +88,7 @@
       <ExternalElement {element} />
     {/each}
 
-    {#each tableOverlays as overlay (overlay.table_id)}
+    {#each tableOverlays as overlay (`${overlay.table_id}-${overlay.start_row_index}`)}
       <TableOverlay {overlay} />
     {/each}
 

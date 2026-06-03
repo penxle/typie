@@ -1,13 +1,9 @@
-use editor_common::Rect;
-use editor_model::NodeId;
+use crate::page_fragment::{
+    PageFragmentAtom, PageFragmentBox, PageFragmentContent, PageFragmentDecoration,
+    PageFragmentLine, PageFragmentNode, PageFragmentTree,
+};
 
-use crate::TableLayoutInfo;
-use crate::glyph_run::{GlyphRun, RubyAnnotation};
-use crate::page::LayoutPage;
-use crate::paginate::*;
-use crate::style::{BoxStyle, DecorationData};
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Edges<T> {
     pub top: T,
     pub bottom: T,
@@ -23,110 +19,53 @@ pub struct LineMetrics {
 }
 
 pub trait PageVisitor {
-    fn box_enter(
-        &mut self,
-        node_id: NodeId,
-        local_rect: Rect,
-        style: &BoxStyle,
-        edges: Edges<bool>,
-        table_info: Option<&TableLayoutInfo>,
-    );
-    fn box_exit(&mut self);
-    fn line(
-        &mut self,
-        node_id: NodeId,
-        local_rect: Rect,
-        metrics: LineMetrics,
-        glyph_runs: &[GlyphRun],
-        ruby_annotations: &[RubyAnnotation],
-    );
-    fn atom(&mut self, node_id: NodeId, local_rect: Rect);
-    fn decoration(&mut self, local_rect: Rect, data: &DecorationData);
+    fn box_enter(&mut self, node: &PageFragmentNode, fragment: &PageFragmentBox);
+    fn box_exit(&mut self, node: &PageFragmentNode, fragment: &PageFragmentBox);
+    fn line(&mut self, node: &PageFragmentNode, fragment: &PageFragmentLine);
+    fn atom(&mut self, node: &PageFragmentNode, fragment: &PageFragmentAtom);
+    fn decoration(&mut self, decoration: &PageFragmentDecoration);
 }
 
-pub fn visit_page(tree: &LayoutTree, page: &LayoutPage, visitor: &mut impl PageVisitor) {
-    visit_node(&tree.root, page, visitor);
-}
-
-fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisitor) {
-    let node_top = node.rect.y;
-    let node_bottom = node.rect.y + node.rect.height;
-
-    if node_bottom <= page.y_start || node_top >= page.y_end {
-        return;
+pub fn visit_page(tree: &PageFragmentTree, visitor: &mut impl PageVisitor) {
+    if let Some(root) = &tree.root {
+        visit_node(root, visitor);
     }
+}
 
-    let local_rect = Rect::from_xywh(
-        node.rect.x,
-        node.rect.y - page.y_start,
-        node.rect.width,
-        node.rect.height,
-    );
-
+fn visit_node(node: &PageFragmentNode, visitor: &mut impl PageVisitor) {
     match &node.content {
-        LayoutContent::Box(b) => {
-            // A border edge is visible only if it falls within the current page's y-range
-            let edges = Edges {
-                top: node_top >= page.y_start,
-                bottom: node_bottom <= page.y_end,
-                left: true,
-                right: true,
-            };
+        PageFragmentContent::Box(b) => {
+            visitor.box_enter(node, b);
 
-            visitor.box_enter(
-                b.node_id,
-                local_rect,
-                &b.style,
-                edges,
-                b.table_info.as_deref(),
-            );
-
-            for dec in &b.style.decorations {
-                let dec_abs_y = node_top + dec.rect.y;
-                let dec_abs_bottom = dec_abs_y + dec.rect.height;
-                if dec_abs_bottom > page.y_start && dec_abs_y < page.y_end {
-                    let dec_local = Rect::from_xywh(
-                        node.rect.x + dec.rect.x,
-                        dec_abs_y - page.y_start,
-                        dec.rect.width,
-                        dec.rect.height,
-                    );
-                    visitor.decoration(dec_local, &dec.data);
-                }
+            for dec in &b.decorations {
+                visitor.decoration(dec);
             }
 
             for child in &b.children {
-                visit_node(child, page, visitor);
+                visit_node(child, visitor);
             }
 
-            visitor.box_exit();
+            visitor.box_exit(node, b);
         }
-        LayoutContent::Line(l) => {
-            let metrics = LineMetrics {
-                baseline: l.baseline,
-                ascent: l.ascent,
-                descent: l.descent,
-            };
-            visitor.line(
-                l.node_id,
-                local_rect,
-                metrics,
-                &l.glyph_runs,
-                &l.ruby_annotations,
-            );
+        PageFragmentContent::Line(l) => {
+            visitor.line(node, l);
         }
-        LayoutContent::Atom(a) => {
-            visitor.atom(a.node_id, local_rect);
+        PageFragmentContent::Atom(a) => {
+            visitor.atom(node, a);
         }
-        LayoutContent::Spacing(_) => {}
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::page::LayoutPage;
+    use crate::page_fragment::build_page_fragment_tree;
+    use crate::paginate::{
+        LayoutBox, LayoutContent, LayoutLine, LayoutNode, LayoutTree, SpacingKind,
+    };
     use crate::style::Alignment;
-    use editor_common::{EdgeInsets, Size};
+    use editor_common::{EdgeInsets, Rect, Size};
     use editor_model::NodeId;
 
     use crate::style::*;
@@ -138,6 +77,7 @@ mod tests {
         atom_count: usize,
         decoration_count: usize,
         last_edges: Option<Edges<bool>>,
+        box_local_rects: Vec<Rect>,
         line_local_rects: Vec<Rect>,
         last_line_metrics: Option<LineMetrics>,
     }
@@ -151,6 +91,7 @@ mod tests {
                 atom_count: 0,
                 decoration_count: 0,
                 last_edges: None,
+                box_local_rects: vec![],
                 line_local_rects: vec![],
                 last_line_metrics: None,
             }
@@ -158,42 +99,38 @@ mod tests {
     }
 
     impl PageVisitor for MockVisitor {
-        fn box_enter(
-            &mut self,
-            _: NodeId,
-            _: Rect,
-            _: &BoxStyle,
-            edges: Edges<bool>,
-            _: Option<&TableLayoutInfo>,
-        ) {
+        fn box_enter(&mut self, node: &PageFragmentNode, fragment: &PageFragmentBox) {
             self.box_enter_count += 1;
-            self.last_edges = Some(edges);
+            self.last_edges = Some(fragment.edges);
+            self.box_local_rects.push(node.rect);
         }
 
-        fn box_exit(&mut self) {
+        fn box_exit(&mut self, _: &PageFragmentNode, _: &PageFragmentBox) {
             self.box_exit_count += 1;
         }
 
-        fn line(
-            &mut self,
-            _: NodeId,
-            local_rect: Rect,
-            metrics: LineMetrics,
-            _: &[GlyphRun],
-            _: &[RubyAnnotation],
-        ) {
+        fn line(&mut self, node: &PageFragmentNode, fragment: &PageFragmentLine) {
             self.line_count += 1;
-            self.line_local_rects.push(local_rect);
-            self.last_line_metrics = Some(metrics);
+            self.line_local_rects.push(node.rect);
+            self.last_line_metrics = Some(LineMetrics {
+                baseline: fragment.baseline,
+                ascent: fragment.ascent,
+                descent: fragment.descent,
+            });
         }
 
-        fn atom(&mut self, _: NodeId, _: Rect) {
+        fn atom(&mut self, _: &PageFragmentNode, _: &PageFragmentAtom) {
             self.atom_count += 1;
         }
 
-        fn decoration(&mut self, _: Rect, _: &DecorationData) {
+        fn decoration(&mut self, _: &PageFragmentDecoration) {
             self.decoration_count += 1;
         }
+    }
+
+    fn visit_layout_page(tree: &LayoutTree, page: &LayoutPage, visitor: &mut impl PageVisitor) {
+        let fragment_tree = build_page_fragment_tree(tree, 0, page);
+        visit_page(&fragment_tree, visitor);
     }
 
     fn make_layout_line(node_id: NodeId, y: f32, height: f32) -> LayoutNode {
@@ -235,7 +172,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children,
                 nav: None,
             }),
@@ -259,13 +195,9 @@ mod tests {
                 ],
             ),
         };
-        let page = LayoutPage {
-            y_start: 50.0,
-            y_end: 150.0,
-            size: Size::new(440.0, 100.0),
-        };
+        let page = LayoutPage::new(50.0, 150.0, Size::new(440.0, 100.0));
         let mut visitor = MockVisitor::new();
-        visit_page(&tree, &page, &mut visitor);
+        visit_layout_page(&tree, &page, &mut visitor);
         assert_eq!(visitor.line_count, 2); // id2 and id3
     }
 
@@ -280,13 +212,9 @@ mod tests {
                 vec![make_layout_line(id, 100.0, 20.0)],
             ),
         };
-        let page = LayoutPage {
-            y_start: 80.0,
-            y_end: 180.0,
-            size: Size::new(440.0, 100.0),
-        };
+        let page = LayoutPage::new(80.0, 180.0, Size::new(440.0, 100.0));
         let mut visitor = MockVisitor::new();
-        visit_page(&tree, &page, &mut visitor);
+        visit_layout_page(&tree, &page, &mut visitor);
         assert_eq!(visitor.line_count, 1);
         // line absolute y=100, page y_start=80 -> local y = 20
         assert!((visitor.line_local_rects[0].y - 20.0).abs() < 0.01);
@@ -304,16 +232,35 @@ mod tests {
                 vec![make_layout_line(NodeId::new(), 120.0, 20.0)],
             ),
         };
-        let page = LayoutPage {
-            y_start: 100.0,
-            y_end: 200.0,
-            size: Size::new(440.0, 100.0),
-        };
+        let page = LayoutPage::new(100.0, 200.0, Size::new(440.0, 100.0));
         let mut visitor = MockVisitor::new();
-        visit_page(&tree, &page, &mut visitor);
+        visit_layout_page(&tree, &page, &mut visitor);
         let edges = visitor.last_edges.unwrap();
         assert!(!edges.top); // box starts before page
         assert!(!edges.bottom); // box ends after page
+    }
+
+    #[test]
+    fn box_rects_are_visible_content_fragments() {
+        // Physical page is [0, 120], but only [10, 110] is content.
+        let tree = LayoutTree {
+            root: make_layout_box(
+                NodeId::ROOT,
+                5.0,
+                110.0,
+                vec![make_layout_line(NodeId::new(), 20.0, 20.0)],
+            ),
+        };
+        let page = LayoutPage::with_content(0.0, 120.0, 10.0, 110.0, Size::new(440.0, 120.0));
+        let mut visitor = MockVisitor::new();
+        visit_layout_page(&tree, &page, &mut visitor);
+
+        let rect = visitor.box_local_rects[0];
+        assert_eq!(rect.y, 10.0);
+        assert_eq!(rect.height, 100.0);
+        let edges = visitor.last_edges.unwrap();
+        assert!(!edges.top);
+        assert!(!edges.bottom);
     }
 
     #[test]
@@ -333,13 +280,9 @@ mod tests {
                 ],
             ),
         };
-        let page = LayoutPage {
-            y_start: 0.0,
-            y_end: 100.0,
-            size: Size::new(440.0, 100.0),
-        };
+        let page = LayoutPage::new(0.0, 100.0, Size::new(440.0, 100.0));
         let mut visitor = MockVisitor::new();
-        visit_page(&tree, &page, &mut visitor);
+        visit_layout_page(&tree, &page, &mut visitor);
         assert_eq!(visitor.line_count, 2); // spacing skipped
     }
 
@@ -354,13 +297,9 @@ mod tests {
                 vec![make_layout_line(id, 100.0, 20.0)],
             ),
         };
-        let page = LayoutPage {
-            y_start: 80.0,
-            y_end: 180.0,
-            size: Size::new(440.0, 100.0),
-        };
+        let page = LayoutPage::new(80.0, 180.0, Size::new(440.0, 100.0));
         let mut visitor = MockVisitor::new();
-        visit_page(&tree, &page, &mut visitor);
+        visit_layout_page(&tree, &page, &mut visitor);
         let m = visitor.last_line_metrics.unwrap();
         assert!((m.baseline - 16.0).abs() < 0.01); // 20 * 0.8
         assert!((m.ascent - 14.0).abs() < 0.01); // 20 * 0.7

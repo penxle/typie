@@ -5,7 +5,6 @@ use editor_common::EdgeInsets;
 use crate::style::Alignment as LayoutAlignment;
 use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
 
-use crate::TableLayoutInfo;
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
@@ -164,7 +163,6 @@ pub fn measure_table(
                     decorations: vec![],
                     monolithic: node.spec().monolithic,
                 },
-                table_info: None,
                 children: vec![],
                 page_break_policy: PageBreakPolicy::Auto,
             }),
@@ -255,7 +253,6 @@ pub fn measure_table(
                     decorations: vec![],
                     monolithic: row.spec().monolithic,
                 },
-                table_info: None,
                 children: row_children,
                 page_break_policy: PageBreakPolicy::Avoid,
             }),
@@ -265,12 +262,12 @@ pub fn measure_table(
     }
 
     let row_count = row_measurements.len();
-    let table_row_inner_heights: Vec<f32> = row_measurements
+    let collapsed_row_content_height: f32 = row_measurements
         .iter()
         .map(|rm| (rm.height - 2.0 * TABLE_BORDER_WIDTH).max(0.0))
-        .collect();
-    let row_inner_heights_sum: f32 = table_row_inner_heights.iter().sum();
-    let collapsed_height = (row_count + 1) as f32 * TABLE_BORDER_WIDTH + row_inner_heights_sum;
+        .sum();
+    let collapsed_height =
+        (row_count + 1) as f32 * TABLE_BORDER_WIDTH + collapsed_row_content_height;
 
     let align = node
         .modifiers_with_style()
@@ -301,10 +298,6 @@ pub fn measure_table(
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
-            table_info: Some(Box::new(TableLayoutInfo {
-                col_inner_widths: col_widths,
-                row_inner_heights: table_row_inner_heights,
-            })),
             children: row_measurements,
             page_break_policy: PageBreakPolicy::Auto,
         }),
@@ -315,6 +308,13 @@ pub fn measure_table(
 mod tests {
     use super::*;
     use editor_macros::doc;
+
+    fn box_children(node: &MeasuredNode) -> &[Arc<MeasuredNode>] {
+        let MeasuredContent::Box(ref b) = node.content else {
+            panic!()
+        };
+        &b.children
+    }
 
     #[test]
     fn table_cell_has_padding_border_scope() {
@@ -471,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn table_col_inner_widths_len_matches_col_count() {
+    fn table_measured_cell_widths_len_matches_col_count() {
         let (doc, t1) = doc! {
             root {
                 t1: table {
@@ -488,15 +488,14 @@ mod tests {
         let mut measurer = Measurer::new_test();
         let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
 
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-        let info = b.table_info.as_ref().expect("table_info must be set");
-        assert_eq!(info.col_inner_widths.len(), 3);
+        let rows = box_children(&result);
+        let first_row = rows.first().expect("table must have a row");
+        let cells = box_children(first_row.as_ref());
+        assert_eq!(cells.len(), 3);
     }
 
     #[test]
-    fn table_row_inner_heights_len_matches_row_count() {
+    fn table_measured_rows_len_matches_row_count() {
         let (doc, t1) = doc! {
             root {
                 t1: table {
@@ -511,15 +510,12 @@ mod tests {
         let mut measurer = Measurer::new_test();
         let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
 
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-        let info = b.table_info.as_ref().expect("table_info must be set");
-        assert_eq!(info.row_inner_heights.len(), 3);
+        let rows = box_children(&result);
+        assert_eq!(rows.len(), 3);
     }
 
     #[test]
-    fn table_col_inner_widths_sum_equals_available_width() {
+    fn table_measured_cell_inner_widths_sum_equals_available_width() {
         let (doc, t1) = doc! {
             root {
                 t1: table {
@@ -535,14 +531,16 @@ mod tests {
         let mut measurer = Measurer::new_test();
         let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
 
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-        let info = b.table_info.as_ref().expect("table_info must be set");
-        let col_count = info.col_inner_widths.len();
+        let rows = box_children(&result);
+        let first_row = rows.first().expect("table must have a row");
+        let cells = box_children(first_row.as_ref());
+        let col_count = cells.len();
         assert_eq!(col_count, 2);
         let expected_available = result.width - (col_count + 1) as f32 * TABLE_BORDER_WIDTH;
-        let actual_sum: f32 = info.col_inner_widths.iter().sum();
+        let actual_sum: f32 = cells
+            .iter()
+            .map(|cell| (cell.width - 2.0 * TABLE_BORDER_WIDTH).max(0.0))
+            .sum();
         assert!((actual_sum - expected_available).abs() < 0.01);
     }
 }

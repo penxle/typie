@@ -300,7 +300,7 @@ mod tests {
             root: std::sync::Arc::unwrap_or_clone(root),
         };
         let paginator = Paginator::continuous(440.0, 1024.0, EdgeInsets::all(20.0));
-        let (layout, _) = paginator.paginate(tree);
+        let layout = paginator.paginate(tree).tree;
 
         let LayoutContent::Box(root_box) = &layout.root.content else {
             panic!("expected box");

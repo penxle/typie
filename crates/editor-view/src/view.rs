@@ -11,6 +11,7 @@ use crate::measure::text::resolve::resolve_text_style;
 use crate::measure::text::strut::compute_strut;
 use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
+use crate::page_fragment::PageFragmentTree;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
 use crate::query::{CursorMetrics, PointerStyle, SelectionEndpoints, SelectionRect};
@@ -32,6 +33,7 @@ pub struct View {
 struct LayoutResult {
     tree: LayoutTree,
     pages: Vec<LayoutPage>,
+    page_fragments: Vec<PageFragmentTree>,
     content_width: f32,
 }
 
@@ -191,20 +193,21 @@ impl View {
             root: Arc::unwrap_or_clone(root),
         };
 
-        let (tree, pages) = paginator.paginate(measured_tree);
+        let paginated = paginator.paginate(measured_tree);
 
         self.layout = Some(LayoutResult {
-            tree,
-            pages,
+            tree: paginated.tree,
+            pages: paginated.pages,
+            page_fragments: paginated.page_fragments,
             content_width,
         });
     }
 
     pub fn visit_page(&self, page_idx: usize, visitor: &mut impl query::PageVisitor) {
         if let Some(ref result) = self.layout
-            && let Some(page) = result.pages.get(page_idx)
+            && let Some(fragment_tree) = result.page_fragments.get(page_idx)
         {
-            query::visit_page(&result.tree, page, visitor);
+            query::visit_page(fragment_tree, visitor);
         }
     }
 
@@ -486,8 +489,7 @@ impl View {
             return vec![];
         };
         crate::table_overlay::table_overlays(
-            &result.tree,
-            &result.pages,
+            &result.page_fragments,
             doc,
             selection,
             result.content_width,

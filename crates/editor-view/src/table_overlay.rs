@@ -1,6 +1,6 @@
 use editor_common::Rect;
 use editor_macros::ffi;
-use editor_model::{Alignment, Doc, Modifier, Node, NodeId, TableBorderStyle};
+use editor_model::{Alignment, Doc, Modifier, Node, NodeId, TableBorderStyle, TableNode};
 
 fn cell_background_color(doc: &Doc, cell_id: NodeId) -> Option<String> {
     doc.node(cell_id)?
@@ -13,8 +13,7 @@ fn cell_background_color(doc: &Doc, cell_id: NodeId) -> Option<String> {
 use editor_state::{Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
 
-use crate::page::LayoutPage;
-use crate::paginate::{LayoutContent, LayoutNode, LayoutTree};
+use crate::page_fragment::{PageFragmentBox, PageFragmentNode, PageFragmentTree};
 
 const TABLE_BORDER_WIDTH: f32 = 1.0;
 
@@ -24,6 +23,8 @@ const TABLE_BORDER_WIDTH: f32 = 1.0;
 pub struct TableOverlay {
     pub table_id: NodeId,
     pub page_idx: usize,
+    pub start_row_index: usize,
+    pub total_rows: usize,
     pub bounds: Rect,
     pub border_style: TableBorderStyle,
     pub align: Alignment,
@@ -47,95 +48,96 @@ pub struct TableOverlay {
 }
 
 pub(crate) fn table_overlays(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    page_fragments: &[PageFragmentTree],
     doc: &Doc,
     selection: Option<&Selection>,
     content_width: f32,
 ) -> Vec<TableOverlay> {
     let resolved = selection.and_then(|s| s.resolve(doc));
     let mut overlays = Vec::new();
-    collect_from_node(
-        &tree.root,
-        pages,
-        doc,
-        resolved.as_ref(),
-        content_width,
-        &mut overlays,
-    );
+    for fragment_tree in page_fragments {
+        if let Some(root) = &fragment_tree.root {
+            collect_table_overlays(
+                root,
+                fragment_tree.page_idx,
+                doc,
+                resolved.as_ref(),
+                content_width,
+                &mut overlays,
+            );
+        }
+    }
     overlays
 }
 
-fn collect_from_node(
-    node: &LayoutNode,
-    pages: &[LayoutPage],
+fn collect_table_overlays(
+    node: &PageFragmentNode,
+    page_idx: usize,
     doc: &Doc,
     selection: Option<&ResolvedSelection<'_>>,
     content_width: f32,
-    out: &mut Vec<TableOverlay>,
+    overlays: &mut Vec<TableOverlay>,
 ) {
-    let LayoutContent::Box(b) = &node.content else {
+    let Some(fragment_box) = node.as_box() else {
         return;
     };
 
-    if let Some(doc_node) = doc.node(b.node_id) {
-        if let Node::Table(table) = doc_node.node() {
-            if let Some(page_idx) = find_page_idx(node, pages) {
-                let page = &pages[page_idx];
-                let overlay = build_overlay(
-                    node,
-                    b.node_id,
-                    &doc_node,
-                    table,
-                    page_idx,
-                    page,
-                    doc,
-                    selection,
-                    content_width,
-                );
-                out.push(overlay);
-                // Don't recurse into table children — no nested tables
-                return;
+    match doc.node(fragment_box.node_id).map(|n| n.node()) {
+        Some(Node::Table(table_node)) => {
+            if let Some(overlay) = build_table_overlay(
+                node.rect,
+                fragment_box,
+                table_node,
+                page_idx,
+                doc,
+                selection,
+                content_width,
+            ) {
+                overlays.push(overlay);
+            }
+        }
+        _ => {
+            for child in &fragment_box.children {
+                collect_table_overlays(child, page_idx, doc, selection, content_width, overlays);
             }
         }
     }
-
-    for child in &b.children {
-        collect_from_node(child, pages, doc, selection, content_width, out);
-    }
 }
 
-fn find_page_idx(node: &LayoutNode, pages: &[LayoutPage]) -> Option<usize> {
-    let center_y = node.rect.y + node.rect.height / 2.0;
-    pages
-        .iter()
-        .position(|p| center_y >= p.y_start && center_y < p.y_end)
-}
-
-fn build_overlay<'a>(
-    node: &LayoutNode,
-    table_id: NodeId,
-    doc_node: &editor_model::NodeRef<'a>,
-    table: &editor_model::TableNode,
+fn build_table_overlay(
+    table_rect: Rect,
+    table_box: &PageFragmentBox,
+    table_node: &TableNode,
     page_idx: usize,
-    page: &LayoutPage,
-    doc: &'a Doc,
+    doc: &Doc,
     selection: Option<&ResolvedSelection<'_>>,
     content_width: f32,
-) -> TableOverlay {
-    let LayoutContent::Box(table_box) = &node.content else {
-        unreachable!("table node must be a Box")
-    };
+) -> Option<TableOverlay> {
+    let table_id = table_box.node_id;
+    let doc_node = doc.node(table_id)?;
+    let mut rows = visible_rows(table_box, doc);
+    rows.sort_by_key(|row| row.index);
+    for row in &mut rows {
+        row.cells.sort_by_key(|cell| cell.index);
+    }
+
+    let start_row_index = rows.first()?.index;
+    let fragment_top = rows.first()?.rect.y;
+    let fragment_bottom = rows.last()?.rect.bottom();
+    let total_rows = doc_node
+        .children()
+        .filter(|row| matches!(row.node(), Node::TableRow(_)))
+        .count();
 
     let bounds = Rect::from_xywh(
-        node.rect.x,
-        node.rect.y - page.y_start,
-        node.rect.width,
-        node.rect.height,
+        table_rect.x,
+        fragment_top,
+        table_rect.width,
+        fragment_bottom - fragment_top,
     );
 
-    let proportion = *table.proportion.get() as f32 / 100.0;
-    let border_style = *table.border_style.get();
+    let proportion = *table_node.proportion.get() as f32 / 100.0;
+    let border_style = *table_node.border_style.get();
     let align = doc_node
         .modifiers()
         .find_map(|m| {
@@ -154,48 +156,23 @@ fn build_overlay<'a>(
     let mut row_background_colors: Vec<Option<String>> = Vec::new();
     let mut col_background_colors: Vec<Option<String>> = Vec::new();
 
-    for (row_idx, row_node) in table_box
-        .children
-        .iter()
-        .filter(|n| matches!(n.content, LayoutContent::Box(_)))
-        .enumerate()
-    {
-        let row_height = (row_node.rect.height - 2.0 * TABLE_BORDER_WIDTH).max(0.0);
+    for row in &rows {
+        let row_height = (row.rect.height - 2.0 * TABLE_BORDER_WIDTH).max(0.0);
         row_heights.push(row_height);
-        row_positions.push(row_node.rect.bottom() - node.rect.y);
+        row_positions.push(row.rect.bottom() - fragment_top);
 
-        if let LayoutContent::Box(row_box) = &row_node.content {
-            let first_cell_id = row_box
-                .children
-                .iter()
-                .find(|n| matches!(n.content, LayoutContent::Box(_)))
-                .and_then(|n| {
-                    if let LayoutContent::Box(b) = &n.content {
-                        Some(b.node_id)
-                    } else {
-                        None
-                    }
-                });
-            let row_bg = first_cell_id.and_then(|id| cell_background_color(doc, id));
-            row_background_colors.push(row_bg);
+        let row_bg = row
+            .cells
+            .first()
+            .and_then(|cell| cell_background_color(doc, cell.node_id));
+        row_background_colors.push(row_bg);
 
-            if row_idx == 0 {
-                for cell_node in row_box
-                    .children
-                    .iter()
-                    .filter(|n| matches!(n.content, LayoutContent::Box(_)))
-                {
-                    let col_width = (cell_node.rect.width - 2.0 * TABLE_BORDER_WIDTH).max(0.0);
-                    col_widths_as_px.push(col_width);
-                    col_positions.push(cell_node.rect.right() - node.rect.x);
-
-                    let cell_bg = if let LayoutContent::Box(cb) = &cell_node.content {
-                        cell_background_color(doc, cb.node_id)
-                    } else {
-                        None
-                    };
-                    col_background_colors.push(cell_bg);
-                }
+        if col_widths_as_px.is_empty() {
+            for cell in &row.cells {
+                let col_width = (cell.rect.width - 2.0 * TABLE_BORDER_WIDTH).max(0.0);
+                col_widths_as_px.push(col_width);
+                col_positions.push(cell.rect.right() - table_rect.x);
+                col_background_colors.push(cell_background_color(doc, cell.node_id));
             }
         }
     }
@@ -208,7 +185,12 @@ fn build_overlay<'a>(
         .unwrap_or(false);
 
     let focused_row_index = if is_focused {
-        selection.and_then(|sel| focused_row(sel.anchor().node_id(), doc, table_id))
+        selection
+            .and_then(|sel| focused_row(sel.anchor().node_id(), doc, table_id))
+            .and_then(|row_idx| {
+                (row_idx >= start_row_index && row_idx < start_row_index + row_heights.len())
+                    .then_some(row_idx - start_row_index)
+            })
     } else {
         None
     };
@@ -227,7 +209,7 @@ fn build_overlay<'a>(
     let is_cross_boundary = cell_rect.is_none()
         && selection.is_some_and(|sel| is_table_boundary_selection(sel, doc, table_id));
 
-    let is_cell_selection = cell_rect.is_some() || is_cross_boundary;
+    let is_table_cell_selection = cell_rect.is_some() || is_cross_boundary;
 
     let cell_selection_background_color = cell_rect.as_ref().and_then(|rect| {
         let mut common: Option<Option<String>> = None;
@@ -243,8 +225,8 @@ fn build_overlay<'a>(
     });
 
     let (
-        cell_selection_row_start,
-        cell_selection_row_end,
+        global_cell_selection_row_start,
+        global_cell_selection_row_end,
         cell_selection_col_start,
         cell_selection_col_end,
     ) = if is_cross_boundary {
@@ -277,9 +259,29 @@ fn build_overlay<'a>(
         )
     };
 
-    TableOverlay {
+    let visible_row_start = start_row_index;
+    let visible_row_end = start_row_index + row_heights.len() - 1;
+    let (cell_selection_row_start, cell_selection_row_end) = match (
+        global_cell_selection_row_start,
+        global_cell_selection_row_end,
+    ) {
+        (Some(row_start), Some(row_end))
+            if row_start <= visible_row_end && row_end >= visible_row_start =>
+        {
+            (
+                Some(row_start.max(visible_row_start) - start_row_index),
+                Some(row_end.min(visible_row_end) - start_row_index),
+            )
+        }
+        _ => (None, None),
+    };
+    let is_cell_selection = is_table_cell_selection && cell_selection_row_start.is_some();
+
+    Some(TableOverlay {
         table_id,
         page_idx,
+        start_row_index,
+        total_rows,
         bounds,
         border_style,
         align,
@@ -300,7 +302,55 @@ fn build_overlay<'a>(
         cell_selection_row_end,
         cell_selection_col_start,
         cell_selection_col_end,
-    }
+    })
+}
+
+fn visible_rows(table_box: &PageFragmentBox, doc: &Doc) -> Vec<OverlayRow> {
+    table_box
+        .children
+        .iter()
+        .filter_map(|row_node| {
+            let row_box = row_node.as_box()?;
+            let row_doc = doc.node(row_box.node_id)?;
+            if !matches!(row_doc.node(), Node::TableRow(_)) {
+                return None;
+            }
+
+            let cells = row_box
+                .children
+                .iter()
+                .filter_map(|cell_node| {
+                    let cell_box = cell_node.as_box()?;
+                    let cell_doc = doc.node(cell_box.node_id)?;
+                    matches!(cell_doc.node(), Node::TableCell(_)).then(|| OverlayCell {
+                        index: cell_doc.index().unwrap_or(0),
+                        node_id: cell_box.node_id,
+                        rect: cell_node.rect,
+                    })
+                })
+                .collect();
+
+            Some(OverlayRow {
+                index: row_doc.index().unwrap_or(0),
+                rect: row_node.rect,
+                cells,
+            })
+        })
+        .collect()
+}
+
+#[derive(Debug)]
+struct OverlayCell {
+    index: usize,
+    node_id: NodeId,
+    rect: Rect,
+}
+
+#[derive(Debug)]
+struct OverlayRow {
+    index: usize,
+    rect: Rect,
+    cells: Vec<OverlayCell>,
 }
 
 fn is_table_boundary_selection(sel: &ResolvedSelection<'_>, doc: &Doc, table_id: NodeId) -> bool {
@@ -344,4 +394,60 @@ fn focused_col(node_id: NodeId, doc: &Doc, table_id: NodeId) -> Option<usize> {
     })?;
     let row = cell.parent()?;
     row.children().position(|c| c.id() == cell.id())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::measure::{MeasuredNode, MeasuredTree, Measurer};
+    use crate::paginate::Paginator;
+    use crate::view_state::ViewState;
+    use editor_common::EdgeInsets;
+    use editor_macros::doc;
+    use std::sync::Arc;
+
+    fn measured_tree(root: Arc<MeasuredNode>) -> MeasuredTree {
+        MeasuredTree {
+            root: Arc::unwrap_or_clone(root),
+        }
+    }
+
+    #[test]
+    fn paginated_table_overlay_splits_per_visible_page_content() {
+        let (doc, table_id) = doc! {
+            root {
+                paragraph { text("before") }
+                table_id: table {
+                    table_row { table_cell { paragraph { text("A") } } }
+                    table_row { table_cell { paragraph { text("B") } } }
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &ViewState::new());
+        let paginated =
+            Paginator::paginated(400.0, 130.0, EdgeInsets::all(10.0)).paginate(measured_tree(root));
+
+        let overlays = table_overlays(&paginated.page_fragments, &doc, None, 380.0);
+        let pages = paginated.pages;
+
+        assert_eq!(overlays.len(), 2);
+        assert_eq!(overlays[0].page_idx, 0);
+        assert_eq!(overlays[0].table_id, table_id);
+        assert_eq!(overlays[0].start_row_index, 0);
+        assert_eq!(overlays[0].total_rows, 2);
+        assert_eq!(overlays[1].page_idx, 1);
+        assert_eq!(overlays[1].table_id, table_id);
+        assert_eq!(overlays[1].start_row_index, 1);
+        assert_eq!(overlays[1].total_rows, 2);
+
+        for overlay in &overlays {
+            let page = &pages[overlay.page_idx];
+            let content_top = page.content_y_start - page.y_start;
+            let content_bottom = page.content_y_end - page.y_start;
+            assert!(overlay.bounds.y >= content_top);
+            assert!(overlay.bounds.bottom() <= content_bottom);
+            assert!(overlay.bounds.width > 0.0);
+        }
+    }
 }

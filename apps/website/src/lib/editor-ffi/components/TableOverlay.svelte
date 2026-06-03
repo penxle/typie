@@ -69,8 +69,11 @@
   let addBothButtonHovered = $state(false);
   let tableOverlayRoot = $state<HTMLDivElement | null>(null);
 
+  const startRowIndex = $derived(overlay.start_row_index);
+  const totalRows = $derived(overlay.total_rows);
+  const isLastRowFragment = $derived(startRowIndex + overlay.row_heights.length === totalRows);
   const isLastRowHovered = $derived(
-    (hoveredRowIndex !== null && hoveredRowIndex === overlay.row_heights.length - 1) || addRowButtonHovered || addBothButtonHovered,
+    (hoveredRowIndex !== null && getGlobalRowIndex(hoveredRowIndex) === totalRows - 1) || addRowButtonHovered || addBothButtonHovered,
   );
   const isLastColumnHovered = $derived(
     hoveredColIndex === overlay.col_widths_as_px.length - 1 || addColButtonHovered || addBothButtonHovered,
@@ -152,6 +155,10 @@
 
   function getRowHeight(rowIndex: number): number {
     return overlay.row_heights[rowIndex];
+  }
+
+  function getGlobalRowIndex(rowIndex: number): number {
+    return startRowIndex + rowIndex;
   }
 
   function updateHoveredPointerFromClient(clientX: number, clientY: number): void {
@@ -464,6 +471,7 @@
     {#if activeRowIndex !== null}
       {@const top = getRowTop(activeRowIndex)}
       {@const height = getRowHeight(activeRowIndex)}
+      {@const globalRowIndex = getGlobalRowIndex(activeRowIndex)}
       <div
         style:top="{top}px"
         style:height="{height}px"
@@ -488,7 +496,7 @@
                 op: {
                   type: 'table',
                   id: overlay.table_id,
-                  op: { type: 'select_axis', axis: 'horizontal', index: activeRowIndex ?? undefined },
+                  op: { type: 'select_axis', axis: 'horizontal', index: globalRowIndex },
                 },
               });
             }}
@@ -517,22 +525,22 @@
               </button>
             {/snippet}
             {#snippet children({ close })}
-              {#if activeRowIndex > 0}
+              {#if globalRowIndex > 0}
                 <MenuItem
                   onclick={() => {
                     close();
-                    moveAxis('horizontal', activeRowIndex, activeRowIndex - 1);
+                    moveAxis('horizontal', globalRowIndex, globalRowIndex - 1);
                   }}
                 >
                   <Icon icon={MoveUpIcon} size={14} />
                   <span>위로 이동</span>
                 </MenuItem>
               {/if}
-              {#if activeRowIndex < overlay.row_heights.length - 1}
+              {#if globalRowIndex < totalRows - 1}
                 <MenuItem
                   onclick={() => {
                     close();
-                    moveAxis('horizontal', activeRowIndex, activeRowIndex + 1);
+                    moveAxis('horizontal', globalRowIndex, globalRowIndex + 1);
                   }}
                 >
                   <Icon icon={MoveDownIcon} size={14} />
@@ -542,7 +550,7 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  insertAxis('horizontal', activeRowIndex, true);
+                  insertAxis('horizontal', globalRowIndex, true);
                 }}
               >
                 <Icon icon={ArrowUpToLineIcon} size={14} />
@@ -551,7 +559,7 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  insertAxis('horizontal', activeRowIndex, false);
+                  insertAxis('horizontal', globalRowIndex, false);
                 }}
               >
                 <Icon icon={ArrowDownToLineIcon} size={14} />
@@ -575,7 +583,7 @@
                           op: {
                             type: 'set_axis_background_color',
                             axis: 'horizontal',
-                            index: activeRowIndex,
+                            index: globalRowIndex,
                             color: value === 'none' ? undefined : value,
                           },
                         },
@@ -588,16 +596,16 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  if (overlay.row_heights.length <= 1) {
+                  if (totalRows <= 1) {
                     enqueueTableOp({ type: 'node', op: { type: 'delete', id: overlay.table_id } });
                   } else {
-                    deleteAxis('horizontal', activeRowIndex);
+                    deleteAxis('horizontal', globalRowIndex);
                   }
                 }}
                 variant="danger"
               >
                 <Icon icon={Trash2Icon} size={14} />
-                <span>{overlay.row_heights.length <= 1 ? '테이블 삭제' : '행 삭제'}</span>
+                <span>{totalRows <= 1 ? '테이블 삭제' : '행 삭제'}</span>
               </MenuItem>
             {/snippet}
           </Menu>
@@ -716,79 +724,83 @@
     </button>
   </div>
 
-  <!-- Add row button (bottom edge) -->
-  <div
-    style:left="{overlay.bounds.x}px"
-    style:top="{overlay.bounds.y + overlay.bounds.height}px"
-    style:width="{overlay.bounds.width}px"
-    style:height="{addTrackThickness}px"
-    style:padding-top="{addTrackPadding}px"
-    class={css({ position: 'absolute', pointerEvents: isActive ? 'auto' : 'none' })}
-    onpointerdown={(e) => e.stopPropagation()}
-    onpointerenter={() => (addRowButtonHovered = true)}
-    onpointerleave={() => (addRowButtonHovered = false)}
-    role="presentation"
-  >
-    <button
-      style:height="{addButtonSize}px"
-      class={center({
-        width: 'full',
-        borderRadius: '4px',
-        color: 'text.disabled',
-        backgroundColor: 'surface.muted',
-        display: isLastRowHovered ? 'flex' : 'none',
-        opacity: '90',
-        _hover: { display: 'flex', backgroundColor: 'interactive.hover' },
-        _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
-      })}
-      aria-label="행 추가"
-      onclick={() => insertAxis('horizontal', overlay.row_heights.length - 1, false)}
-      type="button"
+  {#if isLastRowFragment}
+    <!-- Add row button (bottom edge) -->
+    <div
+      style:left="{overlay.bounds.x}px"
+      style:top="{overlay.bounds.y + overlay.bounds.height}px"
+      style:width="{overlay.bounds.width}px"
+      style:height="{addTrackThickness}px"
+      style:padding-top="{addTrackPadding}px"
+      class={css({ position: 'absolute', pointerEvents: isActive ? 'auto' : 'none' })}
+      onpointerdown={(e) => e.stopPropagation()}
+      onpointerenter={() => (addRowButtonHovered = true)}
+      onpointerleave={() => (addRowButtonHovered = false)}
+      role="presentation"
     >
-      <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
-        <Icon icon={PlusIcon} size={14} />
-      </span>
-    </button>
-  </div>
+      <button
+        style:height="{addButtonSize}px"
+        class={center({
+          width: 'full',
+          borderRadius: '4px',
+          color: 'text.disabled',
+          backgroundColor: 'surface.muted',
+          display: isLastRowHovered ? 'flex' : 'none',
+          opacity: '90',
+          _hover: { display: 'flex', backgroundColor: 'interactive.hover' },
+          _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
+        })}
+        aria-label="행 추가"
+        onclick={() => insertAxis('horizontal', totalRows - 1, false)}
+        type="button"
+      >
+        <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+          <Icon icon={PlusIcon} size={14} />
+        </span>
+      </button>
+    </div>
+  {/if}
 
   <!-- Corner add button (both row and column) -->
-  <div
-    style:left="{overlay.bounds.x + overlay.bounds.width}px"
-    style:top="{overlay.bounds.y + overlay.bounds.height}px"
-    style:width="{addTrackThickness}px"
-    style:height="{addTrackThickness}px"
-    style:padding-left="{addTrackPadding}px"
-    style:padding-top="{addTrackPadding}px"
-    class={css({ position: 'absolute', pointerEvents: isActive ? 'auto' : 'none' })}
-    onpointerdown={(e) => e.stopPropagation()}
-    onpointerenter={() => (addBothButtonHovered = true)}
-    onpointerleave={() => (addBothButtonHovered = false)}
-    role="presentation"
-  >
-    <button
-      style:width="{addButtonSize}px"
-      style:height="{addButtonSize}px"
-      class={center({
-        borderRadius: 'full',
-        color: 'text.disabled',
-        backgroundColor: 'surface.muted',
-        display: isLastRowHovered && isLastColumnHovered ? 'flex' : 'none',
-        opacity: '90',
-        _hover: { display: 'flex', backgroundColor: 'interactive.hover' },
-        _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
-      })}
-      aria-label="행 및 열 추가"
-      onclick={() => {
-        insertAxis('horizontal', overlay.row_heights.length - 1, false);
-        insertAxis('vertical', overlay.col_widths_as_px.length - 1, false);
-      }}
-      type="button"
+  {#if isLastRowFragment}
+    <div
+      style:left="{overlay.bounds.x + overlay.bounds.width}px"
+      style:top="{overlay.bounds.y + overlay.bounds.height}px"
+      style:width="{addTrackThickness}px"
+      style:height="{addTrackThickness}px"
+      style:padding-left="{addTrackPadding}px"
+      style:padding-top="{addTrackPadding}px"
+      class={css({ position: 'absolute', pointerEvents: isActive ? 'auto' : 'none' })}
+      onpointerdown={(e) => e.stopPropagation()}
+      onpointerenter={() => (addBothButtonHovered = true)}
+      onpointerleave={() => (addBothButtonHovered = false)}
+      role="presentation"
     >
-      <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
-        <Icon icon={PlusIcon} size={14} />
-      </span>
-    </button>
-  </div>
+      <button
+        style:width="{addButtonSize}px"
+        style:height="{addButtonSize}px"
+        class={center({
+          borderRadius: 'full',
+          color: 'text.disabled',
+          backgroundColor: 'surface.muted',
+          display: isLastRowHovered && isLastColumnHovered ? 'flex' : 'none',
+          opacity: '90',
+          _hover: { display: 'flex', backgroundColor: 'interactive.hover' },
+          _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
+        })}
+        aria-label="행 및 열 추가"
+        onclick={() => {
+          insertAxis('horizontal', totalRows - 1, false);
+          insertAxis('vertical', overlay.col_widths_as_px.length - 1, false);
+        }}
+        type="button"
+      >
+        <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+          <Icon icon={PlusIcon} size={14} />
+        </span>
+      </button>
+    </div>
+  {/if}
 
   <!-- Floating toolbar -->
   <div

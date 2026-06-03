@@ -2,7 +2,6 @@ use editor_model::NodeId;
 use std::ops::Range;
 use std::sync::Arc;
 
-use crate::TableLayoutInfo;
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::style::BoxStyle;
 
@@ -48,7 +47,6 @@ impl MeasuredNode {
 pub struct MeasuredBox {
     pub node_id: NodeId,
     pub style: BoxStyle,
-    pub table_info: Option<Box<TableLayoutInfo>>,
     pub children: Vec<Arc<MeasuredNode>>,
     pub page_break_policy: PageBreakPolicy,
 }

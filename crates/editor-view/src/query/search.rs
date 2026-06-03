@@ -478,7 +478,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children,
                 nav: None,
             }),
@@ -500,7 +499,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children,
                 nav: None,
             }),
@@ -928,7 +926,6 @@ mod tests {
                     monolithic: false,
                     ..Default::default()
                 },
-                table_info: None,
                 children: vec![],
                 nav: None,
             }),
@@ -950,7 +947,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children,
                 nav: None,
             }),
@@ -958,11 +954,7 @@ mod tests {
     }
 
     fn cell_page() -> LayoutPage {
-        LayoutPage {
-            y_start: 0.0,
-            y_end: 1000.0,
-            size: editor_common::Size::new(200.0, 1000.0),
-        }
+        LayoutPage::new(0.0, 1000.0, editor_common::Size::new(200.0, 1000.0))
     }
 
     fn cell_tree() -> (LayoutTree, NodeId, NodeId, NodeId, NodeId) {
@@ -1062,16 +1054,8 @@ mod tests {
     fn node_box_rects_splits_a_cell_spanning_two_pages() {
         let (tree, c00, ..) = cell_tree();
         let pages = vec![
-            LayoutPage {
-                y_start: 0.0,
-                y_end: 10.0,
-                size: editor_common::Size::new(200.0, 10.0),
-            },
-            LayoutPage {
-                y_start: 10.0,
-                y_end: 1000.0,
-                size: editor_common::Size::new(200.0, 990.0),
-            },
+            LayoutPage::new(0.0, 10.0, editor_common::Size::new(200.0, 10.0)),
+            LayoutPage::new(10.0, 1000.0, editor_common::Size::new(200.0, 990.0)),
         ];
         let rects = super::node_box_rects(&tree, &pages, &[c00]);
         assert_eq!(

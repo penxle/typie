@@ -108,11 +108,7 @@ mod tests {
     use crate::style::*;
 
     fn page(y_start: f32, height: f32) -> LayoutPage {
-        LayoutPage {
-            y_start,
-            y_end: y_start + height,
-            size: Size::new(800.0, height),
-        }
+        LayoutPage::new(y_start, y_start + height, Size::new(800.0, height))
     }
 
     fn box_node(
@@ -138,7 +134,6 @@ mod tests {
                     monolithic: false,
                     ..Default::default()
                 },
-                table_info: None,
                 children,
                 nav: None,
             }),

@@ -11,20 +11,16 @@ pub(crate) mod query;
 mod table_overlay;
 
 mod page;
+mod page_fragment;
 mod view;
 mod view_state;
 mod viewport;
-
-#[derive(Debug, Clone)]
-pub struct TableLayoutInfo {
-    pub col_inner_widths: Vec<f32>,
-    pub row_inner_heights: Vec<f32>,
-}
 
 pub use dnd::*;
 pub use external::*;
 pub use measure::text::ruby::ruby_extra_top;
 pub use page::*;
+pub use page_fragment::*;
 pub use query::*;
 pub use table_overlay::*;
 pub use view::*;

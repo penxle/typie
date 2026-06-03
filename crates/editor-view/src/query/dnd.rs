@@ -227,7 +227,6 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                table_info: None,
                 children,
                 nav: None,
             }),
@@ -235,11 +234,11 @@ mod tests {
     }
 
     fn make_page(y_start: f32, y_end: f32) -> LayoutPage {
-        LayoutPage {
+        LayoutPage::new(
             y_start,
             y_end,
-            size: editor_common::Size::new(440.0, y_end - y_start),
-        }
+            editor_common::Size::new(440.0, y_end - y_start),
+        )
     }
 
     #[test]

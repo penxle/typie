@@ -100,7 +100,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -127,11 +126,7 @@ mod tests {
     fn cursor_rect_at_offset_0() {
         let id = NodeId::new();
         let tree = make_tree(id);
-        let pages = [LayoutPage {
-            y_start: 0.0,
-            y_end: 800.0,
-            size: Size::new(200.0, 800.0),
-        }];
+        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(id, 0);
         let CursorMetrics {
             page_idx, caret, ..
@@ -148,11 +143,7 @@ mod tests {
     fn cursor_rect_at_offset_3() {
         let id = NodeId::new();
         let tree = make_tree(id);
-        let pages = [LayoutPage {
-            y_start: 0.0,
-            y_end: 800.0,
-            size: Size::new(200.0, 800.0),
-        }];
+        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(id, 3);
         let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
@@ -177,7 +168,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(20.0, 0.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -198,11 +188,7 @@ mod tests {
                 }),
             },
         };
-        let pages = [LayoutPage {
-            y_start: 0.0,
-            y_end: 800.0,
-            size: Size::new(240.0, 800.0),
-        }];
+        let pages = [LayoutPage::new(0.0, 800.0, Size::new(240.0, 800.0))];
         let pos = Position::new(id, 2);
         let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
@@ -229,7 +215,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -251,16 +236,8 @@ mod tests {
             },
         };
         let pages = [
-            LayoutPage {
-                y_start: 0.0,
-                y_end: 400.0,
-                size: Size::new(200.0, 400.0),
-            },
-            LayoutPage {
-                y_start: 400.0,
-                y_end: 800.0,
-                size: Size::new(200.0, 400.0),
-            },
+            LayoutPage::new(0.0, 400.0, Size::new(200.0, 400.0)),
+            LayoutPage::new(400.0, 800.0, Size::new(200.0, 400.0)),
         ];
         let pos = Position::new(id, 0);
         let CursorMetrics {
@@ -290,7 +267,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -311,11 +287,7 @@ mod tests {
                 }),
             },
         };
-        let pages = [LayoutPage {
-            y_start: 0.0,
-            y_end: 800.0,
-            size: Size::new(200.0, 800.0),
-        }];
+        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(id, 0);
         let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
 
@@ -341,7 +313,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, 200.0, 30.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -362,11 +333,7 @@ mod tests {
                 }),
             },
         };
-        let pages = [LayoutPage {
-            y_start: 0.0,
-            y_end: 800.0,
-            size: Size::new(200.0, 800.0),
-        }];
+        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(id, 0);
         let CursorMetrics {
             page_idx,
@@ -409,7 +376,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(10.0, 5.0, 150.0, 40.0),
                         content: LayoutContent::Atom(LayoutAtom {
@@ -422,11 +388,7 @@ mod tests {
                 }),
             },
         };
-        let pages = [LayoutPage {
-            y_start: 0.0,
-            y_end: 800.0,
-            size: Size::new(200.0, 800.0),
-        }];
+        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(para_id, 0);
         assert!(cursor_metrics(&tree, &pages, &pos, None).is_none());
     }
@@ -450,7 +412,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![
                         LayoutNode {
                             rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
@@ -489,11 +450,7 @@ mod tests {
                 }),
             },
         };
-        let pages = [LayoutPage {
-            y_start: 0.0,
-            y_end: 800.0,
-            size: Size::new(200.0, 800.0),
-        }];
+        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = editor_state::Position {
             node_id: p1,
             offset: 2,
@@ -523,7 +480,6 @@ mod tests {
                         decorations: vec![],
                         monolithic: false,
                     },
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
                         content: LayoutContent::Line(LayoutLine {
@@ -545,16 +501,8 @@ mod tests {
             },
         };
         let pages = [
-            LayoutPage {
-                y_start: 0.0,
-                y_end: 400.0,
-                size: Size::new(200.0, 400.0),
-            },
-            LayoutPage {
-                y_start: 400.0,
-                y_end: 800.0,
-                size: Size::new(200.0, 400.0),
-            },
+            LayoutPage::new(0.0, 400.0, Size::new(200.0, 400.0)),
+            LayoutPage::new(400.0, 800.0, Size::new(200.0, 400.0)),
         ];
         let pos = Position::new(id, 0);
         let CursorMetrics { page_idx, line, .. } =

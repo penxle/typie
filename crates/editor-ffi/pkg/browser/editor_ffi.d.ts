@@ -513,6 +513,8 @@ export interface StyleRefValue {
 export interface TableOverlay {
     table_id: NodeId;
     page_idx: number;
+    start_row_index: number;
+    total_rows: number;
     bounds: Rect;
     border_style: TableBorderStyle;
     align: Alignment;

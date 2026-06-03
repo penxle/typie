@@ -5,9 +5,37 @@ use serde::{Deserialize, Serialize};
 /// A y-range window into the LayoutTree produced by the two-pass layout.
 #[derive(Debug, Clone)]
 pub struct LayoutPage {
+    /// Physical page top in document coordinates.
     pub y_start: f32,
+    /// Physical page bottom in document coordinates.
     pub y_end: f32,
+    /// Top of the drawable content window in document coordinates.
+    pub content_y_start: f32,
+    /// Bottom of the drawable content window in document coordinates.
+    pub content_y_end: f32,
     pub size: Size,
+}
+
+impl LayoutPage {
+    pub fn new(y_start: f32, y_end: f32, size: Size) -> Self {
+        Self::with_content(y_start, y_end, y_start, y_end, size)
+    }
+
+    pub fn with_content(
+        y_start: f32,
+        y_end: f32,
+        content_y_start: f32,
+        content_y_end: f32,
+        size: Size,
+    ) -> Self {
+        Self {
+            y_start,
+            y_end,
+            content_y_start,
+            content_y_end,
+            size,
+        }
+    }
 }
 
 #[ffi]

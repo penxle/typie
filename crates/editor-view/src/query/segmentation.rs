@@ -474,7 +474,6 @@ mod tests {
                 content: LayoutContent::Box(LayoutBox {
                     node_id: NodeId::new(),
                     style: make_box_style(),
-                    table_info: None,
                     children: vec![LayoutNode {
                         rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
                         content: LayoutContent::Line(line),
@@ -509,7 +508,6 @@ mod tests {
                 content: LayoutContent::Box(LayoutBox {
                     node_id: NodeId::new(),
                     style: make_box_style(),
-                    table_info: None,
                     children: vec![line, atom],
                     nav: None,
                 }),
@@ -565,7 +563,6 @@ mod tests {
                 content: LayoutContent::Box(LayoutBox {
                     node_id: NodeId::new(),
                     style: make_box_style(),
-                    table_info: None,
                     children: vec![atom, line],
                     nav: None,
                 }),
