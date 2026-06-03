@@ -5,6 +5,7 @@
   import { Icon } from '@typie/ui/components';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import XIcon from '~icons/lucide/x';
+  import { pageRectsToVirtualElement } from '$lib/editor-ffi/geometry';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
   type Props = {
@@ -55,38 +56,7 @@
 
   $effect(() => {
     if (activeRange && activeRange.rects.length > 0 && scroller) {
-      const rects = activeRange.rects;
-
-      const collectClientRects = (): DOMRect[] => {
-        const out: DOMRect[] = [];
-        for (const pr of rects) {
-          const pageEl = editor.pageEls[pr.page_idx];
-          if (!pageEl) continue;
-          const pageRect = pageEl.getBoundingClientRect();
-          out.push(new DOMRect(pageRect.left + pr.rect.x, pageRect.top + pr.rect.y, pr.rect.width, pr.rect.height));
-        }
-        return out;
-      };
-
-      const virtualEl = {
-        getBoundingClientRect: () => {
-          const dom = collectClientRects();
-          if (dom.length === 0) return new DOMRect();
-          let minX = Infinity;
-          let minY = Infinity;
-          let maxX = -Infinity;
-          let maxY = -Infinity;
-          for (const r of dom) {
-            minX = Math.min(minX, r.left);
-            minY = Math.min(minY, r.top);
-            maxX = Math.max(maxX, r.right);
-            maxY = Math.max(maxY, r.bottom);
-          }
-          return new DOMRect(minX, minY, maxX - minX, maxY - minY);
-        },
-        getClientRects: () => collectClientRects(),
-      };
-      anchor(virtualEl);
+      anchor(pageRectsToVirtualElement(editor, activeRange.rects));
     }
   });
 

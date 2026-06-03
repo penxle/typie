@@ -12,6 +12,7 @@
   import XIcon from '~icons/lucide/x';
   import { canDeleteComment, canManageThread, canUpdateComment, isRootComment } from '$lib/editor-ffi/comments';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { pageRectsToVirtualElement } from '$lib/editor-ffi/geometry';
   import { graphql } from '$mearie';
   import CommentCard from './CommentCard.svelte';
   import CommentComposer from './CommentComposer.svelte';
@@ -47,16 +48,9 @@
   const open = $derived(comments.composing || comments.activeThreadId !== null);
   const thread = $derived(threadFragment.data);
   const anchor = $derived(comments.activeAnchor);
-
-  let point = $state<{ x: number; y: number } | null>(null);
-
-  $effect(() => {
-    if (!open || !editor || !anchor) {
-      point = null;
-      return;
-    }
-
-    point = editor.localToOffset(anchor.page, anchor.x, anchor.y + anchor.height);
+  const virtualAnchor = $derived.by(() => {
+    if (!editor || !anchor || anchor.rects.length === 0) return null;
+    return pageRectsToVirtualElement(editor, anchor.rects);
   });
 
   let composerDirty = $state(false);
@@ -124,8 +118,8 @@
   });
 </script>
 
-{#if open && point}
-  <CommentPopoverCard onclickoutside={tryClose} x={point.x} y={point.y}>
+{#if open && virtualAnchor}
+  <CommentPopoverCard onclickoutside={tryClose} reference={virtualAnchor}>
     {#if comments.composing}
       <CommentComposer
         autofocus

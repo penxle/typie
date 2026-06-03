@@ -208,8 +208,7 @@ export class Editor {
   #aiFeedbackDecorationsInstalled = false;
 
   activeCommentId = $state<string | null>(null);
-  commentClickHandler: ((id: string, page: number, rect: { x: number; y: number; width: number; height: number } | null) => void) | null =
-    null;
+  commentClickHandler: ((id: string) => void) | null = null;
   requestCommentCompose: (() => void) | null = null;
   #commentDecorationsInstalled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -663,17 +662,6 @@ export class Editor {
     };
   }
 
-  localRectToClientRect(page: number, rect: { x: number; y: number; width: number; height: number }): DOMRect | null {
-    const el = this.pageEls[page];
-    if (!el) {
-      return null;
-    }
-
-    const zoom = this.safeDisplayZoom();
-    const pageRect = el.getBoundingClientRect();
-    return new DOMRect(pageRect.left + rect.x * zoom, pageRect.top + rect.y * zoom, rect.width * zoom, rect.height * zoom);
-  }
-
   #currentCursorLineRect(): PageRect | null {
     const cursor = this.#cursor;
     if (cursor) {
@@ -691,10 +679,14 @@ export class Editor {
     return samePosition(selection.head, endpoints.to_position) ? endpoints.to : endpoints.from;
   }
 
-  trackedItemRect(id: string): PageRect | null {
+  trackedItemFirstRect(id: string): PageRect | null {
+    return this.trackedItemRects(id)?.[0] ?? null;
+  }
+
+  trackedItemRects(id: string): PageRect[] | null {
     const range = this.trackedRanges.find((r) => r.id === id);
     if (!range || range.invalid) return null;
-    return range.rects[0] ?? null;
+    return range.rects.length > 0 ? range.rects : null;
   }
 
   registerScrollIntoView(handler: ((options: EditorScrollIntoViewOptions) => void) | null): void {
@@ -1387,18 +1379,11 @@ export class Editor {
     return !!r && !r.invalid;
   }
 
-  commentHitsAt(
-    page: number,
-    x: number,
-    y: number,
-  ): { id: string; rect: { x: number; y: number; width: number; height: number } | null }[] {
+  commentIdsAt(page: number, x: number, y: number): string[] {
     return this.#wasm
       .tracked_ranges_at(page, x, y, null)
       .filter((hit) => this.#registeredCommentIds.has(hit.id))
-      .map((hit) => {
-        const pr = hit.rects.find((r) => r.page_idx === page) ?? hit.rects[0];
-        return { id: hit.id, rect: pr ? pr.rect : null };
-      });
+      .map((hit) => hit.id);
   }
 
   setActiveComment(id: string | null): void {

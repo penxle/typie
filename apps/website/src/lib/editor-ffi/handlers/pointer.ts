@@ -140,9 +140,9 @@ export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor,
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) return;
 
-  const hits = editor.commentHitsAt(local.page, local.x, local.y);
-  if (hits.length > 0) {
-    editor.commentClickHandler(hits[0].id, local.page, hits[0].rect);
+  const ids = editor.commentIdsAt(local.page, local.x, local.y);
+  if (ids.length > 0) {
+    editor.commentClickHandler(ids[0]);
   }
 };
 

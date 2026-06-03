@@ -1,30 +1,33 @@
 <script lang="ts">
-  import { flip, hide, shift } from '@floating-ui/dom';
+  import { flip, hide, inline, shift } from '@floating-ui/dom';
   import { css } from '@typie/styled-system/css';
   import { createFloatingActions } from '@typie/ui/actions';
   import { scale } from 'svelte/transition';
+  import type { ReferenceElement } from '@floating-ui/dom';
   import type { Snippet } from 'svelte';
 
   type Props = {
-    x: number;
-    y: number;
+    reference: ReferenceElement;
     onclickoutside: () => void;
     children: Snippet;
   };
-  let { x, y, onclickoutside, children }: Props = $props();
+  let { reference, onclickoutside, children }: Props = $props();
 
-  const { anchor, floating } = createFloatingActions({
+  const { anchor: referenceAction, floating } = createFloatingActions({
     placement: 'bottom-start',
     offset: 6,
-    middleware: [flip(), shift({ padding: 8 }), hide()],
+    middleware: [inline(), flip(), shift({ padding: 8 }), hide()],
     onClickOutside: (event: Event) => {
       if (event.target instanceof HTMLElement && event.target.closest('[data-comment-panel-item]')) return;
       onclickoutside();
     },
   });
+
+  $effect(() => {
+    referenceAction(reference);
+  });
 </script>
 
-<div style:top={`${y}px`} style:left={`${x}px`} class={css({ position: 'absolute' })} use:anchor></div>
 <div
   style:width="280px"
   class={css({

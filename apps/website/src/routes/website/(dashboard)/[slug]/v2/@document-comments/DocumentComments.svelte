@@ -158,8 +158,8 @@
   $effect(() => {
     if (!editor) return;
     const ed = editor;
-    ed.commentClickHandler = (id, page, rect) => {
-      openThread(id, rect ? { page, x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined);
+    ed.commentClickHandler = (id) => {
+      openThread(id);
     };
     return () => {
       ed.commentClickHandler = null;
@@ -180,13 +180,13 @@
     };
   });
 
-  const anchorFromPageRect = ({ page_idx, rect }: PageRect): CommentAnchor => ({
-    page: page_idx,
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
-  });
+  const anchorFromPageRects = (rects: PageRect[]): CommentAnchor | null => (rects.length > 0 ? { rects } : null);
+
+  const anchorForThread = (id: string): CommentAnchor | null => {
+    if (!editor) return null;
+    const rects = editor.trackedItemRects(id);
+    return rects ? anchorFromPageRects(rects) : null;
+  };
 
   function isLocatable(id: string): boolean {
     return editor?.isCommentLocatable(id) ?? false;
@@ -203,11 +203,13 @@
     editor.setCommentComposeRange(frozen);
     composing = true;
     activeThreadId = null;
+
+    // TODO: compose range를 active anchor로 쓰고, compose range로 scrollIntoView 하기
     if (editor.cursor) {
-      activeAnchor = { page: editor.cursor.page_idx, x: editor.cursor.caret.x, y: editor.cursor.caret.y, width: 0, height: 0 };
+      activeAnchor = { rects: [{ page_idx: editor.cursor.page_idx, rect: editor.cursor.caret }] };
     } else {
       const rect = editor.selectionHeadRect();
-      activeAnchor = rect ? anchorFromPageRect(rect) : null;
+      activeAnchor = rect ? anchorFromPageRects([rect]) : null;
       ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
     }
   }
@@ -222,7 +224,7 @@
     clearCompose();
     if (pendingThread && pendingThread.id !== id) pendingThread = null;
     activeThreadId = id;
-    if (anchor) activeAnchor = anchor;
+    activeAnchor = anchor ?? anchorForThread(id) ?? activeAnchor;
   }
 
   function openFromPanel(id: string) {
@@ -232,13 +234,14 @@
       return;
     }
     composing = false;
-    const rect = editor.trackedItemRect(id);
-    if (!rect) {
+    const rects = editor.trackedItemRects(id);
+    const anchor = rects ? anchorFromPageRects(rects) : null;
+    if (!anchor) {
       Toast.error('원문에서 위치를 찾을 수 없는 코멘트예요');
       return;
     }
     activeThreadId = id;
-    activeAnchor = anchorFromPageRect(rect);
+    activeAnchor = anchor;
     ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id } });
   }
 

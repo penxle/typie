@@ -190,7 +190,7 @@ export class EditorScrollScope {
         return this.#editor.selectionHeadRect();
       }
       case 'tracked_item': {
-        return this.#editor.trackedItemRect(target.id);
+        return this.#editor.trackedItemFirstRect(target.id);
       }
     }
   }
