@@ -1,6 +1,5 @@
 import { clamp } from '@typie/ui/utils';
 import { CURSOR_VISIBLE_MARGIN, TYPEWRITER_MIN_BOTTOM_PADDING } from './constants';
-import type { Size } from '@typie/editor-ffi/browser';
 
 export type EditorVisibleArea = {
   topInset: number;
@@ -108,66 +107,33 @@ export function resolveTypewriterScrollTop({
   return nearlySameScroll(clamped, safeScrollTop) ? null : clamped;
 }
 
-export function resolveDistanceToPagesBottom({
-  pageSizes,
-  pageIdx,
-  targetY,
-  displayZoom = 1,
-  pageGap = 0,
-}: {
-  pageSizes: readonly Size[];
-  pageIdx: number;
-  targetY: number;
-  displayZoom?: number;
-  pageGap?: number;
-}): number | null {
-  if (!Number.isInteger(pageIdx) || pageIdx < 0 || pageIdx >= pageSizes.length) {
-    return null;
-  }
-
-  const zoom = finiteOrZero(displayZoom) > 0 ? finiteOrZero(displayZoom) : 1;
-  const gap = Math.max(0, finiteOrZero(pageGap));
-  const page = pageSizes[pageIdx];
-  const currentPageDistance = Math.max(0, finiteOrZero(page.height) - Math.max(0, finiteOrZero(targetY)));
-  let distance = currentPageDistance;
-
-  for (let i = pageIdx + 1; i < pageSizes.length; i++) {
-    distance += gap + Math.max(0, finiteOrZero(pageSizes[i].height));
-  }
-
-  return distance * zoom;
-}
-
 export function resolveKeepVisibleBottomPadding({
-  distanceToContentBottom,
   visibleArea,
   margin = CURSOR_VISIBLE_MARGIN,
   minPadding = 0,
 }: {
-  distanceToContentBottom: number;
   visibleArea?: EditorVisibleArea;
   margin?: number;
   minPadding?: number;
 }): number {
   const area = normalizeVisibleArea(visibleArea);
-  const safeDistanceToContentBottom = Math.max(0, finiteOrZero(distanceToContentBottom));
-  const requiredPadding = area.bottomInset + Math.max(0, finiteOrZero(margin)) - safeDistanceToContentBottom;
+  const requiredPadding = area.bottomInset + Math.max(0, finiteOrZero(margin));
   return Math.max(Math.max(0, finiteOrZero(minPadding)), requiredPadding);
 }
 
 export function resolveTypewriterBottomPadding({
   clientHeight,
   targetHeight,
-  distanceToContentBottom,
   visibleArea,
   position,
+  trailingBottomMargin = 0,
   minPadding = TYPEWRITER_MIN_BOTTOM_PADDING,
 }: {
   clientHeight: number;
   targetHeight: number;
-  distanceToContentBottom: number;
   visibleArea?: EditorVisibleArea;
   position: number;
+  trailingBottomMargin?: number;
   minPadding?: number;
 }): number {
   const area = normalizeVisibleArea(visibleArea);
@@ -176,7 +142,8 @@ export function resolveTypewriterBottomPadding({
   const availableRange = Math.max(0, usableHeight - safeTargetHeight);
   const clampedPosition = clamp(finiteOrZero(position), 0, 1);
   const spaceNeededBelowTargetTop = area.bottomInset + (1 - clampedPosition) * availableRange + safeTargetHeight;
-  const requiredPadding = spaceNeededBelowTargetTop - Math.max(0, finiteOrZero(distanceToContentBottom));
+  const intrinsicSpaceBelowTargetTop = Math.max(0, finiteOrZero(trailingBottomMargin)) + safeTargetHeight;
+  const requiredPadding = spaceNeededBelowTargetTop - intrinsicSpaceBelowTargetTop;
 
   return Math.max(Math.max(0, finiteOrZero(minPadding)), requiredPadding);
 }

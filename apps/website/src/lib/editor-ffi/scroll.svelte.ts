@@ -1,8 +1,7 @@
 import { getAppContext } from '@typie/ui/context';
 import { tick, untrack } from 'svelte';
-import { PAGE_GAP } from './constants';
+import { CONTINUOUS_VIEW_PADDING } from './constants';
 import {
-  resolveDistanceToPagesBottom,
   resolveKeepVisibleBottomPadding,
   resolveNearestScrollTop,
   resolveTypewriterBottomPadding,
@@ -232,16 +231,6 @@ export class EditorScrollScope {
     return { targetTop, targetBottom };
   }
 
-  #distanceToPagesBottom({ page_idx }: PageRect, targetY: number): number | null {
-    return resolveDistanceToPagesBottom({
-      pageSizes: this.#editor.pageSizes,
-      pageIdx: page_idx,
-      targetY,
-      displayZoom: this.#editor.safeDisplayZoom(),
-      pageGap: this.#editor.rootAttrs?.layout_mode.type === 'paginated' ? PAGE_GAP : 0,
-    });
-  }
-
   #keepVisibleBottomPadding(): number {
     const target = this.#keepVisibleTarget;
     if (!target) {
@@ -249,31 +238,30 @@ export class EditorScrollScope {
     }
 
     const rect = this.#resolveTargetRect(target);
-    const distanceToPagesBottom = rect ? this.#distanceToPagesBottom(rect, rect.rect.y + rect.rect.height) : null;
-    if (distanceToPagesBottom === null) {
+    if (!rect) {
       return 0;
     }
 
     return resolveKeepVisibleBottomPadding({
-      distanceToContentBottom: distanceToPagesBottom,
       visibleArea: this.visibleArea,
     });
   }
 
   #typewriterBottomPaddingForRect(rect: PageRect): number {
     const container = this.#editor.scrollContainerEl;
-    const distanceToPagesBottom = this.#distanceToPagesBottom(rect, rect.rect.y);
-    if (!container || distanceToPagesBottom === null) {
+    if (!container) {
       return 0;
     }
 
     const zoom = this.#editor.safeDisplayZoom();
+    const layoutMode = this.#editor.rootAttrs?.layout_mode;
+    const trailingBottomMargin = layoutMode?.type === 'paginated' ? layoutMode.page_margin_bottom * zoom : CONTINUOUS_VIEW_PADDING;
     return resolveTypewriterBottomPadding({
       clientHeight: container.clientHeight,
       targetHeight: rect.rect.height * zoom,
-      distanceToContentBottom: distanceToPagesBottom,
       visibleArea: this.visibleArea,
       position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
+      trailingBottomMargin,
     });
   }
 }

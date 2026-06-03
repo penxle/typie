@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { resolveNearestScrollTop, resolveTypewriterBottomPadding, resolveTypewriterScrollTop } from './scroll';
+import {
+  resolveKeepVisibleBottomPadding,
+  resolveNearestScrollTop,
+  resolveTypewriterBottomPadding,
+  resolveTypewriterScrollTop,
+} from './scroll';
 
 describe('resolveNearestScrollTop', () => {
   it('keeps the target inside the guarded visible area with insets', () => {
@@ -68,26 +73,36 @@ describe('resolveTypewriterScrollTop', () => {
   });
 });
 
+describe('resolveKeepVisibleBottomPadding', () => {
+  it('uses stable bottom padding for the cursor guard range', () => {
+    expect(
+      resolveKeepVisibleBottomPadding({
+        visibleArea: { topInset: 0, bottomInset: 40 },
+      }),
+    ).toBe(100);
+  });
+});
+
 describe('resolveTypewriterBottomPadding', () => {
-  it('grows when content bottom is too close to the cursor line', () => {
+  it('uses typewriter padding from viewport position and trailing margin', () => {
     expect(
       resolveTypewriterBottomPadding({
         clientHeight: 500,
         targetHeight: 20,
-        distanceToContentBottom: 80,
         visibleArea: { topInset: 0, bottomInset: 40 },
         position: 0.5,
+        trailingBottomMargin: 20,
       }),
-    ).toBe(200);
+    ).toBe(240);
   });
 
-  it('keeps the minimum bottom padding when existing content space is enough', () => {
+  it('keeps the minimum bottom padding when typewriter space fits in the trailing margin', () => {
     expect(
       resolveTypewriterBottomPadding({
         clientHeight: 500,
         targetHeight: 20,
-        distanceToContentBottom: 500,
-        position: 0.5,
+        position: 1,
+        trailingBottomMargin: 20,
       }),
     ).toBe(48);
   });
