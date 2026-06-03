@@ -23,6 +23,7 @@ import type {
   Message,
   Modifier,
   ModifierState,
+  ModifierType,
   PageRect,
   PlainDoc,
   PlainRootNode,
@@ -102,6 +103,7 @@ export class EditorContext {
   pendingImageDrops: File[] = [];
   pendingFileDrops: File[] = [];
   findReplaceOpen = $state(false);
+  linkEditorOpen = $state(false);
 }
 
 const [getEditorContext, setEditorContext] = createContext<EditorContext>();
@@ -743,6 +745,10 @@ export class Editor {
 
   selectionEndpoints(): SelectionEndpoints | undefined {
     return this.#wasm.selection_endpoints();
+  }
+
+  modifierSpanSelection(pos: Position, modifierType: ModifierType): Selection | undefined {
+    return this.#wasm.modifier_span_selection(pos, modifierType);
   }
 
   ime(beforeLimit: number, afterLimit: number): Ime {

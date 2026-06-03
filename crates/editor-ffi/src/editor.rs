@@ -140,6 +140,21 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.modifier_state().into_ffi()?))
     }
 
+    pub fn modifier_span_selection(
+        &self,
+        pos: Complex<editor_state::Position>,
+        modifier_type: Complex<editor_model::ModifierType>,
+    ) -> EditorResult<Option<Complex<editor_state::Selection>>> {
+        self.with_inner(|inner| {
+            let pos: editor_state::Position = pos.from_ffi()?;
+            let modifier_type: editor_model::ModifierType = modifier_type.from_ffi()?;
+            Ok(inner
+                .editor
+                .modifier_span_selection(&pos, modifier_type)
+                .into_ffi()?)
+        })
+    }
+
     pub fn block_state(&self) -> EditorResult<Option<Complex<editor_core::BlockState>>> {
         self.with_inner(|inner| Ok(inner.editor.block_state().into_ffi()?))
     }

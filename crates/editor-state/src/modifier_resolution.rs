@@ -153,6 +153,10 @@ pub fn resolve_modifier_state_in_range(
         let mut canonical: Option<Modifier> = None;
         let mut absent_seen = false;
         let mut mixed = false;
+        // Links treat interleaved plain text as neutral so a single URL repeated
+        // across a paragraph stays editable as one. Ruby is per-glyph annotation,
+        // so any plain text / differing ruby in the selection makes it Mixed.
+        let sparse_absence_is_neutral = matches!(ty, ModifierType::Link);
 
         for node in &nodes {
             if !targets.contains(&node.as_type()) {
@@ -171,15 +175,17 @@ pub fn resolve_modifier_state_in_range(
                     break;
                 }
                 (Some(m), None) => {
-                    if absent_seen {
+                    if absent_seen && !sparse_absence_is_neutral {
                         mixed = true;
                         break;
                     }
                     canonical = Some(m);
                 }
                 (None, Some(_)) => {
-                    mixed = true;
-                    break;
+                    if !sparse_absence_is_neutral {
+                        mixed = true;
+                        break;
+                    }
                 }
                 (None, None) => {
                     absent_seen = true;
@@ -321,6 +327,37 @@ pub fn resolve_modifier_span_at(
     span.push(node.id());
     span.extend(right_chain);
     Some(span)
+}
+
+/// Selection that covers the whole modifier span containing `pos`.
+///
+/// Resolves the contiguous run of sibling text nodes sharing the same explicit
+/// modifier value (via [`resolve_modifier_span_at`]), then returns a selection
+/// from the start of the first node to the end of the last. Used when entering
+/// link/ruby editing so the visible selection extends over the entire mark,
+/// even if the caller only has a collapsed caret inside it.
+///
+/// Returns `None` when `pos` is not inside such a span.
+pub fn resolve_modifier_span_selection(
+    state: &State,
+    pos: &Position,
+    modifier_type: ModifierType,
+) -> Option<Selection> {
+    let span = resolve_modifier_span_at(state, pos, modifier_type)?;
+    let doc = &state.doc;
+
+    let first = *span.first()?;
+    let last = *span.last()?;
+
+    let last_len = match doc.node(last)?.node() {
+        Node::Text(t) => t.text.len(),
+        _ => return None,
+    };
+
+    Some(Selection::new(
+        Position::new(first, 0),
+        Position::new(last, last_len),
+    ))
 }
 
 fn collect_nodes_in_range<'a>(
@@ -840,6 +877,40 @@ mod tests {
     }
 
     #[test]
+    fn span_selection_covers_whole_link_from_collapsed_caret() {
+        let (state, t1, t2, ..) = state! {
+            doc { root { paragraph {
+                t1: text("Hello") [link(href: "https://a.com".to_string())]
+                t2: text("World") [link(href: "https://a.com".to_string())]
+            } } }
+            selection: (t1, 2)
+        };
+        let sel = resolve_modifier_span_selection(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
+        assert_eq!(
+            sel,
+            Some(Selection::new(Position::new(t1, 0), Position::new(t2, 5)))
+        );
+    }
+
+    #[test]
+    fn span_selection_is_none_outside_link() {
+        let (state, _t1, ..) = state! {
+            doc { root { paragraph { t1: text("plain") } } }
+            selection: (t1, 2)
+        };
+        let sel = resolve_modifier_span_selection(
+            &state,
+            &state.selection.as_ref().unwrap().head,
+            ModifierType::Link,
+        );
+        assert_eq!(sel, None);
+    }
+
+    #[test]
     fn resolve_span_stops_at_non_modifier_text() {
         let (state, _t0, t1, _t2, ..) = state! {
             doc { root { paragraph {
@@ -886,6 +957,94 @@ mod tests {
             ModifierType::Link,
         );
         assert_eq!(span, Some(vec![t1]));
+    }
+
+    #[test]
+    fn range_link_uniform_ignores_plain_text_inside_selection() {
+        let (state, _p1, ..) = state! {
+            doc { root { p1: paragraph {
+                t0: text("pre")
+                t1: text("Hello") [link(href: "https://a.com".to_string())]
+                t2: text("mid")
+                t3: text("World") [link(href: "https://a.com".to_string())]
+                t4: text("post")
+            } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let s = resolve_modifier_state(&state).unwrap();
+        assert_eq!(
+            s.link,
+            editor_common::Tri::Uniform {
+                value: editor_model::LinkValue {
+                    href: "https://a.com".to_string(),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn range_link_mixed_when_selection_contains_different_hrefs_among_plain_text() {
+        let (state, _p1, ..) = state! {
+            doc { root { p1: paragraph {
+                t0: text("pre")
+                t1: text("Hello") [link(href: "https://a.com".to_string())]
+                t2: text("mid")
+                t3: text("World") [link(href: "https://b.com".to_string())]
+                t4: text("post")
+            } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let s = resolve_modifier_state(&state).unwrap();
+        assert_eq!(s.link, editor_common::Tri::Mixed);
+    }
+
+    #[test]
+    fn range_ruby_uniform_when_selection_is_a_single_ruby_run() {
+        let (state, _p1, ..) = state! {
+            doc { root { p1: paragraph {
+                t1: text("Hello") [ruby(text: "헬로".to_string())]
+                t2: text("World") [ruby(text: "헬로".to_string())]
+            } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let s = resolve_modifier_state(&state).unwrap();
+        assert_eq!(
+            s.ruby,
+            editor_common::Tri::Uniform {
+                value: editor_model::RubyValue {
+                    text: "헬로".to_string(),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn range_ruby_mixed_when_plain_text_is_in_selection() {
+        // Unlike links, ruby does not treat interleaved plain text as neutral:
+        // mixing ruby with plain text is Mixed, which disables the ruby button.
+        let (state, _p1, ..) = state! {
+            doc { root { p1: paragraph {
+                t0: text("pre")
+                t1: text("Hello") [ruby(text: "헬로".to_string())]
+                t2: text("post")
+            } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let s = resolve_modifier_state(&state).unwrap();
+        assert_eq!(s.ruby, editor_common::Tri::Mixed);
+    }
+
+    #[test]
+    fn range_ruby_mixed_when_selection_contains_different_text() {
+        let (state, _p1, ..) = state! {
+            doc { root { p1: paragraph {
+                t1: text("Hello") [ruby(text: "헬로".to_string())]
+                t2: text("World") [ruby(text: "월드".to_string())]
+            } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let s = resolve_modifier_state(&state).unwrap();
+        assert_eq!(s.ruby, editor_common::Tri::Mixed);
     }
 
     #[test]

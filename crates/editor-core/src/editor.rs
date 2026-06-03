@@ -1,7 +1,7 @@
 use editor_clipboard::Slice;
 use editor_common::{Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
-use editor_model::{DocOp, ModifierState, Node, NodeId};
+use editor_model::{DocOp, ModifierState, ModifierType, Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer};
 #[cfg(any(test, feature = "test-utils"))]
 use editor_resource::ThemeVariant;
@@ -197,6 +197,19 @@ impl Editor {
 
     pub fn modifier_state(&self) -> Option<ModifierState> {
         editor_state::resolve_modifier_state(&self.state)
+    }
+
+    /// Selection covering the whole link/ruby span containing `pos`.
+    ///
+    /// Used when entering edit mode (toolbar button, hover tooltip) to extend a
+    /// collapsed caret over the entire mark. Returns `None` when `pos` is not
+    /// inside such a span.
+    pub fn modifier_span_selection(
+        &self,
+        pos: &editor_state::Position,
+        modifier_type: ModifierType,
+    ) -> Option<editor_state::Selection> {
+        editor_state::resolve_modifier_span_selection(&self.state, pos, modifier_type)
     }
 
     pub fn block_state(&self) -> Option<BlockState> {
@@ -1792,6 +1805,41 @@ mod tests {
         let editor = Editor::new_test(state);
         let s = editor.modifier_state().unwrap();
         assert_eq!(s.bold, editor_common::Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn editor_exposes_uniform_link_for_paragraph_child_range_selection() {
+        let (state, _p1, ..) = state! {
+            doc { root { p1: paragraph {
+                t1: text("Hello") [link(href: "https://a.com".to_string())]
+                t2: text("World") [link(href: "https://a.com".to_string())]
+            } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let editor = Editor::new_test(state);
+        let s = editor.modifier_state().unwrap();
+        assert_eq!(
+            s.link,
+            editor_common::Tri::Uniform {
+                value: editor_model::LinkValue {
+                    href: "https://a.com".to_string(),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn editor_exposes_mixed_link_for_paragraph_child_range_selection() {
+        let (state, _p1, ..) = state! {
+            doc { root { p1: paragraph {
+                t1: text("Hello") [link(href: "https://a.com".to_string())]
+                t2: text("World") [link(href: "https://b.com".to_string())]
+            } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let editor = Editor::new_test(state);
+        let s = editor.modifier_state().unwrap();
+        assert_eq!(s.link, editor_common::Tri::Mixed);
     }
 
     #[test]

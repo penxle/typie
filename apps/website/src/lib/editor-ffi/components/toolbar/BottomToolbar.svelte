@@ -111,6 +111,26 @@
   const toggleModifier = (modifier_type: ModifierType) => {
     enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type } });
   };
+
+  // When opening the link/ruby editor with a *collapsed* caret inside a mark,
+  // extend the selection over that whole mark span so editing applies to the
+  // entire mark and the range is visible. A range selection (partial or spanning
+  // several marks/plain text) is always preserved so editing applies to exactly
+  // what the user selected.
+  const extendSelectionToSpan = (modifier_type: 'link' | 'ruby') => {
+    const editor = ctx.editor;
+    if (editingDisabled || !editor) return;
+    const selection = editor.selection;
+    if (!selection || !editor.isSelectionCollapsed) return;
+
+    const span = editor.modifierSpanSelection(selection.head, modifier_type);
+    if (!span) return;
+
+    editor.enqueue({ type: 'selection', op: { type: 'set', selection: span } });
+    // Flush so the editor popover reads the extended selection synchronously
+    // instead of the pre-extend one on this same open.
+    editor.flush();
+  };
 </script>
 
 <div
@@ -284,6 +304,11 @@
       disabled={isLinkMixed || (isCollapsed && !isLinkActive)}
       label="링크"
       onEscape={() => ctx.editor?.focus()}
+      onOpenChange={(opened) => {
+        if (opened) extendSelectionToSpan('link');
+        ctx.linkEditorOpen = opened;
+      }}
+      opened={ctx.linkEditorOpen}
       size="small"
     >
       {#snippet anchor()}
@@ -300,6 +325,9 @@
       disabled={isRubyMixed || (isCollapsed && !isRubyActive)}
       label="루비"
       onEscape={() => ctx.editor?.focus()}
+      onOpenChange={(opened) => {
+        if (opened) extendSelectionToSpan('ruby');
+      }}
       size="small"
     >
       {#snippet anchor()}
