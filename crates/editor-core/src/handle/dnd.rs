@@ -5,7 +5,9 @@ use crate::event::EditorEvent;
 use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifiers};
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
-use editor_model::{Doc, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode, PlainRootNode};
+use editor_model::{
+    Doc, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode, PlainRootNode, Schema,
+};
 use editor_state::{Position, Selection, StableSelection};
 
 #[derive(Debug, Clone, Copy)]
@@ -23,8 +25,10 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                 .selection
                 .as_ref()
                 .filter(|selection| !selection.is_collapsed())
+                .map(|selection| snap_to_block_unit(&editor.state.doc, selection))
+                .filter(|selection| !selection.is_collapsed())
                 .map_or(DndState::Idle, |source| DndState::InternalDnd {
-                    source: StableSelection::freeze(source, &editor.state.doc),
+                    source: StableSelection::freeze(&source, &editor.state.doc),
                     drop_target: None,
                 });
             Ok(())
@@ -174,7 +178,27 @@ fn position_inside_selection(doc: &Doc, position: Position, selection: &Selectio
     let Some(resolved_position) = position.resolve(doc) else {
         return false;
     };
-    resolved_selection.contains(&resolved_position)
+    *resolved_selection.from() < resolved_position && resolved_position < *resolved_selection.to()
+}
+
+/// anchor가 isolating+monolithic 블록(fold/table)의 parent 경계에 있으면
+/// 해당 블록의 단위 선택으로 스냅한다. promote_cross_isolating이 만드는
+/// (parent, fold_idx)→(external_pos) 선택을 DnD 소스로 정제하기 위해 사용.
+fn snap_to_block_unit(doc: &Doc, selection: &Selection) -> Selection {
+    let anchor = selection.anchor;
+    if let Some(node) = doc.node(anchor.node_id) {
+        let spec = Schema::node_spec(node.as_type());
+        if !spec.is_textblock() && !spec.inline {
+            if let Some(child) = node.children().nth(anchor.offset) {
+                let child_spec = Schema::node_spec(child.as_type());
+                if child_spec.isolating && child_spec.monolithic {
+                    let unit_end = Position::new(anchor.node_id, anchor.offset + 1);
+                    return Selection::new(anchor, unit_end);
+                }
+            }
+        }
+    }
+    selection.clone()
 }
 
 fn can_apply_drop(
@@ -252,6 +276,17 @@ fn apply_drop(
     }
 }
 
+#[cfg(test)]
+pub(crate) fn apply_drop_for_test(
+    editor: &mut Editor,
+    position: Position,
+    payload: DndDropPayload,
+    modifiers: InputModifiers,
+    source: Option<Selection>,
+) -> Result<(), EditorError> {
+    apply_drop(editor, position, payload, modifiers, source)
+}
+
 fn drop_slice_at(
     editor: &mut Editor,
     position: Position,
@@ -294,6 +329,20 @@ fn drop_internal_selection_at(
     let Some(source) = source else {
         return Ok(());
     };
+
+    // Dropping at the source selection's own from/to boundary is a structural no-op:
+    // the block would be deleted and re-inserted at the same position (with new NodeIds).
+    // Detect and skip early so probe mode doesn't report a false "state changed".
+    if !copy {
+        if let Some(resolved) = source.resolve(&editor.state.doc) {
+            let from = Position::from(resolved.from());
+            let to = Position::from(resolved.to());
+            if position == from || position == to {
+                return Ok(());
+            }
+        }
+    }
+
     let mut state = editor.state().clone();
     state.selection = Some(source.clone());
     let Some(slice) = Slice::extract(&state) else {

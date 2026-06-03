@@ -112,7 +112,7 @@ fn build_fragment<'a>(rs: &ResolvedSelection<'a>, node: NodeRef<'a>) -> Fragment
             };
             let substring: String = s.chars().skip(lo).take(hi - lo).collect();
             Fragment::leaf(PlainNode::Text(PlainTextNode { text: substring }))
-                .with_modifiers(node.modifiers().cloned().collect())
+                .with_modifiers(node.explicit_modifiers().cloned().collect())
         }
         _ => {
             let from_node_path = rs
@@ -137,7 +137,7 @@ fn build_fragment<'a>(rs: &ResolvedSelection<'a>, node: NodeRef<'a>) -> Fragment
                 .collect();
             Fragment {
                 node: node.node().to_plain(),
-                modifiers: node.modifiers().cloned().collect(),
+                modifiers: node.explicit_modifiers().cloned().collect(),
                 children: kids,
             }
         }
@@ -147,7 +147,7 @@ fn build_fragment<'a>(rs: &ResolvedSelection<'a>, node: NodeRef<'a>) -> Fragment
 fn node_to_fragment(node: NodeRef<'_>) -> Fragment {
     Fragment {
         node: node.node().to_plain(),
-        modifiers: node.modifiers().cloned().collect(),
+        modifiers: node.explicit_modifiers().cloned().collect(),
         children: node.children().map(node_to_fragment).collect(),
     }
 }
@@ -170,13 +170,13 @@ fn extract_cell_rect(rect: &CellRect<'_>) -> Slice {
         }
         rows.push(Fragment {
             node: row.node().to_plain(),
-            modifiers: row.modifiers().cloned().collect(),
+            modifiers: row.explicit_modifiers().cloned().collect(),
             children: cells,
         });
     }
     let table_frag = Fragment {
         node: table.node().to_plain(),
-        modifiers: table.modifiers().cloned().collect(),
+        modifiers: table.explicit_modifiers().cloned().collect(),
         children: rows,
     };
     Slice {

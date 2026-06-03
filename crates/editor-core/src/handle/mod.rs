@@ -17,6 +17,8 @@ mod view;
 
 pub use clipboard::handle_clipboard_op;
 pub use deletion::handle_deletion_op;
+#[cfg(test)]
+pub(crate) use dnd::apply_drop_for_test;
 pub use dnd::handle_dnd_op;
 pub use history::handle_history_op;
 pub use insertion::handle_insertion_op;

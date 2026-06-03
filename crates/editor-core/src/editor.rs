@@ -3372,4 +3372,379 @@ mod tests {
                 .collect::<Vec<_>>()
         );
     }
+
+    fn fold_editor_with_unit_selection() -> (Editor, NodeId, NodeId) {
+        let (initial, root, fold_node, _para_text) = state! {
+            doc {
+                root: root {
+                    fold_node: fold {
+                        fold_title { text("title") }
+                        fold_content { paragraph { text("content") } }
+                    }
+                    paragraph { _para_text: text("after") }
+                }
+            }
+            selection: (root, 0) -> (root, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        (editor, root, fold_node)
+    }
+
+    // drop_target_at이 fold 문서에서 유효한 위치를 반환하는지 확인
+    #[test]
+    fn fold_dnd_drop_target_at_returns_position_below_paragraph() {
+        let (initial, r, _fnode, para_text) = state! {
+            doc {
+                r: root {
+                    _fnode: fold {
+                        fold_title { text("title") }
+                        fold_content { paragraph { text("content") } }
+                    }
+                    paragraph { para_text: text("after") }
+                }
+            }
+            selection: (r, 0) -> (r, 1)
+        };
+        let _ = r;
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let page_bottom = editor.view().pages()[0].size.height;
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(para_text, 5))
+            .expect("cursor metrics")
+            .caret;
+
+        let target = editor
+            .view
+            .drop_target_at(&editor.state.doc, 0, caret.x, page_bottom - 1.0);
+
+        assert!(
+            target.is_some(),
+            "drop_target_at must return Some for y=page_bottom-1 with fold+paragraph doc, caret at y={}, height={}",
+            caret.y,
+            caret.height
+        );
+        if let Some(t) = target {
+            assert_eq!(
+                t.position,
+                Position::new(NodeId::ROOT, 2),
+                "drop target position must be (root, 2) - after paragraph"
+            );
+        }
+    }
+
+    // fold 선택 후 StartInternalSelection → DndState가 InternalDnd로 전환되어야 한다
+    #[test]
+    fn fold_unit_selection_starts_internal_dnd() {
+        let (mut editor, _, _) = fold_editor_with_unit_selection();
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        assert!(
+            matches!(editor.dnd, DndState::InternalDnd { .. }),
+            "fold unit selection must produce InternalDnd state, got {:?}",
+            editor.dnd
+        );
+    }
+
+    // drop_internal_selection 단계별 디버그: 어느 단계에서 실패하는지 확인
+    #[test]
+    fn fold_dnd_debug_drop_internal_selection_steps() {
+        use editor_clipboard::Slice;
+        use editor_commands::{self as commands};
+        let (initial, root, _fold_node, _para_text) = state! {
+            doc {
+                root: root {
+                    _fold_node: fold {
+                        fold_title { text("t") }
+                        fold_content { paragraph { text("c") } }
+                    }
+                    paragraph { _para_text: text("after") }
+                }
+            }
+            selection: (root, 0) -> (root, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+
+        let DndState::InternalDnd { ref source, .. } = editor.dnd else {
+            panic!("expected InternalDnd");
+        };
+        let sel = source.thaw(&editor.state.doc);
+
+        // Extract slice
+        let mut state = editor.state().clone();
+        state.selection = Some(sel.clone());
+        let slice = Slice::extract(&state).expect("Slice::extract must succeed");
+
+        // Print slice content for debugging
+        eprintln!("slice fragment node: {:?}", slice.fragment.node);
+        eprintln!(
+            "slice fragment modifiers count: {}",
+            slice.fragment.modifiers.len()
+        );
+        for m in &slice.fragment.modifiers {
+            eprintln!("  root modifier: {:?}", m);
+        }
+        for (i, child) in slice.fragment.children.iter().enumerate() {
+            eprintln!(
+                "  child[{}]: {:?}, modifiers: {:?}",
+                i, child.node, child.modifiers
+            );
+            for (j, gc) in child.children.iter().enumerate() {
+                eprintln!(
+                    "    grandchild[{}]: {:?}, modifiers: {:?}",
+                    j, gc.node, gc.modifiers
+                );
+                for (k, ggc) in gc.children.iter().enumerate() {
+                    eprintln!(
+                        "      great-grandchild[{}]: {:?}, modifiers: {:?}",
+                        k, ggc.node, ggc.modifiers
+                    );
+                }
+            }
+        }
+
+        // Step 1: set_selection + delete_selection in separate transact
+        let stable_target = StableSelection::freeze(
+            &Selection::collapsed(Position::new(NodeId::ROOT, 2)),
+            &editor.state.doc,
+        );
+        let r1 = editor.transact(|tr| {
+            commands::set_selection(tr, sel.clone())
+                .map_err(|e| crate::error::EditorError::from(e))?;
+            commands::delete_selection(tr).map_err(|e| crate::error::EditorError::from(e))?;
+            Ok(())
+        });
+        match r1 {
+            Ok(_) => eprintln!("Step 1 (set_selection + delete_selection): OK"),
+            Err(e) => panic!("Step 1 failed: {:?}", e),
+        }
+
+        // Step 2: insert_slice_at in separate transact
+        let target = stable_target.thaw(&editor.state.doc).head;
+        eprintln!(
+            "target position after deletion: node={:?} offset={}",
+            target.node_id, target.offset
+        );
+        let r2 = editor.transact(|tr| {
+            commands::insert_slice_at(tr, target, slice.clone())
+                .map_err(|e| crate::error::EditorError::from(e))?;
+            Ok(())
+        });
+        match r2 {
+            Ok(_) => eprintln!("Step 2 (insert_slice_at): OK"),
+            Err(e) => panic!("Step 2 failed: {:?}", e),
+        }
+    }
+
+    // can_apply_drop이 fold → after-paragraph 이동에 대해 TRUE 반환하는지 검증
+    #[test]
+    fn fold_dnd_can_apply_drop_at_root_2_returns_true() {
+        let (initial, root, _fold_node, _para_text) = state! {
+            doc {
+                root: root {
+                    _fold_node: fold {
+                        fold_title { text("t") }
+                        fold_content { paragraph { text("c") } }
+                    }
+                    paragraph { _para_text: text("after") }
+                }
+            }
+            selection: (root, 0) -> (root, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+
+        // probe can_apply_drop at (root, 2)
+        let target_pos = Position::new(NodeId::ROOT, 2);
+        let result = editor.probe(|editor| {
+            let DndState::InternalDnd { ref source, .. } = editor.dnd.clone() else {
+                panic!("expected InternalDnd state");
+            };
+            let sel = source.thaw(&editor.state.doc);
+            assert!(
+                !sel.is_collapsed(),
+                "source selection must not be collapsed"
+            );
+            crate::handle::apply_drop_for_test(
+                editor,
+                target_pos,
+                DndDropPayload::InternalSelection,
+                InputModifiers::default(),
+                Some(sel),
+            )
+        });
+        match result {
+            Ok(true) => {}
+            Ok(false) => {
+                panic!("apply_drop at (root, 2) returned Ok(false) — state did not change")
+            }
+            Err(e) => panic!("apply_drop at (root, 2) returned Err: {:?}", e),
+        }
+    }
+
+    // fold 선택 드래그 중 fold 아래 paragraph 하단에 hover → indicator가 나타나야 한다
+    #[test]
+    fn fold_dnd_over_below_paragraph_shows_drop_indicator() {
+        let (initial, root, _fold_node, para_text) = state! {
+            doc {
+                root: root {
+                    _fold_node: fold {
+                        fold_title { text("title") }
+                        fold_content { paragraph { text("content") } }
+                    }
+                    paragraph { para_text: text("after") }
+                }
+            }
+            selection: (root, 0) -> (root, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(para_text, 5))
+            .expect("cursor metrics for paragraph after fold")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        let page_bottom = editor.view().pages()[0].size.height;
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: page_bottom - 1.0,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(
+            editor.drop_indicator_for_test().is_some(),
+            "hovering below paragraph while fold is dragged must show drop indicator"
+        );
+    }
+
+    // fold 드롭 → fold가 paragraph 다음으로 이동해야 한다
+    #[test]
+    fn fold_dnd_drop_moves_fold_after_paragraph() {
+        let (initial, root, fold_node, para_text) = state! {
+            doc {
+                root: root {
+                    fold_node: fold {
+                        fold_title { text("title") }
+                        fold_content { paragraph { text("content") } }
+                    }
+                    paragraph { para_text: text("after") }
+                }
+            }
+            selection: (root, 0) -> (root, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state.doc, &Position::new(para_text, 5))
+            .expect("cursor metrics")
+            .caret;
+
+        let page_bottom = editor.view().pages()[0].size.height;
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: page_bottom - 1.0,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Drop {
+                page: 0,
+                x: caret.x,
+                y: page_bottom - 1.0,
+                payload: DndDropPayload::InternalSelection,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        let doc = &editor.state().doc;
+        let root_children: Vec<_> = doc.node(NodeId::ROOT).unwrap().children().collect();
+        // ROOT schema requires a trailing Paragraph, so fulfill adds one after the inserted fold.
+        // [paragraph("after"), fold, paragraph("")] = 3 children.
+        assert!(
+            root_children.len() >= 2,
+            "root must have at least 2 children after move"
+        );
+        assert!(
+            !matches!(root_children[0].node(), Node::Fold(_)),
+            "fold must have moved away from index 0"
+        );
+        assert!(
+            matches!(root_children[1].node(), Node::Fold(_)),
+            "index 1 must be a Fold node (moved after paragraph)"
+        );
+    }
+
+    // fold 위에 hover → fold 내부이므로 indicator가 나타나면 안 된다
+    #[test]
+    fn fold_dnd_over_inside_fold_shows_no_indicator() {
+        let (initial, root, _fold_node, _para_text) = state! {
+            doc {
+                root: root {
+                    _fold_node: fold {
+                        fold_title { text("title") }
+                        fold_content { paragraph { text("content") } }
+                    }
+                    paragraph { _para_text: text("after") }
+                }
+            }
+            selection: (root, 0) -> (root, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let page_top_y = editor.view().pages()[0].y_start + 1.0;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: 50.0,
+                y: page_top_y,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(
+            editor.drop_indicator_for_test().is_none(),
+            "hovering inside the dragged fold must not show a drop indicator"
+        );
+    }
 }
