@@ -9,7 +9,7 @@ use crate::html::parse::rules::{
     compute_modifiers_for_element, modifier_parse_rules, node_parse_rules, try_parse_node,
 };
 use crate::html::parse::stylesheet::{ComputedStylesheet, Declaration, parse_inline_style};
-use editor_model::{Fragment, Modifier, PlainNode, PlainTextNode};
+use editor_model::{Fragment, Modifier, PlainNode, PlainTabNode, PlainTextNode};
 use editor_resource::Resource;
 use scraper::{ElementRef, Node as ScraperNode};
 
@@ -100,10 +100,21 @@ pub fn walk<'a>(
         ScraperNode::Text(text) => {
             let s = text.to_string();
             if !s.is_empty() {
-                out.push(
-                    Fragment::leaf(PlainNode::Text(PlainTextNode { text: s }))
-                        .with_modifiers(inline_mods.to_vec()),
-                );
+                let mut first = true;
+                for segment in s.split('\t') {
+                    if !first {
+                        out.push(Fragment::leaf(PlainNode::Tab(PlainTabNode::default())));
+                    }
+                    if !segment.is_empty() {
+                        out.push(
+                            Fragment::leaf(PlainNode::Text(PlainTextNode {
+                                text: segment.to_string(),
+                            }))
+                            .with_modifiers(inline_mods.to_vec()),
+                        );
+                    }
+                    first = false;
+                }
             }
         }
         _ => {}

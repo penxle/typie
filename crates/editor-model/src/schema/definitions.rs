@@ -39,7 +39,7 @@ impl Default for SchemaInner {
                     ..Default::default()
                 },
                 NodeType::Paragraph => NodeSpec {
-                    content: content_expr!((Text | HardBreak)*, PageBreak?),
+                    content: content_expr!((Text | HardBreak | Tab)*, PageBreak?),
                     ..Default::default()
                 },
                 NodeType::Text => NodeSpec {
@@ -132,6 +132,10 @@ impl Default for SchemaInner {
                     structural: true,
                     ..Default::default()
                 },
+                NodeType::Tab => NodeSpec {
+                    inline: true,
+                    ..Default::default()
+                },
             },
             modifiers: enum_map! {
                 ModifierType::Bold => ModifierSpec {
@@ -155,18 +159,18 @@ impl Default for SchemaInner {
                     ..Default::default()
                 },
                 ModifierType::FontSize => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
                     ..Default::default()
                 },
                 ModifierType::FontFamily => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
                     ..Default::default()
                 },
                 ModifierType::FontWeight => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
                     ..Default::default()
                 },
                 ModifierType::TextColor => ModifierSpec {
@@ -180,8 +184,8 @@ impl Default for SchemaInner {
                     ..Default::default()
                 },
                 ModifierType::LetterSpacing => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
                     ..Default::default()
                 },
                 ModifierType::Link => ModifierSpec {

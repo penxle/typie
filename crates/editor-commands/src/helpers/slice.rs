@@ -6,7 +6,7 @@ use editor_model::{
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use super::{insert_hard_break_at_caret, insert_text_at_caret};
+use super::{insert_hard_break_at_caret, insert_tab_at_caret, insert_text_at_caret};
 use crate::{CommandError, CommandResult};
 
 pub(crate) fn insert_slice_at_position(
@@ -140,7 +140,10 @@ fn is_inline_only(slice: &Slice) -> bool {
         matches!(n, PlainNode::Paragraph(_))
     }
     fn is_inline_leaf(n: &PlainNode) -> bool {
-        matches!(n, PlainNode::Text(_) | PlainNode::HardBreak(_))
+        matches!(
+            n,
+            PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_)
+        )
     }
 
     let frag = &slice.fragment;
@@ -176,7 +179,7 @@ fn position_in_textblock(tr: &Transaction, position: Position) -> bool {
 fn collect_inline(f: &Fragment) -> Vec<&Fragment> {
     fn walk<'a>(f: &'a Fragment, out: &mut Vec<&'a Fragment>) {
         match &f.node {
-            PlainNode::Text(_) | PlainNode::HardBreak(_) => out.push(f),
+            PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_) => out.push(f),
             _ => {
                 for c in &f.children {
                     walk(c, out);
@@ -237,6 +240,10 @@ fn insert_inline_fragments(tr: &mut Transaction, fragments: Vec<Fragment>) -> Co
             }
             PlainNode::HardBreak(_) => {
                 insert_hard_break_at_caret(tr)?;
+                any_change = true;
+            }
+            PlainNode::Tab(_) => {
+                insert_tab_at_caret(tr)?;
                 any_change = true;
             }
             _ => {}

@@ -13,15 +13,23 @@ pub fn page_for_y(pages: &[LayoutPage], y: f32) -> Option<usize> {
 }
 
 pub fn line_start_x(line: &LayoutLine) -> f32 {
-    line.glyph_runs
-        .first()
-        .map(|r| r.x)
-        .unwrap_or(line.empty_caret_x)
+    let glyph_start = line.glyph_runs.first().map(|r| r.x);
+    let gap_start = line.tab_gaps.first().map(|g| g.x);
+    match (glyph_start, gap_start) {
+        (Some(g), Some(t)) => g.min(t),
+        (Some(g), None) => g,
+        (None, Some(t)) => t,
+        (None, None) => line.empty_caret_x,
+    }
 }
 
 pub fn line_end_x(line: &LayoutLine) -> f32 {
-    line.glyph_runs
-        .last()
-        .map(|r| r.x + r.width)
-        .unwrap_or(line.empty_caret_x)
+    let glyph_end = line.glyph_runs.last().map(|r| r.x + r.width);
+    let gap_end = line.tab_gaps.last().map(|g| g.x + g.width);
+    match (glyph_end, gap_end) {
+        (Some(g), Some(t)) => g.max(t),
+        (Some(g), None) => g,
+        (None, Some(t)) => t,
+        (None, None) => line.empty_caret_x,
+    }
 }

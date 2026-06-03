@@ -4,6 +4,7 @@ use std::ops::Range;
 
 use crate::TableLayoutInfo;
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
+use crate::measure::TabGap;
 use crate::style::BoxStyle;
 
 #[derive(Debug)]
@@ -60,6 +61,7 @@ pub struct LayoutLine {
     /// Mirror of [`crate::measure::MeasuredLine::child_range`]; see that
     /// type for the inclusive-both matching contract and `None` semantics.
     pub child_range: Option<Range<usize>>,
+    pub tab_gaps: Vec<TabGap>,
 }
 
 #[derive(Debug, Clone)]

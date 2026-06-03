@@ -15,6 +15,7 @@ mod ordered_list;
 mod page_break;
 mod paragraph;
 mod root;
+mod tab;
 mod table;
 mod table_cell;
 mod table_row;
@@ -37,6 +38,7 @@ pub use ordered_list::*;
 pub use page_break::*;
 pub use paragraph::*;
 pub use root::*;
+pub use tab::*;
 pub use table::*;
 pub use table_cell::*;
 pub use table_row::*;
@@ -112,6 +114,8 @@ pub enum Node {
     HorizontalRule(HorizontalRuleNode),
     #[strum_discriminants(wire(n(20)))]
     PageBreak(PageBreakNode),
+    #[strum_discriminants(wire(n(21)))]
+    Tab(TabNode),
 }
 
 static FOLD_TITLE_IMPLICIT: LazyLock<Vec<Modifier>> = LazyLock::new(|| {

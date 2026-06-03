@@ -27,7 +27,7 @@ pub fn classify(node: &Node) -> FlatClass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_model::{HardBreakNode, ImageNode, ParagraphNode, TextNode};
+    use editor_model::{HardBreakNode, ImageNode, ParagraphNode, TabNode, TextNode};
 
     #[test]
     fn classify_returns_text_for_text_node() {
@@ -41,6 +41,11 @@ mod tests {
             classify(&Node::HardBreak(HardBreakNode {})),
             FlatClass::Break
         );
+    }
+
+    #[test]
+    fn classify_returns_break_for_tab() {
+        assert_eq!(classify(&Node::Tab(TabNode {})), FlatClass::Break);
     }
 
     #[test]

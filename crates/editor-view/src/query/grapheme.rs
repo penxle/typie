@@ -8,6 +8,20 @@ pub fn run_codepoint_count(run: &GlyphRun) -> usize {
 }
 
 pub fn last_position_in_line(line: &LayoutLine) -> Position {
+    if let Some(last_gap) = line.tab_gaps.last() {
+        let after_glyphs = line
+            .glyph_runs
+            .last()
+            .map(|r| last_gap.x + last_gap.width >= r.x + r.width)
+            .unwrap_or(true);
+        if after_glyphs {
+            return Position {
+                node_id: line.node_id,
+                offset: last_gap.child_index + 1,
+                affinity: Affinity::Upstream,
+            };
+        }
+    }
     if let Some(run) = line.glyph_runs.last() {
         return Position {
             node_id: run.node_id,
@@ -31,6 +45,17 @@ pub fn last_position_in_line(line: &LayoutLine) -> Position {
 }
 
 pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
+    for gap in &line.tab_gaps {
+        if pos.node_id == line.node_id {
+            if pos.offset == gap.child_index {
+                return gap.x;
+            }
+            if pos.offset == gap.child_index + 1 {
+                return gap.x + gap.width;
+            }
+        }
+    }
+
     for run in &line.glyph_runs {
         if run.node_id != pos.node_id {
             continue;
@@ -62,6 +87,22 @@ pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
 }
 
 pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
+    for gap in &line.tab_gaps {
+        if local_x >= gap.x && local_x <= gap.x + gap.width {
+            let before = local_x < gap.x + gap.width / 2.0;
+            let offset = if before {
+                gap.child_index
+            } else {
+                gap.child_index + 1
+            };
+            return Position {
+                node_id: line.node_id,
+                offset,
+                affinity: Affinity::Downstream,
+            };
+        }
+    }
+
     if line.glyph_runs.is_empty() {
         let offset = line.child_range.as_ref().map(|r| r.start).unwrap_or(0);
         return Position::new(line.node_id, offset);
@@ -160,6 +201,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 0.0);
     }
@@ -184,6 +226,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 3)), 30.0);
     }
@@ -208,6 +251,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 5)), 50.0);
     }
@@ -232,6 +276,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         // offset 1 is inside the first grapheme (3 codepoints) => snaps to start
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 0.0);
@@ -261,6 +306,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 60.0);
     }
@@ -285,6 +331,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         let pos = position_at_x(&line, -5.0);
         assert_eq!(pos.node_id, id);
@@ -311,6 +358,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         let pos = position_at_x(&line, 100.0);
         assert_eq!(pos.node_id, id);
@@ -337,6 +385,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         // x=4 is < 5.0 (half of first advance), so snaps to offset 0
         let pos = position_at_x(&line, 4.0);
@@ -366,6 +415,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         // x=9 is < 10.0 (half of 20.0 advance) => offset 0
         let pos = position_at_x(&line, 9.0);
@@ -392,6 +442,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         let pos = position_at_x(&line, 50.0);
         assert_eq!(pos.node_id, id);
@@ -421,6 +472,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         let pos = position_at_x(&line, 100.0);
         assert_eq!(pos.offset, 5);
@@ -447,6 +499,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
 
         let pos = position_at_x(&line, 46.0);
@@ -475,6 +528,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -495,6 +549,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -519,6 +574,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         assert_eq!(x_at_offset(&line, &Position::new(id2, 1)), 30.0);
     }
@@ -541,6 +597,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         let pos = position_at_x(&line, 25.0);
         assert_eq!(pos.node_id, id2);
@@ -561,6 +618,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 32.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 32.0);
     }
@@ -579,6 +637,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: Some(0..1),
+            tab_gaps: vec![],
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, p1);
@@ -600,6 +659,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: Some(2..2),
+            tab_gaps: vec![],
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, p1);
@@ -621,9 +681,183 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: Some(2..2),
+            tab_gaps: vec![],
         };
         let pos = position_at_x(&line, 50.0);
         assert_eq!(pos.node_id, p1);
         assert_eq!(pos.offset, 2);
+    }
+
+    fn tab_gap(node_id: NodeId, child_index: usize, x: f32, width: f32) -> crate::measure::TabGap {
+        crate::measure::TabGap {
+            node_id,
+            child_index,
+            x,
+            width,
+        }
+    }
+
+    #[test]
+    fn x_at_offset_after_leading_tab() {
+        // Paragraph: tab(child 0), text "x"(child 1). Caret AFTER the tab is the
+        // paragraph-level offset child_index + 1 = 1, which must land at the
+        // gap's right edge.
+        let para = NodeId::new();
+        let tab = NodeId::new();
+        let text = NodeId::new();
+        let line = LayoutLine {
+            node_id: para,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![GlyphRun::make_test_run(
+                text,
+                0,
+                "x",
+                40.0,
+                ascii_spans(1, 10.0),
+            )],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            child_range: Some(0..2),
+            tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+        };
+        // After the tab (offset 1) == gap.x + gap.width.
+        assert_eq!(x_at_offset(&line, &Position::new(para, 1)), 40.0);
+    }
+
+    #[test]
+    fn x_at_offset_before_tab() {
+        let para = NodeId::new();
+        let tab = NodeId::new();
+        let line = LayoutLine {
+            node_id: para,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            child_range: Some(0..1),
+            tab_gaps: vec![tab_gap(tab, 0, 12.0, 28.0)],
+        };
+        // Before the tab (offset == child_index) == gap.x.
+        assert_eq!(x_at_offset(&line, &Position::new(para, 0)), 12.0);
+    }
+
+    #[test]
+    fn position_at_x_inside_gap_left_half_is_before() {
+        let para = NodeId::new();
+        let tab = NodeId::new();
+        let line = LayoutLine {
+            node_id: para,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            child_range: Some(0..1),
+            tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+        };
+        // x=10 is in the left half ([0,20)) → before the tab (offset 0).
+        let pos = position_at_x(&line, 10.0);
+        assert_eq!(pos.node_id, para);
+        assert_eq!(pos.offset, 0);
+        assert_eq!(pos.affinity, Affinity::Downstream);
+    }
+
+    #[test]
+    fn position_at_x_inside_gap_right_half_is_after() {
+        let para = NodeId::new();
+        let tab = NodeId::new();
+        let line = LayoutLine {
+            node_id: para,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            child_range: Some(0..1),
+            tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+        };
+        // x=30 is in the right half (>= 20) → after the tab (offset 1).
+        let pos = position_at_x(&line, 30.0);
+        assert_eq!(pos.node_id, para);
+        assert_eq!(pos.offset, 1);
+    }
+
+    #[test]
+    fn last_position_in_line_trailing_tab_is_after_tab() {
+        // text "x"(child 0) then trailing tab(child 1). The line's last
+        // position must be AFTER the tab (offset 2), not the glyph end.
+        let para = NodeId::new();
+        let text = NodeId::new();
+        let tab = NodeId::new();
+        let line = LayoutLine {
+            node_id: para,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![GlyphRun::make_test_run(
+                text,
+                0,
+                "x",
+                0.0,
+                ascii_spans(1, 10.0),
+            )],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            child_range: Some(0..2),
+            // Tab starts at the glyph's right edge (x=10) and extends past it.
+            tab_gaps: vec![tab_gap(tab, 1, 10.0, 30.0)],
+        };
+        let pos = last_position_in_line(&line);
+        assert_eq!(pos.node_id, para);
+        assert_eq!(pos.offset, 2);
+        assert_eq!(pos.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn last_position_in_line_tab_before_trailing_text_uses_glyph_end() {
+        // Tab(child 0) then text "x"(child 1): the tab is NOT the rightmost
+        // content, so the last position is the glyph run end, unchanged.
+        let para = NodeId::new();
+        let tab = NodeId::new();
+        let text = NodeId::new();
+        let line = LayoutLine {
+            node_id: para,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![GlyphRun::make_test_run(
+                text,
+                0,
+                "x",
+                40.0,
+                ascii_spans(1, 10.0),
+            )],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            child_range: Some(0..2),
+            tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+        };
+        let pos = last_position_in_line(&line);
+        // Glyph run end (text node, offset 1), not the tab boundary.
+        assert_eq!(pos.node_id, text);
+        assert_eq!(pos.offset, 1);
     }
 }

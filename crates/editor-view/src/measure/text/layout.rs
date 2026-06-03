@@ -4,7 +4,8 @@ use parley::style::{
     FontFamily, FontFamilyName, FontFeatures, FontVariations, FontWeight, LineHeight, TextStyle,
 };
 use parley::{
-    Alignment as ParleyAlignment, AlignmentOptions, IndentOptions, Layout, OverflowWrap, WordBreak,
+    Alignment as ParleyAlignment, AlignmentOptions, IndentOptions, InlineBox, InlineBoxKind,
+    Layout, OverflowWrap, WordBreak,
 };
 use std::borrow::Cow;
 
@@ -17,6 +18,7 @@ pub fn build_layout(
     indent: f32,
     width: f32,
     resource: &mut Resource,
+    tabs: &[(super::text_run::TabMark, f32)],
 ) -> Layout<TextBrush> {
     let mut builder =
         resource
@@ -54,6 +56,16 @@ pub fn build_layout(
 
         let idx = builder.push_style(style);
         builder.push_style_run(idx, style_run.byte_range.clone());
+    }
+
+    for (i, (tab, placeholder)) in tabs.iter().enumerate() {
+        builder.push_inline_box(InlineBox {
+            id: i as u64,
+            kind: InlineBoxKind::InFlow,
+            index: tab.byte_offset,
+            width: *placeholder,
+            height: 0.0,
+        });
     }
 
     let mut layout = builder.build(text);

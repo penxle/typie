@@ -1263,4 +1263,29 @@ mod tests {
             "bolder against synthetic Bold parent (effective 700) must resolve to 900"
         );
     }
+
+    #[test]
+    fn html_tab_roundtrips() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("a") tab {} t2: text("b") } } }
+            selection: (t1, 0) -> (t2, 1)
+        };
+        let slice = Slice::extract(&s).unwrap();
+        let html = slice.to_html();
+        assert!(
+            html.contains('\t'),
+            "serialized HTML must contain a tab char: {html}"
+        );
+        let resource = Resource::new_test();
+        let meta_end = html.find('>').expect("meta tag closes") + 1;
+        let body_only = &html[meta_end..];
+        let parsed = Slice::from_html(body_only, &resource);
+        fn has_tab(f: &editor_model::Fragment) -> bool {
+            matches!(f.node, editor_model::PlainNode::Tab(_)) || f.children.iter().any(has_tab)
+        }
+        assert!(
+            has_tab(&parsed.fragment),
+            "parsed HTML must contain a Tab node"
+        );
+    }
 }

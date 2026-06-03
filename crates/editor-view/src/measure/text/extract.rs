@@ -6,7 +6,7 @@ use parley::Layout;
 
 use super::strut::StrutMetrics;
 use super::style_run::StyleRun;
-use super::text_run::TextRun;
+use super::text_run::{TabMark, TextRun};
 use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis, TextDecoration};
 use crate::measure::resolve::resolve_inherited;
 
@@ -16,6 +16,7 @@ pub struct ExtractedLine {
     pub ascent: f32,
     pub descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
+    pub tab_gaps_raw: Vec<(u64, f32, f32)>,
 }
 
 pub struct LineHeightConfig {
@@ -191,6 +192,7 @@ pub fn extract_lines(
     strut: &StrutMetrics,
     height_config: LineHeightConfig,
     grapheme_segmenter: &GraphemeClusterSegmenter,
+    tab_boxes: &[(TabMark, f32)],
 ) -> Vec<ExtractedLine> {
     let LineHeightConfig {
         line_height_ratio,
@@ -215,10 +217,30 @@ pub fn extract_lines(
         let baseline = leading / 2.0 + ascent;
 
         let mut glyph_runs = Vec::new();
-        let mut x = metrics.offset;
+        let mut tab_gaps_raw = Vec::new();
+        let mut shift = 0.0_f32;
+        let line_origin = metrics.offset;
 
         for item in line.items() {
-            if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+            let glyph_run = match item {
+                parley::PositionedLayoutItem::GlyphRun(glyph_run) => glyph_run,
+                parley::PositionedLayoutItem::InlineBox(b) => {
+                    let (_, tab_px) = &tab_boxes[b.id as usize];
+                    let cur_x = b.x + shift;
+                    const TAB_EPS: f32 = 0.01;
+                    let rem = (cur_x - line_origin).rem_euclid(*tab_px);
+                    let pad = if rem < TAB_EPS || rem > tab_px - TAB_EPS {
+                        *tab_px
+                    } else {
+                        tab_px - rem
+                    };
+                    tab_gaps_raw.push((b.id, cur_x, pad));
+                    shift += pad - tab_px;
+                    continue;
+                }
+            };
+
+            {
                 let run = glyph_run.run();
                 let font_size = run.font_size();
 
@@ -231,7 +253,7 @@ pub fn extract_lines(
                         glyph_x_advance += g.advance;
                         Glyph {
                             id: g.id,
-                            x: run_x + gx,
+                            x: run_x + gx + shift,
                             y: baseline + g.y,
                         }
                     })
@@ -293,12 +315,10 @@ pub fn extract_lines(
                     node_id,
                     offset: char_offset,
                     text: run_text,
-                    x,
+                    x: run_x + shift,
                     width: run_advance,
                     graphemes,
                 });
-
-                x += run_advance;
             }
         }
 
@@ -307,6 +327,7 @@ pub fn extract_lines(
             baseline,
             ascent,
             descent,
+            tab_gaps_raw,
             glyph_runs,
         });
     }

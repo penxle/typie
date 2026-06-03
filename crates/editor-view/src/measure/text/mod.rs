@@ -6,4 +6,5 @@ pub(crate) mod ruby;
 pub(crate) mod segment;
 pub(crate) mod strut;
 pub(crate) mod style_run;
+pub(crate) mod tab_metric;
 pub(crate) mod text_run;

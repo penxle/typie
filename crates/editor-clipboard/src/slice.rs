@@ -421,6 +421,39 @@ mod tests {
     }
 
     #[test]
+    fn extract_preserves_modifier_on_tab_fragment() {
+        use editor_model::{Modifier, PlainNode};
+        let (s, t1, tab, t2) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("a")
+                        tab: tab [font_size(2400)]
+                        t2: text("b")
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 1)
+        };
+        let _ = (t1, t2);
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        let para = &slice.fragment;
+        let tab_frag = para
+            .children
+            .iter()
+            .find(|c| matches!(c.node, PlainNode::Tab(_)))
+            .expect("Tab must appear in extracted slice");
+        assert!(
+            tab_frag
+                .modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 2400 })),
+            "Tab's font_size modifier must be preserved in the slice"
+        );
+        let _ = tab;
+    }
+
+    #[test]
     fn extract_cell_rect_single_cell_emits_1x1_table() {
         let (state, _, c00, _) = state! {
             doc { root { table { tr0: table_row {

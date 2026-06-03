@@ -145,6 +145,7 @@ fn expand_line(
             ruby_annotations,
             empty_caret_x: line.empty_caret_x,
             child_range: line.child_range.clone(),
+            tab_gaps: line.tab_gaps.clone(),
         }),
     }
 }

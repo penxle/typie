@@ -463,6 +463,7 @@ mod build_tests {
             ascent: 13.0,
             descent: 3.0,
             glyph_runs: runs,
+            tab_gaps_raw: vec![],
         }
     }
 

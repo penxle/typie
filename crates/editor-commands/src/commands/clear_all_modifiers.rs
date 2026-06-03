@@ -255,6 +255,33 @@ mod tests {
     }
 
     #[test]
+    fn range_clears_font_size_on_tab() {
+        let (initial, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    paragraph {
+                        t1: text("a") [font_size(2400)]
+                        tab [font_size(2400)]
+                        t2: text("b") [font_size(2400)]
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| clear_all_modifiers(&mut tr));
+
+        let tab_keeps_font_size = actual.doc.root().unwrap().descendants().any(|n| {
+            matches!(n.node(), editor_model::Node::Tab(_))
+                && n.explicit_modifiers()
+                    .any(|m| matches!(m, Modifier::FontSize { .. }))
+        });
+        assert!(
+            !tab_keeps_font_size,
+            "clear_all must remove the tab's explicit font_size"
+        );
+    }
+
+    #[test]
     fn collapsed_clears_own_inline_into_pending() {
         let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") [italic] } } }

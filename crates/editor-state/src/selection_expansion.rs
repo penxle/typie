@@ -91,7 +91,10 @@ fn inline_target_at(doc: &Doc, position: Position) -> Option<InlineTarget> {
         Node::Text(text) => {
             if position.offset == text.text.len()
                 && let Some(next) = node.next_sibling()
-                && matches!(next.node(), Node::HardBreak(_) | Node::PageBreak(_))
+                && matches!(
+                    next.node(),
+                    Node::HardBreak(_) | Node::PageBreak(_) | Node::Tab(_)
+                )
             {
                 return Some(InlineTarget::Unit {
                     parent_id: next.parent()?.id(),
@@ -127,7 +130,7 @@ fn inline_target_in_textblock(textblock: NodeRef<'_>, position: Position) -> Opt
                 0
             },
         }),
-        Node::HardBreak(_) | Node::PageBreak(_) => Some(InlineTarget::Unit {
+        Node::HardBreak(_) | Node::PageBreak(_) | Node::Tab(_) => Some(InlineTarget::Unit {
             parent_id: textblock.id(),
             index,
         }),
@@ -550,6 +553,58 @@ mod tests {
             affinity: Affinity::Upstream,
         });
         let actual = resolve_word_selection_expansion(&state.doc, selection, &resource);
+
+        assert_eq!(
+            actual,
+            Some(Selection::new(
+                Position::new(p, 1),
+                Position {
+                    node_id: p,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn word_expansion_at_text_tab_boundary_selects_tab() {
+        let resource = Resource::new_test();
+        let (state, p, t) = state! {
+            doc { root { p: paragraph { t: text("h") tab } } }
+            selection: (t, 1)
+        };
+
+        let selection = Selection::collapsed(Position {
+            node_id: t,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        });
+        let actual = resolve_word_selection_expansion(&state.doc, selection, &resource);
+
+        assert_eq!(
+            actual,
+            Some(Selection::new(
+                Position::new(p, 1),
+                Position {
+                    node_id: p,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn sentence_expansion_on_tab_inline_unit_selects_unit() {
+        let resource = Resource::new_test();
+        let (state, p) = state! {
+            doc { root { p: paragraph { text("Hello") tab } } }
+            selection: (p, 1)
+        };
+
+        let actual =
+            resolve_sentence_selection_expansion(&state.doc, state.selection.unwrap(), &resource);
 
         assert_eq!(
             actual,

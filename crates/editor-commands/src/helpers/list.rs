@@ -231,3 +231,136 @@ fn ancestor_index_within(doc: &Doc, node_id: NodeId, ancestor_id: NodeId) -> Opt
         current_id = parent.id();
     }
 }
+
+pub(crate) fn is_at_list_item_content_start(doc: &Doc, selection: &Selection) -> bool {
+    if !selection.is_collapsed() {
+        return false;
+    }
+    let pos = selection.head;
+    let Some(item_id) = find_enclosing_list_item_id(doc, pos.node_id) else {
+        return false;
+    };
+    let Some(item) = doc.node(item_id) else {
+        return false;
+    };
+    let Some(para) = item.first_child() else {
+        return false;
+    };
+    if pos.node_id == para.id() {
+        return pos.offset == 0;
+    }
+    if let Some(first_inline) = para.first_child() {
+        return pos.node_id == first_inline.id() && pos.offset == 0;
+    }
+    false
+}
+
+pub(crate) fn sink_list_item_inner(tr: &mut Transaction, list_item_id: NodeId) -> CommandResult {
+    let doc = tr.doc();
+    let list_item = doc
+        .node(list_item_id)
+        .ok_or(CommandError::NodeNotFound(list_item_id))?;
+    if !matches!(list_item.node(), Node::ListItem(_)) {
+        return Ok(false);
+    }
+
+    let prev = match list_item.prev_sibling() {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+    let prev_id = prev.id();
+
+    let list = list_item
+        .parent()
+        .ok_or(CommandError::NoParent(list_item_id))?;
+    let list_type = list.as_type();
+    if !matches!(list_type, NodeType::BulletList | NodeType::OrderedList) {
+        return Ok(false);
+    }
+
+    // A list_item allows at most one trailing sublist. Reuse any existing one
+    // regardless of its type — creating a second sublist would violate the
+    // schema, so type-matching can't be enforced here.
+    let target_sublist_id = prev
+        .children()
+        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
+        .map(|c| c.id());
+
+    tr.batch::<_, CommandError>(|tr| {
+        let target_id = match target_sublist_id {
+            Some(id) => id,
+            None => {
+                let new_sublist_id = NodeId::new();
+                let new_node = list_type.into_node().to_plain();
+                let doc = tr.doc();
+                let prev = doc
+                    .node(prev_id)
+                    .ok_or(CommandError::NodeNotFound(prev_id))?;
+                let insert_at = prev.entry().children.len();
+                tr.insert_subtree(prev_id, insert_at, Subtree::leaf(new_sublist_id, new_node))?;
+                new_sublist_id
+            }
+        };
+
+        let doc = tr.doc();
+        let target = doc
+            .node(target_id)
+            .ok_or(CommandError::NodeNotFound(target_id))?;
+        let target_len = target.entry().children.len();
+        tr.move_node(list_item_id, target_id, target_len)?;
+
+        let doc = tr.doc();
+        if let Some(prev) = doc.node(prev_id) {
+            tr.apply_steps(fulfill(&prev))?;
+        }
+        Ok(())
+    })?;
+
+    Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use editor_macros::state;
+
+    use super::*;
+
+    #[test]
+    fn at_list_item_start_true_at_offset_zero() {
+        let (state, ..) = state! {
+            doc { root { bullet_list {
+                list_item { paragraph { t1: text("A") } }
+                list_item { paragraph { t2: text("B") } }
+            } } }
+            selection: (t2, 0)
+        };
+        assert!(is_at_list_item_content_start(
+            &state.doc,
+            state.selection.as_ref().unwrap()
+        ));
+    }
+
+    #[test]
+    fn at_list_item_start_false_mid_text() {
+        let (state, ..) = state! {
+            doc { root { bullet_list { list_item { paragraph { t1: text("AB") } } } } }
+            selection: (t1, 1)
+        };
+        assert!(!is_at_list_item_content_start(
+            &state.doc,
+            state.selection.as_ref().unwrap()
+        ));
+    }
+
+    #[test]
+    fn at_list_item_start_false_outside_list() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("A") } } }
+            selection: (t1, 0)
+        };
+        assert!(!is_at_list_item_content_start(
+            &state.doc,
+            state.selection.as_ref().unwrap()
+        ));
+    }
+}

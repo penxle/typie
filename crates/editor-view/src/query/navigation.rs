@@ -122,12 +122,23 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                 }
                 if local == cp_acc
                     && let Some(next) = line.glyph_runs.get(i + 1)
-                    && let Some(g) = next.graphemes.first()
                 {
-                    return Some(Selection::collapsed(Position::new(
-                        next.node_id,
-                        next.offset + g.codepoints as usize,
-                    )));
+                    let separated_by_tab = line
+                        .tab_gaps
+                        .iter()
+                        .any(|gap| gap.x >= run.x - 0.5 && gap.x + gap.width <= next.x + 0.5);
+                    if separated_by_tab {
+                        return Some(Selection::collapsed(Position::new(
+                            next.node_id,
+                            next.offset,
+                        )));
+                    }
+                    if let Some(g) = next.graphemes.first() {
+                        return Some(Selection::collapsed(Position::new(
+                            next.node_id,
+                            next.offset + g.codepoints as usize,
+                        )));
+                    }
                 }
             }
             let next = search::find_navigable_after(&tree.root, line_node)?;
@@ -218,6 +229,16 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                 if pos.offset == run.offset && i > 0 {
                     let prev = &line.glyph_runs[i - 1];
                     let total = super::grapheme::run_codepoint_count(prev);
+                    let separated_by_tab = line
+                        .tab_gaps
+                        .iter()
+                        .any(|gap| gap.x >= prev.x - 0.5 && gap.x + gap.width <= run.x + 0.5);
+                    if separated_by_tab {
+                        return Some(Selection::collapsed(Position::new(
+                            prev.node_id,
+                            prev.offset + total,
+                        )));
+                    }
                     if let Some(g) = prev.graphemes.last() {
                         return Some(Selection::collapsed(Position::new(
                             prev.node_id,
@@ -482,7 +503,16 @@ fn move_document_backward(tree: &LayoutTree) -> Option<Selection> {
 }
 
 fn first_position_in_line(line: &LayoutLine) -> Position {
-    if let Some(run) = line.glyph_runs.first() {
+    let run_first = line.glyph_runs.first();
+    let leading_gap = line
+        .tab_gaps
+        .iter()
+        .filter(|g| run_first.map_or(true, |r| g.x < r.x))
+        .min_by(|a, b| a.x.total_cmp(&b.x));
+    if let Some(gap) = leading_gap {
+        return Position::new(line.node_id, gap.child_index);
+    }
+    if let Some(run) = run_first {
         return Position::new(run.node_id, run.offset);
     }
     let offset = line.child_range.as_ref().map(|r| r.start).unwrap_or(0);
@@ -771,6 +801,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         }
     }
@@ -902,6 +933,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         let line_b = LayoutNode {
@@ -917,6 +949,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         LayoutTree {
@@ -938,6 +971,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: Some(2..2),
+            tab_gaps: vec![],
         };
         let pos = first_position_in_line(&line);
         assert_eq!(pos.node_id, p1);
@@ -1363,6 +1397,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         let tree = LayoutTree {
@@ -1408,6 +1443,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         let tree = LayoutTree {
@@ -2551,6 +2587,150 @@ mod tests {
         assert!(
             view.is_at_edge_line_of(table, &top, false),
             "first row IS the table's top edge"
+        );
+    }
+
+    #[test]
+    fn grapheme_forward_across_tab_stops_after_tab() {
+        use crate::view::View;
+        use editor_macros::doc;
+        let (doc, _p1, t1, t2) =
+            doc! { root { p1: paragraph { t1: text("1") tab {} t2: text("2") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let sel = mov(
+            tree,
+            Position::new(t1, 1),
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        )
+        .expect("move");
+        assert_eq!(sel.head.node_id, t2);
+        assert_eq!(
+            sel.head.offset, 0,
+            "right-arrow across a tab must land before '2' (after the tab), not skip it"
+        );
+    }
+
+    #[test]
+    fn grapheme_backward_across_tab_stops_before_tab() {
+        use crate::view::View;
+        use editor_macros::doc;
+        let (doc, _p1, t1, t2) =
+            doc! { root { p1: paragraph { t1: text("1") tab {} t2: text("2") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let sel = mov(
+            tree,
+            Position::new(t2, 0),
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        )
+        .expect("move");
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(
+            sel.head.offset, 1,
+            "left-arrow across a tab must land after '1' (before the tab), not skip it"
+        );
+    }
+
+    #[test]
+    fn word_forward_stops_at_tab_boundary() {
+        use crate::view::View;
+        use editor_macros::doc;
+        let (doc, _p1, t1, t2) =
+            doc! { root { p1: paragraph { t1: text("foo") tab {} t2: text("bar") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let sel = mov(
+            tree,
+            Position::new(t1, 0),
+            Movement::Word {
+                direction: Direction::Forward,
+            },
+        )
+        .expect("move");
+        assert_eq!(
+            (sel.head.node_id, sel.head.offset),
+            (t1, 3),
+            "word-forward must stop at the tab (end of 'foo'), not skip across to end of 'bar'"
+        );
+    }
+
+    #[test]
+    fn word_backward_stops_at_tab_boundary() {
+        use crate::view::View;
+        use editor_macros::doc;
+        let (doc, _p1, t1, t2) =
+            doc! { root { p1: paragraph { t1: text("foo") tab {} t2: text("bar") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let sel = mov(
+            tree,
+            Position::new(t2, 3),
+            Movement::Word {
+                direction: Direction::Backward,
+            },
+        )
+        .expect("move");
+        assert_eq!(
+            (sel.head.node_id, sel.head.offset),
+            (t2, 0),
+            "word-backward from end of 'bar' must stop at start of 'bar', not skip across the tab"
+        );
+    }
+
+    #[test]
+    fn home_with_leading_tab_goes_before_tab() {
+        use crate::view::View;
+        use editor_macros::doc;
+        let (doc, p1, t) = doc! { root { p1: paragraph { tab {} t: text("x") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let sel = mov(
+            tree,
+            Position::new(t, 0),
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Horizontal,
+            },
+        )
+        .expect("move");
+        assert_eq!(
+            (sel.head.node_id, sel.head.offset),
+            (p1, 0),
+            "Home must go to the line start (before the leading tab)"
+        );
+    }
+
+    #[test]
+    fn end_with_trailing_tab_goes_after_tab() {
+        use crate::view::View;
+        use editor_macros::doc;
+        let (doc, p1, t) = doc! { root { p1: paragraph { t: text("x") tab {} } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let sel = mov(
+            tree,
+            Position::new(t, 0),
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Horizontal,
+            },
+        )
+        .expect("move");
+        assert_eq!(
+            (sel.head.node_id, sel.head.offset),
+            (p1, 2),
+            "End must go to the line end (after the trailing tab)"
         );
     }
 }

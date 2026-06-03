@@ -439,6 +439,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         }
     }
@@ -457,6 +458,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         }
     }
@@ -728,6 +730,7 @@ mod tests {
                         ruby_annotations: vec![],
                         empty_caret_x: 0.0,
                         child_range: Some(0..0),
+                        tab_gaps: vec![],
                     }),
                 }],
             ),
@@ -757,6 +760,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         let line_b = LayoutNode {
@@ -772,6 +776,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         let tree = LayoutTree {
@@ -804,6 +809,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         let line_b = LayoutNode {
@@ -819,6 +825,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         };
         let tree = LayoutTree {
@@ -865,6 +872,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: Some(child_range),
+                tab_gaps: vec![],
             }),
         }
     }
@@ -1090,5 +1098,29 @@ mod tests {
         let missing = NodeId::new();
         let rects = super::node_box_rects(&tree, &pages, &[c00, missing]);
         assert_eq!(rects.len(), 1);
+    }
+
+    #[test]
+    fn find_line_at_resolves_tab_boundary_positions() {
+        use crate::view::View;
+        use editor_macros::doc;
+
+        // Paragraph: tab(child 0) text("x")(child 1). The tab boundary
+        // positions (para, 0) [before] and (para, 1) [after] must both resolve
+        // to the line owning the paragraph child_range.
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} text("x") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+
+        for offset in [0usize, 1usize] {
+            let pos = Position::new(p1, offset);
+            let node = find_line_at(tree, &pos)
+                .unwrap_or_else(|| panic!("tab boundary offset {offset} must resolve to a line"));
+            match &node.content {
+                LayoutContent::Line(l) => assert_eq!(l.node_id, p1),
+                _ => panic!("expected Line for offset {offset}"),
+            }
+        }
     }
 }

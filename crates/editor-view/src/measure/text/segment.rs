@@ -64,7 +64,7 @@ pub(crate) fn split_into_segments<'a>(paragraph: &NodeRef<'a>) -> Vec<Segment<'a
                 seg_start = end;
                 last_was_hard_break = true;
             }
-            Node::Text(_) => {
+            Node::Text(_) | Node::Tab(_) => {
                 buf.push(child);
                 last_was_hard_break = false;
             }
@@ -175,6 +175,18 @@ mod tests {
             variants(&segs),
             vec![("text", 0..2), ("empty", 2..3), ("text", 3..4)]
         );
+    }
+
+    #[test]
+    fn tab_stays_in_text_segment() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") tab text("b") } } };
+        let p = doc.node(p1).unwrap();
+        let segs = split_into_segments(&p);
+        assert_eq!(variants(&segs), vec![("text", 0..3)]);
+        match &segs[0] {
+            Segment::Text { children, .. } => assert_eq!(children.len(), 3),
+            _ => panic!("expected Text"),
+        }
     }
 
     #[test]

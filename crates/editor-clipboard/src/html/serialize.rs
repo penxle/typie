@@ -22,6 +22,7 @@ fn serialize_node(fragment: &Fragment, out: &mut String) {
     match &fragment.node {
         PlainNode::Text(t) => serialize_text(&t.text, &fragment.modifiers, out),
         PlainNode::HardBreak(_) => out.push_str("<br>"),
+        PlainNode::Tab(_) => out.push('\t'),
         PlainNode::Paragraph(_) => wrap("p", fragment, out, None),
         PlainNode::BulletList(_) => wrap("ul", fragment, out, None),
         PlainNode::OrderedList(_) => wrap("ol", fragment, out, None),

@@ -579,4 +579,129 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn range_set_font_size_spanning_tab_applies_to_text_without_panic() {
+        let (initial, t1, t2) = state! {
+            doc {
+                root [font_size(1600)] {
+                    paragraph {
+                        t1: text("Hello")
+                        tab {}
+                        t2: text("World")
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        let actual_doc = actual.doc;
+        let t1_entry = actual_doc.get_entry(t1).unwrap();
+        let t2_entry = actual_doc.get_entry(t2).unwrap();
+        assert!(
+            t1_entry
+                .modifiers
+                .contains_key(&editor_model::ModifierType::FontSize)
+                || t2_entry
+                    .modifiers
+                    .contains_key(&editor_model::ModifierType::FontSize),
+            "font_size must be stamped on at least one text node"
+        );
+    }
+
+    fn tab_has_modifier(doc: &editor_model::Doc, ty: editor_model::ModifierType) -> bool {
+        doc.root().unwrap().descendants().any(|n| {
+            matches!(n.node(), editor_model::Node::Tab(_))
+                && n.explicit_modifiers().any(|m| m.as_type() == ty)
+        })
+    }
+
+    fn tab_font_size(doc: &editor_model::Doc) -> Option<u32> {
+        doc.root().unwrap().descendants().find_map(|n| {
+            if matches!(n.node(), editor_model::Node::Tab(_)) {
+                n.explicit_modifiers().find_map(|m| match m {
+                    Modifier::FontSize { value } => Some(*value),
+                    _ => None,
+                })
+            } else {
+                None
+            }
+        })
+    }
+
+    #[test]
+    fn range_set_font_size_stamps_tab() {
+        let (initial, t1, t2) = state! {
+            doc {
+                root [font_size(1600)] {
+                    paragraph {
+                        t1: text("a")
+                        tab {}
+                        t2: text("b")
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        assert_eq!(
+            tab_font_size(&actual.doc),
+            Some(2400),
+            "tab must carry the range font_size"
+        );
+        assert!(
+            actual
+                .doc
+                .get_entry(t1)
+                .unwrap()
+                .modifiers
+                .contains_key(&editor_model::ModifierType::FontSize),
+            "leading text node must carry font_size"
+        );
+        assert!(
+            actual
+                .doc
+                .get_entry(t2)
+                .unwrap()
+                .modifiers
+                .contains_key(&editor_model::ModifierType::FontSize),
+            "trailing text node must carry font_size"
+        );
+    }
+
+    #[test]
+    fn range_set_font_size_stamps_tab_undo_removes() {
+        let (initial, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    paragraph {
+                        t1: text("a")
+                        tab {}
+                        t2: text("b")
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 1)
+        };
+        let initial_doc = initial.doc.clone();
+        let (after_set, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        assert_eq!(tab_font_size(&after_set.doc), Some(2400));
+
+        let revert =
+            editor_transaction::build_revert_transaction(&after_set, &initial_doc).unwrap();
+        let (reverted, ..) = revert.commit();
+        assert!(
+            !tab_has_modifier(&reverted.doc, editor_model::ModifierType::FontSize),
+            "undo must remove the tab's font_size"
+        );
+    }
 }

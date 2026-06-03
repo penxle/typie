@@ -114,6 +114,7 @@ mod tests {
                             ruby_annotations: vec![],
                             empty_caret_x: 0.0,
                             child_range: None,
+                            tab_gaps: vec![],
                         }),
                     }],
                     nav: None,
@@ -190,6 +191,7 @@ mod tests {
                             ruby_annotations: vec![],
                             empty_caret_x: 0.0,
                             child_range: None,
+                            tab_gaps: vec![],
                         }),
                     }],
                     nav: None,
@@ -241,6 +243,7 @@ mod tests {
                             ruby_annotations: vec![],
                             empty_caret_x: 0.0,
                             child_range: None,
+                            tab_gaps: vec![],
                         }),
                     }],
                     nav: None,
@@ -301,6 +304,7 @@ mod tests {
                             ruby_annotations: vec![],
                             empty_caret_x: 32.0,
                             child_range: Some(0..0),
+                            tab_gaps: vec![],
                         }),
                     }],
                     nav: None,
@@ -351,6 +355,7 @@ mod tests {
                             ruby_annotations: vec![],
                             empty_caret_x: 0.0,
                             child_range: None,
+                            tab_gaps: vec![],
                         }),
                     }],
                     nav: None,
@@ -460,6 +465,7 @@ mod tests {
                                 ruby_annotations: vec![],
                                 empty_caret_x: 0.0,
                                 child_range: Some(0..2),
+                                tab_gaps: vec![],
                             }),
                         },
                         LayoutNode {
@@ -475,6 +481,7 @@ mod tests {
                                 ruby_annotations: vec![],
                                 empty_caret_x: 0.0,
                                 child_range: Some(2..2),
+                                tab_gaps: vec![],
                             }),
                         },
                     ],
@@ -530,6 +537,7 @@ mod tests {
                             ruby_annotations: vec![],
                             empty_caret_x: 0.0,
                             child_range: None,
+                            tab_gaps: vec![],
                         }),
                     }],
                     nav: None,
@@ -556,5 +564,39 @@ mod tests {
         // line.y = 500 - 400 = 100 (페이지 로컬)
         assert_eq!(line.y, 100.0);
         assert_eq!(line.height, 20.0);
+    }
+
+    #[test]
+    fn caret_after_leading_tab_sits_at_gap_end() {
+        use crate::view::View;
+        use editor_macros::doc;
+
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} text("x") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+
+        let (line_node, line) = {
+            fn first_line(node: &LayoutNode) -> Option<(&LayoutNode, &LayoutLine)> {
+                match &node.content {
+                    LayoutContent::Line(l) => Some((node, l)),
+                    LayoutContent::Box(b) => b.children.iter().find_map(first_line),
+                    _ => None,
+                }
+            }
+            first_line(&tree.root).expect("line must exist")
+        };
+        let gap = line.tab_gaps.first().cloned().expect("tab gap exists");
+        let expected_x = line_node.rect.x + gap.x + gap.width;
+
+        let pos = Position::new(p1, 1);
+        let metrics = cursor_metrics(tree, pages, &pos, None).unwrap();
+        assert!(
+            (metrics.caret.x - expected_x).abs() < 0.5,
+            "caret x {} must equal gap end {}",
+            metrics.caret.x,
+            expected_x,
+        );
     }
 }

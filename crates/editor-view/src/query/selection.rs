@@ -1546,4 +1546,66 @@ mod tests {
             tree, pages, &resolved, 1, probe_x, probe_y
         ));
     }
+
+    #[test]
+    fn selection_covering_leading_tab_emits_rect_over_gap() {
+        // Paragraph: tab(child 0) text("xx")(child 1). Select the whole
+        // paragraph content; the emitted rect must span the tab gap.
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} text("xx") } } };
+        let view = layout(&doc);
+
+        let tree = view.layout_tree_for_test().unwrap();
+        let (line_node, line) = first_line(&tree.root).expect("line must exist");
+        let gap = line.tab_gaps.first().cloned().expect("tab gap exists");
+        let line_x = line_node.rect.x;
+
+        let sel = Selection::new(Position::new(p1, 0), Position::new(p1, 2));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(!rects.is_empty(), "expected a selection rect");
+        let r = rects[0].rect;
+        let gap_lo = line_x + gap.x;
+        let gap_hi = line_x + gap.x + gap.width;
+        // The selection rect must overlap the gap's [x, x+width] span.
+        assert!(
+            r.x <= gap_lo + 0.5 && r.x + r.width >= gap_hi - 0.5,
+            "rect [{}, {}] must cover gap [{}, {}]",
+            r.x,
+            r.x + r.width,
+            gap_lo,
+            gap_hi,
+        );
+    }
+
+    #[test]
+    fn selection_covering_only_tab_emits_rect_over_gap() {
+        // Tab-only paragraph: selecting the tab must still produce a visible
+        // rect spanning the gap (no glyph runs to fall back on).
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} } } };
+        let view = layout(&doc);
+
+        let tree = view.layout_tree_for_test().unwrap();
+        let (line_node, line) = first_line(&tree.root).expect("line must exist");
+        let gap = line.tab_gaps.first().cloned().expect("tab gap exists");
+        let line_x = line_node.rect.x;
+
+        let sel = Selection::new(Position::new(p1, 0), Position::new(p1, 1));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(!rects.is_empty(), "expected a selection rect for the tab");
+        let r = rects[0].rect;
+        let gap_lo = line_x + gap.x;
+        let gap_hi = line_x + gap.x + gap.width;
+        assert!(r.width > 0.0, "tab selection rect must have width");
+        assert!(
+            r.x <= gap_lo + 0.5 && r.x + r.width >= gap_hi - 0.5,
+            "rect [{}, {}] must cover gap [{}, {}]",
+            r.x,
+            r.x + r.width,
+            gap_lo,
+            gap_hi,
+        );
+    }
 }

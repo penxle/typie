@@ -39,6 +39,7 @@ fn make_line_node(id: NodeId, x: f32, y: f32, text: &str, char_w: f32) -> Layout
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         }),
     }
 }
@@ -428,6 +429,7 @@ fn hit_test_in_empty_trailing_line_returns_paragraph_offset() {
                             ruby_annotations: vec![],
                             empty_caret_x: 0.0,
                             child_range: Some(0..2),
+                            tab_gaps: vec![],
                         }),
                     },
                     LayoutNode {
@@ -443,6 +445,7 @@ fn hit_test_in_empty_trailing_line_returns_paragraph_offset() {
                             ruby_annotations: vec![],
                             empty_caret_x: 0.0,
                             child_range: Some(2..2),
+                            tab_gaps: vec![],
                         }),
                     },
                 ],

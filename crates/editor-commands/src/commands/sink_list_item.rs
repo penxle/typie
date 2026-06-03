@@ -1,8 +1,9 @@
-use editor_model::{Node, NodeId, NodeType, Subtree};
 use editor_state::Position;
-use editor_transaction::{Transaction, fulfill};
+use editor_transaction::Transaction;
 
-use crate::helpers::{collect_top_level_list_items_in_selection, find_enclosing_list_item_id};
+use crate::helpers::{
+    collect_top_level_list_items_in_selection, find_enclosing_list_item_id, sink_list_item_inner,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn sink_list_item(tr: &mut Transaction) -> CommandResult {
@@ -16,7 +17,7 @@ pub fn sink_list_item(tr: &mut Transaction) -> CommandResult {
         let Some(list_item_id) = find_enclosing_list_item_id(&doc, pos.node_id) else {
             return Ok(false);
         };
-        return sink_single(tr, list_item_id);
+        return sink_list_item_inner(tr, list_item_id);
     }
 
     let resolved = selection
@@ -45,75 +46,11 @@ pub fn sink_list_item(tr: &mut Transaction) -> CommandResult {
         if doc.node(*item_id).is_none() {
             continue;
         }
-        if sink_single(tr, *item_id)? {
+        if sink_list_item_inner(tr, *item_id)? {
             any_sunk = true;
         }
     }
     Ok(any_sunk)
-}
-
-fn sink_single(tr: &mut Transaction, list_item_id: NodeId) -> CommandResult {
-    let doc = tr.doc();
-    let list_item = doc
-        .node(list_item_id)
-        .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    if !matches!(list_item.node(), Node::ListItem(_)) {
-        return Ok(false);
-    }
-
-    let prev = match list_item.prev_sibling() {
-        Some(p) => p,
-        None => return Ok(false),
-    };
-    let prev_id = prev.id();
-
-    let list = list_item
-        .parent()
-        .ok_or(CommandError::NoParent(list_item_id))?;
-    let list_type = list.as_type();
-    if !matches!(list_type, NodeType::BulletList | NodeType::OrderedList) {
-        return Ok(false);
-    }
-
-    // A list_item allows at most one trailing sublist. Reuse any existing one
-    // regardless of its type — creating a second sublist would violate the
-    // schema, so type-matching can't be enforced here.
-    let target_sublist_id = prev
-        .children()
-        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
-        .map(|c| c.id());
-
-    tr.batch::<_, CommandError>(|tr| {
-        let target_id = match target_sublist_id {
-            Some(id) => id,
-            None => {
-                let new_sublist_id = NodeId::new();
-                let new_node = list_type.into_node().to_plain();
-                let doc = tr.doc();
-                let prev = doc
-                    .node(prev_id)
-                    .ok_or(CommandError::NodeNotFound(prev_id))?;
-                let insert_at = prev.entry().children.len();
-                tr.insert_subtree(prev_id, insert_at, Subtree::leaf(new_sublist_id, new_node))?;
-                new_sublist_id
-            }
-        };
-
-        let doc = tr.doc();
-        let target = doc
-            .node(target_id)
-            .ok_or(CommandError::NodeNotFound(target_id))?;
-        let target_len = target.entry().children.len();
-        tr.move_node(list_item_id, target_id, target_len)?;
-
-        let doc = tr.doc();
-        if let Some(prev) = doc.node(prev_id) {
-            tr.apply_steps(fulfill(&prev))?;
-        }
-        Ok(())
-    })?;
-
-    Ok(true)
 }
 
 #[cfg(test)]

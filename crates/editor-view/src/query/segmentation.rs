@@ -3,6 +3,8 @@ use editor_resource::TextSegmenters;
 use editor_state::{Position, Selection};
 use icu_segmenter::{SentenceSegmenter, WordSegmenter};
 
+use crate::glyph_run::GlyphRun;
+use crate::measure::TabGap;
 use crate::paginate::*;
 
 use super::navigation::landed;
@@ -134,35 +136,80 @@ pub fn move_sentence_backward(
     confined_to_scope(tree, pos, prev, true, false)
 }
 
+enum LineItem<'a> {
+    Run(&'a GlyphRun),
+    Tab(&'a TabGap),
+}
+
+fn line_items(line: &LayoutLine) -> Vec<LineItem<'_>> {
+    let mut items: Vec<(f32, LineItem<'_>)> =
+        Vec::with_capacity(line.glyph_runs.len() + line.tab_gaps.len());
+    for run in &line.glyph_runs {
+        items.push((run.x, LineItem::Run(run)));
+    }
+    for gap in &line.tab_gaps {
+        items.push((gap.x, LineItem::Tab(gap)));
+    }
+    items.sort_by(|a, b| a.0.total_cmp(&b.0));
+    items.into_iter().map(|(_, it)| it).collect()
+}
+
 pub fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
     let mut char_count = 0;
-    for run in &line.glyph_runs {
-        let run_chars = run.text.char_count();
-        if run.node_id == pos.node_id {
-            let local = pos.offset.checked_sub(run.offset)?;
-            if local <= run_chars {
-                return Some(char_count + local);
+    for item in line_items(line) {
+        match item {
+            LineItem::Run(run) => {
+                let run_chars = run.text.char_count();
+                if run.node_id == pos.node_id
+                    && let Some(local) = pos.offset.checked_sub(run.offset)
+                    && local <= run_chars
+                {
+                    return Some(char_count + local);
+                }
+                char_count += run_chars;
+            }
+            LineItem::Tab(gap) => {
+                if pos.node_id == line.node_id && pos.offset == gap.child_index {
+                    return Some(char_count);
+                }
+                char_count += 1;
             }
         }
-        char_count += run_chars;
     }
     None
 }
 
 pub fn position_at_char_index(line: &LayoutLine, char_index: usize) -> Option<Position> {
     let mut remaining = char_index;
-    for run in &line.glyph_runs {
-        let run_chars = run.text.char_count();
-        if remaining <= run_chars {
-            return Some(Position::new(run.node_id, run.offset + remaining));
+    for item in line_items(line) {
+        match item {
+            LineItem::Run(run) => {
+                let run_chars = run.text.char_count();
+                if remaining <= run_chars {
+                    return Some(Position::new(run.node_id, run.offset + remaining));
+                }
+                remaining -= run_chars;
+            }
+            LineItem::Tab(gap) => {
+                if remaining == 0 {
+                    return Some(Position::new(line.node_id, gap.child_index));
+                }
+                remaining -= 1;
+            }
         }
-        remaining -= run_chars;
     }
     None
 }
 
 fn line_text(line: &LayoutLine) -> String {
-    line.glyph_runs.iter().map(|r| r.text.as_str()).collect()
+    let mut text = String::new();
+    for item in line_items(line) {
+        match item {
+            LineItem::Run(run) => text.push_str(&run.text),
+            LineItem::Tab(_) => text.push('\t'),
+        }
+    }
+    text
 }
 
 fn next_word_boundary(
@@ -294,6 +341,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         }
     }
 
@@ -314,6 +362,7 @@ mod tests {
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
             child_range: None,
+            tab_gaps: vec![],
         };
         (line, id1, id2)
     }

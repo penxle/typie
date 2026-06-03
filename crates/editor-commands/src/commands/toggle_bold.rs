@@ -1077,6 +1077,53 @@ mod tests {
     }
 
     #[test]
+    fn range_toggle_bold_does_not_reach_tab() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, t1, t2) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("a") [font_weight(400), font_family("Pretendard".to_string())]
+                        tab {}
+                        t2: text("b") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+
+        let tab_has_bold_or_weight = actual.doc.root().unwrap().descendants().any(|n| {
+            matches!(n.node(), editor_model::Node::Tab(_))
+                && n.explicit_modifiers()
+                    .any(|m| matches!(m, Modifier::Bold | Modifier::FontWeight { .. }))
+        });
+        assert!(
+            !tab_has_bold_or_weight,
+            "tab must not receive Bold or a bold font_weight"
+        );
+
+        assert!(
+            actual
+                .doc
+                .get_entry(t1)
+                .unwrap()
+                .modifiers
+                .iter()
+                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 700 }))
+        );
+        assert!(
+            actual
+                .doc
+                .get_entry(t2)
+                .unwrap()
+                .modifiers
+                .iter()
+                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 700 }))
+        );
+    }
+
+    #[test]
     fn range_toggle_on_faux_bold_when_no_heavier() {
         // Weight 400, only [400] available → no heavier → faux bold
         let resource = make_resource([("Pretendard", vec![400])]);

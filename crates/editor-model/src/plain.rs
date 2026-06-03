@@ -262,7 +262,8 @@ mod tests {
         BlockquoteVariant, CalloutVariant, HorizontalRuleVariant, LayoutMode, PlainArchivedNode,
         PlainBlockquoteNode, PlainCalloutNode, PlainEmbedNode, PlainFileNode,
         PlainHorizontalRuleNode, PlainImageNode, PlainNode, PlainNodeEntry, PlainParagraphNode,
-        PlainRootNode, PlainTableCellNode, PlainTableNode, PlainTableRowNode, TableBorderStyle,
+        PlainRootNode, PlainTabNode, PlainTableCellNode, PlainTableNode, PlainTableRowNode,
+        TableBorderStyle,
     };
 
     #[test]
@@ -552,6 +553,64 @@ mod tests {
         let (doc, _) = Doc::from_plain(plain.clone());
         let result = doc.to_plain();
         assert_eq!(result, plain);
+    }
+
+    #[test]
+    fn tab_with_font_size_survives_plain_roundtrip() {
+        let root_id = NodeId::ROOT;
+        let para_id = NodeId::new();
+        let tab_id = NodeId::new();
+
+        let mut tab_modifiers = BTreeMap::new();
+        tab_modifiers.insert(ModifierType::FontSize, Modifier::FontSize { value: 2400 });
+
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            root_id,
+            PlainNodeEntry {
+                parent: None,
+                children: vec![para_id],
+                modifiers: BTreeMap::new(),
+                style: None,
+                node: PlainNode::Root(PlainRootNode::default()),
+            },
+        );
+        nodes.insert(
+            para_id,
+            PlainNodeEntry {
+                parent: Some(root_id),
+                children: vec![tab_id],
+                modifiers: BTreeMap::new(),
+                style: None,
+                node: PlainNode::Paragraph(PlainParagraphNode {}),
+            },
+        );
+        nodes.insert(
+            tab_id,
+            PlainNodeEntry {
+                parent: Some(para_id),
+                children: vec![],
+                modifiers: tab_modifiers,
+                style: None,
+                node: PlainNode::Tab(PlainTabNode {}),
+            },
+        );
+
+        let plain = PlainDoc {
+            nodes,
+            styles: BTreeMap::new(),
+        };
+        let (doc, _) = Doc::from_plain(plain.clone());
+        let result = doc.to_plain();
+        assert_eq!(result, plain);
+
+        let has_tab_with_size = result.nodes.values().any(|e| {
+            matches!(e.node, PlainNode::Tab(_)) && e.modifiers.contains_key(&ModifierType::FontSize)
+        });
+        assert!(
+            has_tab_with_size,
+            "Tab's font_size must survive plain roundtrip"
+        );
     }
 
     #[test]

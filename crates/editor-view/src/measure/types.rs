@@ -52,6 +52,15 @@ pub struct MeasuredLine {
     /// `None` for soft-wrap interior lines of a multi-line text segment —
     /// those lines own no paragraph boundary.
     pub child_range: Option<Range<usize>>,
+    pub tab_gaps: Vec<TabGap>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TabGap {
+    pub node_id: NodeId,
+    pub child_index: usize,
+    pub x: f32,
+    pub width: f32,
 }
 
 #[derive(Debug, Clone)]

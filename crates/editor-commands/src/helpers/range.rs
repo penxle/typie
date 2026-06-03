@@ -82,7 +82,7 @@ fn walk_text_nodes_in_range(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out:
     if !rs.intersects_subtree(node) {
         return;
     }
-    if matches!(node.node(), Node::Text(_)) {
+    if matches!(node.node(), Node::Text(_) | Node::Tab(_)) {
         out.push(node.id());
         return;
     }

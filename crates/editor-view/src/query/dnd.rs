@@ -184,6 +184,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         }
     }

@@ -150,6 +150,33 @@ mod tests {
     }
 
     #[test]
+    fn pasting_text_with_tab_yields_inline_tab_node() {
+        use editor_model::Node;
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        let slice = Slice::from_text("a\tb");
+        let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
+        let root = actual.doc.root().expect("root exists");
+        let para = root.first_child().expect("paragraph exists");
+        let children: Vec<_> = para.children().collect();
+        assert_eq!(children.len(), 3, "paragraph must have 3 inline children");
+        assert!(
+            matches!(children[0].node(), Node::Text(t) if t.text.to_string() == "a"),
+            "first child must be Text(\"a\")"
+        );
+        assert!(
+            matches!(children[1].node(), Node::Tab(_)),
+            "second child must be Tab"
+        );
+        assert!(
+            matches!(children[2].node(), Node::Text(t) if t.text.to_string() == "b"),
+            "third child must be Text(\"b\")"
+        );
+    }
+
+    #[test]
     fn non_collapsed_selection_returns_false() {
         let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }

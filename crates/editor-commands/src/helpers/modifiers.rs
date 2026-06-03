@@ -80,6 +80,16 @@ pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
     found
 }
 
+pub(crate) fn is_tab_metric_modifier(modifier_type: ModifierType) -> bool {
+    matches!(
+        modifier_type,
+        ModifierType::FontFamily
+            | ModifierType::FontWeight
+            | ModifierType::FontSize
+            | ModifierType::LetterSpacing
+    )
+}
+
 pub(crate) fn is_text_applicable(modifier_type: ModifierType) -> bool {
     Schema::modifier_spec(modifier_type)
         .target
@@ -666,5 +676,15 @@ mod tests {
             selection: (ft1, 0)
         };
         assert!(find_enclosing_paragraph_id(&state.doc, ft1).is_none());
+    }
+
+    #[test]
+    fn tab_metric_modifier_set() {
+        assert!(is_tab_metric_modifier(ModifierType::FontFamily));
+        assert!(is_tab_metric_modifier(ModifierType::FontWeight));
+        assert!(is_tab_metric_modifier(ModifierType::FontSize));
+        assert!(is_tab_metric_modifier(ModifierType::LetterSpacing));
+        assert!(!is_tab_metric_modifier(ModifierType::Bold));
+        assert!(!is_tab_metric_modifier(ModifierType::TextColor));
     }
 }

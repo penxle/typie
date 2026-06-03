@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use editor_model::{Alignment, Doc, Node, NodeRef};
 
-use crate::measure::{MeasuredContent, MeasuredLine, MeasuredNode, Measurer};
+use crate::measure::{MeasuredContent, MeasuredLine, MeasuredNode, Measurer, TabGap};
 use crate::view_state::ViewState;
 
 use super::resolve::{apply_pending_to_style, resolve_text_style};
@@ -49,6 +49,7 @@ pub(crate) fn build_strut_only_line(
             ruby_annotations: vec![],
             empty_caret_x: empty_caret_x_for(align, indent, width),
             child_range: Some(child_range),
+            tab_gaps: vec![],
         }),
     })
 }
@@ -137,7 +138,7 @@ fn measure_segment(
             children,
             child_range,
         } => {
-            let (text, runs) = super::text_run::collect_text_runs_for(children);
+            let (text, runs, tabs) = super::text_run::collect_text_runs_for(children);
 
             // A Text segment that contributes no actual text (every child is an
             // empty text node, or every child was skipped from the inline flow —
@@ -145,7 +146,7 @@ fn measure_segment(
             // one strut-only line covering the segment's child_range. This
             // matches the pre-segmentation behavior where `measure_inline_text`
             // short-circuited on the collected text being empty.
-            if text.is_empty() {
+            if text.is_empty() && tabs.is_empty() {
                 return vec![build_strut_only_line(
                     measurer,
                     paragraph_id,
@@ -162,6 +163,15 @@ fn measure_segment(
                 .expect("strut layout should have one line and run");
             let style_runs =
                 super::style_run::resolve_style_runs(&text, &runs, &mut resource.font_registry);
+            let tab_boxes: Vec<(super::text_run::TabMark, f32)> = tabs
+                .into_iter()
+                .map(|tm| {
+                    let node = doc.node(tm.node_id).expect("tab node exists");
+                    let style = super::resolve::resolve_text_style(&node);
+                    let px = super::tab_metric::tab_px(&style, &mut resource);
+                    (tm, px)
+                })
+                .collect();
             let layout = super::layout::build_layout(
                 &text,
                 &style_runs,
@@ -169,6 +179,7 @@ fn measure_segment(
                 indent,
                 width,
                 &mut resource,
+                &tab_boxes,
             );
             let segmenters = std::sync::Arc::clone(&resource.segmenters);
             drop(resource);
@@ -185,6 +196,7 @@ fn measure_segment(
                     base_font_size: base_style.font_size,
                 },
                 &segmenters.grapheme,
+                &tab_boxes,
             );
 
             // identify_ruby_groups inspects all paragraph children, not just this segment's slice.
@@ -273,6 +285,22 @@ fn measure_segment(
                         })
                         .collect::<Vec<_>>();
 
+                    let tab_gaps: Vec<TabGap> = line
+                        .tab_gaps_raw
+                        .iter()
+                        .map(|(id, x, pad)| {
+                            let tm = &tab_boxes[*id as usize].0;
+                            TabGap {
+                                node_id: tm.node_id,
+                                // tm.child_index is already paragraph-absolute
+                                // (collect_text_runs_for uses NodeRef::index).
+                                child_index: tm.child_index,
+                                x: *x,
+                                width: *pad,
+                            }
+                        })
+                        .collect();
+
                     Arc::new(MeasuredNode {
                         width,
                         height: new_height,
@@ -287,6 +315,7 @@ fn measure_segment(
                             ruby_annotations,
                             empty_caret_x: empty_caret_x_for(align, indent, width),
                             child_range: line_child_range,
+                            tab_gaps,
                         }),
                     })
                 })
@@ -1049,6 +1078,28 @@ mod tests {
     }
 
     #[test]
+    fn tab_only_paragraph_measures_without_panic() {
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected box")
+        };
+        assert!(!b.children.is_empty());
+    }
+
+    #[test]
+    fn paragraph_with_tab_measures_without_panic() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") tab {} text("b") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected box")
+        };
+        assert!(!b.children.is_empty());
+    }
+
+    #[test]
     fn empty_pending_matches_non_empty_same_font_size() {
         let (empty_doc, p1) = doc! { root { p1: paragraph } };
         let (non_empty_doc, p2) = doc! { root { p2: paragraph { text("a") [font_size(9600)] } } };
@@ -1073,6 +1124,231 @@ mod tests {
             "line height mismatch between empty+pending and non-empty \
              (empty_pending={empty_pending_h}px, non_empty={non_empty_h}px) — \
              first keystroke would cause layout jump",
+        );
+    }
+
+    #[test]
+    fn leading_tab_gap_is_full_tab_px() {
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} text("x") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.tab_gaps.len(), 1);
+        // A leading tab sits at the line content origin (the paragraph indent).
+        // The grid is relative to that origin, so the leading tab lands on an
+        // exact stop and gets a full tab_px gap.
+        assert!(
+            l.tab_gaps[0].width > 1.0,
+            "exact-stop leading tab = full tab_px (w={})",
+            l.tab_gaps[0].width
+        );
+        let first_glyph_x = l
+            .glyph_runs
+            .first()
+            .and_then(|r| r.glyphs.first())
+            .map(|g| g.x);
+        if let Some(gx) = first_glyph_x {
+            assert!(
+                (gx - (l.tab_gaps[0].x + l.tab_gaps[0].width)).abs() < 1.0,
+                "first glyph must start at gap end (glyph_x={gx}, gap_end={})",
+                l.tab_gaps[0].x + l.tab_gaps[0].width
+            );
+        }
+    }
+
+    #[test]
+    fn tab_only_paragraph_renders_gap() {
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.tab_gaps.len(), 1);
+        assert!(l.tab_gaps[0].width > 0.0);
+    }
+
+    #[test]
+    fn consecutive_tabs_two_gaps() {
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} tab {} text("x") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 1000.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.tab_gaps.len(), 2);
+        assert!(l.tab_gaps[1].x > l.tab_gaps[0].x);
+    }
+
+    #[test]
+    fn trailing_tab_has_gap() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("x") tab {} } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.tab_gaps.len(), 1);
+        assert!(l.tab_gaps[0].x > 0.0);
+    }
+
+    #[test]
+    fn text_after_two_tabs_is_past_both_gaps() {
+        let (doc, p1) = doc! { root { p1: paragraph { tab {} tab {} text("x") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 1000.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        let second_gap_end = l.tab_gaps[1].x + l.tab_gaps[1].width;
+        let glyph_x = l
+            .glyph_runs
+            .first()
+            .and_then(|r| r.glyphs.first())
+            .map(|g| g.x)
+            .unwrap();
+        assert!(glyph_x >= second_gap_end - 0.5);
+    }
+
+    #[test]
+    fn tab_gap_child_index_is_paragraph_absolute() {
+        // children: [text("a")(0), hard_break(1), tab(2), text("b")(3)]
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break tab {} text("b") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let gap = b
+            .children
+            .iter()
+            .find_map(|c| match &c.content {
+                MeasuredContent::Line(l) => l.tab_gaps.first().cloned(),
+                _ => None,
+            })
+            .expect("tab gap exists");
+        assert_eq!(gap.child_index, 2);
+    }
+
+    #[test]
+    fn run_x_matches_glyph_x_after_tab() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("a") tab {} text("big") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        // the run containing "big" (after the tab): its .x must equal its first glyph's x.
+        let run = l
+            .glyph_runs
+            .iter()
+            .find(|r| r.text.contains("big") || r.glyphs.len() >= 3)
+            .or_else(|| l.glyph_runs.last())
+            .expect("run after tab");
+        let first_glyph_x = run.glyphs.first().map(|g| g.x).unwrap();
+        assert!(
+            (run.x - first_glyph_x).abs() < 0.5,
+            "run.x ({}) must match first glyph x ({})",
+            run.x,
+            first_glyph_x
+        );
+    }
+
+    #[test]
+    fn ruby_aligns_with_base_after_tab() {
+        let (doc, p1) = doc! {
+            root { p1: paragraph { text("a") tab {} text("big") [ruby(text: "xy".to_string())] } }
+        };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert_eq!(l.ruby_annotations.len(), 1);
+        let ann = &l.ruby_annotations[0];
+
+        // base center from the "big" run (shifted right by the tab gap).
+        let base_run = l
+            .glyph_runs
+            .iter()
+            .find(|r| r.text.contains("big"))
+            .expect("base run for big");
+        let base_center = base_run.x + base_run.width / 2.0;
+
+        // ruby center from its actual glyph x positions.
+        let rxs: Vec<f32> = ann.glyphs.iter().map(|g| g.x).collect();
+        assert!(!rxs.is_empty(), "ruby annotation must have glyphs");
+        let ruby_min = rxs.iter().cloned().fold(f32::INFINITY, f32::min);
+        let ruby_max = rxs.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let ruby_center = (ruby_min + ruby_max) / 2.0;
+
+        // ruby must center over the shifted base, not the unshifted position.
+        // unshifted position is the run x WITHOUT the tab gap (= base_run.x - tab_gap).
+        let tab_gap = l.tab_gaps.first().map(|g| g.width).expect("tab gap exists");
+        let unshifted_center = base_center - tab_gap;
+        let to_shifted = (ruby_center - base_center).abs();
+        let to_unshifted = (ruby_center - unshifted_center).abs();
+        assert!(
+            to_shifted < to_unshifted,
+            "ruby center ({}) must be closer to shifted base center ({}) than to unshifted ({})",
+            ruby_center,
+            base_center,
+            unshifted_center
+        );
+        assert!(
+            to_shifted < tab_gap,
+            "ruby center ({}) must align with shifted base center ({}) within a tab gap ({})",
+            ruby_center,
+            base_center,
+            tab_gap
+        );
+    }
+
+    #[test]
+    fn centered_plain_line_unaffected_by_tab_extract() {
+        let (doc, p1) =
+            doc! { root { p1: paragraph [alignment(Alignment::Center)] { text("xy") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 400.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!()
+        };
+        let MeasuredContent::Line(l) = &b.children[0].content else {
+            panic!()
+        };
+        assert!(l.tab_gaps.is_empty());
+        let glyph_x = l
+            .glyph_runs
+            .first()
+            .and_then(|r| r.glyphs.first())
+            .map(|g| g.x)
+            .unwrap();
+        assert!(
+            glyph_x > 1.0,
+            "centered line must not collapse to left (x={glyph_x})"
         );
     }
 }

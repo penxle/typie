@@ -125,7 +125,7 @@ mod tests {
             }
         };
         let children: Vec<editor_model::NodeRef<'_>> = doc.node(p1).unwrap().children().collect();
-        let (text, runs) = collect_text_runs_for(&children);
+        let (text, runs, _tabs) = collect_text_runs_for(&children);
         let mut registry = registry_with_families(&[("Arial", &[400])]);
         let arial_id = registry.intern_id("Arial").unwrap();
         registry.force_loaded_for_test(arial_id, 400, 1);
@@ -146,7 +146,7 @@ mod tests {
             }
         };
         let children: Vec<editor_model::NodeRef<'_>> = doc.node(p1).unwrap().children().collect();
-        let (text, runs) = collect_text_runs_for(&children);
+        let (text, runs, _tabs) = collect_text_runs_for(&children);
         let mut registry = registry_with_families(&[("Arial", &[400])]);
         let arial_id = registry.intern_id("Arial").unwrap();
         // base loaded, chunk 0 not loaded
@@ -167,7 +167,7 @@ mod tests {
             }
         };
         let children: Vec<editor_model::NodeRef<'_>> = doc.node(p1).unwrap().children().collect();
-        let (text, runs) = collect_text_runs_for(&children);
+        let (text, runs, _tabs) = collect_text_runs_for(&children);
         let mut registry = registry_with_families(&[("Arial", &[400])]);
 
         let style_runs = resolve_style_runs(&text, &runs, &mut registry);
@@ -187,7 +187,7 @@ mod tests {
             }
         };
         let children: Vec<editor_model::NodeRef<'_>> = doc.node(p1).unwrap().children().collect();
-        let (text, runs) = collect_text_runs_for(&children);
+        let (text, runs, _tabs) = collect_text_runs_for(&children);
 
         // Build a registry where Arial only covers 0x0000..=0x00FF and there is no fallback.
         let mut registry = FontRegistry::new();
@@ -219,7 +219,7 @@ mod tests {
             }
         };
         let children: Vec<editor_model::NodeRef<'_>> = doc.node(p1).unwrap().children().collect();
-        let (text, runs) = collect_text_runs_for(&children);
+        let (text, runs, _tabs) = collect_text_runs_for(&children);
         let mut registry = registry_with_families(&[("Arial", &[400])]);
         let arial_id = registry.intern_id("Arial").unwrap();
         registry.force_loaded_for_test(arial_id, 400, 1);

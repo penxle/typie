@@ -104,6 +104,7 @@ impl Paginator {
                         ruby_annotations: l.ruby_annotations.clone(),
                         empty_caret_x: l.empty_caret_x,
                         child_range: l.child_range.clone(),
+                        tab_gaps: l.tab_gaps.clone(),
                     }),
                 }
             }
@@ -521,6 +522,7 @@ fn place_node_at(
                 ruby_annotations: l.ruby_annotations.clone(),
                 empty_caret_x: l.empty_caret_x,
                 child_range: l.child_range.clone(),
+                tab_gaps: l.tab_gaps.clone(),
             }),
         },
         MeasuredContent::Atom(a) => LayoutNode {
@@ -570,6 +572,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 child_range: None,
+                tab_gaps: vec![],
             }),
         })
     }

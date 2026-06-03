@@ -1,5 +1,6 @@
 use editor_model::{
-    Fragment, PlainHardBreakNode, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
+    Fragment, PlainHardBreakNode, PlainNode, PlainParagraphNode, PlainRootNode, PlainTabNode,
+    PlainTextNode,
 };
 
 use crate::slice::Slice;
@@ -20,6 +21,21 @@ pub fn from_text(text: &str) -> Slice {
     }
 }
 
+fn push_line_with_tabs(line: &str, inline: &mut Vec<Fragment>) {
+    let mut first = true;
+    for segment in line.split('\t') {
+        if !first {
+            inline.push(Fragment::leaf(PlainNode::Tab(PlainTabNode::default())));
+        }
+        if !segment.is_empty() {
+            inline.push(Fragment::leaf(PlainNode::Text(PlainTextNode {
+                text: segment.to_string(),
+            })));
+        }
+        first = false;
+    }
+}
+
 fn paragraph_from_block(block: &str) -> Fragment {
     let mut inline: Vec<Fragment> = Vec::new();
     let mut first = true;
@@ -29,11 +45,7 @@ fn paragraph_from_block(block: &str) -> Fragment {
                 PlainHardBreakNode::default(),
             )));
         }
-        if !line.is_empty() {
-            inline.push(Fragment::leaf(PlainNode::Text(PlainTextNode {
-                text: line.to_string(),
-            })));
-        }
+        push_line_with_tabs(line, &mut inline);
         first = false;
     }
     Fragment {
@@ -122,5 +134,31 @@ mod tests {
         assert_eq!(slice.fragment.children.len(), 1);
         let p = &slice.fragment.children[0];
         assert_eq!(p.children.len(), 3);
+    }
+
+    #[test]
+    fn from_text_tab_becomes_tab_node() {
+        let slice = Slice::from_text("a\tb");
+        assert_eq!(slice.fragment.children.len(), 1);
+        let p = &slice.fragment.children[0];
+        assert_eq!(p.children.len(), 3);
+        if let PlainNode::Text(t) = &p.children[0].node {
+            assert_eq!(t.text, "a");
+        } else {
+            panic!("expected text");
+        }
+        assert!(matches!(p.children[1].node, PlainNode::Tab(_)));
+        if let PlainNode::Text(t) = &p.children[2].node {
+            assert_eq!(t.text, "b");
+        } else {
+            panic!("expected text");
+        }
+    }
+
+    #[test]
+    fn from_text_leading_tab_becomes_tab_node() {
+        let slice = Slice::from_text("\tindented");
+        let p = &slice.fragment.children[0];
+        assert!(matches!(p.children[0].node, PlainNode::Tab(_)));
     }
 }
