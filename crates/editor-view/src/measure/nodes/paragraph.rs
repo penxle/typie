@@ -8,7 +8,7 @@ use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
 use crate::measure::Measurer;
 use crate::measure::text::measure::measure_inline_text;
 use crate::measure::text::resolve::resolve_paragraph_indent;
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
+use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{BorderMode, BoxStyle, Direction};
 use crate::view_state::ViewState;
 
@@ -67,6 +67,7 @@ pub fn measure_paragraph(
             },
             table_info: None,
             children,
+            page_break_policy: PageBreakPolicy::Auto,
         }),
     }
 }

@@ -8,7 +8,7 @@ use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
 use crate::TableLayoutInfo;
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
+use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{BorderMode, BoxStyle, Direction};
 use crate::view_state::ViewState;
 
@@ -130,6 +130,7 @@ pub fn measure_table_cell(
             border: EdgeInsets::all(TABLE_BORDER_WIDTH),
             scope: true,
             alignment: LayoutAlignment::Start,
+            page_break_policy: PageBreakPolicy::Avoid,
         },
     )
 }
@@ -165,6 +166,7 @@ pub fn measure_table(
                 },
                 table_info: None,
                 children: vec![],
+                page_break_policy: PageBreakPolicy::Auto,
             }),
         };
     }
@@ -255,6 +257,7 @@ pub fn measure_table(
                 },
                 table_info: None,
                 children: row_children,
+                page_break_policy: PageBreakPolicy::Avoid,
             }),
         };
 
@@ -303,6 +306,7 @@ pub fn measure_table(
                 row_inner_heights: table_row_inner_heights,
             })),
             children: row_measurements,
+            page_break_policy: PageBreakPolicy::Auto,
         }),
     }
 }

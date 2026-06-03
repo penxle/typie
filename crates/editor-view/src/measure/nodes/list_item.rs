@@ -12,7 +12,7 @@ use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::text::resolve::{ResolvedTextStyle, resolve_text_style};
 use crate::measure::text::strut::compute_strut;
-use crate::measure::{MeasuredContent, MeasuredNode};
+use crate::measure::{MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{Decoration, DecorationData};
 use crate::view_state::ViewState;
 
@@ -70,6 +70,7 @@ pub fn measure_list_item(
             border: EdgeInsets::ZERO,
             scope: false,
             alignment: Alignment::Start,
+            page_break_policy: PageBreakPolicy::Auto,
         },
     );
 

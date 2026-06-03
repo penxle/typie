@@ -27,12 +27,30 @@ pub enum MeasuredContent {
     PageBreak,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PageBreakPolicy {
+    #[default]
+    Auto,
+    Avoid,
+}
+
+impl MeasuredNode {
+    pub(crate) fn page_break_policy(&self) -> PageBreakPolicy {
+        match &self.content {
+            MeasuredContent::Box(b) => b.page_break_policy,
+            MeasuredContent::Line(_) | MeasuredContent::Atom(_) => PageBreakPolicy::Avoid,
+            MeasuredContent::Spacing(_) | MeasuredContent::PageBreak => PageBreakPolicy::Auto,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MeasuredBox {
     pub node_id: NodeId,
     pub style: BoxStyle,
     pub table_info: Option<Box<TableLayoutInfo>>,
     pub children: Vec<Arc<MeasuredNode>>,
+    pub page_break_policy: PageBreakPolicy,
 }
 
 #[derive(Debug, Clone)]

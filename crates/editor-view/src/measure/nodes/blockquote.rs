@@ -4,7 +4,7 @@ use editor_model::{BlockquoteVariant, Doc, Node, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded, layout_vertical};
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
+use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{Alignment, BorderMode, BoxStyle, Decoration, DecorationData, Direction};
 use crate::view_state::ViewState;
 
@@ -48,6 +48,7 @@ pub fn measure_blockquote(
                     border: EdgeInsets::ZERO,
                     scope: false,
                     alignment: Alignment::Start,
+                    page_break_policy: PageBreakPolicy::Auto,
                 },
             );
             if let MeasuredContent::Box(ref mut b) = measured.content {
@@ -80,6 +81,7 @@ pub fn measure_blockquote(
                     border: EdgeInsets::ZERO,
                     scope: false,
                     alignment: Alignment::Start,
+                    page_break_policy: PageBreakPolicy::Auto,
                 },
             );
             let icon_y = first_line_info(&measured)
@@ -149,6 +151,7 @@ pub fn measure_blockquote(
                     },
                     table_info: None,
                     children,
+                    page_break_policy: PageBreakPolicy::Auto,
                 }),
             }
         }

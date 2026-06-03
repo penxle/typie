@@ -5,7 +5,7 @@ use editor_model::{Doc, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
-use crate::measure::{MeasuredContent, MeasuredNode};
+use crate::measure::{MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{Decoration, DecorationData};
 use crate::view_state::ViewState;
 
@@ -41,6 +41,7 @@ pub fn measure_callout(
             border: EdgeInsets::ZERO,
             scope: false,
             alignment: Alignment::Start,
+            page_break_policy: PageBreakPolicy::Auto,
         },
     );
 

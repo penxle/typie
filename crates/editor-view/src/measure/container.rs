@@ -9,7 +9,7 @@ use crate::measure::Measurer;
 use crate::measure::resolve::resolve_inherited;
 use crate::measure::text::measure::build_strut_only_line;
 use crate::measure::text::resolve::resolve_text_style;
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
+use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{BorderMode, BoxStyle, Direction};
 use crate::view_state::ViewState;
 
@@ -118,6 +118,7 @@ pub struct PaddedLayoutConfig {
     pub border: EdgeInsets,
     pub scope: bool,
     pub alignment: Alignment,
+    pub page_break_policy: PageBreakPolicy,
 }
 
 pub fn layout_padded(
@@ -133,6 +134,7 @@ pub fn layout_padded(
         border,
         scope,
         alignment,
+        page_break_policy,
     } = config;
     let inner_width = width - padding.left - padding.right - border.left - border.right;
     let (children, children_height) = layout_vertical(measurer, doc, node, inner_width, view_state);
@@ -155,6 +157,7 @@ pub fn layout_padded(
             },
             table_info: None,
             children,
+            page_break_policy,
         }),
     }
 }
@@ -187,6 +190,7 @@ mod tests {
                 border: EdgeInsets::ZERO,
                 scope: false,
                 alignment: Alignment::Start,
+                page_break_policy: PageBreakPolicy::Auto,
             },
         );
 

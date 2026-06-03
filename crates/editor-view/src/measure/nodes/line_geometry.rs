@@ -81,6 +81,7 @@ pub(super) fn expand_first_line(
                                 style: b.style.clone(),
                                 table_info: b.table_info.clone(),
                                 children: new_children,
+                                page_break_policy: b.page_break_policy,
                             }),
                         },
                         top: running_y + expanded.top,

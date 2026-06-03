@@ -6,7 +6,7 @@ use editor_model::{Alignment, Doc, Node, NodeRef};
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::text::measure::measure_inline_text;
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
+use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{BorderMode, BoxStyle, Decoration, DecorationData, Direction};
 use crate::view_state::ViewState;
 
@@ -67,6 +67,7 @@ pub fn measure_fold_title(
             },
             table_info: None,
             children,
+            page_break_policy: PageBreakPolicy::Avoid,
         }),
     };
 
@@ -110,6 +111,7 @@ pub fn measure_fold_content(
             border: EdgeInsets::ZERO,
             scope: false,
             alignment: LayoutAlignment::Start,
+            page_break_policy: PageBreakPolicy::Auto,
         },
     )
 }
@@ -156,6 +158,7 @@ pub fn measure_fold(
             },
             table_info: None,
             children,
+            page_break_policy: PageBreakPolicy::Auto,
         }),
     }
 }

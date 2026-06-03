@@ -193,10 +193,7 @@ impl Paginator {
             }
 
             // 4. Break check
-            if self.is_paginated()
-                && child.height > self.remaining()
-                && child.height <= self.page_content_height()
-            {
+            if self.should_break_before_child(child) {
                 self.break_page(&mut children);
                 // Absorb gap immediately after a forced page break
                 if matches!(child.content, MeasuredContent::Spacing(_)) {
@@ -332,12 +329,16 @@ impl Paginator {
         (self.accumulated_y - self.page_content_top).abs() < f32::EPSILON
     }
 
-    fn page_content_height(&self) -> f32 {
-        self.content_height
-    }
-
     fn is_paginated(&self) -> bool {
         self.paginated
+    }
+
+    fn should_break_before_child(&self, child: &MeasuredNode) -> bool {
+        self.is_paginated()
+            && !self.is_at_page_start()
+            && child.height > self.remaining()
+            && (child.page_break_policy() == PageBreakPolicy::Avoid
+                || matches!(child.content, MeasuredContent::Spacing(_)))
     }
 
     fn page_content_bottom(&self) -> f32 {
@@ -596,6 +597,7 @@ mod tests {
                 },
                 table_info: None,
                 children,
+                page_break_policy: PageBreakPolicy::Auto,
             }),
         }
     }
@@ -774,6 +776,7 @@ mod tests {
                 },
                 table_info: None,
                 children: vec![make_line(20.0)],
+                page_break_policy: PageBreakPolicy::Auto,
             }),
         });
 
@@ -794,6 +797,7 @@ mod tests {
                 },
                 table_info: None,
                 children: vec![inner],
+                page_break_policy: PageBreakPolicy::Auto,
             }),
         };
 
@@ -846,6 +850,81 @@ mod tests {
         assert!(has_fill);
         // Box height should be inflated
         assert!(tree.root.rect.height > 100.0);
+    }
+
+    #[test]
+    fn paginated_splits_box_children_before_moving_splittable_box() {
+        // Page content height is 100. After the first line, 40px remain.
+        // A paragraph-like box with 3 lines should use that remaining space
+        // before splitting internally; it must not move wholesale to page 2.
+        let paragraph = Arc::new(make_box(vec![
+            make_line(20.0),
+            make_line(20.0),
+            make_line(20.0),
+        ]));
+        let root = make_box(vec![make_line(60.0), paragraph]);
+
+        let (tree, pages) = paginate_p(root, 400.0, 120.0, EdgeInsets::all(10.0));
+        assert_eq!(pages.len(), 2);
+
+        let LayoutContent::Box(root_box) = &tree.root.content else {
+            panic!("expected root box")
+        };
+        let paragraph_node = root_box
+            .children
+            .iter()
+            .find(|child| matches!(child.content, LayoutContent::Box(_)))
+            .expect("paragraph-like box");
+        let LayoutContent::Box(paragraph_box) = &paragraph_node.content else {
+            panic!("expected paragraph box")
+        };
+        let first_line = paragraph_box
+            .children
+            .iter()
+            .find(|child| matches!(child.content, LayoutContent::Line(_)))
+            .expect("first paragraph line");
+
+        assert!(
+            first_line.rect.y < pages[0].y_end,
+            "first paragraph line should stay on page 1 when space remains; got y={} page_end={}",
+            first_line.rect.y,
+            pages[0].y_end
+        );
+    }
+
+    #[test]
+    fn paginated_splits_table_by_rows_instead_of_moving_table() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph { text("before") }
+                t1: table {
+                    table_row { table_cell { paragraph { text("A") } } }
+                    table_row { table_cell { paragraph { text("B") } } }
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &ViewState::new());
+
+        let (tree, pages) =
+            Paginator::paginated(400.0, 130.0, EdgeInsets::all(10.0)).paginate(measured_tree(root));
+
+        assert_eq!(pages.len(), 2);
+        let table = find_node(&tree.root, t1).expect("table box in layout");
+        let rows = box_children(table);
+        assert_eq!(rows.len(), 2);
+        assert!(
+            rows[0].rect.y < pages[0].y_end,
+            "first table row should stay on page 1 when space remains; got y={} page_end={}",
+            rows[0].rect.y,
+            pages[0].y_end
+        );
+        assert!(
+            rows[1].rect.y >= pages[1].y_start,
+            "last table row should move to page 2 after row-level split; got y={} page2_start={}",
+            rows[1].rect.y,
+            pages[1].y_start
+        );
     }
 
     #[test]
