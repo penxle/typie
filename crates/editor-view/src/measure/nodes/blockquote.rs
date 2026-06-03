@@ -34,10 +34,10 @@ pub fn measure_blockquote(
     match *bq.variant.get() {
         BlockquoteVariant::LeftLine => {
             let padding = EdgeInsets {
-                left: BQ_LINE_WIDTH + BQ_CONTENT_PADDING,
+                left: BQ_CONTENT_PADDING,
                 ..EdgeInsets::ZERO
             };
-            let mut measured = layout_padded(
+            layout_padded(
                 measurer,
                 doc,
                 node,
@@ -45,25 +45,15 @@ pub fn measure_blockquote(
                 view_state,
                 PaddedLayoutConfig {
                     padding,
-                    border: EdgeInsets::ZERO,
+                    border: EdgeInsets {
+                        left: BQ_LINE_WIDTH,
+                        ..EdgeInsets::ZERO
+                    },
                     scope: false,
                     alignment: Alignment::Start,
                     page_break_policy: PageBreakPolicy::Auto,
                 },
-            );
-            if let MeasuredContent::Box(ref mut b) = measured.content {
-                b.style.decorations.push(Decoration {
-                    id: 0,
-                    rect: Rect {
-                        x: 0.0,
-                        y: 0.0,
-                        width: BQ_LINE_WIDTH,
-                        height: measured.height,
-                    },
-                    data: DecorationData::None,
-                });
-            }
-            measured
+            )
         }
         BlockquoteVariant::LeftQuote => {
             let padding = EdgeInsets {
@@ -195,7 +185,8 @@ mod tests {
             panic!()
         };
 
-        assert_eq!(b.style.padding.left, 20.0);
+        assert_eq!(b.style.border.left, 4.0);
+        assert_eq!(b.style.padding.left, 16.0);
         assert_eq!(b.style.alignment, Alignment::Start);
     }
 
