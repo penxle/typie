@@ -15,7 +15,13 @@ pub fn insert_slice(tr: &mut Transaction, slice: Slice) -> CommandResult {
         return Ok(false);
     }
 
-    Ok(insert_slice_at_position(tr, selection.head, slice)?.is_some())
+    let Some(inserted) = insert_slice_at_position(tr, selection.head, slice)? else {
+        return Ok(false);
+    };
+    if inserted.is_unit_node_selection(&tr.doc()) {
+        tr.set_selection(Some(inserted))?;
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -299,12 +305,12 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
-            doc { root {
+            doc { r: root {
                 paragraph { text("hel") }
-                img: image
+                image
                 paragraph { text("lo") }
             } }
-            selection: (img, 0)
+            selection: (r, 1, >) -> (r, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -327,11 +333,11 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
-            doc { root {
-                img: image
+            doc { r: root {
+                image
                 paragraph {}
             } }
-            selection: (img, 0)
+            selection: (r, 0, >) -> (r, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }
