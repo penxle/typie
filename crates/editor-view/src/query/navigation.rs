@@ -802,6 +802,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         }
     }
@@ -933,6 +935,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         let line_b = LayoutNode {
@@ -949,6 +953,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         LayoutTree {
@@ -971,6 +977,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(2..2),
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = first_position_in_line(&line);
         assert_eq!(pos.node_id, p1);
@@ -1397,6 +1405,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         let tree = LayoutTree {
@@ -1443,6 +1453,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         let tree = LayoutTree {

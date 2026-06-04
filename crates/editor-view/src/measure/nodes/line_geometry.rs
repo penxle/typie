@@ -102,6 +102,16 @@ fn expand_line(
     old_height: f32,
     expansion: &LineStrutExpansion,
 ) -> MeasuredNode {
+    // Phantom lines carry no content; expanding them would reintroduce the
+    // ghost vertical space the phantom-as-zero-height design is meant to avoid.
+    if line.is_phantom {
+        return MeasuredNode {
+            width,
+            height: 0.0,
+            content: MeasuredContent::Line(line.clone()),
+        };
+    }
+
     let new_ascent = line.ascent.max(expansion.ascent);
     let new_descent = line.descent.max(expansion.descent);
     let content_height = new_ascent + new_descent;
@@ -146,6 +156,8 @@ fn expand_line(
             empty_caret_x: line.empty_caret_x,
             child_range: line.child_range.clone(),
             tab_gaps: line.tab_gaps.clone(),
+            is_phantom: line.is_phantom,
+            content_edge_x: line.content_edge_x,
         }),
     }
 }

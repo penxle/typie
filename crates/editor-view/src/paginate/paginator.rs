@@ -112,6 +112,8 @@ impl Paginator {
                         empty_caret_x: l.empty_caret_x,
                         child_range: l.child_range.clone(),
                         tab_gaps: l.tab_gaps.clone(),
+                        is_phantom: l.is_phantom,
+                        content_edge_x: l.content_edge_x,
                     }),
                 }
             }
@@ -535,6 +537,8 @@ fn place_node_at(
                 empty_caret_x: l.empty_caret_x,
                 child_range: l.child_range.clone(),
                 tab_gaps: l.tab_gaps.clone(),
+                is_phantom: l.is_phantom,
+                content_edge_x: l.content_edge_x,
             }),
         },
         MeasuredContent::Atom(a) => LayoutNode {
@@ -585,6 +589,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         })
     }

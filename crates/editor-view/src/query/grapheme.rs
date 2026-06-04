@@ -45,6 +45,14 @@ pub fn last_position_in_line(line: &LayoutLine) -> Position {
 }
 
 pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
+    let raw = x_at_offset_raw(line, pos);
+    match line.content_edge_x {
+        Some(clamp) if raw > clamp => clamp,
+        _ => raw,
+    }
+}
+
+fn x_at_offset_raw(line: &LayoutLine, pos: &Position) -> f32 {
     for gap in &line.tab_gaps {
         if pos.node_id == line.node_id {
             if pos.offset == gap.child_index {
@@ -202,6 +210,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 0.0);
     }
@@ -227,6 +237,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 3)), 30.0);
     }
@@ -252,6 +264,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 5)), 50.0);
     }
@@ -277,6 +291,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         // offset 1 is inside the first grapheme (3 codepoints) => snaps to start
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 0.0);
@@ -307,6 +323,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 60.0);
     }
@@ -332,6 +350,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = position_at_x(&line, -5.0);
         assert_eq!(pos.node_id, id);
@@ -359,6 +379,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = position_at_x(&line, 100.0);
         assert_eq!(pos.node_id, id);
@@ -386,6 +408,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         // x=4 is < 5.0 (half of first advance), so snaps to offset 0
         let pos = position_at_x(&line, 4.0);
@@ -416,6 +440,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         // x=9 is < 10.0 (half of 20.0 advance) => offset 0
         let pos = position_at_x(&line, 9.0);
@@ -443,6 +469,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = position_at_x(&line, 50.0);
         assert_eq!(pos.node_id, id);
@@ -473,6 +501,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = position_at_x(&line, 100.0);
         assert_eq!(pos.offset, 5);
@@ -500,6 +530,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
 
         let pos = position_at_x(&line, 46.0);
@@ -529,6 +561,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -550,6 +584,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -575,6 +611,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id2, 1)), 30.0);
     }
@@ -598,6 +636,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = position_at_x(&line, 25.0);
         assert_eq!(pos.node_id, id2);
@@ -619,6 +659,8 @@ mod tests {
             empty_caret_x: 32.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 32.0);
     }
@@ -638,6 +680,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(0..1),
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, p1);
@@ -660,6 +704,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(2..2),
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, p1);
@@ -682,6 +728,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(2..2),
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = position_at_x(&line, 50.0);
         assert_eq!(pos.node_id, p1);
@@ -723,6 +771,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(0..2),
             tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+            is_phantom: false,
+            content_edge_x: None,
         };
         // After the tab (offset 1) == gap.x + gap.width.
         assert_eq!(x_at_offset(&line, &Position::new(para, 1)), 40.0);
@@ -744,6 +794,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(0..1),
             tab_gaps: vec![tab_gap(tab, 0, 12.0, 28.0)],
+            is_phantom: false,
+            content_edge_x: None,
         };
         // Before the tab (offset == child_index) == gap.x.
         assert_eq!(x_at_offset(&line, &Position::new(para, 0)), 12.0);
@@ -765,6 +817,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(0..1),
             tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+            is_phantom: false,
+            content_edge_x: None,
         };
         // x=10 is in the left half ([0,20)) → before the tab (offset 0).
         let pos = position_at_x(&line, 10.0);
@@ -789,6 +843,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(0..1),
             tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+            is_phantom: false,
+            content_edge_x: None,
         };
         // x=30 is in the right half (>= 20) → after the tab (offset 1).
         let pos = position_at_x(&line, 30.0);
@@ -822,6 +878,8 @@ mod tests {
             child_range: Some(0..2),
             // Tab starts at the glyph's right edge (x=10) and extends past it.
             tab_gaps: vec![tab_gap(tab, 1, 10.0, 30.0)],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, para);
@@ -854,6 +912,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: Some(0..2),
             tab_gaps: vec![tab_gap(tab, 0, 0.0, 40.0)],
+            is_phantom: false,
+            content_edge_x: None,
         };
         let pos = last_position_in_line(&line);
         // Glyph run end (text node, offset 1), not the tab boundary.

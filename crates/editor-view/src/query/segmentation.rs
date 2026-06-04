@@ -342,6 +342,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         }
     }
 
@@ -363,6 +365,8 @@ mod tests {
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
         (line, id1, id2)
     }

@@ -88,6 +88,7 @@ fn position_attaches_to_child(pos: &Position, parent_id: NodeId, index: usize) -
 pub fn find_first_navigable(node: &LayoutNode) -> Option<&LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => b.children.iter().find_map(find_first_navigable),
+        LayoutContent::Line(l) if l.is_phantom => None,
         LayoutContent::Line(_) | LayoutContent::Atom(_) => Some(node),
         LayoutContent::Spacing(_) => None,
     }
@@ -97,6 +98,7 @@ pub fn find_first_navigable(node: &LayoutNode) -> Option<&LayoutNode> {
 pub fn find_last_navigable(node: &LayoutNode) -> Option<&LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => b.children.iter().rev().find_map(find_last_navigable),
+        LayoutContent::Line(l) if l.is_phantom => None,
         LayoutContent::Line(_) | LayoutContent::Atom(_) => Some(node),
         LayoutContent::Spacing(_) => None,
     }
@@ -181,6 +183,7 @@ pub fn find_navigable_below(node: &LayoutNode, y: f32) -> Option<&LayoutNode> {
             }
             None
         }
+        LayoutContent::Line(l) if l.is_phantom => None,
         LayoutContent::Line(_) | LayoutContent::Atom(_) => {
             if node.rect.y >= y {
                 Some(node)
@@ -203,6 +206,7 @@ pub fn find_navigable_above(node: &LayoutNode, y: f32) -> Option<&LayoutNode> {
             }
             None
         }
+        LayoutContent::Line(l) if l.is_phantom => None,
         LayoutContent::Line(_) | LayoutContent::Atom(_) => {
             if node.rect.bottom() <= y {
                 Some(node)
@@ -242,6 +246,7 @@ fn find_navigable_after_inner<'a>(
             .children
             .iter()
             .find_map(|child| find_navigable_after_inner(child, target, seen)),
+        LayoutContent::Line(l) if l.is_phantom => None,
         LayoutContent::Line(_) | LayoutContent::Atom(_) => seen.then_some(node),
         LayoutContent::Spacing(_) => None,
     }
@@ -274,6 +279,7 @@ fn find_navigable_before_inner<'a>(
             .iter()
             .rev()
             .find_map(|child| find_navigable_before_inner(child, target, seen)),
+        LayoutContent::Line(l) if l.is_phantom => None,
         LayoutContent::Line(_) | LayoutContent::Atom(_) => seen.then_some(node),
         LayoutContent::Spacing(_) => None,
     }
@@ -286,6 +292,7 @@ fn collect_navigable<'a>(node: &'a LayoutNode, out: &mut Vec<&'a LayoutNode>) {
                 collect_navigable(child, out);
             }
         }
+        LayoutContent::Line(l) if l.is_phantom => {}
         LayoutContent::Line(_) | LayoutContent::Atom(_) => out.push(node),
         LayoutContent::Spacing(_) => {}
     }
@@ -440,6 +447,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         }
     }
@@ -459,6 +468,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         }
     }
@@ -729,6 +740,8 @@ mod tests {
                         empty_caret_x: 0.0,
                         child_range: Some(0..0),
                         tab_gaps: vec![],
+                        is_phantom: false,
+                        content_edge_x: None,
                     }),
                 }],
             ),
@@ -759,6 +772,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         let line_b = LayoutNode {
@@ -775,6 +790,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         let tree = LayoutTree {
@@ -808,6 +825,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         let line_b = LayoutNode {
@@ -824,6 +843,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: None,
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         };
         let tree = LayoutTree {
@@ -871,6 +892,8 @@ mod tests {
                 empty_caret_x: 0.0,
                 child_range: Some(child_range),
                 tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         }
     }

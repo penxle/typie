@@ -69,6 +69,8 @@ pub struct LayoutLine {
     /// type for the inclusive-both matching contract and `None` semantics.
     pub child_range: Option<Range<usize>>,
     pub tab_gaps: Vec<TabGap>,
+    pub is_phantom: bool,
+    pub content_edge_x: Option<f32>,
 }
 
 #[derive(Debug, Clone)]

@@ -24,7 +24,14 @@ pub fn line_start_x(line: &LayoutLine) -> f32 {
 }
 
 pub fn line_end_x(line: &LayoutLine) -> f32 {
-    let glyph_end = line.glyph_runs.last().map(|r| r.x + r.width);
+    let clamp = line.content_edge_x;
+    let glyph_end = line.glyph_runs.last().map(|r| {
+        let raw = r.x + r.width;
+        match clamp {
+            Some(c) if raw > c => c,
+            _ => raw,
+        }
+    });
     let gap_end = line.tab_gaps.last().map(|g| g.x + g.width);
     match (glyph_end, gap_end) {
         (Some(g), Some(t)) => g.max(t),

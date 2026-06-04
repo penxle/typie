@@ -50,6 +50,8 @@ pub(crate) fn build_strut_only_line(
             empty_caret_x: empty_caret_x_for(align, indent, width),
             child_range: Some(child_range),
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         }),
     })
 }
@@ -316,6 +318,8 @@ fn measure_segment(
                             empty_caret_x: empty_caret_x_for(align, indent, width),
                             child_range: line_child_range,
                             tab_gaps,
+                            is_phantom: line.is_phantom,
+                            content_edge_x: line.content_edge_x,
                         }),
                     })
                 })
@@ -1353,21 +1357,30 @@ mod tests {
     }
 
     #[test]
-    fn trailing_space_wrap_does_not_emit_phantom_line() {
+    fn trailing_space_wrap_emits_zero_height_phantom() {
+        // Parley hangs the overflowing trailing space and opens a new line.
+        // We keep that empty line as a 0-height phantom so the cursor can
+        // wrap onto it; the height must stay at 0 so paragraphs don't gain
+        // ghost vertical space.
         let (doc, p1) = doc! { root { p1: paragraph { text("aaaaaaaaaa ") } } };
         let mut measurer = Measurer::new_test();
         let m = measurer.measure(&doc, p1, 30.0, &ViewState::new());
         let MeasuredContent::Box(b) = &m.content else {
             panic!("expected box")
         };
-        for (i, c) in b.children.iter().enumerate() {
-            let MeasuredContent::Line(l) = &c.content else {
-                continue;
-            };
-            assert!(
-                !l.glyph_runs.is_empty() || !l.tab_gaps.is_empty(),
-                "line {i} must not be a phantom (empty trailing line)"
-            );
-        }
+        let phantoms: Vec<&MeasuredNode> = b
+            .children
+            .iter()
+            .map(|c| c.as_ref())
+            .filter(|c| matches!(&c.content, MeasuredContent::Line(l) if l.is_phantom))
+            .collect();
+        assert_eq!(phantoms.len(), 1, "expected exactly one phantom line");
+        let phantom = phantoms[0];
+        assert_eq!(phantom.height, 0.0, "phantom must be zero-height");
+        let MeasuredContent::Line(line) = &phantom.content else {
+            unreachable!()
+        };
+        assert!(line.glyph_runs.is_empty());
+        assert!(line.tab_gaps.is_empty());
     }
 }

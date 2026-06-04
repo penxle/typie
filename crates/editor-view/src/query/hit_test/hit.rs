@@ -160,6 +160,7 @@ fn exact_hit_target<'a>(node: &'a LayoutNode, x: f32, y: f32) -> Option<HitTarge
             }
             None
         }
+        LayoutContent::Line(line) if line.is_phantom => None,
         LayoutContent::Line(line) => (y >= node.rect.y && y < node.rect.y + node.rect.height)
             .then_some(HitTarget::TextLine { node, line }),
         LayoutContent::Atom(atom) => node
@@ -191,6 +192,7 @@ fn closest_target<'a>(
             }
             closest_target_in_range(node, x, y, y_start, y_end).map(|(_, target)| target)
         }
+        LayoutContent::Line(line) if line.is_phantom => None,
         LayoutContent::Line(line) => (node.rect.y >= y_start && node.rect.y < y_end)
             .then_some(HitTarget::TextLine { node, line }),
         LayoutContent::Atom(atom) => (node.rect.y >= y_start && node.rect.y < y_end)
@@ -215,6 +217,7 @@ fn closest_target_in_range<'a>(
             .iter()
             .filter_map(|child| closest_target_in_range(child, x, y, y_start, y_end))
             .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)),
+        LayoutContent::Line(line) if line.is_phantom => None,
         LayoutContent::Line(line) => {
             if node.rect.y >= y_start && node.rect.y < y_end {
                 Some((

@@ -464,6 +464,8 @@ mod build_tests {
             descent: 3.0,
             glyph_runs: runs,
             tab_gaps_raw: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         }
     }
 

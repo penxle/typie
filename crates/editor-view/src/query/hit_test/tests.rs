@@ -40,6 +40,8 @@ fn make_line_node(id: NodeId, x: f32, y: f32, text: &str, char_w: f32) -> Layout
             empty_caret_x: 0.0,
             child_range: None,
             tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         }),
     }
 }
@@ -426,6 +428,8 @@ fn hit_test_in_empty_trailing_line_returns_paragraph_offset() {
                             empty_caret_x: 0.0,
                             child_range: Some(0..2),
                             tab_gaps: vec![],
+                            is_phantom: false,
+                            content_edge_x: None,
                         }),
                     },
                     LayoutNode {
@@ -442,6 +446,8 @@ fn hit_test_in_empty_trailing_line_returns_paragraph_offset() {
                             empty_caret_x: 0.0,
                             child_range: Some(2..2),
                             tab_gaps: vec![],
+                            is_phantom: false,
+                            content_edge_x: None,
                         }),
                     },
                 ],

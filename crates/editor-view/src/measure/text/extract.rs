@@ -17,6 +17,13 @@ pub struct ExtractedLine {
     pub descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
     pub tab_gaps_raw: Vec<(u64, f32, f32)>,
+    pub is_phantom: bool,
+    /// Some(content_edge_x) for a real line whose trailing whitespace was hung
+    /// past content_width: cursor / selection X computations clamp to this
+    /// value so they stay at the page's content edge instead of following the
+    /// hung whitespace's glyph X. The phantom line that follows owns the
+    /// paragraph-end caret on its own row. None for normal lines.
+    pub content_edge_x: Option<f32>,
 }
 
 pub struct LineHeightConfig {
@@ -199,9 +206,18 @@ pub fn extract_lines(
         base_font_size,
     } = height_config;
     let mut lines = Vec::new();
+    let content_width = layout.layout_max_advance();
 
     for line in layout.lines() {
         let metrics = line.metrics();
+        // metrics.advance excludes the line indent; the absolute right edge of
+        // the line is `metrics.offset + metrics.advance`. The page's content
+        // edge sits at X = content_width regardless of indent, so we only need
+        // to compare absolute edges. Without adding metrics.offset, indented
+        // first lines fail to detect their hung trailing whitespace.
+        let hung_clamp_x = (metrics.trailing_whitespace > 0.0
+            && metrics.offset + metrics.advance > content_width)
+            .then_some(content_width);
         let typography = resolve_line_typography_metrics(
             *metrics,
             strut,
@@ -329,17 +345,42 @@ pub fn extract_lines(
             descent,
             tab_gaps_raw,
             glyph_runs,
+            is_phantom: false,
+            content_edge_x: hung_clamp_x,
         });
     }
 
-    // Parley emits a zero-content trailing line as a hanging-space artifact;
-    // keeping it would break ArrowDown navigation across the paragraph.
+    // Hanging trailing whitespace needs a 0-height phantom row to host the
+    // paragraph-end caret, otherwise the cursor sits past content_width inside
+    // the hung whitespace. Parley emits an empty trailing line for this only
+    // when the hung whitespace was followed by `start_new_line`; if the line
+    // is the very last (no further content), Parley leaves it as a single
+    // overflowed line and we synthesize the phantom ourselves. Either way the
+    // phantom is skipped by navigation/hit-testing and only owns offset→line
+    // lookup at the paragraph end.
     if lines.len() > 1
         && lines
             .last()
             .is_some_and(|l| l.glyph_runs.is_empty() && l.tab_gaps_raw.is_empty())
     {
-        lines.pop();
+        let last = lines.last_mut().unwrap();
+        last.height = 0.0;
+        last.ascent = 0.0;
+        last.descent = 0.0;
+        last.baseline = 0.0;
+        last.is_phantom = true;
+        last.content_edge_x = None;
+    } else if lines.last().is_some_and(|l| l.content_edge_x.is_some()) {
+        lines.push(ExtractedLine {
+            height: 0.0,
+            baseline: 0.0,
+            ascent: 0.0,
+            descent: 0.0,
+            glyph_runs: vec![],
+            tab_gaps_raw: vec![],
+            is_phantom: true,
+            content_edge_x: None,
+        });
     }
 
     lines
