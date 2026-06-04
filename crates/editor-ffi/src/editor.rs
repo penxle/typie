@@ -90,7 +90,7 @@ impl Editor {
                 Ok(inner
                     .editor
                     .view()
-                    .cursor_metrics(&state.doc, &selection.head)
+                    .cursor_metrics(state, &selection.head)
                     .into_ffi()?)
             } else {
                 Ok(None)

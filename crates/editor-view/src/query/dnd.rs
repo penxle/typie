@@ -250,13 +250,14 @@ mod tests {
         };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = editor_state::State::new(doc, editor_crdt::OpGraph::new(), None);
         let caret = view
-            .cursor_metrics(&doc, &Position::new(t, 2))
+            .cursor_metrics(&state, &Position::new(t, 2))
             .expect("cursor metrics")
             .caret;
 
         let target = view
-            .drop_target_at(&doc, 0, caret.x, caret.y + caret.height * 0.5)
+            .drop_target_at(&state.doc, 0, caret.x, caret.y + caret.height * 0.5)
             .expect("valid dnd target");
 
         assert_eq!(target.position.node_id, t);
@@ -871,12 +872,13 @@ mod tests {
         };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = editor_state::State::new(doc, editor_crdt::OpGraph::new(), None);
         let caret = view
-            .cursor_metrics(&doc, &Position::new(t, 2))
+            .cursor_metrics(&state, &Position::new(t, 2))
             .expect("cursor metrics")
             .caret;
 
-        let target = view.drop_target_at(&doc, 0, caret.x, caret.y + caret.height * 0.5);
+        let target = view.drop_target_at(&state.doc, 0, caret.x, caret.y + caret.height * 0.5);
 
         assert!(target.is_some());
     }

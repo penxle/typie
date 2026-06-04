@@ -2415,7 +2415,7 @@ mod tests {
         let sel = editor.state.selection.expect("selection exists in test");
         let cursor = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &sel.head)
+            .cursor_metrics(&editor.state, &sel.head)
             .expect("collapsed cursor has metrics");
         let probe_x = cursor.caret.x;
         let probe_y = cursor.line.y + cursor.line.height * 0.5;
@@ -2437,7 +2437,7 @@ mod tests {
         let sel = editor.state.selection.expect("selection exists in test");
         let cursor = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &sel.head)
+            .cursor_metrics(&editor.state, &sel.head)
             .expect("collapsed cursor has metrics");
         let probe_x = cursor.caret.x + 100.0;
         let probe_y = cursor.line.y + cursor.line.height * 0.5;
@@ -2460,6 +2460,35 @@ mod tests {
     }
 
     #[test]
+    fn cursor_metrics_at_span_boundary_uses_input_font_size() {
+        let (initial, _t0, t1) = state! {
+            doc { root { paragraph { t0: text("a") t1: text("a") [font_size(2400)] } } }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let at_start = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(t1, 0))
+            .expect("cursor metrics at t1 start");
+        let at_end = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(t1, 1))
+            .expect("cursor metrics at t1 end");
+
+        assert!(
+            at_start.caret.height < at_end.caret.height,
+            "offset 0 (입력은 이전 span 폰트) caret이 offset 1 (24pt) caret보다 작아야 함: \
+             start={}, end={}",
+            at_start.caret.height,
+            at_end.caret.height,
+        );
+    }
+
+    #[test]
     fn dnd_over_text_sets_drop_indicator_and_invalidates_render() {
         let (initial, t) = state! {
             doc { root { paragraph { t: text("hello") } } }
@@ -2471,7 +2500,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(t, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2509,7 +2538,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(t, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2542,7 +2571,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(t, 2))
             .expect("cursor metrics")
             .caret;
         editor.apply(Message::Dnd {
@@ -2581,7 +2610,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(t, 5))
             .expect("cursor metrics")
             .caret;
         editor.apply(Message::Dnd {
@@ -2620,7 +2649,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(t, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2655,7 +2684,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t2, 2))
+            .cursor_metrics(&editor.state, &Position::new(t2, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2690,7 +2719,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t2, 2))
+            .cursor_metrics(&editor.state, &Position::new(t2, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2721,7 +2750,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(t, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -2770,7 +2799,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(t, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -2802,7 +2831,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(t, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -2839,7 +2868,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(t, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -2888,7 +2917,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(t, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -2956,7 +2985,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 11))
+            .cursor_metrics(&editor.state, &Position::new(t, 11))
             .expect("cursor metrics")
             .caret;
 
@@ -3183,7 +3212,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 11))
+            .cursor_metrics(&editor.state, &Position::new(t, 11))
             .expect("cursor metrics")
             .caret;
 
@@ -3227,7 +3256,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(t, 11))
+            .cursor_metrics(&editor.state, &Position::new(t, 11))
             .expect("cursor metrics")
             .caret;
 
@@ -3318,10 +3347,7 @@ mod tests {
         assert!(
             editor
                 .view()
-                .cursor_metrics(
-                    &st.doc,
-                    &st.selection.expect("selection exists in test").head
-                )
+                .cursor_metrics(st, &st.selection.expect("selection exists in test").head)
                 .is_some(),
             "gap cursor must produce a caret via the phantom line"
         );
@@ -3336,10 +3362,7 @@ mod tests {
         assert!(
             editor
                 .view()
-                .cursor_metrics(
-                    &st2.doc,
-                    &st2.selection.expect("selection exists in test").head
-                )
+                .cursor_metrics(st2, &st2.selection.expect("selection exists in test").head)
                 .is_some(),
             "normal caret still valid after leaving the gap (phantom space recovered)"
         );
@@ -3545,7 +3568,7 @@ mod tests {
         let page_bottom = editor.view().pages()[0].size.height;
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(para_text, 5))
+            .cursor_metrics(&editor.state, &Position::new(para_text, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -3750,7 +3773,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(para_text, 5))
+            .cursor_metrics(&editor.state, &Position::new(para_text, 5))
             .expect("cursor metrics for paragraph after fold")
             .caret;
 
@@ -3794,7 +3817,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state.doc, &Position::new(para_text, 5))
+            .cursor_metrics(&editor.state, &Position::new(para_text, 5))
             .expect("cursor metrics")
             .caret;
 

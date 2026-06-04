@@ -2,12 +2,12 @@ use editor_common::{EdgeInsets, Movement};
 use editor_crdt::Op;
 use editor_model::{Doc, DocOp, LayoutMode, Node, NodeId};
 use editor_resource::Resource;
-use editor_state::{Position, ResolvedSelection, Selection};
+use editor_state::{Position, ResolvedSelection, Selection, State, resolve_effective_modifiers_at};
 use std::sync::{Arc, Mutex};
 
 use crate::ExternalElement;
 use crate::TableOverlay;
-use crate::measure::text::resolve::resolve_text_style;
+use crate::measure::text::resolve::style_from_effective_modifiers;
 use crate::measure::text::strut::compute_strut;
 use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
@@ -362,9 +362,9 @@ impl View {
         query::navigation::position_at_preferred_x_in(&result.tree, node_id, at_end, x)
     }
 
-    pub fn cursor_metrics(&self, doc: &Doc, pos: &Position) -> Option<CursorMetrics> {
+    pub fn cursor_metrics(&self, state: &State, pos: &Position) -> Option<CursorMetrics> {
         let result = self.layout.as_ref()?;
-        let metrics_override = self.cursor_metrics_at(doc, pos);
+        let metrics_override = self.cursor_metrics_at(state, pos);
         query::cursor_metrics(&result.tree, &result.pages, pos, metrics_override)
     }
 
@@ -373,12 +373,15 @@ impl View {
         crate::query::placeholder_metrics(&result.tree, &result.pages, doc)
     }
 
-    fn cursor_metrics_at(&self, doc: &Doc, pos: &Position) -> Option<(f32, f32)> {
-        let node = doc.node(pos.node_id)?;
+    // 입력 경로(`resolve_effective_modifiers_at`)와 동일한 effective set을 써서
+    // span 경계의 Expand 규칙·pending_modifiers를 커서 높이에 반영한다.
+    fn cursor_metrics_at(&self, state: &State, pos: &Position) -> Option<(f32, f32)> {
+        let node = state.doc.node(pos.node_id)?;
         if !matches!(node.node(), Node::Text(_)) {
             return None;
         }
-        let style = resolve_text_style(&node);
+        let modifiers = resolve_effective_modifiers_at(state, pos);
+        let style = style_from_effective_modifiers(&modifiers);
         let mut resource = self.measurer.resource.lock().unwrap();
         let strut = compute_strut(&mut resource, &style)?;
         Some((strut.ascent, strut.descent))
@@ -673,6 +676,10 @@ mod tests {
         }
     }
 
+    fn mk_state(doc: Doc) -> State {
+        State::new(doc, editor_crdt::OpGraph::new(), None)
+    }
+
     #[test]
     fn layout_produces_pages() {
         let (doc,) = doc! { root { paragraph { text("hello") } } };
@@ -776,9 +783,10 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph } };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = mk_state(doc);
 
         let pos = Position::new(p1, 0);
-        let default_rect = view.cursor_metrics(&doc, &pos).unwrap();
+        let default_rect = view.cursor_metrics(&state, &pos).unwrap();
 
         // With no pending modifiers, cursor uses stored strut metrics.
         assert!(default_rect.caret.height > 0.0);
@@ -786,9 +794,6 @@ mod tests {
 
     #[test]
     fn cursor_rect_matches_adjacent_text_font_size() {
-        // Text node with its own FontSize modifier (24pt) alongside default text.
-        // Cursor inside the big-sized text should reflect that text's style, not
-        // the paragraph default.
         let (doc, t1, t2) = doc! {
             root {
                 paragraph {
@@ -799,9 +804,10 @@ mod tests {
         };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = mk_state(doc);
 
-        let r1 = view.cursor_metrics(&doc, &Position::new(t1, 0)).unwrap();
-        let r2 = view.cursor_metrics(&doc, &Position::new(t2, 0)).unwrap();
+        let r1 = view.cursor_metrics(&state, &Position::new(t1, 1)).unwrap();
+        let r2 = view.cursor_metrics(&state, &Position::new(t2, 1)).unwrap();
 
         assert!(
             r2.caret.height > r1.caret.height,
@@ -824,13 +830,16 @@ mod tests {
         };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = mk_state(doc);
 
+        // offset 1 = end of each single-char node so the Expand::After mark
+        // on `big` actually applies (Expand::After only kicks in at_end).
         let small_caret = view
-            .cursor_metrics(&doc, &Position::new(small, 0))
+            .cursor_metrics(&state, &Position::new(small, 1))
             .unwrap()
             .caret;
         let big_caret = view
-            .cursor_metrics(&doc, &Position::new(big, 0))
+            .cursor_metrics(&state, &Position::new(big, 1))
             .unwrap()
             .caret;
 
@@ -858,8 +867,9 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph } };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = mk_state(doc);
         let pos = Position::new(p1, 0);
-        let baseline = view.cursor_metrics(&doc, &pos).unwrap();
+        let baseline = view.cursor_metrics(&state, &pos).unwrap();
 
         let pending_style = Some(PendingStyle {
             node_id: p1,
@@ -867,8 +877,8 @@ mod tests {
                 modifier: Modifier::FontSize { value: 9600 },
             }],
         });
-        view.reconcile_with_ops(&doc, &doc, &[], pending_style, None);
-        let pending = view.cursor_metrics(&doc, &pos).unwrap();
+        view.reconcile_with_ops(&state.doc, &state.doc, &[], pending_style, None);
+        let pending = view.cursor_metrics(&state, &pos).unwrap();
 
         assert!(pending.caret.height > baseline.caret.height);
         assert!(pending.line.height > baseline.line.height);
@@ -880,9 +890,10 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph [alignment(Alignment::Right)] } };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = mk_state(doc);
 
         let pos = Position::new(p1, 0);
-        let m = view.cursor_metrics(&doc, &pos).unwrap();
+        let m = view.cursor_metrics(&state, &pos).unwrap();
 
         assert!(
             (m.caret.x - (m.line.x + m.line.width)).abs() < 1.0,
@@ -899,9 +910,10 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph [alignment(Alignment::Center)] } };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = mk_state(doc);
 
         let pos = Position::new(p1, 0);
-        let m = view.cursor_metrics(&doc, &pos).unwrap();
+        let m = view.cursor_metrics(&state, &pos).unwrap();
 
         let mid = m.line.x + m.line.width / 2.0;
         assert!(
@@ -922,8 +934,9 @@ mod tests {
         let (doc, p1, t1) = doc! { root { p1: paragraph { t1: text("hi") } } };
         let mut view = View::new_test();
         view.layout(&doc);
+        let state = mk_state(doc);
         let pos = Position::new(t1, 0);
-        let baseline = view.cursor_metrics(&doc, &pos).unwrap();
+        let baseline = view.cursor_metrics(&state, &pos).unwrap();
 
         let pending_style = Some(PendingStyle {
             node_id: p1,
@@ -931,8 +944,8 @@ mod tests {
                 modifier: Modifier::FontSize { value: 9600 },
             }],
         });
-        view.reconcile_with_ops(&doc, &doc, &[], pending_style, None);
-        let after = view.cursor_metrics(&doc, &pos).unwrap();
+        view.reconcile_with_ops(&state.doc, &state.doc, &[], pending_style, None);
+        let after = view.cursor_metrics(&state, &pos).unwrap();
 
         assert!((after.caret.height - baseline.caret.height).abs() < 0.01);
         assert!((after.line.height - baseline.line.height).abs() < 0.01);
