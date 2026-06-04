@@ -272,7 +272,7 @@
           />
         {/each}
         <HorizontalDivider color="secondary" />
-        <div onmouseenter={() => (activeDeleteId = null)} role="presentation">
+        <div class={flex({ flexDirection: 'column' })} onmouseenter={() => (activeDeleteId = null)} role="presentation">
           <DropdownMenuItem
             onclick={() => {
               opened = false;
