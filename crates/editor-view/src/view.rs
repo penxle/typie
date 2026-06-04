@@ -368,6 +368,11 @@ impl View {
         query::cursor_metrics(&result.tree, &result.pages, pos, metrics_override)
     }
 
+    pub fn placeholder_metrics(&self, doc: &Doc) -> Option<crate::query::PlaceholderMetrics> {
+        let result = self.layout.as_ref()?;
+        crate::query::placeholder_metrics(&result.tree, &result.pages, doc)
+    }
+
     fn cursor_metrics_at(&self, doc: &Doc, pos: &Position) -> Option<(f32, f32)> {
         let node = doc.node(pos.node_id)?;
         if !matches!(node.node(), Node::Text(_)) {

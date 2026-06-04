@@ -3,6 +3,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { graphql } from '$mearie';
@@ -43,7 +44,9 @@
       query DocumentTemplateModalV2_Query($slug: String!) {
         document(slug: $slug) {
           id
-          snapshot
+          state {
+            graph
+          }
         }
       }
     `),
@@ -69,8 +72,12 @@
 
   $effect(() => {
     if (templateSlug && query.data && !query.loading) {
-      // v2 FFI: snapshot 기반 template insert 미구현
-      console.warn('Template insert not yet supported in v2');
+      const graph = query.data.document.state?.graph;
+      if (graph) {
+        editor?.insertTemplateFragment(Uint8Array.fromBase64(graph));
+      } else {
+        Toast.error('이 템플릿은 아직 사용할 수 없어요.');
+      }
       editor?.focus();
       templateSlug = null;
       open = false;

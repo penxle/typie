@@ -374,6 +374,15 @@ export interface ParagraphIndentValue {
     value: number;
 }
 
+export interface PlaceholderMetrics {
+    page_idx: number;
+    rect: Rect;
+    font_size: number | undefined;
+    line_height: number | undefined;
+    letter_spacing: number | undefined;
+    align: Alignment | undefined;
+}
+
 export interface PlainArchivedNode {
     id: string | undefined;
 }
@@ -700,7 +709,7 @@ export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_f
 
 export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
-export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "styles" | "tracked_ranges" | "last_history_tag";
+export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "styles" | "tracked_ranges" | "last_history_tag" | "placeholder";
 
 export type StyleOp = { type: "apply"; node_id: NodeId; style_id: string } | { type: "unapply"; node_id: NodeId; style_id: string } | { type: "apply_to_selection"; style_id: string } | { type: "unset_in_selection" } | { type: "create_from_selection"; style_id: string; name: string } | { type: "update_from_selection" } | { type: "define"; style_id: string; name: string; modifiers: Modifier[] } | { type: "delete"; style_id: string } | { type: "rename"; style_id: string; name: string } | { type: "set_modifier"; style_id: string; modifier: Modifier } | { type: "unset_modifier"; style_id: string; modifier_type: ModifierType };
 
@@ -753,6 +762,7 @@ declare class Editor {
     find_matches(query: string, options?: SearchOptions | null): Selection[];
     freeze_selection(selection: Selection): StableSelection;
     ime(before_limit: number, after_limit: number): Ime;
+    insert_template_fragment(changesets: Uint8Array): void;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;
@@ -765,6 +775,7 @@ declare class Editor {
     modifier_state(): ModifierState | undefined;
     page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];
+    placeholder(): PlaceholderMetrics | undefined;
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
     prose_text(): string;
     prose_to_selection(start: number, end: number): Selection | undefined;

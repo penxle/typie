@@ -22,4 +22,5 @@ pub enum StateField {
     Styles,
     TrackedRanges,
     LastHistoryTag,
+    Placeholder,
 }

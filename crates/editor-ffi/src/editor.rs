@@ -98,6 +98,17 @@ impl Editor {
         })
     }
 
+    pub fn placeholder(&self) -> EditorResult<Option<Complex<editor_view::PlaceholderMetrics>>> {
+        self.with_inner(|inner| {
+            let state = inner.editor.state();
+            Ok(inner
+                .editor
+                .view()
+                .placeholder_metrics(&state.doc)
+                .into_ffi()?)
+        })
+    }
+
     pub fn selection(&self) -> EditorResult<Option<Complex<editor_state::Selection>>> {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
@@ -355,6 +366,20 @@ impl Editor {
     pub fn set_doc(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<()> {
         self.with_inner(|inner| {
             inner.editor.set_doc(plain.from_ffi()?);
+            Ok(())
+        })
+    }
+
+    pub fn insert_template_fragment(&self, changesets: Vec<u8>) -> EditorResult<()> {
+        self.with_inner(|inner| {
+            let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+                editor_crdt::wire::decode(&changesets[..])
+                    .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            let graph = editor_crdt::OpGraph::from_changesets(css)?;
+            let template_doc = editor_model::Doc::from_op_graph(&graph)?;
+            inner
+                .editor
+                .insert_template_fragment(template_doc.to_plain())?;
             Ok(())
         })
     }

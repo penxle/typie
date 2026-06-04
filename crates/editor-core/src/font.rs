@@ -249,6 +249,7 @@ pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
                 StateField::PageSizes,
                 StateField::ExternalElements,
                 StateField::TableOverlays,
+                StateField::Placeholder,
             ],
         });
         editor.push_event(EditorEvent::RenderInvalidated);

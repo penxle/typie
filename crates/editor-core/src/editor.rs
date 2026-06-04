@@ -464,6 +464,7 @@ impl Editor {
             fields.insert(StateField::ExternalElements);
             fields.insert(StateField::TableOverlays);
             fields.insert(StateField::LinkRects);
+            fields.insert(StateField::Placeholder);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
@@ -474,6 +475,7 @@ impl Editor {
             fields.insert(StateField::Ime);
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
+            fields.insert(StateField::Placeholder);
             if !self.tracked_ranges.is_empty() {
                 fields.insert(StateField::TrackedRanges);
             }
@@ -810,6 +812,7 @@ impl Editor {
                     StateField::ExternalElements,
                     StateField::TableOverlays,
                     StateField::LinkRects,
+                    StateField::Placeholder,
                 ],
             });
             self.push_event(EditorEvent::RenderInvalidated);
@@ -998,6 +1001,84 @@ impl Editor {
             fields: StateField::iter().collect(),
         });
         self.push_event(EditorEvent::RenderInvalidated);
+    }
+
+    pub fn insert_template_fragment(
+        &mut self,
+        template: editor_model::PlainDoc,
+    ) -> Result<(), EditorError> {
+        use editor_state::NodeRefCursorExt;
+
+        let root_entry = template
+            .nodes
+            .get(&editor_model::NodeId::ROOT)
+            .ok_or_else(|| EditorError::General {
+                msg: "template has no ROOT".into(),
+            })?;
+        let root_plain_node = root_entry.node.clone();
+        let root_modifiers: Vec<editor_model::Modifier> =
+            root_entry.modifiers.values().cloned().collect();
+        let child_ids: Vec<editor_model::NodeId> = root_entry.children.clone();
+
+        let styles = template.styles.clone();
+        let node_styles: Vec<(editor_model::NodeId, String)> = template
+            .nodes
+            .iter()
+            .filter(|(id, _)| **id != editor_model::NodeId::ROOT)
+            .filter_map(|(id, e)| e.style.clone().map(|s| (*id, s)))
+            .collect();
+
+        let (template_doc, _graph) = editor_model::Doc::from_plain(template);
+
+        let subtrees: Vec<editor_model::Subtree> = child_ids
+            .iter()
+            .filter_map(|&id| editor_model::Subtree::capture(&template_doc, id))
+            .collect();
+
+        if subtrees.is_empty() {
+            return Ok(());
+        }
+
+        self.transact(|tr| {
+            tr.batch::<_, EditorError>(|tr| {
+                let existing: Vec<editor_model::NodeId> = tr
+                    .doc()
+                    .node(editor_model::NodeId::ROOT)
+                    .ok_or_else(|| EditorError::General {
+                        msg: "ROOT not found".into(),
+                    })?
+                    .children()
+                    .map(|c| c.id())
+                    .collect();
+                for id in existing {
+                    tr.remove_subtree(id)?;
+                }
+                for (i, st) in subtrees.into_iter().enumerate() {
+                    tr.insert_subtree(editor_model::NodeId::ROOT, i, st)?;
+                }
+                tr.set_node(editor_model::NodeId::ROOT, root_plain_node)?;
+                for modifier in root_modifiers {
+                    editor_commands::set_node_modifier(tr, editor_model::NodeId::ROOT, modifier)?;
+                }
+                for (name, entry) in styles {
+                    tr.set_style(name, Some(entry))?;
+                }
+                for (id, name) in node_styles {
+                    tr.set_node_style(id, Some(name))?;
+                }
+                Ok(())
+            })?;
+
+            let doc = tr.doc();
+            if let Some(pos) = doc
+                .node(editor_model::NodeId::ROOT)
+                .and_then(|r| r.first_child())
+                .and_then(|first| first.first_cursor_position())
+            {
+                tr.set_selection(Some(editor_state::Selection::collapsed(pos)))?;
+            }
+            Ok(())
+        })
     }
 
     pub(crate) fn run_initialize(&mut self) -> Result<(), EditorError> {
@@ -3793,6 +3874,103 @@ mod tests {
         assert!(
             editor.drop_indicator_for_test().is_none(),
             "hovering inside the dragged fold must not show a drop indicator"
+        );
+    }
+
+    #[test]
+    fn insert_template_fragment_replaces_empty_doc() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("") } } }
+            selection: (t1, 0)
+        };
+        let (template, ..) = state! {
+            doc { root { paragraph { a: text("Title") } paragraph { b: text("Body") } } }
+            selection: (a, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor
+            .insert_template_fragment(template.doc.to_plain())
+            .expect("template insert ok");
+
+        let root = editor.state().doc.root().unwrap();
+        let texts: Vec<String> = root
+            .children()
+            .map(|p| {
+                let mut s = String::new();
+                for c in p.children() {
+                    if let Node::Text(t) = c.node() {
+                        s.push_str(&t.text.to_string());
+                    }
+                }
+                s
+            })
+            .collect();
+        assert_eq!(texts, vec!["Title".to_string(), "Body".to_string()]);
+    }
+
+    #[test]
+    fn insert_template_fragment_hides_placeholder() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("") } } }
+            selection: (t1, 0)
+        };
+        let (template, ..) = state! {
+            doc { root { paragraph { a: text("X") } } }
+            selection: (a, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor
+            .insert_template_fragment(template.doc.to_plain())
+            .expect("template insert ok");
+        assert!(
+            editor
+                .view()
+                .placeholder_metrics(&editor.state().doc)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn insert_template_fragment_preserves_named_styles() {
+        use editor_transaction::Transaction;
+        let (tpl_initial, p1, _t) = state! {
+            doc { root { p1: paragraph { t1: text("Styled") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&tpl_initial);
+        tr.set_style(
+            "h1".into(),
+            Some(editor_model::PlainStyleEntry {
+                name: "Heading".into(),
+                modifiers: vec![editor_model::Modifier::FontSize { value: 1800 }]
+                    .into_iter()
+                    .collect(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        let (tpl_state, ..) = tr.commit();
+
+        let (initial, ..) = state! {
+            doc { root { paragraph { e: text("") } } }
+            selection: (e, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor
+            .insert_template_fragment(tpl_state.doc.to_plain())
+            .expect("ok");
+
+        let plain = editor.state().doc.to_plain();
+        assert!(
+            plain.styles.contains_key("h1"),
+            "named style entry must transfer"
+        );
+        let para = editor.state().doc.root().unwrap().first_child().unwrap();
+        let entry = plain.nodes.get(&para.id()).unwrap();
+        assert_eq!(
+            entry.style.as_deref(),
+            Some("h1"),
+            "node style ref must be reapplied"
         );
     }
 }

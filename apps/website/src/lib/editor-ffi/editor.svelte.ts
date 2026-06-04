@@ -26,6 +26,7 @@ import type {
   ModifierState,
   ModifierType,
   PageRect,
+  PlaceholderMetrics,
   PlainDoc,
   PlainRootNode,
   PointerStyle,
@@ -150,6 +151,7 @@ export class Editor {
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
 
   #cursor = $state<CursorMetrics>();
+  #placeholder = $state<PlaceholderMetrics | undefined>();
   #selection = $state<Selection | undefined>();
   #lastHistoryTag = $state<HistoryTag>();
   #pageSizes = $state<Size[]>([]);
@@ -377,6 +379,10 @@ export class Editor {
     return this.#cursor;
   }
 
+  get placeholder(): PlaceholderMetrics | undefined {
+    return this.#placeholder;
+  }
+
   get selection() {
     return this.#selection;
   }
@@ -579,6 +585,12 @@ export class Editor {
     const result = await readClipboardRich();
     if (!result || result.text === '') return;
     this.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text: result.text } });
+  }
+
+  insertTemplateFragment(changesets: Uint8Array): void {
+    if (this.readOnly) return;
+    this.#wasm.insert_template_fragment(changesets);
+    this.#scheduleTick();
   }
 
   handleRepasteAsText(): void {
@@ -1526,6 +1538,10 @@ export class Editor {
 
     if (fields.includes('cursor')) {
       this.#cursor = this.#wasm.cursor();
+    }
+
+    if (fields.includes('placeholder')) {
+      this.#placeholder = this.#wasm.placeholder() ?? undefined;
     }
 
     if (fields.includes('selection')) {

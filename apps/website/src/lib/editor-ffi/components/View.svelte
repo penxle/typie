@@ -25,6 +25,7 @@
   import LineHighlight from './LineHighlight.svelte';
   import LinkTooltip from './LinkTooltip.svelte';
   import Page from './Page.svelte';
+  import PlaceholderOverlay from './PlaceholderOverlay.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
   import EditorZoom from './ui/EditorZoom.svelte';
@@ -246,6 +247,8 @@
           </CaretPositioned>
 
           <LineHighlight />
+
+          <PlaceholderOverlay />
 
           <RepasteAsText />
 
