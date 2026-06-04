@@ -1351,4 +1351,23 @@ mod tests {
             "centered line must not collapse to left (x={glyph_x})"
         );
     }
+
+    #[test]
+    fn trailing_space_wrap_does_not_emit_phantom_line() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("aaaaaaaaaa ") } } };
+        let mut measurer = Measurer::new_test();
+        let m = measurer.measure(&doc, p1, 30.0, &ViewState::new());
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected box")
+        };
+        for (i, c) in b.children.iter().enumerate() {
+            let MeasuredContent::Line(l) = &c.content else {
+                continue;
+            };
+            assert!(
+                !l.glyph_runs.is_empty() || !l.tab_gaps.is_empty(),
+                "line {i} must not be a phantom (empty trailing line)"
+            );
+        }
+    }
 }

@@ -332,6 +332,16 @@ pub fn extract_lines(
         });
     }
 
+    // Parley emits a zero-content trailing line as a hanging-space artifact;
+    // keeping it would break ArrowDown navigation across the paragraph.
+    if lines.len() > 1
+        && lines
+            .last()
+            .is_some_and(|l| l.glyph_runs.is_empty() && l.tab_gaps_raw.is_empty())
+    {
+        lines.pop();
+    }
+
     lines
 }
 #[cfg(test)]
