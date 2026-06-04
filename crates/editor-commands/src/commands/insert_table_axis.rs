@@ -88,6 +88,10 @@ mod tests {
         let doc = actual.doc;
         let table = doc.node(tbl).unwrap();
         assert_eq!(table.children().count(), 2);
+        let new_row = table.children().next().unwrap();
+        for cell in new_row.children() {
+            assert_empty_cell(&cell);
+        }
     }
 
     #[test]
@@ -110,6 +114,10 @@ mod tests {
         let doc = actual.doc;
         let table = doc.node(tbl).unwrap();
         assert_eq!(table.children().count(), 2);
+        let new_row = table.children().nth(1).unwrap();
+        for cell in new_row.children() {
+            assert_empty_cell(&cell);
+        }
     }
 
     #[test]
@@ -136,6 +144,7 @@ mod tests {
         let table = doc.node(tbl).unwrap();
         let row = table.children().next().unwrap();
         assert_eq!(row.children().count(), 3);
+        assert_empty_cell(&row.children().next().unwrap());
     }
 
     #[test]
@@ -166,6 +175,14 @@ mod tests {
         let table = doc.node(tbl).unwrap();
         for row in table.children() {
             assert_eq!(row.children().count(), 3);
+            assert_empty_cell(&row.children().nth(2).unwrap());
         }
+    }
+
+    fn assert_empty_cell(cell: &editor_model::NodeRef<'_>) {
+        let kids: Vec<_> = cell.children().collect();
+        assert_eq!(kids.len(), 1, "cell should have one child");
+        assert!(matches!(kids[0].node(), editor_model::Node::Paragraph(_)));
+        assert_eq!(kids[0].children().count(), 0, "paragraph should be empty");
     }
 }

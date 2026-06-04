@@ -1,6 +1,6 @@
 use editor_model::{
     Fragment, NodeId, NodeRef, PlainNode, PlainParagraphNode, PlainTableCellNode,
-    PlainTableRowNode, PlainTextNode, Subtree,
+    PlainTableRowNode, Subtree,
 };
 use editor_state::enclosing_table_cell;
 use editor_transaction::{Transaction, fulfill};
@@ -73,7 +73,6 @@ pub(crate) fn nth_table_cell(
 pub(crate) fn make_empty_table_cell() -> Subtree {
     let cell_id = NodeId::new();
     let para_id = NodeId::new();
-    let text_id = NodeId::new();
     Subtree::leaf(
         cell_id,
         PlainNode::TableCell(PlainTableCellNode {
@@ -81,16 +80,10 @@ pub(crate) fn make_empty_table_cell() -> Subtree {
             background_color: None,
         }),
     )
-    .with_children(vec![
-        Subtree::leaf(para_id, PlainNode::Paragraph(PlainParagraphNode {})).with_children(vec![
-            Subtree::leaf(
-                text_id,
-                PlainNode::Text(PlainTextNode {
-                    text: String::new(),
-                }),
-            ),
-        ]),
-    ])
+    .with_children(vec![Subtree::leaf(
+        para_id,
+        PlainNode::Paragraph(PlainParagraphNode {}),
+    )])
 }
 
 fn make_empty_table_row(n_cols: usize) -> Subtree {
