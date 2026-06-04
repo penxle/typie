@@ -5,6 +5,7 @@ import {
   TOUCH_MENU_ESTIMATED_HEIGHT,
   TOUCH_MENU_VIEWPORT_PADDING,
 } from './constants';
+import { EditorEdgeAutoScroll } from './edge-auto-scroll';
 import { tryHandleInteractiveHit } from './handlers/pointer';
 import type { InputModifiers, Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
@@ -101,6 +102,7 @@ export class TouchGestureController {
   #selectionHit = false;
   #longPressTimer: ReturnType<typeof setTimeout> | null = null;
   #suppressNativeContextMenuUntil = 0;
+  #edgeAutoScroll = new EditorEdgeAutoScroll();
 
   constructor(editor: Editor) {
     this.#editor = editor;
@@ -143,12 +145,14 @@ export class TouchGestureController {
         }
         this.#phase = 'tapMoved';
         this.#routeMoveToWasm(e);
+        this.#updateEdgeAutoScroll();
       }
       return;
     }
 
     if (this.#phase === 'tapMoved') {
       this.#routeMoveToWasm(e);
+      this.#updateEdgeAutoScroll();
       return;
     }
   }
@@ -279,9 +283,13 @@ export class TouchGestureController {
     return true;
   }
 
-  #routeMoveToWasm(e: PointerEvent): void {
-    const local = this.#editor.clientToLocal(e.clientX, e.clientY);
-    if (!local || !this.#dragAnchor) return;
+  #routeMoveToWasm(e: PointerEvent): boolean {
+    return this.#routeMoveToClientPoint(e.clientX, e.clientY);
+  }
+
+  #routeMoveToClientPoint(clientX: number, clientY: number): boolean {
+    const local = this.#editor.clientToLocal(clientX, clientY);
+    if (!local || !this.#dragAnchor) return false;
     this.#editor.enqueue({
       type: 'selection',
       op: {
@@ -293,6 +301,25 @@ export class TouchGestureController {
         base_selection: this.#baseSelection,
       },
     });
+    return true;
+  }
+
+  #updateEdgeAutoScroll(): void {
+    if (this.#phase !== 'tapMoved' || !this.#lastClientPoint) {
+      this.#edgeAutoScroll.stop();
+      return;
+    }
+
+    this.#edgeAutoScroll.update(
+      this.#editor,
+      { clientX: this.#lastClientPoint.x, clientY: this.#lastClientPoint.y },
+      (clientX, clientY) => {
+        this.#lastClientPoint = { x: clientX, y: clientY };
+        if (this.#phase === 'tapMoved' && this.#routeMoveToClientPoint(clientX, clientY)) {
+          this.#editor.flush();
+        }
+      },
+    );
   }
 
   #clearLongPressTimer(): void {
@@ -312,5 +339,6 @@ export class TouchGestureController {
     this.#dragAnchor = null;
     this.#baseSelection = undefined;
     this.#selectionHit = false;
+    this.#edgeAutoScroll.stop();
   }
 }

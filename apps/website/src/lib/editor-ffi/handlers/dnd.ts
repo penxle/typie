@@ -1,3 +1,4 @@
+import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
 import { markNativeSelectionDragStarted } from './pointer';
 import type { DndDropPayload, ExternalDndPayloadKind, InputModifiers } from '@typie/editor-ffi/browser';
 import type { EditorContext } from '../editor.svelte';
@@ -8,6 +9,20 @@ type BrowserDropEffect = 'copy' | 'move' | 'none';
 type EditorInstance = NonNullable<EditorContext['editor']>;
 
 const internalDndEditors = new WeakSet<EditorInstance>();
+const dndEdgeAutoScrolls = new WeakMap<EditorInstance, EditorEdgeAutoScroll>();
+
+const edgeAutoScrollFor = (editor: EditorInstance): EditorEdgeAutoScroll => {
+  let edgeAutoScroll = dndEdgeAutoScrolls.get(editor);
+  if (!edgeAutoScroll) {
+    edgeAutoScroll = new EditorEdgeAutoScroll();
+    dndEdgeAutoScrolls.set(editor, edgeAutoScroll);
+  }
+  return edgeAutoScroll;
+};
+
+const stopDndEdgeAutoScroll = (editor: EditorInstance): void => {
+  dndEdgeAutoScrolls.get(editor)?.stop();
+};
 
 const modifiersFromEvent = (event: DragEvent): InputModifiers => ({
   alt: event.altKey,
@@ -67,6 +82,15 @@ const setDropEffect = (dataTransfer: DataTransfer | null, effect: BrowserDropEff
   if (dataTransfer) {
     dataTransfer.dropEffect = effect;
   }
+};
+
+const dispatchDndOverAtClient = (editor: EditorInstance, clientX: number, clientY: number, modifiers: InputModifiers): boolean => {
+  const local = editor.clientToLocal(clientX, clientY);
+  if (!local) return false;
+
+  editor.enqueue({ type: 'dnd', op: { type: 'over', page: local.page, x: local.x, y: local.y, modifiers } });
+  editor.flush();
+  return true;
 };
 
 const hasTransferablePayload = (editor: EditorInstance, dataTransfer: DataTransfer): boolean => {
@@ -137,6 +161,7 @@ export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
   const local = editor.clientToLocal(event.clientX, event.clientY);
   if (!hasTransferablePayload(editor, dataTransfer) || !local) {
     setDropEffect(dataTransfer, 'none');
+    stopDndEdgeAutoScroll(editor);
     return;
   }
 
@@ -145,6 +170,14 @@ export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
   editor.flush();
   event.preventDefault();
   setDropEffect(dataTransfer, dropEffectFromTransfer(editor, dataTransfer, modifiers));
+  edgeAutoScrollFor(editor).update(editor, { clientX: event.clientX, clientY: event.clientY }, (clientX, clientY) => {
+    if (editor.destroyed) {
+      stopDndEdgeAutoScroll(editor);
+      return;
+    }
+
+    dispatchDndOverAtClient(editor, clientX, clientY, modifiers);
+  });
 };
 
 export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
@@ -159,12 +192,15 @@ export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
 
   editor.enqueue({ type: 'dnd', op: { type: 'leave' } });
   editor.flush();
+  stopDndEdgeAutoScroll(editor);
 };
 
 export const handleDrop = (ctx: EditorContext, event: DragEvent) => {
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
-  if (!editor || editor.readOnly || !dataTransfer) return;
+  if (!editor) return;
+  stopDndEdgeAutoScroll(editor);
+  if (editor.readOnly || !dataTransfer) return;
 
   const local = editor.clientToLocal(event.clientX, event.clientY);
   if (!local || !hasTransferablePayload(editor, dataTransfer)) {
@@ -206,6 +242,7 @@ export const handleDragEnd = (ctx: EditorContext) => {
   const editor = ctx.editor;
   if (!editor) return;
   internalDndEditors.delete(editor);
+  stopDndEdgeAutoScroll(editor);
   editor.endNativeDragAdmission({ restoreFocus: false });
   editor.enqueue({ type: 'dnd', op: { type: 'end' } });
   editor.flush();

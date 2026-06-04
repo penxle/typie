@@ -1,3 +1,4 @@
+import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
 import type { InputModifiers, InteractiveHit, Position, Rect, Selection } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { EditorEventHandler } from '../types';
@@ -7,6 +8,7 @@ const DRAG_START_THRESHOLD_PX = 5;
 const pointInRect = (x: number, y: number, r: Rect): boolean => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
 
 type LocalPoint = { page: number; x: number; y: number };
+type DragPoint = LocalPoint & { clientX: number; clientY: number };
 
 export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, local: { x: number; y: number }): boolean => {
   const editMode = !editor.readOnly;
@@ -113,7 +115,7 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
   }
 
   e.preventDefault();
-  PointerState.of(editor).enqueueMoveThrottled(editor, local);
+  PointerState.of(editor).enqueueMoveThrottled(editor, { ...local, clientX: e.clientX, clientY: e.clientY });
 };
 
 export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
@@ -175,8 +177,9 @@ class PointerState {
   #clickY = 0;
   #clickCount = 0;
 
-  #dragPending: LocalPoint | null = null;
+  #dragPending: DragPoint | null = null;
   #dragScheduled = false;
+  #edgeAutoScroll = new EditorEdgeAutoScroll();
   #session: {
     pointerId: number;
     captured: boolean;
@@ -215,7 +218,7 @@ class PointerState {
     return this.#clickCount;
   }
 
-  enqueueMoveThrottled(editor: Editor, point: LocalPoint) {
+  enqueueMoveThrottled(editor: Editor, point: DragPoint) {
     this.#dragPending = point;
 
     if (!this.#dragScheduled) {
@@ -269,12 +272,14 @@ class PointerState {
       editor.enqueue({ type: 'selection', op: { type: 'set_at', page: session.down.page, x: session.down.x, y: session.down.y } });
       editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
     }
+    this.#edgeAutoScroll.stop();
     this.#session = null;
   }
 
   cancelPointer(pointerId: number): void {
     if (this.#session?.pointerId !== pointerId) return;
     this.#dragPending = null;
+    this.#edgeAutoScroll.stop();
     this.#session = null;
   }
 
@@ -287,13 +292,37 @@ class PointerState {
   #flushDragPending(editor: Editor): void {
     const point = this.#dragPending;
     this.#dragPending = null;
-    if (!point || !this.#session?.anchor) return;
+    if (!point) return;
 
+    if (this.#extendSelectionTo(editor, point, { respectThreshold: true })) {
+      this.#edgeAutoScroll.update(editor, point, (clientX, clientY) => {
+        if (editor.destroyed) {
+          this.#edgeAutoScroll.stop();
+          return;
+        }
+
+        const local = editor.clientToLocal(clientX, clientY);
+        if (!local) return;
+
+        if (this.#extendSelectionTo(editor, { ...local, clientX, clientY }, { respectThreshold: false })) {
+          editor.flush();
+        }
+      });
+    }
+  }
+
+  #extendSelectionTo(editor: Editor, point: DragPoint, { respectThreshold }: { respectThreshold: boolean }): boolean {
+    if (!this.#session?.anchor) return false;
     const { down } = this.#session;
     const dx = point.x - down.x;
     const dy = point.y - down.y;
-    if (!this.#session.dragging && point.page === down.page && dx * dx + dy * dy < DRAG_START_THRESHOLD_PX * DRAG_START_THRESHOLD_PX) {
-      return;
+    if (
+      respectThreshold &&
+      !this.#session.dragging &&
+      point.page === down.page &&
+      dx * dx + dy * dy < DRAG_START_THRESHOLD_PX * DRAG_START_THRESHOLD_PX
+    ) {
+      return false;
     }
 
     this.#session.dragging = true;
@@ -308,5 +337,6 @@ class PointerState {
         base_selection: this.#session.baseSelection,
       },
     });
+    return true;
   }
 }
