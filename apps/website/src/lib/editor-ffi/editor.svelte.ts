@@ -7,6 +7,7 @@ import { IS_MAC } from './constants';
 import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
+import { isMutatingMessage } from './message-gate';
 import { register, snapshot, unregister } from './registry';
 import { zoomDiffers } from './zoom';
 import type {
@@ -143,6 +144,7 @@ export class Editor {
   renderZoom = $state(1);
 
   readOnly = $state(false);
+  protectContent = $state(false);
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
@@ -548,6 +550,7 @@ export class Editor {
 
   async requestCopy(): Promise<void> {
     if (this.isSelectionCollapsed) return;
+    if (this.readOnly && this.protectContent) return;
     const payload = this.copySelection();
     if (!payload) return;
     await writeClipboardPayload(payload.html, payload.text);
@@ -818,6 +821,9 @@ export class Editor {
   }
 
   enqueue(message: Message) {
+    if (this.readOnly && isMutatingMessage(message)) {
+      return;
+    }
     this.#wasm.enqueue(message);
     this.#scheduleTick();
   }

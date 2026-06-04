@@ -2,6 +2,11 @@ import type { ImeTextInput } from '../input/ime-context';
 import type { EditorEventHandler } from '../types';
 
 export const handleCopy: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
+  if (editor.readOnly && editor.protectContent) {
+    e.preventDefault();
+    return;
+  }
+
   const payload = editor.copySelection();
   if (!payload) {
     return;

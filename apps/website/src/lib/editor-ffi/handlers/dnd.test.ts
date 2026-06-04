@@ -53,7 +53,7 @@ const createDragEvent = (dataTransfer: DataTransfer | null = createDataTransfer(
   } as unknown as DragEvent;
 };
 
-const createCtx = ({ readOnly = false } = {}) => {
+const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
   const messages: Message[] = [];
   const enqueue = vi.fn((message: Message) => {
     messages.push(message);
@@ -63,6 +63,7 @@ const createCtx = ({ readOnly = false } = {}) => {
   const pendingFileDrops: File[] = [];
   const editor = {
     readOnly,
+    protectContent,
     isSelectionCollapsed: false,
     clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
     selectionHitTest: vi.fn(() => true),
@@ -129,6 +130,17 @@ describe('handleDragStart', () => {
     ]);
     expect(flush).toHaveBeenCalledTimes(1);
     expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('보호 문서의 read-only 드래그는 dataTransfer 에 쓰지 않고 차단한다', () => {
+    const { ctx } = createCtx({ readOnly: true, protectContent: true });
+    const dataTransfer = createDataTransfer();
+    const event = createDragEvent(dataTransfer);
+
+    handleDragStart(ctx, event);
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(dataTransfer.setData).not.toHaveBeenCalled();
   });
 });
 

@@ -45,7 +45,7 @@
   <Menu {contextMenuPosition} offset={6} placement={contextMenuPlacement} bind:open>
     {#snippet children({ close })}
       <MenuItem
-        disabled={ctx.editor?.isSelectionCollapsed ?? true}
+        disabled={(ctx.editor?.isSelectionCollapsed ?? true) || !!(ctx.editor?.readOnly && ctx.editor?.protectContent)}
         icon={CopyIcon}
         onclick={() => {
           void ctx.editor?.requestCopy();

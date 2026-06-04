@@ -64,6 +64,7 @@
   };
 
   const copyHref = async () => {
+    if (editor?.readOnly && editor?.protectContent) return;
     const href = tooltipTarget?.link.href;
     if (!href) return;
     await navigator.clipboard.writeText(href);
@@ -181,24 +182,26 @@
           {tooltipTarget.link.href}
         </span>
 
-        <button
-          class={css({
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: '0',
-            width: '20px',
-            height: '20px',
-            borderRadius: '4px',
-            color: 'text.subtle',
-            transition: 'common',
-          })}
-          aria-label="링크 복사"
-          onclick={copyHref}
-          type="button"
-        >
-          <Icon icon={CopyIcon} size={12} />
-        </button>
+        {#if !(editor?.readOnly && editor?.protectContent)}
+          <button
+            class={css({
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: '0',
+              width: '20px',
+              height: '20px',
+              borderRadius: '4px',
+              color: 'text.subtle',
+              transition: 'common',
+            })}
+            aria-label="링크 복사"
+            onclick={copyHref}
+            type="button"
+          >
+            <Icon icon={CopyIcon} size={12} />
+          </button>
+        {/if}
 
         {#if !(editor?.readOnly ?? false)}
           <button

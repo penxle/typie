@@ -109,6 +109,11 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
     return;
   }
 
+  if (editor.readOnly && editor.protectContent) {
+    event.preventDefault();
+    return;
+  }
+
   const local = editor.clientToLocal(event.clientX, event.clientY);
   if (!local || !editor.selectionHitTest(local.page, local.x, local.y)) {
     event.preventDefault();

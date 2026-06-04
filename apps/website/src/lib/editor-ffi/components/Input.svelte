@@ -98,7 +98,6 @@
       inputAdapter.handleInput(e);
     }}
     onkeydown={(e) => {
-      if (editor.readOnly) return;
       handleKeyDown(editor, e);
     }}
     onpaste={(e) => {
