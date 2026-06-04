@@ -481,10 +481,10 @@ fn insert_blocks_in_textblock(
         container.spec().content.validate(&remaining).is_ok()
     };
 
-    if safe_to_remove(tr, textblock_id) {
+    if !merge_start && safe_to_remove(tr, textblock_id) {
         tr.remove_subtree(textblock_id)?;
     }
-    if safe_to_remove(tr, p2_id) {
+    if !merge_end && safe_to_remove(tr, p2_id) {
         tr.remove_subtree(p2_id)?;
     }
 

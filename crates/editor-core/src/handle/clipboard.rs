@@ -250,6 +250,55 @@ mod tests {
     }
 
     #[test]
+    fn paste_backward_open_paragraph_copy_at_text_end() {
+        let (source, _t1, t2) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("a")
+                    }
+                    paragraph {
+                        t2: text("b")
+                    }
+                }
+            }
+            selection: (t2, 0, <) -> (t1, 0, >)
+        };
+        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+        let target = editor_state::State {
+            selection: Some(editor_state::Selection::collapsed(
+                editor_state::Position::new(t2, 1),
+            )),
+            ..source
+        };
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        text("a")
+                    }
+                    paragraph {
+                        text("ba")
+                    }
+                    p: paragraph {
+                    }
+                }
+            }
+            selection: (p, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn paste_crlf_text_does_not_fail() {
         let (s, ..) = state! {
             doc { root { paragraph { t1: text("") } } }
