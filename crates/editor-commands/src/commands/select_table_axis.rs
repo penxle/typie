@@ -100,7 +100,7 @@ pub fn select_table_axis(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::CellRect;
+    use editor_state::{Affinity, CellRect, Position, Selection};
 
     use super::*;
     use crate::test_utils::*;
@@ -118,8 +118,8 @@ mod tests {
 
     #[test]
     fn select_full_table() {
-        let (initial, tbl, ..) = state! {
-            doc { root {
+        let (initial, root, tbl, ..) = state! {
+            doc { root: root {
                 tbl: table {
                     table_row {
                         r0c0: table_cell { paragraph { text("A") } }
@@ -134,8 +134,21 @@ mod tests {
             selection: (r0c0, 0)
         };
         let (actual, ..) = transact!(initial, |tr| select_table_axis(&mut tr, tbl, None, None));
-        let rect = as_cell_rect(&actual);
-        assert!(rect.is_full_table());
+        assert_eq!(
+            actual.selection,
+            Some(Selection::new(
+                Position {
+                    node_id: root,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: root,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
     }
 
     #[test]

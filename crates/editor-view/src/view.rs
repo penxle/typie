@@ -1291,10 +1291,17 @@ mod tests {
                 table_row {
                     c00: table_cell { paragraph { text("a") } }
                     table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
                 table_row {
                     table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
+                }
+                table_row {
+                    table_cell { paragraph { text("z") } }
+                    table_cell { paragraph { text("w") } }
+                    table_cell { paragraph { text("v") } }
                 }
             } } }
             selection: (c00, 0)

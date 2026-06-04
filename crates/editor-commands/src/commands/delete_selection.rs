@@ -972,11 +972,17 @@ mod tests {
 
     #[test]
     fn delete_selection_clears_1xn_cell_rect() {
-        let (state, _, c00, c01) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph { text("a") } }
-                c01: table_cell { paragraph { text("b") } }
-            } } } }
+        let (state, c00, c01) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                }
+                table_row {
+                    table_cell { paragraph { text("c") } }
+                    table_cell { paragraph { text("d") } }
+                }
+            } } }
             selection: (c00, 0)
         };
         let sel = editor_state::cell_rect_selection(&state.doc, c00, c01).unwrap();
@@ -1153,15 +1159,17 @@ mod tests {
 
     #[test]
     fn delete_selection_clears_mxn_cell_rect() {
-        let (state, _, c00, c01, _, c10, c11) = state! {
+        let (state, c00, c01, c10, c11) = state! {
             doc { root { table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00, 0)
@@ -1177,5 +1185,37 @@ mod tests {
             assert_eq!(n.children().count(), 1);
             assert_eq!(n.first_child().unwrap().children().count(), 0);
         }
+    }
+
+    #[test]
+    fn delete_selection_full_table_cell_rect_removes_table() {
+        let (state, tbl, c00, c11, _) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        c00: table_cell { paragraph { text("a") } }
+                        table_cell { paragraph { text("b") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("c") } }
+                        c11: table_cell { paragraph { text("d") } }
+                    }
+                }
+                paragraph { after: text("after") }
+            } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
+        let initial = editor_state::State {
+            selection: Some(sel),
+            ..state
+        };
+
+        let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+
+        assert!(
+            after.doc.node(tbl).is_none(),
+            "full-table selection should delete the table"
+        );
     }
 }

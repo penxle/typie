@@ -254,15 +254,17 @@ mod tests {
 
     #[test]
     fn equal_dimensions_no_extension_just_overwrites() {
-        let (state, tbl, _, c00, c01, _, c10, c11) = state! {
+        let (state, tbl, c00, c01, c10, c11) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00, 0)
@@ -270,7 +272,7 @@ mod tests {
         let initial = with_cell_rect(state, c00, c11);
         let source = source_slice_2x2();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (2, 2));
+        assert_eq!(table_dims(&after.doc, tbl), (2, 3));
         assert_eq!(cell_text(&after.doc, c00), "X");
         assert_eq!(cell_text(&after.doc, c01), "Y");
         assert_eq!(cell_text(&after.doc, c10), "Z");
@@ -279,19 +281,22 @@ mod tests {
 
     #[test]
     fn extends_rows_when_source_is_taller_than_target() {
-        let (state, tbl, _, c00, c01, _, _, c11, _, _, c21) = state! {
+        let (state, tbl, c00, c01, c11, c21) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
-                    c10: table_cell { paragraph { text("c") } }
+                table_row {
+                    table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
-                tr2: table_row {
-                    c20: table_cell { paragraph { text("e") } }
+                table_row {
+                    table_cell { paragraph { text("e") } }
                     c21: table_cell { paragraph { text("f") } }
+                    table_cell { paragraph { text("z") } }
                 }
             } } }
             selection: (c00, 0)
@@ -299,7 +304,7 @@ mod tests {
         let initial = with_cell_rect(state, c00, c21);
         let source = source_slice_5x1();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (5, 2));
+        assert_eq!(table_dims(&after.doc, tbl), (5, 3));
         for (row, ch) in ["A", "B", "C", "D", "E"].iter().enumerate() {
             assert_eq!(cell_text_at(&after.doc, tbl, row, 0), *ch);
         }
@@ -308,14 +313,24 @@ mod tests {
         assert_eq!(cell_text(&after.doc, c21), "f");
         assert_eq!(cell_text_at(&after.doc, tbl, 3, 1), "");
         assert_eq!(cell_text_at(&after.doc, tbl, 4, 1), "");
+        assert_eq!(cell_text_at(&after.doc, tbl, 0, 2), "x");
+        assert_eq!(cell_text_at(&after.doc, tbl, 1, 2), "y");
+        assert_eq!(cell_text_at(&after.doc, tbl, 2, 2), "z");
+        assert_eq!(cell_text_at(&after.doc, tbl, 3, 2), "");
+        assert_eq!(cell_text_at(&after.doc, tbl, 4, 2), "");
     }
 
     #[test]
     fn extends_cols_when_source_is_wider_than_target() {
-        let (state, tbl, _, c00) = state! {
-            doc { root { tbl: table { tr0: table_row {
-                c00: table_cell { paragraph { text("a") } }
-            } } } }
+        let (state, tbl, c00, c10) = state! {
+            doc { root { tbl: table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                }
+                table_row {
+                    c10: table_cell { paragraph { text("b") } }
+                }
+            } } }
             selection: (c00, 0)
         };
         let initial = with_cell_rect(state, c00, c00);
@@ -334,18 +349,26 @@ mod tests {
         };
         let source = Slice::extract(&src).unwrap();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (1, 3));
+        assert_eq!(table_dims(&after.doc, tbl), (2, 3));
         assert_eq!(cell_text_at(&after.doc, tbl, 0, 0), "P");
         assert_eq!(cell_text_at(&after.doc, tbl, 0, 1), "Q");
         assert_eq!(cell_text_at(&after.doc, tbl, 0, 2), "R");
+        assert_eq!(cell_text(&after.doc, c10), "b");
+        assert_eq!(cell_text_at(&after.doc, tbl, 1, 1), "");
+        assert_eq!(cell_text_at(&after.doc, tbl, 1, 2), "");
     }
 
     #[test]
     fn extends_both_axes_when_source_overflows_in_both() {
-        let (state, tbl, _, c00) = state! {
-            doc { root { tbl: table { tr0: table_row {
-                c00: table_cell { paragraph { text("x") } }
-            } } } }
+        let (state, tbl, c00) = state! {
+            doc { root { tbl: table {
+                table_row {
+                    c00: table_cell { paragraph { text("x") } }
+                }
+                table_row {
+                    table_cell { paragraph { text("y") } }
+                }
+            } } }
             selection: (c00, 0)
         };
         let initial = with_cell_rect(state, c00, c00);
@@ -502,22 +525,25 @@ mod tests {
 
     #[test]
     fn never_shrinks_when_target_is_larger_than_source() {
-        let (state, tbl, _, c00, _, c02, _, _, _, c12, _, c20, c21, c22) = state! {
+        let (state, tbl, c00, c02, c03, c12, c13, c20, c21, c22, c23) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("0") } }
-                    c01: table_cell { paragraph { text("1") } }
+                    table_cell { paragraph { text("1") } }
                     c02: table_cell { paragraph { text("2") } }
+                    c03: table_cell { paragraph { text("9") } }
                 }
-                tr1: table_row {
-                    c10: table_cell { paragraph { text("3") } }
-                    c11: table_cell { paragraph { text("4") } }
+                table_row {
+                    table_cell { paragraph { text("3") } }
+                    table_cell { paragraph { text("4") } }
                     c12: table_cell { paragraph { text("5") } }
+                    c13: table_cell { paragraph { text("10") } }
                 }
-                tr2: table_row {
+                table_row {
                     c20: table_cell { paragraph { text("6") } }
                     c21: table_cell { paragraph { text("7") } }
                     c22: table_cell { paragraph { text("8") } }
+                    c23: table_cell { paragraph { text("11") } }
                 }
             } } }
             selection: (c00, 0)
@@ -525,7 +551,7 @@ mod tests {
         let initial = with_cell_rect(state, c00, c22);
         let source = source_slice_2x2();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (3, 3));
+        assert_eq!(table_dims(&after.doc, tbl), (3, 4));
         assert_eq!(cell_text_at(&after.doc, tbl, 0, 0), "X");
         assert_eq!(cell_text_at(&after.doc, tbl, 0, 1), "Y");
         assert_eq!(cell_text_at(&after.doc, tbl, 1, 0), "Z");
@@ -535,5 +561,8 @@ mod tests {
         assert_eq!(cell_text(&after.doc, c20), "6");
         assert_eq!(cell_text(&after.doc, c21), "7");
         assert_eq!(cell_text(&after.doc, c22), "8");
+        assert_eq!(cell_text(&after.doc, c03), "9");
+        assert_eq!(cell_text(&after.doc, c13), "10");
+        assert_eq!(cell_text(&after.doc, c23), "11");
     }
 }

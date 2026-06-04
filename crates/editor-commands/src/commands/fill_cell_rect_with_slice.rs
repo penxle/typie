@@ -130,15 +130,17 @@ mod tests {
 
     #[test]
     fn fills_every_selected_cell_with_inline_slice() {
-        let (state, _, c00, c01, _, c10, c11) = state! {
+        let (state, c00, c01, c10, c11) = state! {
             doc { root { table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00, 0)
@@ -153,15 +155,17 @@ mod tests {
 
     #[test]
     fn keeps_table_structure_and_cell_ids() {
-        let (state, tbl, _, c00, c01, _, c10, c11) = state! {
+        let (state, tbl, c00, c01, c10, c11) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00, 0)

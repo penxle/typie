@@ -256,6 +256,27 @@ fn promote_cross_isolating(doc: &Doc, a: Position, h: Position) -> Option<Select
     None
 }
 
+fn promote_full_table_cell_rect(selection: &ResolvedSelection<'_>) -> Option<Selection> {
+    let rect = selection.as_cell_rect()?;
+    if !rect.is_full_table() {
+        return None;
+    }
+    let parent = rect.table.parent()?;
+    let index = rect.table.index()?;
+    Some(Selection::new(
+        Position {
+            node_id: parent.id(),
+            offset: index,
+            affinity: Affinity::Downstream,
+        },
+        Position {
+            node_id: parent.id(),
+            offset: index + 1,
+            affinity: Affinity::Upstream,
+        },
+    ))
+}
+
 pub(crate) fn enclosing_unit_at_subtree_overlap(
     doc: &Doc,
     a_in: Position,
@@ -296,6 +317,10 @@ impl<'a> ResolvedSelection<'a> {
         let doc = self.doc();
         let a_in: Position = self.anchor().into();
         let h_in: Position = self.head().into();
+
+        if let Some(promoted) = promote_full_table_cell_rect(self) {
+            return promoted;
+        }
 
         let a_bd = boundary_identity(doc, a_in);
         let h_bd = boundary_identity(doc, h_in);

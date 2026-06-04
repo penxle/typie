@@ -271,15 +271,17 @@ mod tests {
 
     #[test]
     fn cut_on_cell_rect_clears_cells_keeps_structure() {
-        let (s, _, c00, c01, _, c10, c11) = state! {
+        let (s, c00, c01, c10, c11) = state! {
             doc { root { table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00, 0)
@@ -301,15 +303,15 @@ mod tests {
     }
 
     #[test]
-    fn cut_on_full_table_cell_rect_keeps_table() {
-        let (s, tbl, _, c00, _, _, _, c11) = state! {
+    fn cut_on_full_table_cell_rect_removes_table() {
+        let (s, tbl, c00, c11) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
-                    c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("b") } }
                 }
-                tr1: table_row {
-                    c10: table_cell { paragraph { text("c") } }
+                table_row {
+                    table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
                 }
             } } }
@@ -324,16 +326,7 @@ mod tests {
         editor.apply(Message::Clipboard {
             op: ClipboardOp::Cut,
         });
-        let table = editor
-            .state()
-            .doc
-            .node(tbl)
-            .expect("table survives cell-rect cut");
-        assert!(matches!(table.node(), editor_model::Node::Table(_)));
-        assert_eq!(table.children().count(), 2);
-        for row in table.children() {
-            assert_eq!(row.children().count(), 2);
-        }
+        assert!(editor.state().doc.node(tbl).is_none());
     }
 
     #[test]
@@ -358,15 +351,17 @@ mod tests {
         };
         let payload = Slice::extract(&s_src).unwrap().to_payload();
 
-        let (s_tgt, tbl, _, c00t, _, _, _, c11t) = state! {
+        let (s_tgt, tbl, c00t, c11t) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00t: table_cell { paragraph { text("a") } }
-                    c01t: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
-                    c10t: table_cell { paragraph { text("c") } }
+                table_row {
+                    table_cell { paragraph { text("c") } }
                     c11t: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00t, 0)
@@ -404,7 +399,7 @@ mod tests {
                 })
             })
             .collect();
-        assert_eq!(texts, vec!["X", "Y", "Z", "W"]);
+        assert_eq!(texts, vec!["X", "Y", "x", "Z", "W", "y"]);
     }
 
     #[test]
@@ -426,19 +421,22 @@ mod tests {
         };
         let payload = Slice::extract(&s_src).unwrap().to_payload();
 
-        let (s_tgt, tbl, _, c00, _, _, _, _, _, _, c21) = state! {
+        let (s_tgt, tbl, c00, c21) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
-                    c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
-                    c10: table_cell { paragraph { text("c") } }
-                    c11: table_cell { paragraph { text("d") } }
+                table_row {
+                    table_cell { paragraph { text("c") } }
+                    table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
-                tr2: table_row {
-                    c20: table_cell { paragraph { text("e") } }
+                table_row {
+                    table_cell { paragraph { text("e") } }
                     c21: table_cell { paragraph { text("f") } }
+                    table_cell { paragraph { text("z") } }
                 }
             } } }
             selection: (c00, 0)
@@ -482,7 +480,7 @@ mod tests {
         let table = doc.node(tbl).expect("table survives");
         assert_eq!(table.children().count(), 5, "target now has 5 rows");
         for row in table.children() {
-            assert_eq!(row.children().count(), 2, "every row keeps 2 cols");
+            assert_eq!(row.children().count(), 3, "every row keeps 3 cols");
         }
         for (row, ch) in ["A", "B", "C", "D", "E"].iter().enumerate() {
             assert_eq!(cell_text_at(doc, tbl, row, 0), *ch);
@@ -492,6 +490,11 @@ mod tests {
         assert_eq!(cell_text_at(doc, tbl, 2, 1), "f");
         assert_eq!(cell_text_at(doc, tbl, 3, 1), "");
         assert_eq!(cell_text_at(doc, tbl, 4, 1), "");
+        assert_eq!(cell_text_at(doc, tbl, 0, 2), "x");
+        assert_eq!(cell_text_at(doc, tbl, 1, 2), "y");
+        assert_eq!(cell_text_at(doc, tbl, 2, 2), "z");
+        assert_eq!(cell_text_at(doc, tbl, 3, 2), "");
+        assert_eq!(cell_text_at(doc, tbl, 4, 2), "");
     }
 
     #[test]
@@ -573,15 +576,17 @@ mod tests {
 
     #[test]
     fn paste_plain_text_into_cell_rect_fills_every_cell() {
-        let (s, _, c00, c01, _, c10, c11) = state! {
+        let (s, c00, c01, c10, c11) = state! {
             doc { root { table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00, 0)
@@ -641,15 +646,17 @@ mod tests {
         };
         let payload = Slice::extract(&s_src).unwrap().to_payload();
 
-        let (s_tgt, _, _, c00t, _, _, _, c11t) = state! {
+        let (s_tgt, _tbl, c00t, c11t) = state! {
             doc { root { tbl: table {
-                tr0: table_row {
+                table_row {
                     c00t: table_cell { paragraph { text("a") } }
-                    c01t: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
-                    c10t: table_cell { paragraph { text("c") } }
+                table_row {
+                    table_cell { paragraph { text("c") } }
                     c11t: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00t, 0)

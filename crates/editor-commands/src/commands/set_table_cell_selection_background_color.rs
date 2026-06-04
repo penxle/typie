@@ -84,10 +84,12 @@ mod tests {
                     table_row {
                         r0c0: table_cell { paragraph { text("A") } }
                         r0c1: table_cell { paragraph { text("B") } }
+                        table_cell { paragraph { text("X") } }
                     }
                     table_row {
                         r1c0: table_cell { paragraph { text("C") } }
                         r1c1: table_cell { paragraph { text("D") } }
+                        table_cell { paragraph { text("Y") } }
                     }
                 }
             } }

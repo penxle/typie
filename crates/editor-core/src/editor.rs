@@ -3370,15 +3370,17 @@ mod tests {
 
     #[test]
     fn render_uses_node_box_rects_for_cell_rect_selection() {
-        let (state, _, c00, _, _, _, c11) = state! {
+        let (state, c00, _c01, _c10, c11) = state! {
             doc { root { table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
                 }
             } } }
             selection: (c00, 0)

@@ -213,7 +213,8 @@ impl<'a> CellRect<'a> {
 /// is already canonical (correct affinities, no pre-normalization invariant
 /// violation) and safe for any caller to inspect directly — not only via the
 /// `set_selection` ingress. Derivation never reads affinity anyway; this is
-/// belt-and-suspenders. The result resolves back to a `CellRect` whose
+/// belt-and-suspenders. Full-table rectangles normalize to the table's unit
+/// selection; non-full rectangles resolve back to a `CellRect` whose
 /// `anchor_cell`/`head_cell` match the inputs (direction preserved).
 pub fn cell_rect_selection(doc: &Doc, anchor_cell: NodeId, head_cell: NodeId) -> Option<Selection> {
     let ac = doc.node(anchor_cell)?;
@@ -699,15 +700,22 @@ mod tests {
 
     #[test]
     fn builder_roundtrips_through_as_cell_rect() {
-        let (state, _, c00, _, _, _, c11) = state! {
+        let (state, c00, c11) = state! {
             doc { root { table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
                 }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
+                table_row {
+                    table_cell { paragraph {} }
                     c11: table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                }
+                table_row {
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
                 }
             } } }
             selection: (c00, 0)
@@ -722,16 +730,62 @@ mod tests {
     }
 
     #[test]
-    fn builder_preserves_direction() {
-        let (state, _, c00, _, _, _, c11) = state! {
-            doc { root { table {
-                tr0: table_row {
+    fn full_table_cell_rect_normalizes_to_table_selection() {
+        let (state, root, table, c00, c11) = state! {
+            doc { root: root { table: table {
+                table_row {
                     c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
+                    table_cell { paragraph {} }
                 }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
+                table_row {
+                    table_cell { paragraph {} }
                     c11: table_cell { paragraph {} }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+
+        let sel = super::cell_rect_selection(&state.doc, c00, c11)
+            .expect("full-table cell rect should normalize");
+
+        assert_eq!(
+            sel,
+            Selection::new(
+                Position {
+                    node_id: root,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: root,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
+        assert!(sel.resolve(&state.doc).unwrap().as_cell_rect().is_none());
+        assert!(sel.is_unit_node_selection(&state.doc));
+        assert_eq!(state.doc.node(table).unwrap().index(), Some(0));
+    }
+
+    #[test]
+    fn builder_preserves_direction() {
+        let (state, c00, c11) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                }
+                table_row {
+                    table_cell { paragraph {} }
+                    c11: table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                }
+                table_row {
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
                 }
             } } }
             selection: (c00, 0)
@@ -758,15 +812,17 @@ mod tests {
 
     #[test]
     fn antidiagonal_survives_normalize() {
-        let (state, _, _, c01, _, c10, _) = state! {
+        let (state, _c00, c01, c10) = state! {
             doc { root { table {
-                tr0: table_row {
+                table_row {
                     c00: table_cell { paragraph {} }
                     c01: table_cell { paragraph {} }
+                    table_cell { paragraph {} }
                 }
-                tr1: table_row {
+                table_row {
                     c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
                 }
             } } }
             selection: (c00, 0)
@@ -787,11 +843,17 @@ mod tests {
 
     #[test]
     fn same_row_backward_survives_normalize() {
-        let (state, _, c00, c01) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph {} }
-                c01: table_cell { paragraph {} }
-            } } } }
+        let (state, c00, c01) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph {} }
+                    c01: table_cell { paragraph {} }
+                }
+                table_row {
+                    table_cell { paragraph {} }
+                    table_cell { paragraph {} }
+                }
+            } } }
             selection: (c00, 0)
         };
         // backward 1xN: anchor corner c01 (right), head corner c00 (left).
