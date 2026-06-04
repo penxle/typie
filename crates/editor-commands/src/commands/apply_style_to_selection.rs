@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn applies_style_to_all_textblocks_in_range() {
-        let (initial, p1, p2, ..) = state! {
+        let (initial, p1, _t1, p2, ..) = state! {
             doc { root {
                 p1: paragraph { t1: text("Hello") }
                 p2: paragraph { t2: text("World") }
