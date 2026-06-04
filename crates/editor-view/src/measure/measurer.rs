@@ -1,5 +1,5 @@
 use editor_crdt::Op;
-use editor_model::{Doc, DocOp, NodeId};
+use editor_model::{Doc, DocOp, NodeAttr, NodeId, TableNodeAttr};
 use editor_resource::Resource;
 use std::sync::{Arc, Mutex};
 
@@ -82,6 +82,22 @@ impl Measurer {
                         invalidated =
                             self.invalidate_descendants(doc_for_subtree, id) || invalidated;
                     }
+                }
+                // proportion은 각 셀의 측정 너비를 결정하므로 셀 자손까지 무효화한다 (border_style 등은 측정 무관).
+                DocOp::Attr {
+                    node_id,
+                    op:
+                        NodeAttr::Table {
+                            attr: TableNodeAttr::Proportion(_),
+                        },
+                } => {
+                    let doc_for_subtree = if new_doc.node(*node_id).is_some() {
+                        new_doc
+                    } else {
+                        old_doc
+                    };
+                    invalidated =
+                        self.invalidate_descendants(doc_for_subtree, *node_id) || invalidated;
                 }
                 _ => {}
             }
@@ -397,6 +413,120 @@ mod tests {
         assert!(
             measurer.cache.get(c).is_none(),
             "callout should be invalidated"
+        );
+    }
+
+    #[test]
+    fn doc_ops_table_proportion_invalidates_cells_and_triggers_relayout() {
+        use editor_crdt::Dot;
+        use editor_model::{DocOp, NodeAttr, TableNodeAttr};
+
+        let mut measurer = Measurer::new_test();
+        let (doc, t, c, p, tx) = doc! {
+            root {
+                t: table {
+                    table_row {
+                        c: table_cell {
+                            p: paragraph {
+                                tx: text("A")
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        measurer.cache.insert(t, dummy());
+        measurer.cache.insert(c, dummy());
+        measurer.cache.insert(p, dummy());
+        measurer.cache.insert(tx, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Attr {
+                node_id: t,
+                op: NodeAttr::Table {
+                    attr: TableNodeAttr::Proportion(50),
+                },
+            },
+        )];
+
+        let invalidated = measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        // A non-empty invalidation is what makes tick() report `dirty`, which in
+        // turn triggers relayout + RenderInvalidated. set_proportion therefore
+        // drives layout/render purely through the doc-op invalidation path.
+        assert!(invalidated, "proportion change must report an invalidation");
+        assert!(
+            measurer.cache.get(t).is_none(),
+            "table should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(c).is_none(),
+            "cell must be invalidated: proportion changes its measured width"
+        );
+        assert!(
+            measurer.cache.get(p).is_none(),
+            "cell's paragraph descendant must be invalidated"
+        );
+        assert!(
+            measurer.cache.get(tx).is_none(),
+            "cell's text descendant must be invalidated"
+        );
+    }
+
+    #[test]
+    fn doc_ops_table_border_style_preserves_cell_descendants() {
+        use editor_crdt::Dot;
+        use editor_model::{DocOp, NodeAttr, TableBorderStyle, TableNodeAttr};
+
+        let mut measurer = Measurer::new_test();
+        let (doc, t, c, p, tx) = doc! {
+            root {
+                t: table {
+                    table_row {
+                        c: table_cell {
+                            p: paragraph {
+                                tx: text("A")
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        measurer.cache.insert(t, dummy());
+        measurer.cache.insert(c, dummy());
+        measurer.cache.insert(p, dummy());
+        measurer.cache.insert(tx, dummy());
+
+        let ops = vec![make_op(
+            Dot::new(1, 0),
+            DocOp::Attr {
+                node_id: t,
+                op: NodeAttr::Table {
+                    attr: TableNodeAttr::BorderStyle(TableBorderStyle::Dashed),
+                },
+            },
+        )];
+
+        measurer.invalidate_with_doc_ops(&doc, &doc, &ops);
+
+        assert!(
+            measurer.cache.get(t).is_none(),
+            "table itself should still be invalidated"
+        );
+        assert!(
+            measurer.cache.get(c).is_some(),
+            "cell must be preserved: border_style does not affect cell measurement"
+        );
+        assert!(
+            measurer.cache.get(p).is_some(),
+            "cell's paragraph descendant must be preserved"
+        );
+        assert!(
+            measurer.cache.get(tx).is_some(),
+            "cell's text descendant must be preserved"
         );
     }
 
