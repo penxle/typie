@@ -6,16 +6,20 @@ use skrifa::{FontRef, GlyphId, MetadataProvider};
 use crate::sink::RenderSink;
 use crate::types::{Color, Image, Path, PathElement, Stroke, StrokeCap, StrokeJoin, Transform};
 use crate::vector::types::{
-    VectorFillRule, VectorLineCap, VectorLineJoin, VectorOp, VectorPage, VectorPathCommand,
+    TextOp, VectorFillRule, VectorLineCap, VectorLineJoin, VectorOp, VectorPage, VectorPathCommand,
 };
 
 pub struct VectorSink {
     ops: Vec<VectorOp>,
+    text_ops: Vec<TextOp>,
 }
 
 impl VectorSink {
     pub fn new() -> Self {
-        Self { ops: Vec::new() }
+        Self {
+            ops: Vec::new(),
+            text_ops: Vec::new(),
+        }
     }
 
     pub fn into_page(self, width: f32, height: f32) -> VectorPage {
@@ -23,6 +27,7 @@ impl VectorSink {
             width,
             height,
             ops: self.ops,
+            text_ops: self.text_ops,
         }
     }
 }
@@ -121,6 +126,18 @@ impl RenderSink for VectorSink {
                 path: writer.cmds,
                 color: rgba,
                 fill_rule: VectorFillRule::Winding,
+            });
+        }
+
+        if !run.text.is_empty() {
+            let baseline_x = run.glyphs.first().map(|g| g.x).unwrap_or(run.x);
+            let baseline_y = run.glyphs.first().map(|g| g.y).unwrap_or(0.0);
+            let (tx, ty) = map_point(base_transform, baseline_x, baseline_y);
+            self.text_ops.push(TextOp {
+                text: run.text.clone(),
+                x: tx,
+                y: ty,
+                size: run.font_size * base_transform.m[0],
             });
         }
     }
@@ -457,6 +474,91 @@ mod tests {
                 .iter()
                 .all(|op| matches!(op, VectorOp::FillPath { .. }))
         );
+    }
+
+    #[test]
+    fn draw_glyph_run_emits_text_op() {
+        use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
+        const TEST_FONT: &[u8] = include_bytes!("../../../../assets/Pretendard-Regular.ttf");
+        let mut resource = editor_resource::Resource::new_test();
+        let compressed = editor_resource::compress_zstd(TEST_FONT);
+        resource.add_font_base("test", 400, &compressed).unwrap();
+        let family_id = resource.font_registry.intern_id("test").unwrap();
+        let run = GlyphRun {
+            family_id,
+            weight: 400,
+            font_size: 16.0,
+            synthesis: Synthesis::default(),
+            color: "text.black".to_string(),
+            background_color: None,
+            glyphs: vec![Glyph {
+                id: 3,
+                x: 0.0,
+                y: 0.0,
+            }],
+            decoration: TextDecoration::default(),
+            node_id: editor_model::NodeId::ROOT,
+            offset: 0,
+            text: "A".to_string(),
+            x: 0.0,
+            width: 10.0,
+            graphemes: vec![],
+        };
+        let mut sink = VectorSink::new();
+        sink.draw_glyph_run(&run, red(), Transform::IDENTITY, &resource.font_registry);
+        let page = sink.into_page(100.0, 100.0);
+        assert_eq!(page.text_ops.len(), 1);
+        assert_eq!(page.text_ops[0].text, "A");
+        assert_eq!(page.text_ops[0].size, 16.0);
+    }
+
+    #[test]
+    fn draw_glyph_run_text_op_uses_first_glyph_origin_and_transform() {
+        use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
+        const TEST_FONT: &[u8] = include_bytes!("../../../../assets/Pretendard-Regular.ttf");
+        let mut resource = editor_resource::Resource::new_test();
+        let compressed = editor_resource::compress_zstd(TEST_FONT);
+        resource.add_font_base("test", 400, &compressed).unwrap();
+        let family_id = resource.font_registry.intern_id("test").unwrap();
+        let run = GlyphRun {
+            family_id,
+            weight: 400,
+            font_size: 16.0,
+            synthesis: Synthesis::default(),
+            color: "text.black".to_string(),
+            background_color: None,
+            glyphs: vec![Glyph {
+                id: 3,
+                x: 5.0,
+                y: 8.0,
+            }],
+            decoration: TextDecoration::default(),
+            node_id: editor_model::NodeId::ROOT,
+            offset: 0,
+            text: "A".to_string(),
+            x: 99.0,
+            width: 10.0,
+            graphemes: vec![],
+        };
+        let mut sink = VectorSink::new();
+        sink.draw_glyph_run(
+            &run,
+            red(),
+            Transform::IDENTITY.translate(10.0, 20.0),
+            &resource.font_registry,
+        );
+        let page = sink.into_page(100.0, 100.0);
+        assert_eq!(page.text_ops.len(), 1);
+        assert_eq!(page.text_ops[0].x, 15.0);
+        assert_eq!(page.text_ops[0].y, 28.0);
+        assert_eq!(page.text_ops[0].size, 16.0);
+
+        let mut sink2 = VectorSink::new();
+        sink2.draw_glyph_run(&run, red(), Transform::scale(2.0), &resource.font_registry);
+        let page2 = sink2.into_page(100.0, 100.0);
+        assert_eq!(page2.text_ops[0].x, 10.0);
+        assert_eq!(page2.text_ops[0].y, 16.0);
+        assert_eq!(page2.text_ops[0].size, 32.0);
     }
 
     #[test]

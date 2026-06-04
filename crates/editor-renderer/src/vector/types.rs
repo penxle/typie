@@ -71,8 +71,17 @@ pub enum VectorOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct TextOp {
+    pub text: String,
+    pub x: f32,
+    pub y: f32,
+    pub size: f32,
+}
+
+#[derive(Debug, Clone)]
 pub struct VectorPage {
     pub width: f32,
     pub height: f32,
     pub ops: Vec<VectorOp>,
+    pub text_ops: Vec<TextOp>,
 }

@@ -97,6 +97,18 @@ pub fn encode_vector_page(page: &VectorPage) -> Vec<u8> {
         }
     }
 
+    if !page.text_ops.is_empty() {
+        write_u32(&mut out, page.text_ops.len() as u32);
+        for t in &page.text_ops {
+            write_f32(&mut out, t.x);
+            write_f32(&mut out, t.y);
+            write_f32(&mut out, t.size);
+            let text_bytes = t.text.as_bytes();
+            write_u32(&mut out, text_bytes.len() as u32);
+            out.extend_from_slice(text_bytes);
+        }
+    }
+
     out
 }
 
@@ -156,7 +168,7 @@ fn write_path_commands(out: &mut Vec<u8>, path: &[VectorPathCommand]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vector::types::VectorPage;
+    use crate::vector::types::{TextOp, VectorPage};
 
     #[test]
     fn encode_starts_with_magic() {
@@ -165,6 +177,7 @@ mod tests {
             width: 100.0,
             height: 200.0,
             ops: vec![],
+            text_ops: vec![],
         };
         let bytes = encode_vector_page(&page);
         let magic = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
@@ -178,6 +191,7 @@ mod tests {
             width: 123.0,
             height: 456.0,
             ops: vec![],
+            text_ops: vec![],
         };
         let bytes = encode_vector_page(&page);
         let w = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
@@ -202,6 +216,7 @@ mod tests {
                 color: [255, 0, 0, 255],
                 fill_rule: VectorFillRule::Winding,
             }],
+            text_ops: vec![],
         };
 
         let bytes = encode_vector_page(&page);
@@ -211,5 +226,68 @@ mod tests {
         assert!((f32::from_le_bytes(bytes[8..12].try_into().unwrap()) - 297.0).abs() < 0.001);
         assert_eq!(u32::from_le_bytes(bytes[12..16].try_into().unwrap()), 1);
         assert_eq!(bytes[16], OP_FILL_PATH);
+    }
+
+    #[test]
+    fn encodes_trailing_text_ops_section() {
+        let page = VectorPage {
+            width: 10.0,
+            height: 20.0,
+            ops: vec![],
+            text_ops: vec![TextOp {
+                text: "Hi".to_string(),
+                x: 1.0,
+                y: 2.0,
+                size: 3.0,
+            }],
+        };
+        let bytes = encode_vector_page(&page);
+        let empty = VectorPage {
+            width: 10.0,
+            height: 20.0,
+            ops: vec![],
+            text_ops: vec![],
+        };
+        let empty_bytes = encode_vector_page(&empty);
+        assert!(bytes.len() > empty_bytes.len());
+        assert_eq!(empty_bytes.len(), 16);
+
+        // Round-trip decode: ops section starts at byte 16 (header is 16 bytes, ops count is 0).
+        // Text-ops section layout: u32 count, then per entry: f32 x, f32 y, f32 size, u32 byte_len, utf8 bytes.
+        let text_section_start = 16usize;
+        let count = u32::from_le_bytes(
+            bytes[text_section_start..text_section_start + 4]
+                .try_into()
+                .unwrap(),
+        );
+        assert_eq!(count, 1);
+        let x = f32::from_le_bytes(
+            bytes[text_section_start + 4..text_section_start + 8]
+                .try_into()
+                .unwrap(),
+        );
+        let y = f32::from_le_bytes(
+            bytes[text_section_start + 8..text_section_start + 12]
+                .try_into()
+                .unwrap(),
+        );
+        let size = f32::from_le_bytes(
+            bytes[text_section_start + 12..text_section_start + 16]
+                .try_into()
+                .unwrap(),
+        );
+        let byte_len = u32::from_le_bytes(
+            bytes[text_section_start + 16..text_section_start + 20]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let text = std::str::from_utf8(
+            &bytes[text_section_start + 20..text_section_start + 20 + byte_len],
+        )
+        .unwrap();
+        assert!((x - 1.0).abs() < 0.001);
+        assert!((y - 2.0).abs() < 0.001);
+        assert!((size - 3.0).abs() < 0.001);
+        assert_eq!(text, "Hi");
     }
 }

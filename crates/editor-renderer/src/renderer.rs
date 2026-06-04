@@ -859,6 +859,14 @@ impl<'a> RenderVisitor<'a> {
                 graphemes: Vec::<GraphemeSpan>::new(),
             };
 
+            if self.text_mode == TextRenderMode::VectorExport {
+                let resource = Arc::clone(&self.renderer.resource);
+                let fonts = resource.lock().unwrap();
+                self.sink
+                    .draw_glyph_run(&adapter, color, base_transform, &fonts.font_registry);
+                continue;
+            }
+
             let resource = Arc::clone(&self.renderer.resource);
             let resource_guard = resource.lock().unwrap();
             let positioned = crate::glyph::rasterize(

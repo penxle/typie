@@ -1422,4 +1422,98 @@ mod tests {
             "must produce at least magic+dimensions+op_count"
         );
     }
+
+    fn assert_no_image_ops(bytes: &[u8]) {
+        let mut off = 12usize;
+        let op_count = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap());
+        off += 4;
+        for _ in 0..op_count {
+            let tag = bytes[off];
+            off += 1;
+            assert!(
+                tag == 0 || tag == 1,
+                "unexpected op tag {tag} (image op leaked into headless export)"
+            );
+            let path_count = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap()) as usize;
+            off += 4;
+            for _ in 0..path_count {
+                let cmd = bytes[off];
+                off += 1;
+                off += match cmd {
+                    0 | 1 => 8,
+                    2 => 16,
+                    3 => 24,
+                    4 => 0,
+                    _ => panic!("bad path cmd {cmd}"),
+                };
+            }
+            off += 4;
+            if tag == 0 {
+                off += 1;
+            } else {
+                off += 4 + 1 + 1;
+            }
+        }
+    }
+
+    #[test]
+    fn ffi_export_page_vector_image_node_emits_no_image_ops() {
+        // image 노드는 headless export에서 픽셀 데이터가 없으므로 tag=2 Image op를 방출하지 않아야 한다.
+        // horizontal_rule을 함께 배치해 op_count > 0 조건을 보장한다 (비-공허 검증).
+        let (initial, _t) = state! {
+            doc { root {
+                paragraph { t: text("a") }
+                image
+                horizontal_rule
+            } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
+        assert!(
+            op_count(&bytes) > 0,
+            "page with horizontal_rule must produce at least one op (non-vacuity)"
+        );
+        assert_no_image_ops(&bytes);
+    }
+
+    #[test]
+    fn ffi_export_page_vector_emoji_text_emits_no_image_ops() {
+        // 이모지 텍스트는 VectorExport 모드에서 draw_glyph_run으로 처리되며 tag=2 Image op를 방출하지 않아야 한다.
+        // horizontal_rule을 함께 배치해 op_count > 0 조건을 보장한다 (비-공허 검증).
+        let (initial, _t) = state! {
+            doc { root {
+                paragraph { t: text("Hello 😀 World 🎉") }
+                horizontal_rule
+            } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
+        assert!(
+            op_count(&bytes) > 0,
+            "page with horizontal_rule must produce at least one op (non-vacuity)"
+        );
+        assert_no_image_ops(&bytes);
+    }
+
+    #[test]
+    fn ffi_export_page_vector_ruby_text_emits_no_image_ops() {
+        // ruby 어노테이션이 있는 텍스트도 headless export에서 tag=2 Image op를 방출하지 않아야 한다.
+        // horizontal_rule을 함께 배치해 op_count > 0 조건을 보장한다 (비-공허 검증).
+        let (initial, _t) = state! {
+            doc { root {
+                paragraph { t: text("漢字") [ruby(text: "かんじ".into())] }
+                horizontal_rule
+            } }
+            selection: (t, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
+        assert!(
+            op_count(&bytes) > 0,
+            "page with horizontal_rule must produce at least one op (non-vacuity)"
+        );
+        assert_no_image_ops(&bytes);
+    }
 }

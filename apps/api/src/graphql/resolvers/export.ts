@@ -6,7 +6,9 @@ import {
   db,
   DocumentContents,
   Documents,
+  DocumentStates,
   Entities,
+  first,
   firstOrThrow,
   firstOrThrowWith,
   FontFamilies,
@@ -100,6 +102,36 @@ builder.mutationFields((t) => ({
 
       if (format !== 'pdf') {
         await assertActiveSubscription({ userId: ctx.session.userId });
+      }
+
+      if (format === 'pdf') {
+        const state = await db
+          .select({ graph: DocumentStates.graph })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, document.id))
+          .then(first);
+
+        if (state) {
+          if (!input.layout) {
+            throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
+          }
+
+          const title = document.title || '(제목 없음)';
+          const filename = `${title}${document.subtitle ? ` - ${document.subtitle}` : ''}`;
+
+          const user = await db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow);
+
+          const { generateDocumentPdfV2 } = await import('../../export/pdf/v2/generate.ts');
+          const data = await generateDocumentPdfV2({
+            graph: state.graph,
+            userId: entity.userId,
+            title,
+            author: user.name,
+            layout: input.layout,
+          });
+
+          return { data, filename: `${filename}.${meta.ext}`, mimeType: meta.mimeType };
+        }
       }
 
       const content = await db
