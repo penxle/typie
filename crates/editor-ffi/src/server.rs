@@ -205,6 +205,18 @@ impl EditorServer {
         Ok(doc.to_plain().into_ffi()?)
     }
 
+    pub fn to_plain_resolved(
+        &self,
+        changeset_payloads: Vec<u8>,
+    ) -> EditorResult<Complex<editor_model::PlainDoc>> {
+        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
+        let doc = editor_model::Doc::from_op_graph(&graph)?;
+        Ok(editor_view::export::to_plain_resolved(&doc).into_ffi()?)
+    }
+
     pub fn heads(&self, changeset_payloads: Vec<u8>) -> EditorResult<Vec<u8>> {
         let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
             editor_crdt::wire::decode(&changeset_payloads[..])

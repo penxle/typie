@@ -848,6 +848,7 @@ declare class EditorServer {
     revert(graph: Uint8Array, target_heads: Uint8Array): Uint8Array;
     to_graph(plain: PlainDoc): Uint8Array;
     to_plain(changeset_payloads: Uint8Array): PlainDoc;
+    to_plain_resolved(changeset_payloads: Uint8Array): PlainDoc;
     /**
      * Verifies a PlainDoc's structural invariants (root uniqueness, tree reciprocity).
      */

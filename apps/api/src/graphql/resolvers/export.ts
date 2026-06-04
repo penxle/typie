@@ -21,7 +21,7 @@ import {
 import { generateDocument } from '#/export/index.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
-import type { ExportFontFamily, ExportFormat } from '#/export/index.ts';
+import type { ExportFontFamily, ExportFormat, PageLayout } from '#/export/index.ts';
 
 type FontFamilyEntry = {
   source: 'DEFAULT' | 'FALLBACK';
@@ -104,34 +104,50 @@ builder.mutationFields((t) => ({
         await assertActiveSubscription({ userId: ctx.session.userId });
       }
 
-      if (format === 'pdf') {
-        const state = await db
-          .select({ graph: DocumentStates.graph })
-          .from(DocumentStates)
-          .where(eq(DocumentStates.documentId, document.id))
-          .then(first);
+      const layout = input.layout ?? undefined;
+      if (format !== 'epub' && !layout) {
+        throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
+      }
 
-        if (state) {
-          if (!input.layout) {
-            throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
-          }
+      const state = await db
+        .select({ graph: DocumentStates.graph })
+        .from(DocumentStates)
+        .where(eq(DocumentStates.documentId, document.id))
+        .then(first);
 
-          const title = document.title || '(제목 없음)';
-          const filename = `${title}${document.subtitle ? ` - ${document.subtitle}` : ''}`;
+      const title = document.title || '(제목 없음)';
+      const filename = `${title}${document.subtitle ? ` - ${document.subtitle}` : ''}`;
 
-          const user = await db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow);
+      const user = await db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow);
 
+      if (state) {
+        let data: Uint8Array;
+
+        if (format === 'pdf') {
           const { generateDocumentPdfV2 } = await import('../../export/pdf/v2/generate.ts');
-          const data = await generateDocumentPdfV2({
+          data = await generateDocumentPdfV2({
             graph: state.graph,
             userId: entity.userId,
             title,
             author: user.name,
-            layout: input.layout,
+            layout: layout as PageLayout,
           });
+        } else {
+          const fonts = await buildExportFonts(entity.userId);
 
-          return { data, filename: `${filename}.${meta.ext}`, mimeType: meta.mimeType };
+          if (format === 'hwp') {
+            const { generateDocumentHwpV2 } = await import('../../export/hwp/v2/index.ts');
+            data = await generateDocumentHwpV2({ graph: state.graph, title, author: user.name, fonts, layout: layout as PageLayout });
+          } else if (format === 'docx') {
+            const { generateDocumentDocxV2 } = await import('../../export/docx/v2/index.ts');
+            data = await generateDocumentDocxV2({ graph: state.graph, title, author: user.name, fonts, layout: layout as PageLayout });
+          } else {
+            const { generateDocumentEpubV2 } = await import('../../export/epub/v2/index.ts');
+            data = await generateDocumentEpubV2({ graph: state.graph, title, author: user.name, fonts });
+          }
         }
+
+        return { data, filename: `${filename}.${meta.ext}`, mimeType: meta.mimeType };
       }
 
       const content = await db
@@ -140,17 +156,7 @@ builder.mutationFields((t) => ({
         .where(eq(DocumentContents.documentId, document.id))
         .then(firstOrThrowWith(new NotFoundError()));
 
-      const title = document.title || '(제목 없음)';
-      const filename = `${title}${document.subtitle ? ` - ${document.subtitle}` : ''}`;
-
-      if (format !== 'epub' && !input.layout) {
-        throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
-      }
-
-      const [user, fonts] = await Promise.all([
-        db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow),
-        buildExportFonts(entity.userId),
-      ]);
+      const fonts = await buildExportFonts(entity.userId);
 
       const data = await generateDocument(format, {
         snapshot: content.snapshot,

@@ -71,6 +71,7 @@ imageio
 imbl
 indexeddb
 initdb
+inlines
 inview
 ipaddr
 jaccard
@@ -191,6 +192,7 @@ tini
 tlsv
 tmpl
 tnum
+tnode
 tsup
 twips
 typie

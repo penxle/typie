@@ -81,7 +81,7 @@ fn resolve_decoration(doc: &Doc, node_id: NodeId) -> TextDecoration {
         .unwrap_or_default()
 }
 
-fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
+pub fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
     let node_ref = doc.node(node_id);
 
     let color = node_ref
