@@ -1,4 +1,6 @@
-use editor_state::StableSelection;
+use editor_crdt::Dot;
+use editor_model::{Doc, Node};
+use editor_state::{ResolvedSelection, Selection, StableSelection};
 use editor_view::PageRect;
 use hashbrown::{HashMap, HashSet};
 
@@ -11,6 +13,19 @@ pub struct TrackedRange {
     pub selection: StableSelection,
     pub metadata: String,
     pub explicitly_invalid: bool,
+    covered_text: Option<CoveredTextSnapshot>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TrackedTextAnchor {
+    node_id: editor_model::NodeId,
+    dot: Dot,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CoveredTextSnapshot {
+    anchors: Vec<TrackedTextAnchor>,
+    text: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -117,6 +132,105 @@ impl TrackedRangeRegistry {
     }
 }
 
+impl TrackedRange {
+    pub fn new(
+        id: TrackedRangeId,
+        group: String,
+        selection: StableSelection,
+        metadata: String,
+        doc: &Doc,
+    ) -> Self {
+        let covered_text = selection
+            .locate(doc)
+            .and_then(|sel| sel.resolve(doc))
+            .map(|resolved| CoveredTextSnapshot {
+                anchors: collect_covered_text_anchors(&resolved),
+                text: resolved.collect_text(),
+            });
+        Self {
+            id,
+            group,
+            selection,
+            metadata,
+            explicitly_invalid: false,
+            covered_text,
+        }
+    }
+
+    pub fn locate(&self, doc: &Doc) -> Option<Selection> {
+        let located = self.selection.locate(doc)?;
+        let Some(snapshot) = &self.covered_text else {
+            return Some(located);
+        };
+        if snapshot.anchors.iter().any(|anchor| anchor.is_alive(doc)) {
+            return Some(located);
+        }
+        let restored_text = located
+            .resolve(doc)
+            .is_some_and(|resolved| resolved.collect_text() == snapshot.text);
+        restored_text.then_some(located)
+    }
+}
+
+impl TrackedTextAnchor {
+    fn is_alive(&self, doc: &Doc) -> bool {
+        let Some(entry) = doc.get_entry(self.node_id) else {
+            return false;
+        };
+        match &entry.node {
+            Node::Text(text) => text.text.live_offset_of(self.dot).is_some(),
+            _ => false,
+        }
+    }
+}
+
+fn collect_covered_text_anchors(resolved: &ResolvedSelection<'_>) -> Vec<TrackedTextAnchor> {
+    let mut out = Vec::new();
+    if let Some(root) = resolved.doc().root() {
+        collect_text_anchors_walk(&root, resolved, &mut out);
+    }
+    out
+}
+
+fn collect_text_anchors_walk(
+    node: &editor_model::NodeRef<'_>,
+    resolved: &ResolvedSelection<'_>,
+    out: &mut Vec<TrackedTextAnchor>,
+) {
+    if !resolved.intersects_subtree(node) {
+        return;
+    }
+    if let Node::Text(text_node) = node.node() {
+        let from = resolved.from();
+        let to = resolved.to();
+        let total = text_node.text.len();
+        let start = if from.node_id() == node.id() {
+            from.offset().min(total)
+        } else {
+            0
+        };
+        let end = if to.node_id() == node.id() {
+            to.offset().min(total)
+        } else {
+            total
+        };
+        if end > start {
+            for idx in start + 1..=end {
+                if let Ok(Some(dot)) = text_node.text.dot_at(idx) {
+                    out.push(TrackedTextAnchor {
+                        node_id: node.id(),
+                        dot,
+                    });
+                }
+            }
+        }
+        return;
+    }
+    for child in node.children() {
+        collect_text_anchors_walk(&child, resolved, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,13 +242,13 @@ mod tests {
             selection: (t1, 0) -> (t1, 5)
         };
         let sel = s.selection.unwrap();
-        TrackedRange {
-            id: id.into(),
-            group: group.into(),
-            selection: StableSelection::freeze(&sel, &s.doc),
-            metadata: String::new(),
-            explicitly_invalid: false,
-        }
+        TrackedRange::new(
+            id.into(),
+            group.into(),
+            StableSelection::freeze(&sel, &s.doc),
+            String::new(),
+            &s.doc,
+        )
     }
 
     #[test]

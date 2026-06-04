@@ -23,13 +23,13 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                     msg: "TrackedRange::Add: selection must resolve against current doc".into(),
                 });
             }
-            let new_range = TrackedRange {
-                id: id.clone(),
+            let new_range = TrackedRange::new(
+                id.clone(),
                 group,
-                selection: StableSelection::freeze(&selection, doc),
+                StableSelection::freeze(&selection, doc),
                 metadata,
-                explicitly_invalid: false,
-            };
+                doc,
+            );
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -45,13 +45,8 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             selection,
             metadata,
         } => {
-            let new_range = TrackedRange {
-                id: id.clone(),
-                group,
-                selection,
-                metadata,
-                explicitly_invalid: false,
-            };
+            let doc = &editor.state().doc;
+            let new_range = TrackedRange::new(id.clone(), group, selection, metadata, doc);
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -157,10 +152,9 @@ fn classify_replace_text(
     if range.explicitly_invalid {
         return TrackedRangeReplaceOutcome::Invalid;
     }
-    let selection = range.selection.thaw(&editor.state.doc);
-    if selection.is_collapsed() {
+    let Some(selection) = range.locate(&editor.state.doc) else {
         return TrackedRangeReplaceOutcome::Invalid;
-    }
+    };
     if replacement.contains(['\n', '\r']) {
         return TrackedRangeReplaceOutcome::InvalidReplacement;
     }

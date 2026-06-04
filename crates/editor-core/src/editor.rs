@@ -299,10 +299,9 @@ impl Editor {
             if range.explicitly_invalid {
                 continue;
             }
-            let sel = range.selection.thaw(&self.state.doc);
-            if sel.is_collapsed() {
+            let Some(sel) = range.locate(&self.state.doc) else {
                 continue;
-            }
+            };
             let Some(resolved) = sel.resolve(&self.state.doc) else {
                 continue;
             };
@@ -550,10 +549,9 @@ impl Editor {
             if range.explicitly_invalid {
                 continue;
             }
-            let sel = range.selection.thaw(&self.state.doc);
-            if sel.is_collapsed() {
+            let Some(sel) = range.locate(&self.state.doc) else {
                 continue;
-            }
+            };
             let Some(resolved) = sel.resolve(&self.state.doc) else {
                 continue;
             };

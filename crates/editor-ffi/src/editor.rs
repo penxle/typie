@@ -417,8 +417,13 @@ impl Editor {
             let result: Vec<TrackedRange> = ranges
                 .map(|r| {
                     let sel = r.selection.thaw(doc);
-                    let invalid = r.explicitly_invalid || sel.is_collapsed();
-                    let resolved = if invalid { None } else { sel.resolve(doc) };
+                    let located = if r.explicitly_invalid {
+                        None
+                    } else {
+                        r.locate(doc)
+                    };
+                    let invalid = located.is_none();
+                    let resolved = located.as_ref().and_then(|s| s.resolve(doc));
                     let rects = match &resolved {
                         Some(resolved) => view
                             .selection_rects(resolved)

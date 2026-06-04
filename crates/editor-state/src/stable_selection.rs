@@ -25,6 +25,15 @@ impl StableSelection {
         StableSelection { anchor, head }
     }
 
+    /// Thaws and normalizes, returning `Some` only when the range still locates
+    /// to a real (non-empty) span. Returns `None` when the covered text was
+    /// deleted.
+    pub fn locate(&self, doc: &Doc) -> Option<Selection> {
+        let sel = self.thaw(doc);
+        let sel = sel.normalize(doc).unwrap_or(sel);
+        (!sel.is_collapsed()).then_some(sel)
+    }
+
     pub fn thaw(&self, doc: &Doc) -> Selection {
         let was_collapsed = self.anchor == self.head;
         let a = thaw_position(&self.anchor, doc);
