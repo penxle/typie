@@ -23,19 +23,15 @@ const TABLE_BORDER_WIDTH: f32 = 1.0;
 pub struct TableOverlay {
     pub table_id: NodeId,
     pub page_idx: usize,
-    pub start_row_index: usize,
-    pub total_rows: usize,
     pub bounds: Rect,
     pub border_style: TableBorderStyle,
     pub align: Alignment,
     pub proportion: f32,
     pub content_width: f32,
-    pub col_widths_as_px: Vec<f32>,
-    pub col_positions: Vec<f32>,
-    pub row_heights: Vec<f32>,
-    pub row_positions: Vec<f32>,
-    pub row_background_colors: Vec<Option<String>>,
-    pub col_background_colors: Vec<Option<String>>,
+    pub rows: Vec<TableOverlayRow>,
+    pub columns: Vec<TableOverlayColumn>,
+    pub row_count: usize,
+    pub is_last_row_fragment: bool,
     pub is_focused: bool,
     pub focused_row_index: Option<usize>,
     pub focused_col_index: Option<usize>,
@@ -45,6 +41,26 @@ pub struct TableOverlay {
     pub cell_selection_row_end: Option<usize>,
     pub cell_selection_col_start: Option<usize>,
     pub cell_selection_col_end: Option<usize>,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TableOverlayRow {
+    pub index: usize,
+    pub height: f32,
+    pub position: f32,
+    pub background_color: Option<String>,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TableOverlayColumn {
+    pub index: usize,
+    pub width_as_px: f32,
+    pub position: f32,
+    pub background_color: Option<String>,
 }
 
 pub(crate) fn table_overlays(
@@ -121,13 +137,15 @@ fn build_table_overlay(
         row.cells.sort_by_key(|cell| cell.index);
     }
 
-    let start_row_index = rows.first()?.index;
     let fragment_top = rows.first()?.rect.y;
     let fragment_bottom = rows.last()?.rect.bottom();
-    let total_rows = doc_node
+    let row_count = doc_node
         .children()
         .filter(|row| matches!(row.node(), Node::TableRow(_)))
         .count();
+    let is_last_row_fragment = rows
+        .last()
+        .is_some_and(|row| row.index.checked_add(1) == Some(row_count));
 
     let bounds = Rect::from_xywh(
         table_rect.x,
@@ -149,33 +167,33 @@ fn build_table_overlay(
         })
         .unwrap_or(Alignment::Left);
 
-    let mut col_widths_as_px = Vec::new();
-    let mut col_positions = Vec::new();
-    let mut row_heights = Vec::new();
-    let mut row_positions = Vec::new();
-    let mut row_background_colors: Vec<Option<String>> = Vec::new();
-    let mut col_background_colors: Vec<Option<String>> = Vec::new();
+    let columns = rows
+        .first()
+        .map(|row| {
+            row.cells
+                .iter()
+                .map(|cell| TableOverlayColumn {
+                    index: cell.index,
+                    width_as_px: (cell.rect.width - 2.0 * TABLE_BORDER_WIDTH).max(0.0),
+                    position: cell.rect.right() - table_rect.x,
+                    background_color: cell_background_color(doc, cell.node_id),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
-    for row in &rows {
-        let row_height = (row.rect.height - 2.0 * TABLE_BORDER_WIDTH).max(0.0);
-        row_heights.push(row_height);
-        row_positions.push(row.rect.bottom() - fragment_top);
-
-        let row_bg = row
-            .cells
-            .first()
-            .and_then(|cell| cell_background_color(doc, cell.node_id));
-        row_background_colors.push(row_bg);
-
-        if col_widths_as_px.is_empty() {
-            for cell in &row.cells {
-                let col_width = (cell.rect.width - 2.0 * TABLE_BORDER_WIDTH).max(0.0);
-                col_widths_as_px.push(col_width);
-                col_positions.push(cell.rect.right() - table_rect.x);
-                col_background_colors.push(cell_background_color(doc, cell.node_id));
-            }
-        }
-    }
+    let overlay_rows = rows
+        .iter()
+        .map(|row| TableOverlayRow {
+            index: row.index,
+            height: (row.rect.height - 2.0 * TABLE_BORDER_WIDTH).max(0.0),
+            position: row.rect.bottom() - fragment_top,
+            background_color: row
+                .cells
+                .first()
+                .and_then(|cell| cell_background_color(doc, cell.node_id)),
+        })
+        .collect::<Vec<_>>();
 
     let is_focused = selection
         .map(|sel| {
@@ -187,10 +205,7 @@ fn build_table_overlay(
     let focused_row_index = if is_focused {
         selection
             .and_then(|sel| focused_row(sel.anchor().node_id(), doc, table_id))
-            .and_then(|row_idx| {
-                (row_idx >= start_row_index && row_idx < start_row_index + row_heights.len())
-                    .then_some(row_idx - start_row_index)
-            })
+            .and_then(|row_idx| rows.iter().position(|row| row.index == row_idx))
     } else {
         None
     };
@@ -230,10 +245,6 @@ fn build_table_overlay(
         cell_selection_col_start,
         cell_selection_col_end,
     ) = if is_cross_boundary {
-        let row_count = doc_node
-            .children()
-            .filter(|r| matches!(r.node(), Node::TableRow(_)))
-            .count();
         let max_cols = doc_node
             .children()
             .filter(|r| matches!(r.node(), Node::TableRow(_)))
@@ -259,8 +270,8 @@ fn build_table_overlay(
         )
     };
 
-    let visible_row_start = start_row_index;
-    let visible_row_end = start_row_index + row_heights.len() - 1;
+    let visible_row_start = rows.first()?.index;
+    let visible_row_end = rows.last()?.index;
     let (cell_selection_row_start, cell_selection_row_end) = match (
         global_cell_selection_row_start,
         global_cell_selection_row_end,
@@ -268,9 +279,11 @@ fn build_table_overlay(
         (Some(row_start), Some(row_end))
             if row_start <= visible_row_end && row_end >= visible_row_start =>
         {
+            let clipped_start = row_start.max(visible_row_start);
+            let clipped_end = row_end.min(visible_row_end);
             (
-                Some(row_start.max(visible_row_start) - start_row_index),
-                Some(row_end.min(visible_row_end) - start_row_index),
+                rows.iter().position(|row| row.index == clipped_start),
+                rows.iter().position(|row| row.index == clipped_end),
             )
         }
         _ => (None, None),
@@ -280,19 +293,15 @@ fn build_table_overlay(
     Some(TableOverlay {
         table_id,
         page_idx,
-        start_row_index,
-        total_rows,
         bounds,
         border_style,
         align,
         proportion,
         content_width,
-        col_widths_as_px,
-        col_positions,
-        row_heights,
-        row_positions,
-        row_background_colors,
-        col_background_colors,
+        rows: overlay_rows,
+        columns,
+        row_count,
+        is_last_row_fragment,
         is_focused,
         focused_row_index,
         focused_col_index,
@@ -434,12 +443,14 @@ mod tests {
         assert_eq!(overlays.len(), 2);
         assert_eq!(overlays[0].page_idx, 0);
         assert_eq!(overlays[0].table_id, table_id);
-        assert_eq!(overlays[0].start_row_index, 0);
-        assert_eq!(overlays[0].total_rows, 2);
+        assert_eq!(overlays[0].rows[0].index, 0);
+        assert_eq!(overlays[0].row_count, 2);
+        assert!(!overlays[0].is_last_row_fragment);
         assert_eq!(overlays[1].page_idx, 1);
         assert_eq!(overlays[1].table_id, table_id);
-        assert_eq!(overlays[1].start_row_index, 1);
-        assert_eq!(overlays[1].total_rows, 2);
+        assert_eq!(overlays[1].rows[0].index, 1);
+        assert_eq!(overlays[1].row_count, 2);
+        assert!(overlays[1].is_last_row_fragment);
 
         for overlay in &overlays {
             let page = &pages[overlay.page_idx];

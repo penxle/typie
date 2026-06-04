@@ -26,7 +26,7 @@ pub trait PageVisitor {
     fn decoration(&mut self, decoration: &PageFragmentDecoration);
 }
 
-pub fn visit_page(tree: &PageFragmentTree, visitor: &mut impl PageVisitor) {
+pub(crate) fn visit_page(tree: &PageFragmentTree, visitor: &mut impl PageVisitor) {
     if let Some(root) = &tree.root {
         visit_node(root, visitor);
     }

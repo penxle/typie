@@ -540,19 +540,15 @@ export interface StyleRefValue {
 export interface TableOverlay {
     table_id: NodeId;
     page_idx: number;
-    start_row_index: number;
-    total_rows: number;
     bounds: Rect;
     border_style: TableBorderStyle;
     align: Alignment;
     proportion: number;
     content_width: number;
-    col_widths_as_px: number[];
-    col_positions: number[];
-    row_heights: number[];
-    row_positions: number[];
-    row_background_colors: (string | undefined)[];
-    col_background_colors: (string | undefined)[];
+    rows: TableOverlayRow[];
+    columns: TableOverlayColumn[];
+    row_count: number;
+    is_last_row_fragment: boolean;
     is_focused: boolean;
     focused_row_index: number | undefined;
     focused_col_index: number | undefined;
@@ -562,6 +558,20 @@ export interface TableOverlay {
     cell_selection_row_end: number | undefined;
     cell_selection_col_start: number | undefined;
     cell_selection_col_end: number | undefined;
+}
+
+export interface TableOverlayColumn {
+    index: number;
+    width_as_px: number;
+    position: number;
+    background_color: string | undefined;
+}
+
+export interface TableOverlayRow {
+    index: number;
+    height: number;
+    position: number;
+    background_color: string | undefined;
 }
 
 export interface TextColorValue {

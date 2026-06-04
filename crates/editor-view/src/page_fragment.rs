@@ -106,46 +106,71 @@ fn fragment_node(node: &LayoutNode, page: &LayoutPage) -> Option<PageFragmentNod
         return None;
     }
 
-    let fragment_top = node_top.max(visible_top);
-    let fragment_bottom = node_bottom.min(visible_bottom);
-    let rect = Rect::from_xywh(
-        node.rect.x,
-        fragment_top - page.y_start,
-        node.rect.width,
-        fragment_bottom - fragment_top,
-    );
-
     let content = match &node.content {
-        LayoutContent::Box(b) => PageFragmentContent::Box(PageFragmentBox {
-            node_id: b.node_id,
-            style: b.style.clone(),
-            edges: Edges {
-                top: node_top >= visible_top,
-                bottom: node_bottom <= visible_bottom,
-                left: true,
-                right: true,
-            },
-            decorations: b
-                .style
-                .decorations
-                .iter()
-                .filter_map(|dec| fragment_decoration(node, dec, page))
-                .collect(),
-            children: b
-                .children
-                .iter()
-                .filter_map(|child| fragment_node(child, page))
-                .collect(),
-            nav: b.nav,
-        }),
-        LayoutContent::Line(l) => PageFragmentContent::Line(fragment_line(l)),
-        LayoutContent::Atom(a) => PageFragmentContent::Atom(fragment_atom(a)),
+        LayoutContent::Box(b) => {
+            let fragment_top = node_top.max(visible_top);
+            let fragment_bottom = node_bottom.min(visible_bottom);
+            let rect = Rect::from_xywh(
+                node.rect.x,
+                fragment_top - page.y_start,
+                node.rect.width,
+                fragment_bottom - fragment_top,
+            );
+            let content = PageFragmentContent::Box(PageFragmentBox {
+                node_id: b.node_id,
+                style: b.style.clone(),
+                edges: Edges {
+                    top: node_top >= visible_top,
+                    bottom: node_bottom <= visible_bottom,
+                    left: true,
+                    right: true,
+                },
+                decorations: b
+                    .style
+                    .decorations
+                    .iter()
+                    .filter_map(|dec| fragment_decoration(node, dec, page))
+                    .collect(),
+                children: b
+                    .children
+                    .iter()
+                    .filter_map(|child| fragment_node(child, page))
+                    .collect(),
+                nav: b.nav,
+            });
+            return Some(PageFragmentNode { rect, content });
+        }
+        LayoutContent::Line(l) => {
+            debug_assert!(
+                node_top >= visible_top && node_bottom <= visible_bottom,
+                "line layout node should be contained by its page content window"
+            );
+            PageFragmentContent::Line(fragment_line(l))
+        }
+        LayoutContent::Atom(a) => {
+            let fragment_top = node_top.max(visible_top);
+            let fragment_bottom = node_bottom.min(visible_bottom);
+            let rect = Rect::from_xywh(
+                node.rect.x,
+                fragment_top - page.y_start,
+                node.rect.width,
+                fragment_bottom - fragment_top,
+            );
+            let content = PageFragmentContent::Atom(fragment_atom(a));
+            return Some(PageFragmentNode { rect, content });
+        }
         LayoutContent::Spacing(kind) => {
             let _ = kind;
             return None;
         }
     };
 
+    let rect = Rect::from_xywh(
+        node.rect.x,
+        node.rect.y - page.y_start,
+        node.rect.width,
+        node.rect.height,
+    );
     Some(PageFragmentNode { rect, content })
 }
 
@@ -157,19 +182,16 @@ fn fragment_decoration(
     let dec_abs_y = node.rect.y + dec.rect.y;
     let dec_abs_bottom = dec_abs_y + dec.rect.height;
 
-    if dec_abs_bottom <= page.content_y_start || dec_abs_y >= page.content_y_end {
+    if dec_abs_y < page.content_y_start || dec_abs_bottom > page.content_y_end {
         return None;
     }
-
-    let dec_fragment_top = dec_abs_y.max(page.content_y_start);
-    let dec_fragment_bottom = dec_abs_bottom.min(page.content_y_end);
 
     Some(PageFragmentDecoration {
         rect: Rect::from_xywh(
             node.rect.x + dec.rect.x,
-            dec_fragment_top - page.y_start,
+            dec_abs_y - page.y_start,
             dec.rect.width,
-            dec_fragment_bottom - dec_fragment_top,
+            dec.rect.height,
         ),
         data: dec.data.clone(),
     })

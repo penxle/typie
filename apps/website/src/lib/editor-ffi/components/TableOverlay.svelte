@@ -58,8 +58,22 @@
   } | null>(null);
 
   let hoveredPointer = $state<{ x: number; y: number } | null>(null);
-  const hoveredColIndex = $derived(hoveredPointer ? findOverlayIndex(overlay.col_positions, hoveredPointer.x) : null);
-  const hoveredRowIndex = $derived(hoveredPointer ? findOverlayIndex(overlay.row_positions, hoveredPointer.y) : null);
+  const hoveredColIndex = $derived(
+    hoveredPointer
+      ? findOverlayIndex(
+          overlay.columns.map((col) => col.position),
+          hoveredPointer.x,
+        )
+      : null,
+  );
+  const hoveredRowIndex = $derived(
+    hoveredPointer
+      ? findOverlayIndex(
+          overlay.rows.map((row) => row.position),
+          hoveredPointer.y,
+        )
+      : null,
+  );
 
   let menuOpenColIndex = $state<number | null>(null);
   let menuOpenRowIndex = $state<number | null>(null);
@@ -69,15 +83,13 @@
   let addBothButtonHovered = $state(false);
   let tableOverlayRoot = $state<HTMLDivElement | null>(null);
 
-  const startRowIndex = $derived(overlay.start_row_index);
-  const totalRows = $derived(overlay.total_rows);
-  const isLastRowFragment = $derived(startRowIndex + overlay.row_heights.length === totalRows);
+  const rowCount = $derived(overlay.row_count);
+  const lastColumnIndex = $derived(overlay.columns.at(-1)?.index ?? 0);
+  const isLastRowFragment = $derived(overlay.is_last_row_fragment);
   const isLastRowHovered = $derived(
-    (hoveredRowIndex !== null && getGlobalRowIndex(hoveredRowIndex) === totalRows - 1) || addRowButtonHovered || addBothButtonHovered,
+    (hoveredRowIndex !== null && overlay.rows[hoveredRowIndex]?.index === rowCount - 1) || addRowButtonHovered || addBothButtonHovered,
   );
-  const isLastColumnHovered = $derived(
-    hoveredColIndex === overlay.col_widths_as_px.length - 1 || addColButtonHovered || addBothButtonHovered,
-  );
+  const isLastColumnHovered = $derived(hoveredColIndex === overlay.columns.length - 1 || addColButtonHovered || addBothButtonHovered);
   const safeDisplayZoom = $derived.by(() => {
     if (!editor) return 1;
     return editor.safeDisplayZoom();
@@ -142,23 +154,19 @@
   }
 
   function getColLeft(colIndex: number): number {
-    return colIndex === 0 ? 0 : overlay.col_positions[colIndex - 1];
+    return colIndex === 0 ? 0 : (overlay.columns[colIndex - 1]?.position ?? 0);
   }
 
   function getColWidth(colIndex: number): number {
-    return overlay.col_widths_as_px[colIndex];
+    return overlay.columns[colIndex]?.width_as_px ?? 0;
   }
 
   function getRowTop(rowIndex: number): number {
-    return rowIndex === 0 ? 0 : overlay.row_positions[rowIndex - 1];
+    return rowIndex === 0 ? 0 : (overlay.rows[rowIndex - 1]?.position ?? 0);
   }
 
   function getRowHeight(rowIndex: number): number {
-    return overlay.row_heights[rowIndex];
-  }
-
-  function getGlobalRowIndex(rowIndex: number): number {
-    return startRowIndex + rowIndex;
+    return overlay.rows[rowIndex]?.height ?? 0;
   }
 
   function updateHoveredPointerFromClient(clientX: number, clientY: number): void {
@@ -210,24 +218,20 @@
     const colStart = overlay.cell_selection_col_start ?? 0;
     const colEnd = overlay.cell_selection_col_end ?? 0;
     const rowEnd = overlay.cell_selection_row_end ?? 0;
-    const leftEdge = colStart === 0 ? 0 : (overlay.col_positions[colStart - 1] ?? 0);
-    const rightEdge = overlay.col_positions[colEnd] ?? overlay.bounds.width;
+    const leftEdge = colStart === 0 ? 0 : (overlay.columns[colStart - 1]?.position ?? 0);
+    const rightEdge = overlay.columns[colEnd]?.position ?? overlay.bounds.width;
     const centerX = (leftEdge + rightEdge) / 2;
-    const bottomY = overlay.row_positions[rowEnd] ?? overlay.bounds.height;
+    const bottomY = overlay.rows[rowEnd]?.position ?? overlay.bounds.height;
     return { left: centerX, top: bottomY + 4 };
   });
 
   const isAlignButtonVisible = $derived(!Number.isFinite(overlay.proportion) || overlay.proportion < 1 - 0.001);
 
   const activeColIndex = $derived(
-    isActive
-      ? clampOverlayIndex(menuOpenColIndex ?? hoveredColIndex ?? overlay.focused_col_index ?? null, overlay.col_widths_as_px.length)
-      : null,
+    isActive ? clampOverlayIndex(menuOpenColIndex ?? hoveredColIndex ?? overlay.focused_col_index ?? null, overlay.columns.length) : null,
   );
   const activeRowIndex = $derived(
-    isActive
-      ? clampOverlayIndex(menuOpenRowIndex ?? hoveredRowIndex ?? overlay.focused_row_index ?? null, overlay.row_heights.length)
-      : null,
+    isActive ? clampOverlayIndex(menuOpenRowIndex ?? hoveredRowIndex ?? overlay.focused_row_index ?? null, overlay.rows.length) : null,
   );
 
   $effect(() => {
@@ -245,7 +249,7 @@
   $effect(() => {
     const pointer = lastWindowPointer;
     const root = tableOverlayRoot;
-    const overlayRevision = `${overlay.bounds.x}:${overlay.bounds.y}:${overlay.bounds.width}:${overlay.bounds.height}:${overlay.col_widths_as_px.length}:${overlay.row_heights.length}:${menuOpenColIndex ?? -1}:${menuOpenRowIndex ?? -1}:${safeDisplayZoom}`;
+    const overlayRevision = `${overlay.bounds.x}:${overlay.bounds.y}:${overlay.bounds.width}:${overlay.bounds.height}:${overlay.columns.length}:${overlay.rows.length}:${menuOpenColIndex ?? -1}:${menuOpenRowIndex ?? -1}:${safeDisplayZoom}`;
 
     if (!pointer || !root || overlayRevision.length === 0) return;
 
@@ -323,6 +327,8 @@
   >
     <!-- Column handle -->
     {#if activeColIndex !== null}
+      {@const activeColumn = overlay.columns[activeColIndex]}
+      {@const colIndex = activeColumn.index}
       {@const left = getColLeft(activeColIndex)}
       {@const width = getColWidth(activeColIndex)}
       <div
@@ -350,7 +356,7 @@
                 op: {
                   type: 'table',
                   id: overlay.table_id,
-                  op: { type: 'select_axis', axis: 'vertical', index: activeColIndex ?? undefined },
+                  op: { type: 'select_axis', axis: 'vertical', index: colIndex },
                 },
               });
             }}
@@ -379,22 +385,22 @@
               </button>
             {/snippet}
             {#snippet children({ close })}
-              {#if activeColIndex > 0}
+              {#if colIndex > 0}
                 <MenuItem
                   onclick={() => {
                     close();
-                    moveAxis('vertical', activeColIndex, activeColIndex - 1);
+                    moveAxis('vertical', colIndex, colIndex - 1);
                   }}
                 >
                   <Icon icon={MoveLeftIcon} size={14} />
                   <span>왼쪽으로 이동</span>
                 </MenuItem>
               {/if}
-              {#if activeColIndex < overlay.col_widths_as_px.length - 1}
+              {#if colIndex < lastColumnIndex}
                 <MenuItem
                   onclick={() => {
                     close();
-                    moveAxis('vertical', activeColIndex, activeColIndex + 1);
+                    moveAxis('vertical', colIndex, colIndex + 1);
                   }}
                 >
                   <Icon icon={MoveRightIcon} size={14} />
@@ -404,7 +410,7 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  insertAxis('vertical', activeColIndex, true);
+                  insertAxis('vertical', colIndex, true);
                 }}
               >
                 <Icon icon={ArrowLeftToLineIcon} size={14} />
@@ -413,7 +419,7 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  insertAxis('vertical', activeColIndex, false);
+                  insertAxis('vertical', colIndex, false);
                 }}
               >
                 <Icon icon={ArrowRightToLineIcon} size={14} />
@@ -424,7 +430,7 @@
                 <li>
                   <ToolbarColorGrid
                     columns={8}
-                    currentValue={overlay.col_background_colors[activeColIndex] ?? 'none'}
+                    currentValue={activeColumn.background_color ?? 'none'}
                     items={cellBackgroundColors}
                     onClose={close}
                     onSelect={(value) => {
@@ -437,7 +443,7 @@
                           op: {
                             type: 'set_axis_background_color',
                             axis: 'vertical',
-                            index: activeColIndex,
+                            index: colIndex,
                             color: value === 'none' ? undefined : value,
                           },
                         },
@@ -450,16 +456,16 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  if (overlay.col_widths_as_px.length <= 1) {
+                  if (overlay.columns.length <= 1) {
                     enqueueTableOp({ type: 'node', op: { type: 'delete', id: overlay.table_id } });
                   } else {
-                    deleteAxis('vertical', activeColIndex);
+                    deleteAxis('vertical', colIndex);
                   }
                 }}
                 variant="danger"
               >
                 <Icon icon={Trash2Icon} size={14} />
-                <span>{overlay.col_widths_as_px.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
+                <span>{overlay.columns.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
               </MenuItem>
             {/snippet}
           </Menu>
@@ -471,7 +477,8 @@
     {#if activeRowIndex !== null}
       {@const top = getRowTop(activeRowIndex)}
       {@const height = getRowHeight(activeRowIndex)}
-      {@const globalRowIndex = getGlobalRowIndex(activeRowIndex)}
+      {@const activeRow = overlay.rows[activeRowIndex]}
+      {@const rowIndex = activeRow.index}
       <div
         style:top="{top}px"
         style:height="{height}px"
@@ -496,7 +503,7 @@
                 op: {
                   type: 'table',
                   id: overlay.table_id,
-                  op: { type: 'select_axis', axis: 'horizontal', index: globalRowIndex },
+                  op: { type: 'select_axis', axis: 'horizontal', index: rowIndex },
                 },
               });
             }}
@@ -525,22 +532,22 @@
               </button>
             {/snippet}
             {#snippet children({ close })}
-              {#if globalRowIndex > 0}
+              {#if rowIndex > 0}
                 <MenuItem
                   onclick={() => {
                     close();
-                    moveAxis('horizontal', globalRowIndex, globalRowIndex - 1);
+                    moveAxis('horizontal', rowIndex, rowIndex - 1);
                   }}
                 >
                   <Icon icon={MoveUpIcon} size={14} />
                   <span>위로 이동</span>
                 </MenuItem>
               {/if}
-              {#if globalRowIndex < totalRows - 1}
+              {#if rowIndex < rowCount - 1}
                 <MenuItem
                   onclick={() => {
                     close();
-                    moveAxis('horizontal', globalRowIndex, globalRowIndex + 1);
+                    moveAxis('horizontal', rowIndex, rowIndex + 1);
                   }}
                 >
                   <Icon icon={MoveDownIcon} size={14} />
@@ -550,7 +557,7 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  insertAxis('horizontal', globalRowIndex, true);
+                  insertAxis('horizontal', rowIndex, true);
                 }}
               >
                 <Icon icon={ArrowUpToLineIcon} size={14} />
@@ -559,7 +566,7 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  insertAxis('horizontal', globalRowIndex, false);
+                  insertAxis('horizontal', rowIndex, false);
                 }}
               >
                 <Icon icon={ArrowDownToLineIcon} size={14} />
@@ -570,7 +577,7 @@
                 <li>
                   <ToolbarColorGrid
                     columns={8}
-                    currentValue={overlay.row_background_colors[activeRowIndex] ?? 'none'}
+                    currentValue={activeRow.background_color ?? 'none'}
                     items={cellBackgroundColors}
                     onClose={close}
                     onSelect={(value) => {
@@ -583,7 +590,7 @@
                           op: {
                             type: 'set_axis_background_color',
                             axis: 'horizontal',
-                            index: globalRowIndex,
+                            index: rowIndex,
                             color: value === 'none' ? undefined : value,
                           },
                         },
@@ -596,16 +603,16 @@
               <MenuItem
                 onclick={() => {
                   close();
-                  if (totalRows <= 1) {
+                  if (rowCount <= 1) {
                     enqueueTableOp({ type: 'node', op: { type: 'delete', id: overlay.table_id } });
                   } else {
-                    deleteAxis('horizontal', globalRowIndex);
+                    deleteAxis('horizontal', rowIndex);
                   }
                 }}
                 variant="danger"
               >
                 <Icon icon={Trash2Icon} size={14} />
-                <span>{totalRows <= 1 ? '테이블 삭제' : '행 삭제'}</span>
+                <span>{rowCount <= 1 ? '테이블 삭제' : '행 삭제'}</span>
               </MenuItem>
             {/snippet}
           </Menu>
@@ -614,8 +621,9 @@
     {/if}
 
     <!-- Column resize handles -->
-    {#each overlay.col_positions as colX, colIndex (colIndex)}
-      {@const isLastCol = colIndex === overlay.col_widths_as_px.length - 1}
+    {#each overlay.columns as col, colIndex (col.index)}
+      {@const colX = col.position}
+      {@const isLastCol = colIndex === overlay.columns.length - 1}
       {@const visualX = getVisualColX(colIndex, colX)}
       {@const isResizing = resizing?.colIndex === colIndex}
       <button
@@ -639,7 +647,7 @@
           const target = e.currentTarget as HTMLElement;
           target.setPointerCapture(e.pointerId);
           const startX = e.clientX;
-          const initialWidths = [...overlay.col_widths_as_px];
+          const initialWidths = overlay.columns.map((column) => column.width_as_px);
 
           resizing = { colIndex, startX, initialWidths, deltaX: 0 };
 
@@ -715,7 +723,7 @@
         _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
       })}
       aria-label="열 추가"
-      onclick={() => insertAxis('vertical', overlay.col_widths_as_px.length - 1, false)}
+      onclick={() => insertAxis('vertical', lastColumnIndex, false)}
       type="button"
     >
       <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
@@ -751,7 +759,7 @@
           _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
         })}
         aria-label="행 추가"
-        onclick={() => insertAxis('horizontal', totalRows - 1, false)}
+        onclick={() => insertAxis('horizontal', rowCount - 1, false)}
         type="button"
       >
         <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
@@ -790,8 +798,8 @@
         })}
         aria-label="행 및 열 추가"
         onclick={() => {
-          insertAxis('horizontal', totalRows - 1, false);
-          insertAxis('vertical', overlay.col_widths_as_px.length - 1, false);
+          insertAxis('horizontal', rowCount - 1, false);
+          insertAxis('vertical', lastColumnIndex, false);
         }}
         type="button"
       >

@@ -27,4 +27,5 @@ pub(crate) use navigation::resolve_movement;
 pub use pointer_style::PointerStyle;
 pub(crate) use pointer_style::pointer_style_at;
 pub use selection::{SelectionEndpoints, SelectionRect, SelectionRectKind};
-pub use visit::{Edges, LineMetrics, PageVisitor, visit_page};
+pub(crate) use visit::visit_page;
+pub use visit::{Edges, LineMetrics, PageVisitor};

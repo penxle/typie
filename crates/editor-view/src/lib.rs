@@ -20,7 +20,10 @@ pub use dnd::*;
 pub use external::*;
 pub use measure::text::ruby::ruby_extra_top;
 pub use page::*;
-pub use page_fragment::*;
+pub use page_fragment::{
+    PageFragmentAtom, PageFragmentBox, PageFragmentContent, PageFragmentDecoration,
+    PageFragmentLine, PageFragmentNode,
+};
 pub use query::*;
 pub use table_overlay::*;
 pub use view::*;
