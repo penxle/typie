@@ -1,4 +1,6 @@
-use editor_model::{Fragment, Node, NodeRef, PlainNode, PlainRootNode, PlainTextNode};
+use editor_model::{
+    Fragment, Node, NodeRef, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
+};
 use editor_resource::Resource;
 use editor_state::{CellRect, ResolvedSelection, State, is_prefix_of};
 use serde::{Deserialize, Serialize};
@@ -43,6 +45,14 @@ impl Slice {
             .saturating_sub(common_depth)) as u32;
 
         let fragment = build_fragment(&rs, common);
+        // When the selection is contained within a single inline node, the
+        // common ancestor is that inline node, so build_fragment returns a bare
+        // inline leaf with no way to carry the source paragraph's style. Wrap
+        // it in a synthesized Paragraph that carries the enclosing textblock's
+        // style; bump open_start/open_end so paste paths still see the slice as
+        // inline content to merge.
+        let (fragment, open_start, open_end) =
+            wrap_bare_inline_in_textblock(fragment, common, open_start, open_end);
         Some(Slice {
             fragment,
             open_start,
@@ -87,6 +97,50 @@ impl Slice {
             text: self.to_text(),
         }
     }
+}
+
+fn nearest_enclosing_textblock<'a>(node: NodeRef<'a>) -> Option<NodeRef<'a>> {
+    let mut current = Some(node);
+    while let Some(n) = current {
+        if n.spec().is_textblock() {
+            return Some(n);
+        }
+        current = n.parent();
+    }
+    None
+}
+
+// Only wraps when the source textblock actually has a named style — otherwise
+// returns the bare inline fragment unchanged, preserving the existing slice
+// shape (and open_start/open_end semantics) for unstyled paragraphs. The wrap
+// is the only carrier for style in the single-inline-node case because Text
+// itself has no style slot on its NodeEntry.
+fn wrap_bare_inline_in_textblock(
+    fragment: Fragment,
+    common: NodeRef<'_>,
+    open_start: u32,
+    open_end: u32,
+) -> (Fragment, u32, u32) {
+    let is_bare_inline = matches!(
+        fragment.node,
+        PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_)
+    );
+    if !is_bare_inline {
+        return (fragment, open_start, open_end);
+    }
+    let Some(textblock) = nearest_enclosing_textblock(common) else {
+        return (fragment, open_start, open_end);
+    };
+    let Some(style_id) = textblock.entry().style.get().clone() else {
+        return (fragment, open_start, open_end);
+    };
+    let wrapped = Fragment {
+        node: PlainNode::Paragraph(PlainParagraphNode::default()),
+        modifiers: vec![],
+        style: Some(style_id),
+        children: vec![fragment],
+    };
+    (wrapped, open_start + 1, open_end + 1)
 }
 
 fn build_fragment<'a>(rs: &ResolvedSelection<'a>, node: NodeRef<'a>) -> Fragment {
@@ -138,6 +192,7 @@ fn build_fragment<'a>(rs: &ResolvedSelection<'a>, node: NodeRef<'a>) -> Fragment
             Fragment {
                 node: node.node().to_plain(),
                 modifiers: node.explicit_modifiers().cloned().collect(),
+                style: node.entry().style.get().clone(),
                 children: kids,
             }
         }
@@ -148,6 +203,7 @@ fn node_to_fragment(node: NodeRef<'_>) -> Fragment {
     Fragment {
         node: node.node().to_plain(),
         modifiers: node.explicit_modifiers().cloned().collect(),
+        style: node.entry().style.get().clone(),
         children: node.children().map(node_to_fragment).collect(),
     }
 }
@@ -171,18 +227,21 @@ fn extract_cell_rect(rect: &CellRect<'_>) -> Slice {
         rows.push(Fragment {
             node: row.node().to_plain(),
             modifiers: row.explicit_modifiers().cloned().collect(),
+            style: row.entry().style.get().clone(),
             children: cells,
         });
     }
     let table_frag = Fragment {
         node: table.node().to_plain(),
         modifiers: table.explicit_modifiers().cloned().collect(),
+        style: table.entry().style.get().clone(),
         children: rows,
     };
     Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
+            style: None,
             children: vec![table_frag],
         },
         open_start: 0,

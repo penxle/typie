@@ -11,6 +11,8 @@ pub struct Fragment {
     pub node: PlainNode,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub modifiers: Vec<Modifier>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub style: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub children: Vec<Fragment>,
 }
@@ -20,6 +22,7 @@ impl Fragment {
         Self {
             node,
             modifiers: vec![],
+            style: None,
             children: vec![],
         }
     }
@@ -34,11 +37,17 @@ impl Fragment {
         self
     }
 
+    pub fn with_style(mut self, style: Option<String>) -> Self {
+        self.style = style;
+        self
+    }
+
     pub fn into_subtree(self) -> Subtree {
         Subtree {
             id: NodeId::new(),
             node: self.node,
             modifiers: self.modifiers,
+            style: self.style,
             children: self
                 .children
                 .into_iter()

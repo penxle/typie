@@ -8,6 +8,7 @@ pub struct Subtree {
     pub id: NodeId,
     pub node: PlainNode,
     pub modifiers: Vec<Modifier>,
+    pub style: Option<String>,
     pub children: Vec<Subtree>,
 }
 
@@ -17,6 +18,7 @@ impl Subtree {
             id,
             node,
             modifiers: vec![],
+            style: None,
             children: vec![],
         }
     }
@@ -31,6 +33,11 @@ impl Subtree {
         self
     }
 
+    pub fn with_style(mut self, style: Option<String>) -> Self {
+        self.style = style;
+        self
+    }
+
     pub fn capture(doc: &Doc, node_id: NodeId) -> Option<Self> {
         let entry = doc.get_entry(node_id)?;
         let children = entry
@@ -40,10 +47,12 @@ impl Subtree {
             .filter_map(|child_id| Self::capture(doc, child_id))
             .collect();
         let modifiers: Vec<Modifier> = entry.modifiers.iter().map(|(_, v)| v.clone()).collect();
+        let style = entry.style.get().clone();
         Some(Self {
             id: node_id,
             node: entry.node.to_plain(),
             modifiers,
+            style,
             children,
         })
     }

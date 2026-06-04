@@ -31,6 +31,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             },
             open_start: 0,
@@ -42,6 +43,7 @@ mod tests {
         Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
+            style: None,
             children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                 text: text.into(),
             }))],
@@ -194,6 +196,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![paragraph_fragment("A"), paragraph_fragment("B")],
             },
             open_start: 0,
@@ -247,6 +250,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![paragraph_fragment("first"), paragraph_fragment("second")],
             },
             open_start: 2,

@@ -390,6 +390,7 @@ fn files_slice(image_count: u32, file_count: u32) -> Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
+            style: None,
             children,
         },
         open_start: 0,

@@ -69,6 +69,14 @@ fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepE
             },
         })?;
     }
+    if let Some(style_id) = &subtree.style {
+        batched.apply(DocOp::NodeStyle {
+            node_id: subtree.id,
+            op: LwwRegOp::Set {
+                value: Some(style_id.clone()),
+            },
+        })?;
+    }
     for attr in subtree.node.to_attrs() {
         batched.apply(DocOp::Attr {
             node_id: subtree.id,

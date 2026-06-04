@@ -10,6 +10,7 @@ pub fn normalize(children: Vec<Fragment>) -> Vec<Fragment> {
             result.push(Fragment {
                 node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: std::mem::take(inline_run),
             });
         }
@@ -22,6 +23,7 @@ pub fn normalize(children: Vec<Fragment>) -> Vec<Fragment> {
                 result.push(Fragment {
                     node: PlainNode::BulletList(PlainBulletListNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![child],
                 });
             }
@@ -30,6 +32,7 @@ pub fn normalize(children: Vec<Fragment>) -> Vec<Fragment> {
                 result.push(Fragment {
                     node: PlainNode::Table(PlainTableNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![child],
                 });
             }
@@ -38,9 +41,11 @@ pub fn normalize(children: Vec<Fragment>) -> Vec<Fragment> {
                 result.push(Fragment {
                     node: PlainNode::Table(PlainTableNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![Fragment {
                         node: PlainNode::TableRow(PlainTableRowNode::default()),
                         modifiers: vec![],
+                        style: None,
                         children: vec![child],
                     }],
                 });

@@ -240,9 +240,11 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode {
                             text: "bold italic".into(),
@@ -264,9 +266,11 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode {
                             text: "styled".into(),
@@ -296,9 +300,11 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode {
                             text: "click".into(),

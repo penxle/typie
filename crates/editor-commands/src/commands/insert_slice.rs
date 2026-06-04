@@ -38,9 +38,11 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                         text: text.into(),
                     }))],
@@ -55,6 +57,7 @@ mod tests {
         Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
+            style: None,
             children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                 text: text.into(),
             }))],
@@ -104,6 +107,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                     text: "X".into(),
                 }))],
@@ -134,12 +138,15 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment {
                     node: PlainNode::BulletList(PlainBulletListNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![Fragment {
                         node: PlainNode::ListItem(PlainListItemNode::default()),
                         modifiers: vec![],
+                        style: None,
                         children: vec![paragraph_fragment("X")],
                     }],
                 }],
@@ -205,6 +212,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![paragraph_fragment("X"), paragraph_fragment("Y")],
             },
             open_start: 0,
@@ -234,15 +242,18 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![
                     Fragment {
                         node: PlainNode::Callout(PlainCalloutNode::default()),
                         modifiers: vec![],
+                        style: None,
                         children: vec![paragraph_fragment("1")],
                     },
                     Fragment {
                         node: PlainNode::Paragraph(PlainParagraphNode::default()),
                         modifiers: vec![],
+                        style: None,
                         children: vec![],
                     },
                 ],
@@ -271,6 +282,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![paragraph_fragment("first"), paragraph_fragment("second")],
             },
             open_start: 2,
@@ -298,6 +310,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             },
             open_start: 0,
@@ -326,6 +339,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             },
             open_start: 0,
@@ -340,5 +354,134 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    fn paragraph_slice_with_style(text: &str, style_id: &str) -> Slice {
+        Slice {
+            fragment: Fragment {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: vec![],
+                style: None,
+                children: vec![Fragment {
+                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
+                    modifiers: vec![],
+                    style: Some(style_id.into()),
+                    children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: text.into(),
+                    }))],
+                }],
+            },
+            open_start: 2,
+            open_end: 2,
+        }
+    }
+
+    #[test]
+    fn paste_block_boundary_applies_source_paragraph_style() {
+        use editor_model::Modifier;
+
+        use crate::commands::define_style;
+
+        let (initial, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                paragraph { text("b") }
+            } }
+            selection: (r, 1, >)
+        };
+        let (with_style, ..) = transact!(initial, |tr| define_style(
+            &mut tr,
+            "h1".into(),
+            "H1".into(),
+            vec![Modifier::FontSize { value: 2400 }],
+        ));
+
+        let slice = paragraph_slice_with_style("XY", "h1");
+        let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
+
+        let root = actual.doc.root().unwrap();
+        let inserted = root.children().nth(1).unwrap();
+        assert_eq!(inserted.entry().style.get().as_deref(), Some("h1"));
+    }
+
+    #[test]
+    fn paste_into_empty_paragraph_inherits_source_style() {
+        use editor_model::Modifier;
+
+        use crate::commands::define_style;
+
+        let (initial, p_empty) = state! {
+            doc { root { p_empty: paragraph {} } }
+            selection: (p_empty, 0)
+        };
+        let (with_style, ..) = transact!(initial, |tr| define_style(
+            &mut tr,
+            "h1".into(),
+            "H1".into(),
+            vec![Modifier::FontSize { value: 2400 }],
+        ));
+
+        let slice = paragraph_slice_with_style("XY", "h1");
+        let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
+
+        let entry = actual.doc.get_entry(p_empty).unwrap();
+        assert_eq!(entry.style.get().as_deref(), Some("h1"));
+    }
+
+    #[test]
+    fn extract_preserves_paragraph_style() {
+        use editor_model::Modifier;
+
+        use crate::commands::{apply_style, define_style};
+
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { t1: text("Hello") } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let (s1, ..) = transact!(initial, |tr| define_style(
+            &mut tr,
+            "h1".into(),
+            "H1".into(),
+            vec![Modifier::FontSize { value: 2400 }]
+        ));
+        let (with_style, ..) = transact!(s1, |tr| apply_style(&mut tr, p1, "h1".into()));
+
+        let slice = Slice::extract(&with_style).expect("non-collapsed");
+        // Single-text-node selection from a styled paragraph: extract
+        // synthesizes a Paragraph wrapper carrying the enclosing textblock's
+        // style so the slice can transport it to the paste site.
+        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
+        assert_eq!(slice.fragment.style.as_deref(), Some("h1"));
+    }
+
+    #[test]
+    fn paste_into_non_empty_paragraph_keeps_destination_style() {
+        use editor_model::Modifier;
+
+        use crate::commands::{apply_style, define_style};
+
+        let (initial, p1, t1) = state! {
+            doc { root { p1: paragraph { t1: text("Hello") } } }
+            selection: (t1, 2)
+        };
+        let (s1, ..) = transact!(initial, |tr| define_style(
+            &mut tr,
+            "h1".into(),
+            "H1".into(),
+            vec![Modifier::FontSize { value: 2400 }]
+        ));
+        let (s2, ..) = transact!(s1, |tr| define_style(
+            &mut tr,
+            "body".into(),
+            "Body".into(),
+            vec![Modifier::FontSize { value: 1600 }]
+        ));
+        let (with_styles, ..) = transact!(s2, |tr| apply_style(&mut tr, p1, "body".into()));
+
+        let slice = paragraph_slice_with_style("XY", "h1");
+        let (actual, ..) = transact!(with_styles, |tr| insert_slice(&mut tr, slice));
+
+        let entry = actual.doc.get_entry(p1).unwrap();
+        assert_eq!(entry.style.get().as_deref(), Some("body"));
     }
 }

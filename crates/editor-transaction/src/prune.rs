@@ -41,6 +41,7 @@ fn prune_empty(node: &NodeRef) -> Vec<Step> {
             id: node.id(),
             node: node.node().to_plain(),
             modifiers: node.explicit_modifiers().cloned().collect(),
+            style: node.entry().style.get().clone(),
             children: vec![],
         },
     }];

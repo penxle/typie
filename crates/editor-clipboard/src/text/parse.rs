@@ -14,6 +14,7 @@ pub fn from_text(text: &str) -> Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
+            style: None,
             children: blocks,
         },
         open_start: 0,
@@ -51,6 +52,7 @@ fn paragraph_from_block(block: &str) -> Fragment {
     Fragment {
         node: PlainNode::Paragraph(PlainParagraphNode::default()),
         modifiers: vec![],
+        style: None,
         children: inline,
     }
 }

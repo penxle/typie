@@ -59,6 +59,7 @@ fn coerce_slice_for_position(tr: &Transaction, position: Position, slice: Slice)
                 fragment: Fragment {
                     node: fragment.node,
                     modifiers: fragment.modifiers,
+                    style: fragment.style,
                     children: coerced,
                 },
                 open_start,
@@ -70,6 +71,7 @@ fn coerce_slice_for_position(tr: &Transaction, position: Position, slice: Slice)
                 Fragment {
                     node: fragment.node,
                     modifiers: fragment.modifiers,
+                    style: fragment.style,
                     children: fragment.children,
                 },
                 container_type,
@@ -77,6 +79,7 @@ fn coerce_slice_for_position(tr: &Transaction, position: Position, slice: Slice)
             let wrapped = Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: coerced,
             };
             Slice {
@@ -176,6 +179,52 @@ fn position_in_textblock(tr: &Transaction, position: Position) -> bool {
         .is_some_and(|resolved| resolved.is_inline_position())
 }
 
+fn enclosing_textblock_id(tr: &Transaction, position: Position) -> Option<NodeId> {
+    let doc = tr.doc();
+    let node = doc.node(position.node_id)?;
+    if matches!(node.node(), Node::Text(_)) {
+        return node.parent().map(|p| p.id());
+    }
+    if node.spec().is_textblock() {
+        return Some(node.id());
+    }
+    None
+}
+
+fn paragraph_is_empty(tr: &Transaction, para_id: NodeId) -> bool {
+    let doc = tr.doc();
+    let Some(node) = doc.node(para_id) else {
+        return false;
+    };
+    if !node.spec().is_textblock() {
+        return false;
+    }
+    node.children().all(|c| match c.node() {
+        Node::Text(t) => t.text.is_empty(),
+        _ => false,
+    })
+}
+
+fn source_paragraph_wrapper_style(slice: &Slice) -> Option<String> {
+    match &slice.fragment.node {
+        PlainNode::Paragraph(_) => slice.fragment.style.clone(),
+        PlainNode::Root(_) => {
+            let paras: Vec<&Fragment> = slice
+                .fragment
+                .children
+                .iter()
+                .filter(|c| matches!(c.node, PlainNode::Paragraph(_)))
+                .collect();
+            if paras.len() == 1 {
+                paras[0].style.clone()
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 fn collect_inline(f: &Fragment) -> Vec<&Fragment> {
     fn walk<'a>(f: &'a Fragment, out: &mut Vec<&'a Fragment>) {
         match &f.node {
@@ -205,11 +254,19 @@ fn insert_inline_at_position(
     position: Position,
     slice: &Slice,
 ) -> Result<Option<Selection>, CommandError> {
+    let dest_para = enclosing_textblock_id(tr, position);
+    let dest_was_empty = dest_para.is_some_and(|id| paragraph_is_empty(tr, id));
+
     tr.set_selection(Some(Selection::collapsed(position)))?;
     let start = tr.selection().map(|s| s.head).unwrap_or(position);
     let inserted = insert_inline_at_caret(tr, slice)?;
     if !inserted {
         return Ok(None);
+    }
+    if dest_was_empty
+        && let (Some(para_id), Some(style)) = (dest_para, source_paragraph_wrapper_style(slice))
+    {
+        tr.set_node_style(para_id, Some(style))?;
     }
     let Some(end) = tr.selection().map(|s| s.head) else {
         return Ok(None);
@@ -627,7 +684,8 @@ fn insert_inline_at_block_boundary(
     let para_subtree = Subtree::leaf(
         new_para_id,
         PlainNode::Paragraph(PlainParagraphNode::default()),
-    );
+    )
+    .with_style(source_paragraph_wrapper_style(slice));
     tr.insert_subtree(position.node_id, position.offset, para_subtree)?;
 
     position_caret_at_textblock_start(tr, new_para_id)?;
@@ -752,9 +810,11 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
+                    style: None,
                     children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                         text: text.into(),
                     }))],
@@ -769,6 +829,7 @@ mod tests {
         Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
+            style: None,
             children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                 text: text.into(),
             }))],
@@ -797,6 +858,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                style: None,
                 children: vec![paragraph_fragment("a"), paragraph_fragment("b")],
             },
             open_start: 2,

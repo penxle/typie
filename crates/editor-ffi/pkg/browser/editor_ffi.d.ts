@@ -295,6 +295,7 @@ export interface FontWeightValue {
 export interface Fragment {
     node: PlainNode;
     modifiers?: Modifier[];
+    style?: string;
     children?: Fragment[];
 }
 
