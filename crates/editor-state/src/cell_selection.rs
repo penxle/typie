@@ -254,21 +254,6 @@ pub fn enclosing_table(doc: &Doc, cell_id: NodeId) -> Option<NodeId> {
         .map(|n| n.id())
 }
 
-pub fn table_parent_boundary(doc: &Doc, cell_id: NodeId, head_is_below: bool) -> Option<Position> {
-    let cell = doc.node(cell_id)?;
-    let table = cell
-        .ancestors()
-        .find(|n| matches!(n.node(), Node::Table(_)))?;
-    let parent = table.parent()?;
-    let table_index = table.index()?;
-    let offset = if head_is_below {
-        table_index
-    } else {
-        table_index + 1
-    };
-    Some(Position::new(parent.id(), offset))
-}
-
 pub fn table_cell_ids(doc: &Doc, cell_id: NodeId) -> Vec<NodeId> {
     let Some(node) = doc.node(cell_id) else {
         return Vec::new();

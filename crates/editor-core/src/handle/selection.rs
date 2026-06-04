@@ -4,7 +4,7 @@ use editor_state::{
     PendingModifiers, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
     cell_rect_selection, enclosing_table, enclosing_table_cell, farther_endpoint,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
-    resolve_word_selection_expansion, table_cell_ids, table_parent_boundary,
+    resolve_word_selection_expansion, table_cell_ids,
 };
 use editor_transaction::HistoryMeta;
 
@@ -179,7 +179,6 @@ fn resolve_extend_to_selection(
             let head_inside_table = editor
                 .view
                 .node_box_contains(head_page, head_x, head_y, table_id);
-
             if head_inside_table {
                 let cells = table_cell_ids(doc, anchor_cell);
                 if let Some(head_cell) = editor
@@ -198,19 +197,8 @@ fn resolve_extend_to_selection(
                         return Some(selection);
                     }
                 }
-            } else {
-                let head_hit = editor.view.hit_test_extending(head_page, head_x, head_y)?;
-                let head_is_below = editor
-                    .view
-                    .is_below_node_box(head_page, head_x, head_y, table_id);
-                if let Some(boundary) = table_parent_boundary(doc, anchor_cell, head_is_below) {
-                    let head_pos = farther_endpoint(doc, anchor, head_hit.anchor, head_hit.head);
-                    let selection = Selection::new(boundary, head_pos);
-                    if !selection.is_collapsed() {
-                        return Some(selection);
-                    }
-                }
             }
+            // head outside table: fall through; normalize promotes anchor to table boundary
         }
     }
 

@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
-use editor_model::{Doc, Node, NodeRef, Schema};
+use editor_model::{Doc, Node, NodeId, NodeRef, Schema};
 
 use crate::affinity::Affinity;
 use crate::gap_cursor::between_monolithic_at;
@@ -199,6 +200,62 @@ fn unit_or_collapsed(doc: &Doc, pos: Position) -> Selection {
     Selection::collapsed(pos)
 }
 
+fn is_isolating_container(node: &NodeRef<'_>) -> bool {
+    let spec = Schema::node_spec(node.as_type());
+    spec.isolating && spec.monolithic
+}
+
+fn outermost_crossing_unit(doc: &Doc, inside: Position, outside: Position) -> Option<NodeId> {
+    let inside_node = doc.node(inside.node_id)?;
+    let outside_ancestors: HashSet<NodeId> = doc
+        .node(outside.node_id)?
+        .ancestors()
+        .map(|n| n.id())
+        .chain([outside.node_id])
+        .collect();
+
+    let mut result = None;
+    for ancestor in inside_node.ancestors() {
+        if outside_ancestors.contains(&ancestor.id()) {
+            break;
+        }
+        if is_isolating_container(&ancestor) {
+            result = Some(ancestor.id());
+        }
+    }
+    result
+}
+
+fn promote_cross_isolating(doc: &Doc, a: Position, h: Position) -> Option<Selection> {
+    if let Some(unit_id) = outermost_crossing_unit(doc, a, h) {
+        let unit = doc.node(unit_id)?;
+        let parent = unit.parent()?;
+        let unit_idx = unit.index()?;
+        let a_res = a.resolve(doc)?;
+        let h_res = h.resolve(doc)?;
+        let offset = if h_res > a_res {
+            unit_idx
+        } else {
+            unit_idx + 1
+        };
+        return Some(Selection::new(Position::new(parent.id(), offset), h));
+    }
+    if let Some(unit_id) = outermost_crossing_unit(doc, h, a) {
+        let unit = doc.node(unit_id)?;
+        let parent = unit.parent()?;
+        let unit_idx = unit.index()?;
+        let a_res = a.resolve(doc)?;
+        let h_res = h.resolve(doc)?;
+        let offset = if h_res > a_res {
+            unit_idx + 1
+        } else {
+            unit_idx
+        };
+        return Some(Selection::new(a, Position::new(parent.id(), offset)));
+    }
+    None
+}
+
 pub(crate) fn enclosing_unit_at_subtree_overlap(
     doc: &Doc,
     a_in: Position,
@@ -272,6 +329,10 @@ impl<'a> ResolvedSelection<'a> {
                 return sel;
             }
             return unit_or_collapsed(doc, normalize_position(doc, h_in));
+        }
+
+        if let Some(promoted) = promote_cross_isolating(doc, a_in, h_in) {
+            return promoted.normalize(doc).unwrap_or(promoted);
         }
 
         Selection { anchor: a, head: h }
@@ -1809,6 +1870,123 @@ mod tests {
                 "subtree_violation fallback must not produce a gap cursor at affinity {aff:?}, got {s:?}"
             );
         }
+    }
+
+    #[test]
+    fn promote_anchor_inside_fold_head_outside() {
+        let (d, tc, ta) = doc! {
+            root {
+                fold {
+                    fold_title { text("t") }
+                    fold_content { paragraph { tc: text("content") } }
+                }
+                paragraph { ta: text("after") }
+            }
+        };
+        let root_id = NodeId::ROOT;
+        let raw = Selection::new(Position::new(tc, 4), Position::new(ta, 2));
+        let out = raw.normalize(&d).unwrap();
+        assert_eq!(
+            out.anchor,
+            Position {
+                node_id: root_id,
+                offset: 0,
+                affinity: Affinity::Downstream
+            },
+            "anchor must be promoted to fold's front boundary"
+        );
+        assert_eq!(out.head.node_id, ta);
+    }
+
+    #[test]
+    fn promote_head_inside_fold_anchor_outside() {
+        let (d, ta, tc) = doc! {
+            root {
+                paragraph { ta: text("before") }
+                fold {
+                    fold_title { text("t") }
+                    fold_content { paragraph { tc: text("content") } }
+                }
+            }
+        };
+        let root_id = NodeId::ROOT;
+        let raw = Selection::new(Position::new(ta, 2), Position::new(tc, 3));
+        let out = raw.normalize(&d).unwrap();
+        assert_eq!(out.anchor.node_id, ta);
+        assert_eq!(
+            out.head,
+            Position {
+                node_id: root_id,
+                offset: 2,
+                affinity: Affinity::Upstream
+            },
+            "head must be promoted to fold's back boundary"
+        );
+    }
+
+    #[test]
+    fn promote_skips_when_both_inside_same_fold() {
+        let (d, ta, tb) = doc! {
+            root {
+                fold {
+                    fold_title { ta: text("title") }
+                    fold_content { paragraph { tb: text("body") } }
+                }
+            }
+        };
+        let raw = Selection::new(Position::new(ta, 1), Position::new(tb, 2));
+        let out = raw.normalize(&d).unwrap();
+        assert!(
+            !out.is_collapsed(),
+            "selection inside fold must not collapse"
+        );
+        assert_eq!(out.anchor.node_id, ta);
+        assert_eq!(out.head.node_id, tb);
+    }
+
+    #[test]
+    fn promote_anchor_inside_table_head_outside() {
+        let (d, tc, ta) = doc! {
+            root {
+                table {
+                    table_row { table_cell { paragraph { tc: text("cell") } } }
+                }
+                paragraph { ta: text("after") }
+            }
+        };
+        let root_id = NodeId::ROOT;
+        let raw = Selection::new(Position::new(tc, 2), Position::new(ta, 1));
+        let out = raw.normalize(&d).unwrap();
+        assert_eq!(
+            out.anchor,
+            Position {
+                node_id: root_id,
+                offset: 0,
+                affinity: Affinity::Downstream
+            },
+            "anchor must be promoted to table's front boundary"
+        );
+        assert_eq!(out.head.node_id, ta);
+    }
+
+    #[test]
+    fn promote_cross_isolating_idempotent() {
+        let (d, tc, ta) = doc! {
+            root {
+                fold {
+                    fold_title { text("t") }
+                    fold_content { paragraph { tc: text("content") } }
+                }
+                paragraph { ta: text("after") }
+            }
+        };
+        let raw = Selection::new(Position::new(tc, 4), Position::new(ta, 2));
+        let once = raw.normalize(&d).unwrap();
+        let twice = once.normalize(&d).unwrap();
+        assert_eq!(
+            once, twice,
+            "promote_cross_isolating normalize must be idempotent"
+        );
     }
 
     #[test]
