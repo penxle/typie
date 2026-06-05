@@ -166,14 +166,20 @@ export class EditorZoomController {
       return;
     }
 
+    const zoomDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    const deltaMagnitude = Math.abs(zoomDelta);
+
     const hasZoomModifier = event.metaKey || event.ctrlKey;
+
+    if (hasZoomModifier && this.#wheelSessionMode === 'scroll' && deltaMagnitude >= EditorZoomController.WHEEL_MODE_SWITCH_MIN_DELTA_PX) {
+      this.#clearWheelSessionModeState();
+    }
+
     const shouldPreventBrowserZoom = hasZoomModifier && this.#wheelSessionMode !== 'scroll';
     if (shouldPreventBrowserZoom && event.cancelable) {
       event.preventDefault();
     }
 
-    const zoomDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-    const deltaMagnitude = Math.abs(zoomDelta);
     if (deltaMagnitude === 0) {
       return;
     }
