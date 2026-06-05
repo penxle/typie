@@ -10,6 +10,7 @@ pub(crate) mod set_composition;
 pub(crate) mod set_node;
 pub(crate) mod set_node_style;
 pub(crate) mod set_pending_modifiers;
+pub(crate) mod set_pending_style;
 pub(crate) mod set_selection;
 pub(crate) mod set_style;
 pub(crate) mod split_node;

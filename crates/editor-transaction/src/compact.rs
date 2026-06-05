@@ -47,6 +47,9 @@ pub fn compact(node: &NodeRef) -> Vec<Step> {
         if !modifiers_set_eq(&curr_mods, &prev_mods) {
             continue;
         }
+        if curr.entry().style.get() != prev.entry().style.get() {
+            continue;
+        }
 
         steps.push(Step::MergeNode {
             node_id: curr.id(),
@@ -449,5 +452,59 @@ mod tests {
         assert_eq!(restored.text(t3).text.to_string(), "B");
         assert_eq!(restored.text(t4).text.to_string(), "C");
         assert_eq!(restored.node(p1).children().count(), 4);
+    }
+
+    #[test]
+    fn no_merge_when_style_refs_differ() {
+        use editor_model::PlainStyleEntry;
+        let (initial, _p1, t1, _t2) = state! {
+            doc { root { p1: paragraph { t1: text("A") t2: text("B") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "s1".into(),
+            Some(PlainStyleEntry {
+                name: "s".into(),
+                modifiers: Default::default(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(t1, Some("s1".into())).unwrap();
+        let (next, ..) = tr.commit();
+
+        let parent_id = next.doc.node(t1).unwrap().parent().unwrap().id();
+        let p = next.doc.node(parent_id).unwrap();
+        let steps = compact(&p);
+        assert!(
+            steps.is_empty(),
+            "runs with different style refs must not merge"
+        );
+    }
+
+    #[test]
+    fn merge_when_style_refs_equal() {
+        use editor_model::PlainStyleEntry;
+        let (initial, _p1, t1, t2) = state! {
+            doc { root { p1: paragraph { t1: text("A") t2: text("B") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "s1".into(),
+            Some(PlainStyleEntry {
+                name: "s".into(),
+                modifiers: Default::default(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(t1, Some("s1".into())).unwrap();
+        tr.set_node_style(t2, Some("s1".into())).unwrap();
+        let (next, ..) = tr.commit();
+
+        let parent_id = next.doc.node(t1).unwrap().parent().unwrap().id();
+        let p = next.doc.node(parent_id).unwrap();
+        let steps = compact(&p);
+        assert_eq!(steps.len(), 1, "same style refs must merge");
     }
 }

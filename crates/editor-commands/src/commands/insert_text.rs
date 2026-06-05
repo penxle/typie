@@ -342,4 +342,92 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn retype_into_empty_paragraph_restores_marker_style() {
+        use editor_model::PlainStyleEntry;
+        use editor_resource::Resource;
+
+        use crate::commands::delete_text_backward;
+        let (state, p1, t1) = state! {
+            doc { root { p1: paragraph { t1: text("Hi") } } }
+            selection: (t1, 2)
+        };
+        let mut setup = editor_transaction::Transaction::new(&state);
+        setup
+            .set_style(
+                "s1".into(),
+                Some(PlainStyleEntry {
+                    name: "s".into(),
+                    modifiers: Default::default(),
+                }),
+            )
+            .unwrap();
+        setup.set_node_style(t1, Some("s1".into())).unwrap();
+        let (state, ..) = setup.commit();
+
+        // delete all text → marker lift puts "s1" on the empty paragraph
+        let (e1, ..) = transact!(state, |tr| delete_text_backward(
+            &mut tr,
+            &Resource::new_test()
+        ));
+        let (emptied, ..) = transact!(e1, |tr| delete_text_backward(
+            &mut tr,
+            &Resource::new_test()
+        ));
+        assert_eq!(
+            emptied.doc.node(p1).unwrap().entry().style.get().as_deref(),
+            Some("s1"),
+            "marker present while empty"
+        );
+
+        let (actual, ..) = transact!(emptied, |tr| insert_text(&mut tr, "X"));
+        let para = actual.doc.node(p1).unwrap();
+        assert!(
+            para.children()
+                .any(|c| c.entry().style.get().as_deref() == Some("s1")),
+            "retyped run gets marker style"
+        );
+        assert_eq!(
+            para.entry().style.get().as_deref(),
+            None,
+            "marker cleared from paragraph"
+        );
+    }
+
+    #[test]
+    fn insert_with_pending_style_stamps_style_on_new_run() {
+        use editor_model::PlainStyleEntry;
+        use editor_state::PendingStyle;
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 5)
+        };
+        let mut setup = editor_transaction::Transaction::new(&initial);
+        setup
+            .set_style(
+                "s1".into(),
+                Some(PlainStyleEntry {
+                    name: "s".into(),
+                    modifiers: Default::default(),
+                }),
+            )
+            .unwrap();
+        setup
+            .set_pending_style(Some(PendingStyle::Set {
+                style_id: "s1".into(),
+            }))
+            .unwrap();
+        let (with_pending, ..) = setup.commit();
+        let (actual, ..) = transact!(with_pending, |tr| insert_text(&mut tr, "X"));
+        let para = actual.doc.root().unwrap().children().next().unwrap();
+        let styled = para
+            .children()
+            .any(|c| c.entry().style.get().as_deref() == Some("s1"));
+        assert!(styled, "inserted text run must carry pending style");
+        assert!(
+            actual.pending_style.is_none(),
+            "pending style must be consumed"
+        );
+    }
 }

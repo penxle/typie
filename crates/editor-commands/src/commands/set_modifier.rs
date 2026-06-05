@@ -1,11 +1,11 @@
-use editor_model::Modifier;
+use editor_model::{Modifier, ModifierType, NodeRef, Schema};
 use editor_state::{PendingModifier, PendingModifiers, Position};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
     apply_modifier_to_node, collect_applicable_targets_in_range, collect_text_nodes_in_range,
     compact_and_restore_selection, filter_applicable_node_ids, is_text_applicable, is_unit_variant,
-    resolve_applicable_target_collapsed, resolve_base_modifiers, resolve_inherited_modifiers,
+    resolve_applicable_target_collapsed,
 };
 use crate::{CommandError, CommandResult};
 
@@ -43,8 +43,14 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    let inherited = resolve_inherited_modifiers(&node);
-    let inherited_value = inherited.iter().find(|m| m.as_type() == modifier_type);
+    // Value already provided to this node without an explicit override of its own
+    // (the node's applied style ref / type-implicit, else style-aware ancestor
+    // inheritance). Style-aware so a value a run's style already supplies is
+    // recognized as "already applied" and not re-pended as an explicit Set.
+    let provided_value = provided_without_explicit_value(&node, modifier_type);
+    let has_explicit_override = node
+        .explicit_modifiers()
+        .any(|m| m.as_type() == modifier_type);
 
     let mut pending: PendingModifiers = tr
         .pending_modifiers()
@@ -53,11 +59,10 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
         .cloned()
         .collect();
 
-    if inherited_value == Some(modifier) {
-        let base_has_override = resolve_base_modifiers(&node, pos.offset)
-            .iter()
-            .any(|m| m.as_type() == modifier_type);
-        if base_has_override {
+    if provided_value.as_ref() == Some(modifier) {
+        // Desired value is already supplied by style/inheritance. Only drop a
+        // differing explicit override so the node falls back to it.
+        if has_explicit_override {
             pending.push(PendingModifier::Unset { ty: modifier_type });
         }
     } else {
@@ -68,6 +73,36 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
 
     tr.set_pending_modifiers(pending)?;
     Ok(true)
+}
+
+/// The modifier value in effect at `node` for `ty`, ignoring `node`'s own explicit
+/// override: the node's applied style ref or type-implicit value (style modifiers
+/// are only expanded on inline run nodes by `modifiers_with_style`), else the
+/// nearest style-aware inheritable ancestor value. Used solely by the collapsed
+/// pending decision; it must NOT feed insertion carry-over, which stays explicit-only.
+fn provided_without_explicit_value(node: &NodeRef, ty: ModifierType) -> Option<Modifier> {
+    let has_explicit = node.explicit_modifiers().any(|m| m.as_type() == ty);
+    let mut local = node.modifiers_with_style().filter(|m| m.as_type() == ty);
+    // `modifiers_with_style` yields explicit, then style, then implicit. Skip the
+    // explicit entry so only the style/implicit contribution is considered here.
+    let local_value = if has_explicit {
+        local.nth(1)
+    } else {
+        local.next()
+    };
+    if let Some(m) = local_value {
+        return Some(m.clone());
+    }
+
+    if !Schema::modifier_spec(ty).inheritable {
+        return None;
+    }
+    for ancestor in node.ancestors().skip(1) {
+        if let Some(m) = ancestor.modifiers_with_style().find(|m| m.as_type() == ty) {
+            return Some(m.clone());
+        }
+    }
+    None
 }
 
 fn set_modifier_collapsed_block(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
@@ -448,6 +483,44 @@ mod tests {
             selection: (t1, 0) -> (t1, 5)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_set_matching_run_style_value_is_noop_or_unset() {
+        use editor_model::{Modifier, PlainStyleEntry};
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 2)
+        };
+        let mut setup = editor_transaction::Transaction::new(&initial);
+        setup
+            .set_style(
+                "s1".into(),
+                Some(PlainStyleEntry {
+                    name: "s".into(),
+                    modifiers: vec![Modifier::FontSize { value: 2400 }]
+                        .into_iter()
+                        .collect(),
+                }),
+            )
+            .unwrap();
+        setup.set_node_style(t1, Some("s1".into())).unwrap();
+        let (with_style, ..) = setup.commit();
+
+        // run already has font_size 2400 via its style → setting the same value must NOT add a pending Set
+        let (actual, ..) = transact!(with_style, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        assert!(
+            !actual.pending_modifiers.iter().any(|pm| matches!(
+                pm,
+                editor_state::PendingModifier::Set {
+                    modifier: Modifier::FontSize { value: 2400 }
+                }
+            )),
+            "matching style-provided value must not be added as pending Set"
+        );
     }
 
     #[test]

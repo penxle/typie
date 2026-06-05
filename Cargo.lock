@@ -648,6 +648,7 @@ dependencies = [
  "csscolorparser",
  "cssparser",
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-resource",

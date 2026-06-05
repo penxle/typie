@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::Schema;
 use crate::doc::Doc;
 use crate::entry::NodeEntry;
 use crate::id::NodeId;
@@ -59,11 +60,24 @@ impl<'a> NodeRef<'a> {
     // → implicit precedence — so a named style can override node-type defaults
     // (e.g. FoldTitle's implicit FontSize) while still leaving implicits
     // visible when no style/explicit overrides them.
+    //
+    // Style modifiers are expanded only on inline run nodes (Text/Tab), and only
+    // those whose target applies to this node type. On a Paragraph (which may hold
+    // a transient marker style ref) no style modifiers are expanded — block modifiers
+    // must not leak into paragraph layout; the empty-paragraph caret's inline preview
+    // is handled separately in editor-state.
     pub fn modifiers_with_style(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
+        let self_type = self.as_type();
         let style_iter: Box<dyn Iterator<Item = &'a Modifier> + 'a> =
             match self.entry().style.get().as_ref() {
                 Some(id) => match self.doc.style_entry(id) {
-                    Some(s) => Box::new(s.modifiers.iter()),
+                    Some(s) => Box::new(s.modifiers.iter().filter(move |m| {
+                        matches!(self_type, NodeType::Text | NodeType::Tab)
+                            && Schema::modifier_spec(m.as_type())
+                                .target
+                                .rightmost_node_types()
+                                .contains(&self_type)
+                    })),
                     None => Box::new(std::iter::empty()),
                 },
                 None => Box::new(std::iter::empty()),

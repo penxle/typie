@@ -1,6 +1,8 @@
 use editor_crdt::Op;
 use editor_model::{DocOp, Modifier, ModifierType, NodeId, PlainNode, PlainStyleEntry, Subtree};
-use editor_state::{BatchedState, Composition, PendingModifiers, StableSelection, State};
+use editor_state::{
+    BatchedState, Composition, PendingModifiers, PendingStyle, StableSelection, State,
+};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
 use strum::{EnumDiscriminants, IntoStaticStr};
@@ -97,6 +99,10 @@ pub enum Step {
         old: PendingModifiers,
         new: PendingModifiers,
     },
+    SetPendingStyle {
+        old: Option<PendingStyle>,
+        new: Option<PendingStyle>,
+    },
     SetComposition {
         old: Option<Composition>,
         new: Option<Composition>,
@@ -117,6 +123,7 @@ impl Step {
             self,
             Step::SetSelection { .. }
                 | Step::SetPendingModifiers { .. }
+                | Step::SetPendingStyle { .. }
                 | Step::SetComposition { .. }
         )
     }
@@ -129,11 +136,16 @@ impl Step {
         matches!(self, Step::SetPendingModifiers { .. })
     }
 
+    pub fn is_pending_style_step(&self) -> bool {
+        matches!(self, Step::SetPendingStyle { .. })
+    }
+
     pub fn is_commitable(&self) -> bool {
         !matches!(
             self,
             Step::SetSelection { .. }
                 | Step::SetPendingModifiers { .. }
+                | Step::SetPendingStyle { .. }
                 | Step::SetComposition { .. }
         )
     }
@@ -165,6 +177,7 @@ impl Step {
 
             Step::SetSelection { .. }
             | Step::SetPendingModifiers { .. }
+            | Step::SetPendingStyle { .. }
             | Step::SetComposition { .. } => StepScope::Local,
         }
     }
@@ -253,6 +266,9 @@ impl Step {
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::apply_to(batched, validations, old, new)
             }
+            Step::SetPendingStyle { old, new } => {
+                steps::set_pending_style::apply_to(batched, validations, old, new)
+            }
             Step::SetComposition { old, new } => {
                 steps::set_composition::apply_to(batched, validations, *old, *new)
             }
@@ -327,6 +343,9 @@ impl Step {
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::inverse(old.clone(), new.clone())
             }
+            Step::SetPendingStyle { old, new } => {
+                steps::set_pending_style::inverse(old.clone(), new.clone())
+            }
             Step::SetComposition { old, new } => steps::set_composition::inverse(*old, *new),
         }
     }
@@ -397,6 +416,15 @@ mod tests {
     }
 
     #[test]
+    fn is_commitable_false_for_set_pending_style() {
+        let step = Step::SetPendingStyle {
+            old: None,
+            new: None,
+        };
+        assert!(!step.is_commitable());
+    }
+
+    #[test]
     fn is_commitable_for_all_variants_matches_spec() {
         let node_id = NodeId::new();
         let parent_id = NodeId::new();
@@ -407,7 +435,7 @@ mod tests {
             PlainNode::Paragraph(PlainParagraphNode::default()),
         );
 
-        // non-commitable (3)
+        // non-commitable (4)
         let non_commitable: Vec<Step> = vec![
             Step::SetSelection {
                 old: sel.clone(),
@@ -416,6 +444,10 @@ mod tests {
             Step::SetPendingModifiers {
                 old: PendingModifiers::new(),
                 new: PendingModifiers::new(),
+            },
+            Step::SetPendingStyle {
+                old: None,
+                new: None,
             },
             Step::SetComposition {
                 old: None,
@@ -477,7 +509,7 @@ mod tests {
             },
         ];
 
-        assert_eq!(non_commitable.len() + commitable.len(), 13);
+        assert_eq!(non_commitable.len() + commitable.len(), 14);
 
         for step in &non_commitable {
             assert!(!step.is_commitable(), "{step:?}");

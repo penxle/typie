@@ -37,11 +37,6 @@ impl Fragment {
         self
     }
 
-    pub fn with_style(mut self, style: Option<String>) -> Self {
-        self.style = style;
-        self
-    }
-
     pub fn into_subtree(self) -> Subtree {
         Subtree {
             id: NodeId::new(),

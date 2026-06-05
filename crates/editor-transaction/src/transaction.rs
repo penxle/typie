@@ -67,6 +67,10 @@ impl Transaction {
         &self.state.pending_modifiers
     }
 
+    pub fn pending_style(&self) -> &Option<editor_state::PendingStyle> {
+        &self.state.pending_style
+    }
+
     pub fn composition(&self) -> Option<&Composition> {
         self.state.composition.as_ref()
     }
@@ -372,6 +376,17 @@ impl Transaction {
         })
     }
 
+    pub fn set_pending_style(
+        &mut self,
+        pending: Option<editor_state::PendingStyle>,
+    ) -> Result<(), StepError> {
+        if self.state.pending_style == pending {
+            return Ok(());
+        }
+        let old = self.state.pending_style.clone();
+        self.apply_step(Step::SetPendingStyle { old, new: pending })
+    }
+
     pub fn set_composition(&mut self, composition: Option<Composition>) -> Result<(), StepError> {
         let old = self.state.composition;
         if old == composition {
@@ -421,11 +436,13 @@ impl Transaction {
         let mut last_selection: Option<usize> = None;
         let mut last_composition: Option<usize> = None;
         let mut last_pending: Option<usize> = None;
+        let mut last_pending_style: Option<usize> = None;
         for (i, step) in steps.iter().enumerate() {
             match step {
                 Step::SetSelection { .. } => last_selection = Some(i),
                 Step::SetComposition { .. } => last_composition = Some(i),
                 Step::SetPendingModifiers { .. } => last_pending = Some(i),
+                Step::SetPendingStyle { .. } => last_pending_style = Some(i),
                 _ => {}
             }
         }
@@ -438,9 +455,14 @@ impl Transaction {
                 }
                 step.apply_to(batched, &mut validations)?;
             }
-            for i in [last_selection, last_composition, last_pending]
-                .into_iter()
-                .flatten()
+            for i in [
+                last_selection,
+                last_composition,
+                last_pending,
+                last_pending_style,
+            ]
+            .into_iter()
+            .flatten()
             {
                 steps[i].apply_to(batched, &mut validations)?;
             }

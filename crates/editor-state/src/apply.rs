@@ -31,6 +31,10 @@ impl<'a> BatchedState<'a> {
         self.inner.pending_modifiers = pending;
     }
 
+    pub fn set_pending_style(&mut self, pending: Option<crate::PendingStyle>) {
+        self.inner.pending_style = pending;
+    }
+
     pub fn set_composition(&mut self, composition: Option<Composition>) {
         self.inner.composition = composition;
     }
@@ -750,6 +754,30 @@ mod tests {
         assert!(
             !next.pending_modifiers.is_empty(),
             "set_selection(None) must not touch pending_modifiers"
+        );
+    }
+
+    #[test]
+    fn batched_set_selection_none_does_not_touch_pending_style() {
+        use crate::PendingStyle;
+
+        let state = rooted_state();
+        let next: State = state
+            .batch(|b| {
+                b.set_pending_style(Some(PendingStyle::Set {
+                    style_id: "s1".into(),
+                }));
+                b.set_selection(None);
+                Ok::<_, StateError>(())
+            })
+            .unwrap();
+        assert!(next.selection.is_none());
+        assert_eq!(
+            next.pending_style,
+            Some(PendingStyle::Set {
+                style_id: "s1".into()
+            }),
+            "set_selection(None) must not touch pending_style"
         );
     }
 

@@ -32,10 +32,10 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
             let at_end = offset == node_len && node_len > 0;
 
             if !at_start && !at_end {
-                return node.modifiers().cloned().collect::<Vec<_>>();
+                return node.modifiers_with_style().cloned().collect::<Vec<_>>();
             }
 
-            node.modifiers()
+            node.modifiers_with_style()
                 .filter(|m| {
                     let expand = &m.spec().expand;
                     match expand {
@@ -50,18 +50,31 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
         }
         Node::Paragraph(_) => {
             let mut seen: Vec<ModifierType> = Vec::new();
-            node.modifiers_with_style()
-                .filter(|m| {
+            let mut out: Vec<Modifier> = Vec::new();
+            for m in node.modifiers_with_style() {
+                let t = m.as_type();
+                if !seen.contains(&t) {
+                    seen.push(t);
+                    out.push(m.clone());
+                }
+            }
+            if node.first_child().is_none()
+                && let Some(style_id) = node.entry().style.get().as_ref()
+                && let Some(style) = node.doc().style_entry(style_id)
+            {
+                for m in style.modifiers.iter() {
                     let t = m.as_type();
-                    if seen.contains(&t) {
-                        false
-                    } else {
+                    let is_inline = Schema::modifier_spec(t)
+                        .target
+                        .rightmost_node_types()
+                        .contains(&NodeType::Text);
+                    if is_inline && !seen.contains(&t) {
                         seen.push(t);
-                        true
+                        out.push(m.clone());
                     }
-                })
-                .cloned()
-                .collect()
+                }
+            }
+            out
         }
         _ => vec![],
     }
@@ -1163,5 +1176,76 @@ mod tests {
         };
         let s = resolve_modifier_state(&state).unwrap();
         assert_eq!(s.effective_bold, editor_common::Tri::Absent);
+    }
+
+    #[test]
+    fn collapsed_effective_includes_run_style_inline_modifier() {
+        use editor_model::PlainStyleEntry;
+
+        let (initial, t1, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 2)
+        };
+
+        let mut plain = initial.doc.to_plain();
+        plain.styles.insert(
+            "s1".into(),
+            PlainStyleEntry {
+                name: "s".into(),
+                modifiers: std::iter::once(Modifier::Bold).collect(),
+            },
+        );
+        plain.nodes.entry(t1).and_modify(|e| {
+            e.style = Some("s1".into());
+        });
+
+        let (doc, graph) = editor_model::Doc::from_plain(plain);
+        let next = crate::state::State::new(doc, graph, initial.selection);
+
+        let pos = next.selection.as_ref().unwrap().head;
+        let eff = resolve_effective_modifiers_at(&next, &pos);
+        assert!(
+            eff.contains(&Modifier::Bold),
+            "run style's inline modifier must be effective at caret"
+        );
+    }
+
+    #[test]
+    fn empty_paragraph_marker_style_surfaces_inline_modifiers() {
+        use editor_model::PlainStyleEntry;
+
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+
+        let mut plain = initial.doc.to_plain();
+        plain.styles.insert(
+            "s1".into(),
+            PlainStyleEntry {
+                name: "s1".into(),
+                modifiers: [Modifier::Bold, Modifier::LineHeight { value: 200 }]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+        plain.nodes.entry(p1).and_modify(|e| {
+            e.style = Some("s1".into());
+        });
+
+        let (doc, graph) = editor_model::Doc::from_plain(plain);
+        let next = crate::state::State::new(doc, graph, initial.selection);
+
+        let pos = next.selection.as_ref().unwrap().head;
+        let eff = resolve_effective_modifiers_at(&next, &pos);
+        assert!(
+            eff.contains(&Modifier::Bold),
+            "marker style inline modifier must surface at empty-paragraph caret"
+        );
+        assert!(
+            !eff.iter()
+                .any(|m| matches!(m, Modifier::LineHeight { value: 200 })),
+            "block modifier from style must not surface"
+        );
     }
 }

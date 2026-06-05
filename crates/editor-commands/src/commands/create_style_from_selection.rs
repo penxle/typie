@@ -2,8 +2,7 @@ use editor_model::{ModifierType, PlainStyleEntry};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    clear_inline_modifier_types_in_selection, collect_textblocks_in_selection,
-    collect_uniform_text_modifiers_in_selection,
+    clear_inline_modifier_types_in_selection, collect_uniform_text_modifiers_in_selection,
 };
 use crate::{CommandError, CommandResult};
 
@@ -18,8 +17,8 @@ pub fn create_style_from_selection(
         ));
     }
 
-    let textblock_ids = collect_textblocks_in_selection(tr.state());
-    if textblock_ids.is_empty() {
+    let run_ids = crate::helpers::collect_run_nodes_in_selection(tr)?;
+    if run_ids.is_empty() {
         return Ok(false);
     }
 
@@ -34,8 +33,8 @@ pub fn create_style_from_selection(
         }),
     )?;
 
-    for node_id in textblock_ids {
-        tr.set_node_style(node_id, Some(style_id.clone()))?;
+    for node_id in &run_ids {
+        tr.set_node_style(*node_id, Some(style_id.clone()))?;
     }
 
     clear_inline_modifier_types_in_selection(tr, &modifier_types)?;
@@ -73,19 +72,25 @@ mod tests {
     }
 
     #[test]
-    fn sets_style_ref_on_textblocks_in_selection() {
-        let (initial, p1, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") [font_size(800)] } } }
+    fn sets_style_ref_on_selected_runs() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") [font_size(800)] } } }
             selection: (t1, 0) -> (t1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
             &mut tr,
             "s1".into(),
-            "x".into(),
+            "x".into()
         ));
+        let para = actual.doc.root().unwrap().children().next().unwrap();
+        assert!(
+            para.children()
+                .any(|c| c.entry().style.get().as_deref() == Some("s1"))
+        );
         assert_eq!(
-            actual.doc.get_entry(p1).unwrap().style.get().as_deref(),
-            Some("s1")
+            para.entry().style.get().as_deref(),
+            None,
+            "paragraph must not carry style"
         );
     }
 

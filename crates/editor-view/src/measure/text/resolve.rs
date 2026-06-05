@@ -187,8 +187,8 @@ mod tests {
     }
 
     #[test]
-    fn resolve_text_style_picks_up_textblock_style_modifiers() {
-        let (initial, p1, ..) = state! {
+    fn resolve_text_style_picks_up_run_style_modifiers() {
+        let (initial, _p1, t1, ..) = state! {
             doc { root { p1: paragraph { t1: text("hello") } } }
             selection: (t1, 0)
         };
@@ -207,11 +207,10 @@ mod tests {
             }),
         )
         .unwrap();
-        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        tr.set_node_style(t1, Some("h1".into())).unwrap();
         let (next, ..) = tr.commit();
 
-        let para = next.doc.node(p1).unwrap();
-        let text = para.children().next().unwrap();
+        let text = next.doc.node(t1).unwrap();
         let style = resolve_text_style(&text);
 
         // 18pt * (96/72) = 24px
@@ -221,7 +220,7 @@ mod tests {
 
     #[test]
     fn resolve_text_style_own_overrides_style_modifier() {
-        let (initial, p1, ..) = state! {
+        let (initial, _p1, t1, ..) = state! {
             doc { root { p1: paragraph { t1: text("hello") [font_size(1200)] } } }
             selection: (t1, 0)
         };
@@ -237,14 +236,13 @@ mod tests {
             }),
         )
         .unwrap();
-        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        tr.set_node_style(t1, Some("h1".into())).unwrap();
         let (next, ..) = tr.commit();
 
-        let para = next.doc.node(p1).unwrap();
-        let text = para.children().next().unwrap();
+        let text = next.doc.node(t1).unwrap();
         let style = resolve_text_style(&text);
 
-        // 12pt * (96/72) = 16px (text node's own wins over style)
+        // 12pt * (96/72) = 16px (run's own modifier wins over its style)
         assert!((style.font_size - 16.0).abs() < 0.01);
     }
 

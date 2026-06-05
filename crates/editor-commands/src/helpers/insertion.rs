@@ -34,6 +34,22 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
     let pos = selection.head;
     let doc = tr.doc();
 
+    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
+    let marker_style: Option<String> = host_paragraph_id
+        .and_then(|id| doc.node(id))
+        .filter(|p| !p.children().any(|c| matches!(c.node(), Node::Text(_))))
+        .and_then(|p| p.entry().style.get().clone());
+
+    let pending_style_explicit = tr.pending_style().is_some();
+    let pending_style: Option<String> = match tr.pending_style() {
+        Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
+        Some(editor_state::PendingStyle::Unset) => None,
+        None => doc
+            .node(pos.node_id)
+            .and_then(|n| n.entry().style.get().clone())
+            .or_else(|| marker_style.clone()),
+    };
+
     let node = doc
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
@@ -41,8 +57,6 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
     let mut effective_mods = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
     effective_mods.retain(|m| is_text_applicable(m.as_type()));
     let insert_len = text.char_count();
-
-    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
 
     if let Some(p_id) = host_paragraph_id
         && p_id != pos.node_id
@@ -74,7 +88,12 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
             node_mods.sort_by_key(|m| m.as_type());
             let mut effective_sorted = effective_mods.clone();
             effective_sorted.sort_by_key(|m| m.as_type());
-            if effective_sorted == node_mods {
+            if effective_sorted == node_mods
+                && doc
+                    .node(pos.node_id)
+                    .and_then(|n| n.entry().style.get().clone())
+                    == pending_style
+            {
                 tr.insert_text(pos.node_id, pos.offset, text)?;
                 tr.set_selection(Some(Selection::collapsed(Position {
                     node_id: pos.node_id,
@@ -102,6 +121,10 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
                 }
                 tr.insert_text(new_id, 0, text)?;
 
+                if let Some(style_id) = pending_style.clone() {
+                    tr.set_node_style(new_id, Some(style_id))?;
+                }
+
                 tr.set_selection(Some(Selection::collapsed(Position {
                     node_id: new_id,
                     offset: insert_len,
@@ -117,6 +140,11 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
 
             tr.insert_subtree(pos.node_id, pos.offset, subtree)?;
             tr.insert_text(new_id, 0, text)?;
+
+            if let Some(style_id) = pending_style.clone() {
+                tr.set_node_style(new_id, Some(style_id))?;
+            }
+
             tr.set_selection(Some(Selection::collapsed(Position {
                 node_id: new_id,
                 offset: insert_len,
@@ -129,10 +157,20 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         tr.set_pending_modifiers(PendingModifiers::new())?;
     }
 
+    if pending_style_explicit {
+        tr.set_pending_style(None)?;
+    }
+
     if let Some(p_id) = host_paragraph_id {
         for m in marker_to_clear {
             tr.remove_modifier(p_id, m)?;
         }
+    }
+
+    if let Some(p_id) = host_paragraph_id
+        && marker_style.is_some()
+    {
+        tr.set_node_style(p_id, None)?;
     }
 
     Ok(true)
@@ -257,6 +295,22 @@ pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
     let pos = selection.head;
     let doc = tr.doc();
 
+    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
+    let marker_style: Option<String> = host_paragraph_id
+        .and_then(|id| doc.node(id))
+        .filter(|p| !p.children().any(|c| matches!(c.node(), Node::Text(_))))
+        .and_then(|p| p.entry().style.get().clone());
+
+    let pending_style_explicit = tr.pending_style().is_some();
+    let pending_style: Option<String> = match tr.pending_style() {
+        Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
+        Some(editor_state::PendingStyle::Unset) => None,
+        None => doc
+            .node(pos.node_id)
+            .and_then(|n| n.entry().style.get().clone())
+            .or_else(|| marker_style.clone()),
+    };
+
     let node = doc
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
@@ -265,7 +319,6 @@ pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
     metric_mods.retain(|m| is_tab_metric_modifier(m.as_type()));
 
     let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
-    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
 
     let tab_id = NodeId::new();
     let tab_subtree =
@@ -336,6 +389,20 @@ pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
                 affinity: Affinity::Downstream,
             })))?;
         }
+    }
+
+    if let Some(style_id) = pending_style {
+        tr.set_node_style(tab_id, Some(style_id))?;
+    }
+
+    if pending_style_explicit {
+        tr.set_pending_style(None)?;
+    }
+
+    if let Some(p_id) = host_paragraph_id
+        && marker_style.is_some()
+    {
+        tr.set_node_style(p_id, None)?;
     }
 
     if let Some(p_id) = host_paragraph_id {

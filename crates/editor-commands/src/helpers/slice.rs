@@ -183,12 +183,17 @@ fn insert_blocks_in_textblock_at_position(
 fn insert_inline_fragments(tr: &mut Transaction, fragments: Vec<Fragment>) -> CommandResult {
     let mut any_change = false;
     for f in fragments {
+        // Each clipboard run carries its own style ref. Route it through the
+        // pending-style-ref channel that insert_text/insert_tab already consume
+        // so the inserted run node receives the source run's style (and an
+        // unstyled run forces None rather than inheriting the destination's).
+        set_pending_style_for_run(tr, &f.style)?;
         match f.node {
             PlainNode::Text(t) if !t.text.is_empty() => {
                 if f.modifiers.is_empty() {
                     insert_text_at_caret(tr, &t.text)?;
                 } else {
-                    insert_modifier_text(tr, &t.text, f.modifiers)?;
+                    insert_modifier_text(tr, &t.text, f.modifiers, f.style.clone())?;
                 }
                 any_change = true;
             }
@@ -203,13 +208,32 @@ fn insert_inline_fragments(tr: &mut Transaction, fragments: Vec<Fragment>) -> Co
             _ => {}
         }
     }
+    // Leave no pending style lingering after the paste completes.
+    if tr.pending_style().is_some() {
+        tr.set_pending_style(None)?;
+    }
     Ok(any_change)
+}
+
+fn set_pending_style_for_run(
+    tr: &mut Transaction,
+    style: &Option<String>,
+) -> Result<(), CommandError> {
+    let pending = match style {
+        Some(style_id) => Some(editor_state::PendingStyle::Set {
+            style_id: style_id.clone(),
+        }),
+        None => Some(editor_state::PendingStyle::Unset),
+    };
+    tr.set_pending_style(pending)?;
+    Ok(())
 }
 
 fn insert_modifier_text(
     tr: &mut Transaction,
     text: &str,
     modifiers: Vec<Modifier>,
+    style: Option<String>,
 ) -> CommandResult {
     let pos = tr
         .selection()
@@ -221,6 +245,9 @@ fn insert_modifier_text(
         Subtree::leaf(id, PlainNode::Text(PlainTextNode::default())).with_modifiers(modifiers);
     tr.insert_subtree(parent_id, child_index, subtree)?;
     tr.insert_text(id, 0, text)?;
+    if let Some(style_id) = style {
+        tr.set_node_style(id, Some(style_id))?;
+    }
     let len = text.chars().count();
     tr.set_selection(Some(Selection::collapsed(Position {
         node_id: id,

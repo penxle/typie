@@ -1,12 +1,25 @@
 use editor_model::ModifierType;
+use editor_state::PendingStyle;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::{clear_inline_modifier_types_in_selection, collect_textblocks_in_selection};
+use crate::helpers::{
+    clear_inline_modifier_types_in_selection, collect_run_nodes_in_selection,
+    compact_and_restore_selection,
+};
 
 pub fn apply_style_to_selection(tr: &mut Transaction, style_id: String) -> CommandResult {
-    let textblock_ids = collect_textblocks_in_selection(tr.state());
-    if textblock_ids.is_empty() {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+
+    if selection.is_collapsed() {
+        tr.set_pending_style(Some(PendingStyle::Set { style_id }))?;
+        return Ok(true);
+    }
+
+    let run_ids = collect_run_nodes_in_selection(tr)?;
+    if run_ids.is_empty() {
         return Ok(false);
     }
 
@@ -18,18 +31,22 @@ pub fn apply_style_to_selection(tr: &mut Transaction, style_id: String) -> Comma
     };
 
     let mut changed = false;
-    for node_id in textblock_ids {
-        let Some(entry) = tr.state().doc.get_entry(node_id) else {
-            continue;
-        };
-        if entry.style.get().as_deref() == Some(style_id.as_str()) {
+    for node_id in &run_ids {
+        let cur = tr
+            .state()
+            .doc
+            .get_entry(*node_id)
+            .and_then(|e| e.style.get().clone());
+        if cur.as_deref() == Some(style_id.as_str()) {
             continue;
         }
-        tr.set_node_style(node_id, Some(style_id.clone()))?;
+        tr.set_node_style(*node_id, Some(style_id.clone()))?;
         changed = true;
     }
 
-    if clear_inline_modifier_types_in_selection(tr, &style_modifier_types)? {
+    if style_modifier_types.is_empty() {
+        compact_and_restore_selection(tr, &run_ids)?;
+    } else if clear_inline_modifier_types_in_selection(tr, &style_modifier_types)? {
         changed = true;
     }
 
@@ -46,35 +63,52 @@ mod tests {
     use crate::test_utils::*;
 
     #[test]
-    fn applies_style_to_all_textblocks_in_range() {
-        let (initial, p1, _t1, p2, ..) = state! {
-            doc { root {
-                p1: paragraph { t1: text("Hello") }
-                p2: paragraph { t2: text("World") }
-            } }
-            selection: (t1, 0) -> (t2, 5)
+    fn applies_style_to_selected_runs_only_not_whole_paragraph() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("HelloWorld") } } }
+            selection: (t1, 2) -> (t1, 7)
         };
-        let (actual, ..) = transact!(initial, |tr| apply_style_to_selection(&mut tr, "h1".into()));
-        assert_eq!(
-            actual.doc.get_entry(p1).unwrap().style.get().as_deref(),
-            Some("h1")
-        );
-        assert_eq!(
-            actual.doc.get_entry(p2).unwrap().style.get().as_deref(),
-            Some("h1")
-        );
+        let (with_style, ..) = transact!(initial, |tr| crate::commands::define_style(
+            &mut tr,
+            "h1".into(),
+            "제목".into(),
+            vec![editor_model::Modifier::Bold]
+        ));
+        let (actual, ..) = transact!(with_style, |tr| apply_style_to_selection(
+            &mut tr,
+            "h1".into()
+        ));
+
+        let para = actual.doc.root().unwrap().children().next().unwrap();
+        let runs: Vec<_> = para.children().collect();
+        assert_eq!(runs.len(), 3, "selection boundary splits runs");
+        assert_eq!(runs[0].entry().style.get().as_deref(), None);
+        assert_eq!(runs[1].entry().style.get().as_deref(), Some("h1"));
+        assert_eq!(runs[2].entry().style.get().as_deref(), None);
+        assert_eq!(para.entry().style.get().as_deref(), None);
     }
 
     #[test]
-    fn applies_style_to_collapsed_textblock() {
-        let (initial, p1, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
+    fn collapsed_apply_sets_pending_style() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };
-        let (actual, ..) = transact!(initial, |tr| apply_style_to_selection(&mut tr, "h1".into()));
+        let (with_style, ..) = transact!(initial, |tr| crate::commands::define_style(
+            &mut tr,
+            "h1".into(),
+            "제목".into(),
+            vec![]
+        ));
+        let (actual, ..) = transact!(with_style, |tr| apply_style_to_selection(
+            &mut tr,
+            "h1".into()
+        ));
         assert_eq!(
-            actual.doc.get_entry(p1).unwrap().style.get().as_deref(),
-            Some("h1")
+            actual.pending_style,
+            Some(editor_state::PendingStyle::Set {
+                style_id: "h1".into()
+            })
         );
     }
 
@@ -96,7 +130,10 @@ mod tests {
         ));
 
         let para = actual.doc.root().unwrap().children().next().unwrap();
-        let text = para.children().next().unwrap();
+        let runs: Vec<_> = para.children().collect();
+        assert_eq!(runs.len(), 1, "full-run selection needs no boundary splits");
+        let text = &runs[0];
+        assert_eq!(text.entry().style.get().as_deref(), Some("h1"));
         let has_font_size = text
             .explicit_modifiers()
             .any(|m| matches!(m, Modifier::FontSize { .. }));

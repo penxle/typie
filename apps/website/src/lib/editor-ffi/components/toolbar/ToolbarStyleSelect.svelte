@@ -27,9 +27,7 @@
   const clearStyles = () => {
     const editor = ctx.editor;
     if (!editor || currentStyleId === undefined) return;
-    for (const nodeId of targetBlockIds) {
-      editor.enqueue({ type: 'style', op: { type: 'unapply', node_id: nodeId, style_id: currentStyleId } });
-    }
+    editor.enqueue({ type: 'style', op: { type: 'unset_in_selection' } });
     editor.focus();
   };
 </script>
@@ -63,9 +61,7 @@
   onchange={(styleId, options) => {
     const editor = ctx.editor;
     if (!editor) return;
-    for (const nodeId of targetBlockIds) {
-      editor.enqueue({ type: 'style', op: { type: 'apply', node_id: nodeId, style_id: styleId } });
-    }
+    editor.enqueue({ type: 'style', op: { type: 'apply_to_selection', style_id: styleId } });
     if (options?.shouldFocus) {
       editor.focus();
     }

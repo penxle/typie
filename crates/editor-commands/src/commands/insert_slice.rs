@@ -409,7 +409,11 @@ mod tests {
         assert_state_eq!(&actual, &expected);
     }
 
-    fn paragraph_slice_with_style(text: &str, style_id: &str) -> Slice {
+    // A single-paragraph slice whose inline RUN carries a style ref. In the
+    // text-style model the named style lives on the run, not the paragraph
+    // wrapper, so paste must transport the run's style — not stamp the
+    // destination paragraph.
+    fn run_styled_paragraph_slice(text: &str, style_id: &str) -> Slice {
         Slice {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
@@ -418,10 +422,13 @@ mod tests {
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
-                    style: Some(style_id.into()),
-                    children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
-                        text: text.into(),
-                    }))],
+                    style: None,
+                    children: vec![Fragment {
+                        node: PlainNode::Text(PlainTextNode { text: text.into() }),
+                        modifiers: vec![],
+                        style: Some(style_id.into()),
+                        children: vec![],
+                    }],
                 }],
             },
             open_start: 2,
@@ -429,8 +436,14 @@ mod tests {
         }
     }
 
+    fn run_style_of(node: &editor_model::NodeRef<'_>, idx: usize) -> Option<String> {
+        node.children()
+            .nth(idx)
+            .and_then(|c| c.entry().style.get().clone())
+    }
+
     #[test]
-    fn paste_block_boundary_applies_source_paragraph_style() {
+    fn paste_block_boundary_preserves_run_style_without_paragraph_wrapper() {
         use editor_model::Modifier;
 
         use crate::commands::define_style;
@@ -449,16 +462,19 @@ mod tests {
             vec![Modifier::FontSize { value: 2400 }],
         ));
 
-        let slice = paragraph_slice_with_style("XY", "h1");
+        let slice = run_styled_paragraph_slice("XY", "h1");
         let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
 
         let root = actual.doc.root().unwrap();
         let inserted = root.children().nth(1).unwrap();
-        assert_eq!(inserted.entry().style.get().as_deref(), Some("h1"));
+        // The new paragraph itself acquires no wrapper style...
+        assert_eq!(inserted.entry().style.get().as_deref(), None);
+        // ...but the pasted run keeps the source run's style.
+        assert_eq!(run_style_of(&inserted, 0).as_deref(), Some("h1"));
     }
 
     #[test]
-    fn paste_into_empty_paragraph_inherits_source_style() {
+    fn paste_into_empty_paragraph_keeps_run_style_not_wrapper() {
         use editor_model::Modifier;
 
         use crate::commands::define_style;
@@ -474,20 +490,24 @@ mod tests {
             vec![Modifier::FontSize { value: 2400 }],
         ));
 
-        let slice = paragraph_slice_with_style("XY", "h1");
+        let slice = run_styled_paragraph_slice("XY", "h1");
         let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
 
+        // The destination paragraph gains no wrapper style...
         let entry = actual.doc.get_entry(p_empty).unwrap();
-        assert_eq!(entry.style.get().as_deref(), Some("h1"));
+        assert_eq!(entry.style.get().as_deref(), None);
+        // ...and the pasted run carries the source run's style.
+        let p_node = actual.doc.node(p_empty).unwrap();
+        assert_eq!(run_style_of(&p_node, 0).as_deref(), Some("h1"));
     }
 
     #[test]
-    fn extract_preserves_paragraph_style() {
+    fn extract_preserves_run_style() {
         use editor_model::Modifier;
 
-        use crate::commands::{apply_style, define_style};
+        use crate::commands::define_style;
 
-        let (initial, p1, ..) = state! {
+        let (initial, _p1, t1) = state! {
             doc { root { p1: paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 5)
         };
@@ -497,21 +517,21 @@ mod tests {
             "H1".into(),
             vec![Modifier::FontSize { value: 2400 }]
         ));
-        let (with_style, ..) = transact!(s1, |tr| apply_style(&mut tr, p1, "h1".into()));
+        let (with_style, ..) = transact!(s1, |tr| tr
+            .set_node_style(t1, Some("h1".into()))
+            .map(|_| true)
+            .map_err(crate::CommandError::Step));
 
         let slice = Slice::extract(&with_style).expect("non-collapsed");
-        // Single-text-node selection from a styled paragraph: extract
-        // synthesizes a Paragraph wrapper carrying the enclosing textblock's
-        // style so the slice can transport it to the paste site.
         assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        assert_eq!(slice.fragment.style.as_deref(), Some("h1"));
+        assert_eq!(slice.fragment.children[0].style.as_deref(), Some("h1"));
     }
 
     #[test]
-    fn paste_into_non_empty_paragraph_keeps_destination_style() {
+    fn paste_into_non_empty_paragraph_keeps_destination_style_and_run_style() {
         use editor_model::Modifier;
 
-        use crate::commands::{apply_style, define_style};
+        use crate::commands::define_style;
 
         let (initial, p1, _t1) = state! {
             doc { root { p1: paragraph { t1: text("Hello") } } }
@@ -529,12 +549,74 @@ mod tests {
             "Body".into(),
             vec![Modifier::FontSize { value: 1600 }]
         ));
-        let (with_styles, ..) = transact!(s2, |tr| apply_style(&mut tr, p1, "body".into()));
+        let (with_styles, ..) = transact!(s2, |tr| tr
+            .set_node_style(p1, Some("body".into()))
+            .map(|_| true)
+            .map_err(crate::CommandError::Step));
 
-        let slice = paragraph_slice_with_style("XY", "h1");
+        let slice = run_styled_paragraph_slice("XY", "h1");
         let (actual, ..) = transact!(with_styles, |tr| insert_slice(&mut tr, slice));
 
+        // The destination paragraph keeps its own style (no wrapper transport)...
         let entry = actual.doc.get_entry(p1).unwrap();
         assert_eq!(entry.style.get().as_deref(), Some("body"));
+        // ...while the pasted run carries the source run's "h1" style. The run
+        // lands mid-paragraph: locate the run bearing the pasted "XY" text.
+        let p_node = actual.doc.node(p1).unwrap();
+        let styled_run = p_node
+            .children()
+            .find(|c| matches!(c.node(), editor_model::Node::Text(t) if t.text.to_string() == "XY"))
+            .expect("pasted run exists");
+        assert_eq!(styled_run.entry().style.get().as_deref(), Some("h1"));
+    }
+
+    #[test]
+    fn copy_styled_run_then_paste_round_trips_run_style() {
+        use editor_model::Modifier;
+
+        use crate::commands::define_style;
+
+        // Source doc: a styled run "Hello".
+        let (src, p1, t1) = state! {
+            doc { root { p1: paragraph { t1: text("Hello") } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let (src, ..) = transact!(src, |tr| define_style(
+            &mut tr,
+            "h1".into(),
+            "H1".into(),
+            vec![Modifier::FontSize { value: 2400 }]
+        ));
+        let (src, ..) = transact!(src, |tr| tr
+            .set_node_style(t1, Some("h1".into()))
+            .map(|_| true)
+            .map_err(crate::CommandError::Step));
+        let _ = p1;
+
+        // Copy.
+        let slice = Slice::extract(&src).expect("non-collapsed");
+
+        // Destination doc: empty (unstyled) paragraph. Define the same style so
+        // the ref resolves.
+        let (dst, p_empty) = state! {
+            doc { root { p_empty: paragraph {} } }
+            selection: (p_empty, 0)
+        };
+        let (dst, ..) = transact!(dst, |tr| define_style(
+            &mut tr,
+            "h1".into(),
+            "H1".into(),
+            vec![Modifier::FontSize { value: 2400 }]
+        ));
+
+        // Paste.
+        let (actual, ..) = transact!(dst, |tr| insert_slice(&mut tr, slice));
+
+        // Destination paragraph acquires no wrapper style.
+        let entry = actual.doc.get_entry(p_empty).unwrap();
+        assert_eq!(entry.style.get().as_deref(), None);
+        // The pasted run carries the copied run's style.
+        let p_node = actual.doc.node(p_empty).unwrap();
+        assert_eq!(run_style_of(&p_node, 0).as_deref(), Some("h1"));
     }
 }

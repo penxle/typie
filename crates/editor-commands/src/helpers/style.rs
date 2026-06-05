@@ -193,6 +193,30 @@ pub(crate) fn clear_inline_modifier_types_in_selection(
     Ok(changed)
 }
 
+/// Inline run (text/tab) node ids intersecting the current range selection,
+/// with boundary splits applied. Empty for a collapsed selection.
+pub(crate) fn collect_run_nodes_in_selection(
+    tr: &mut Transaction,
+) -> Result<Vec<NodeId>, CommandError> {
+    let Some(selection) = tr.selection() else {
+        return Ok(Vec::new());
+    };
+    if selection.is_collapsed() {
+        return Ok(Vec::new());
+    }
+    let (from, to) = {
+        let doc = tr.doc();
+        let resolved = selection
+            .resolve(&doc)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        (
+            Position::from(resolved.from()),
+            Position::from(resolved.to()),
+        )
+    };
+    collect_text_nodes_in_range(tr, &from, &to)
+}
+
 /// Returns the style ids defined on the document, in lexicographic order.
 /// A style is defined iff `Doc.styles` contains it (presence).
 pub(crate) fn defined_style_ids(doc: &Doc) -> Vec<String> {
@@ -257,7 +281,7 @@ mod tests {
     use editor_macros::state;
     use editor_model::Modifier;
 
-    use crate::commands::{apply_style, define_style};
+    use crate::commands::define_style;
     use crate::test_utils::*;
 
     #[test]
@@ -272,11 +296,10 @@ mod tests {
             "제목 1".into(),
             vec![Modifier::Bold, Modifier::FontSize { value: 2400 }],
         ));
-        let (applied, ..) = transact!(with_style, |tr| apply_style(
-            &mut tr,
-            p1,
-            "heading-1".into()
-        ));
+        let (applied, ..) = transact!(with_style, |tr| tr
+            .set_node_style(p1, Some("heading-1".into()))
+            .map(|_| true)
+            .map_err(crate::CommandError::Step));
 
         let node = applied.doc.node(p1).unwrap();
         let mods = style_modifiers_for(&node);
@@ -296,11 +319,10 @@ mod tests {
             "제목 1".into(),
             vec![Modifier::FontSize { value: 2400 }],
         ));
-        let (applied, ..) = transact!(with_style, |tr| apply_style(
-            &mut tr,
-            p1,
-            "heading-1".into()
-        ));
+        let (applied, ..) = transact!(with_style, |tr| tr
+            .set_node_style(p1, Some("heading-1".into()))
+            .map(|_| true)
+            .map_err(crate::CommandError::Step));
         let (after, ..) = transact!(applied, |tr| crate::commands::set_node_modifier(
             &mut tr,
             p1,
@@ -319,7 +341,10 @@ mod tests {
             doc { root { p1: paragraph { text("Hello") } } }
             selection: (p1, 0)
         };
-        let (applied, ..) = transact!(state, |tr| apply_style(&mut tr, p1, "missing".into()));
+        let (applied, ..) = transact!(state, |tr| tr
+            .set_node_style(p1, Some("missing".into()))
+            .map(|_| true)
+            .map_err(crate::CommandError::Step));
         let node = applied.doc.node(p1).unwrap();
         assert!(style_modifiers_for(&node).is_empty());
     }

@@ -33,11 +33,6 @@ impl Subtree {
         self
     }
 
-    pub fn with_style(mut self, style: Option<String>) -> Self {
-        self.style = style;
-        self
-    }
-
     pub fn capture(doc: &Doc, node_id: NodeId) -> Option<Self> {
         let entry = doc.get_entry(node_id)?;
         let children = entry

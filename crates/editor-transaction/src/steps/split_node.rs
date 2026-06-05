@@ -19,7 +19,7 @@ pub(crate) fn apply_to(
     offset: usize,
     new_node_id: NodeId,
 ) -> Result<(), StepError> {
-    let (kind, parent_id, attrs, modifiers, parent_anchor_dot, content_split) = {
+    let (kind, parent_id, attrs, modifiers, style, parent_anchor_dot, content_split) = {
         let entry = batched
             .doc
             .get_entry(node_id)
@@ -28,6 +28,7 @@ pub(crate) fn apply_to(
         let kind = entry.node.as_type();
         let attrs: Vec<NodeAttr> = entry.node.to_plain().to_attrs();
         let modifiers: Vec<Modifier> = entry.modifiers.iter().map(|(_, m)| m.clone()).collect();
+        let style: Option<String> = entry.style.get().clone();
 
         let parent_entry = batched
             .doc
@@ -78,6 +79,7 @@ pub(crate) fn apply_to(
             parent_id,
             attrs,
             modifiers,
+            style,
             parent_anchor_dot,
             content_split,
         )
@@ -96,6 +98,14 @@ pub(crate) fn apply_to(
             op: OrMapOp::Set {
                 key: modifier.as_type(),
                 value: modifier.clone(),
+            },
+        })?;
+    }
+    if let Some(style_id) = style {
+        batched.apply(DocOp::NodeStyle {
+            node_id: new_node_id,
+            op: LwwRegOp::Set {
+                value: Some(style_id),
             },
         })?;
     }
@@ -291,6 +301,34 @@ mod tests {
         let new_id = NodeId::new();
         let mut tr = Transaction::new(&state);
         assert!(tr.split_node(ft1, 0, new_id).is_err());
+    }
+
+    #[test]
+    fn split_copies_style_ref_to_new_node() {
+        use editor_model::PlainStyleEntry;
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("HelloWorld") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "s1".into(),
+            Some(PlainStyleEntry {
+                name: "s".into(),
+                modifiers: Default::default(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(t1, Some("s1".into())).unwrap();
+        let new_id = NodeId::new();
+        tr.split_node(t1, 5, new_id).unwrap();
+        let (next, ..) = tr.commit();
+
+        assert_eq!(
+            next.doc.get_entry(new_id).unwrap().style.get().as_deref(),
+            Some("s1"),
+            "split-off node must inherit the style ref"
+        );
     }
 
     #[test]

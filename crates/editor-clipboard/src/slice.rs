@@ -154,8 +154,12 @@ fn build_fragment<'a>(rs: &ResolvedSelection<'a>, node: NodeRef<'a>) -> Fragment
                 s.chars().count()
             };
             let substring: String = s.chars().skip(lo).take(hi - lo).collect();
-            Fragment::leaf(PlainNode::Text(PlainTextNode { text: substring }))
-                .with_modifiers(node.explicit_modifiers().cloned().collect())
+            Fragment {
+                node: PlainNode::Text(PlainTextNode { text: substring }),
+                modifiers: node.explicit_modifiers().cloned().collect(),
+                style: node.entry().style.get().clone(),
+                children: vec![],
+            }
         }
         _ => {
             let from_node_path = rs
@@ -243,6 +247,20 @@ mod tests {
     use super::*;
     use editor_macros::state;
     use editor_resource::Resource;
+
+    fn set_run_style(state: State, run_id: editor_model::NodeId, style_id: &str) -> State {
+        use editor_crdt::LwwRegOp;
+        use editor_model::DocOp;
+        let (next, _) = state
+            .apply(DocOp::NodeStyle {
+                node_id: run_id,
+                op: LwwRegOp::Set {
+                    value: Some(style_id.into()),
+                },
+            })
+            .expect("apply NodeStyle");
+        next
+    }
 
     #[test]
     fn extract_collapsed_returns_none() {
@@ -562,5 +580,63 @@ mod tests {
         let table = &slice.fragment.children[0];
         assert_eq!(table.children.len(), 1);
         assert_eq!(table.children[0].children.len(), 1);
+    }
+
+    #[test]
+    fn extract_full_run_carries_run_style() {
+        let (s, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let s = set_run_style(s, t1, "emphasis");
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        // A single-inline selection is wrapped in its enclosing textblock, so
+        // the run lives at children[0]; its style ref must be captured there.
+        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
+        let run = &slice.fragment.children[0];
+        if let PlainNode::Text(t) = &run.node {
+            assert_eq!(t.text, "Hello");
+        } else {
+            panic!("expected text node");
+        }
+        assert_eq!(run.style.as_deref(), Some("emphasis"));
+    }
+
+    #[test]
+    fn extract_partial_run_carries_run_style() {
+        let (s, t1) = state! {
+            doc { root { paragraph { t1: text("Hello World") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let s = set_run_style(s, t1, "emphasis");
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        // Mid-run selection: build_fragment carves a partial Text leaf, wrapped
+        // in its enclosing textblock; the partial run must still carry the
+        // source run's style ref.
+        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
+        let run = &slice.fragment.children[0];
+        if let PlainNode::Text(t) = &run.node {
+            assert_eq!(t.text, "ell");
+        } else {
+            panic!("expected text node");
+        }
+        assert_eq!(run.style.as_deref(), Some("emphasis"));
+    }
+
+    #[test]
+    fn extract_multi_run_carries_each_run_style() {
+        let (s, t1, t2) = state! {
+            doc { root { paragraph {
+                t1: text("Hello")
+                t2: text("World")
+            } } }
+            selection: (t1, 2) -> (t2, 3)
+        };
+        let s = set_run_style(s, t1, "first");
+        let s = set_run_style(s, t2, "second");
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
+        assert_eq!(slice.fragment.children[0].style.as_deref(), Some("first"));
+        assert_eq!(slice.fragment.children[1].style.as_deref(), Some("second"));
     }
 }

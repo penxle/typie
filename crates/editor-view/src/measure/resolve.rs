@@ -55,8 +55,8 @@ mod tests {
     }
 
     #[test]
-    fn resolve_inherited_picks_up_style_modifier_on_textblock() {
-        let (initial, p1, ..) = state! {
+    fn resolve_inherited_picks_up_style_modifier_on_run() {
+        let (initial, _p1, t1, ..) = state! {
             doc { root { p1: paragraph { t1: text("Hi") } } }
             selection: (t1, 0)
         };
@@ -78,11 +78,10 @@ mod tests {
             }),
         )
         .unwrap();
-        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        tr.set_node_style(t1, Some("h1".into())).unwrap();
         let (next, ..) = tr.commit();
 
-        let para = next.doc.node(p1).unwrap();
-        let text = para.children().next().unwrap();
+        let text = next.doc.node(t1).unwrap();
 
         assert!(matches!(
             resolve_inherited(&text, ModifierType::FontSize),
@@ -100,7 +99,7 @@ mod tests {
 
     #[test]
     fn resolve_inherited_node_own_modifier_overrides_style() {
-        let (initial, p1, ..) = state! {
+        let (initial, _p1, t1, ..) = state! {
             doc { root { p1: paragraph { t1: text("Hi") [font_size(1200)] } } }
             selection: (t1, 0)
         };
@@ -116,11 +115,10 @@ mod tests {
             }),
         )
         .unwrap();
-        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        tr.set_node_style(t1, Some("h1".into())).unwrap();
         let (next, ..) = tr.commit();
 
-        let para = next.doc.node(p1).unwrap();
-        let text = para.children().next().unwrap();
+        let text = next.doc.node(t1).unwrap();
 
         assert!(matches!(
             resolve_inherited(&text, ModifierType::FontSize),

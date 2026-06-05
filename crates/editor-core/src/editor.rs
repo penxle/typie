@@ -1,14 +1,14 @@
 use editor_clipboard::Slice;
 use editor_common::{Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
-use editor_model::{DocOp, ModifierState, ModifierType, Node, NodeId};
+use editor_model::{DocOp, ModifierState, ModifierType, Node, NodeId, NodeType, Schema};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer};
 #[cfg(any(test, feature = "test-utils"))]
 use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
-    DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
-    State,
+    DocFlatExt, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+    StableSelection, State,
 };
 use editor_transaction::{Effect, HistoryMeta, HistoryTag, Step, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingStyle, View, Viewport};
@@ -33,8 +33,34 @@ enum Mode {
     Probe { changed: bool },
 }
 
+fn is_inline_modifier_type(ty: ModifierType) -> bool {
+    Schema::modifier_spec(ty)
+        .target
+        .rightmost_node_types()
+        .contains(&NodeType::Text)
+}
+
 fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
-    if state.pending_modifiers.is_empty() {
+    let mut modifiers = state.pending_modifiers.clone();
+
+    if let Some(editor_state::PendingStyle::Set { style_id }) = &state.pending_style
+        && let Some(entry) = state.doc.style_entry(style_id)
+    {
+        for modifier in entry.modifiers.iter() {
+            let ty = modifier.as_type();
+            if !is_inline_modifier_type(ty) {
+                continue;
+            }
+            if modifiers.iter().any(|m| m.as_type() == ty) {
+                continue;
+            }
+            modifiers.push(PendingModifier::Set {
+                modifier: modifier.clone(),
+            });
+        }
+    }
+
+    if modifiers.is_empty() {
         return None;
     }
     let selection = state.selection.as_ref()?;
@@ -51,7 +77,7 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
     }
     Some(PendingStyle {
         node_id: textblock.id(),
-        modifiers: state.pending_modifiers.clone(),
+        modifiers,
     })
 }
 
@@ -428,6 +454,7 @@ impl Editor {
         let old_doc = self.state.doc.clone();
         let old_selection = self.state.selection;
         let old_pending_modifiers = self.state.pending_modifiers.clone();
+        let old_pending_style = self.state.pending_style.clone();
         let old_composition = self.state.composition;
         let old_last_history_tag_revision = self.history.last_tag_revision();
 
@@ -509,6 +536,10 @@ impl Editor {
 
         if old_pending_modifiers != self.state.pending_modifiers {
             fields.insert(StateField::Modifiers);
+        }
+
+        if old_pending_style != self.state.pending_style {
+            fields.insert(StateField::Styles);
         }
 
         if old_composition != self.state.composition {
@@ -1458,6 +1489,76 @@ mod tests {
         }];
         let s = build_state(doc, Position::new(t1, 0), pending);
         assert!(normalize_pending_style(&s).is_none());
+    }
+
+    fn state_with_inline_block_style(pending: PendingModifiers) -> State {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        tr.set_style(
+            "s1".into(),
+            Some(editor_model::PlainStyleEntry {
+                name: "s1".into(),
+                modifiers: [Modifier::Bold, Modifier::LineHeight { value: 200 }]
+                    .into_iter()
+                    .collect(),
+            }),
+        )
+        .unwrap();
+        tr.set_pending_style(Some(editor_state::PendingStyle::Set {
+            style_id: "s1".into(),
+        }))
+        .unwrap();
+        tr.set_pending_modifiers(pending).unwrap();
+        let (next, ..) = tr.commit();
+        next
+    }
+
+    #[test]
+    fn normalize_reflects_pending_style_inline_modifiers_only() {
+        let s = state_with_inline_block_style(PendingModifiers::new());
+        let ps = normalize_pending_style(&s).expect("Some");
+        assert!(
+            ps.modifiers.iter().any(|m| matches!(
+                m,
+                PendingModifier::Set {
+                    modifier: Modifier::Bold
+                }
+            )),
+            "inline Bold from style should be reflected"
+        );
+        assert!(
+            !ps.modifiers
+                .iter()
+                .any(|m| m.as_type() == ModifierType::LineHeight),
+            "block LineHeight from style should NOT be reflected"
+        );
+    }
+
+    #[test]
+    fn normalize_explicit_pending_overrides_style_modifier() {
+        let explicit = vec![PendingModifier::Unset {
+            ty: ModifierType::Bold,
+        }];
+        let s = state_with_inline_block_style(explicit);
+        let ps = normalize_pending_style(&s).expect("Some");
+        let bold_entries: Vec<_> = ps
+            .modifiers
+            .iter()
+            .filter(|m| m.as_type() == ModifierType::Bold)
+            .collect();
+        assert_eq!(bold_entries.len(), 1, "single Bold entry, no duplicate");
+        assert!(
+            matches!(
+                bold_entries[0],
+                PendingModifier::Unset {
+                    ty: ModifierType::Bold
+                }
+            ),
+            "explicit pending Unset must win over the style's Set"
+        );
     }
 
     fn test_editor() -> (Editor, NodeId) {

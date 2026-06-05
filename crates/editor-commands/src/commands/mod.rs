@@ -1,4 +1,3 @@
-mod apply_style;
 mod apply_style_to_selection;
 mod auto_surround;
 mod clear_all_modifiers;
@@ -73,7 +72,6 @@ mod surround_selection;
 mod toggle_bold;
 mod toggle_modifier;
 mod try_text_replacement;
-mod unapply_style;
 mod unset_style_in_selection;
 mod unset_style_modifier;
 mod unwrap_blockquote;
@@ -81,7 +79,6 @@ mod unwrap_callout;
 mod unwrap_fold;
 mod update_style_from_selection;
 
-pub use apply_style::apply_style;
 pub use apply_style_to_selection::apply_style_to_selection;
 pub use auto_surround::auto_surround;
 pub use clear_all_modifiers::clear_all_modifiers;
@@ -156,7 +153,6 @@ pub use surround_selection::surround_selection;
 pub use toggle_bold::toggle_bold;
 pub use toggle_modifier::toggle_modifier;
 pub use try_text_replacement::try_text_replacement;
-pub use unapply_style::unapply_style;
 pub use unset_style_in_selection::unset_style_in_selection;
 pub use unset_style_modifier::unset_style_modifier;
 pub use unwrap_blockquote::unwrap_blockquote;

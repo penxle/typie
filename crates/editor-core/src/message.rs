@@ -138,14 +138,6 @@ pub enum ModifierOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StyleOp {
-    Apply {
-        node_id: NodeId,
-        style_id: String,
-    },
-    Unapply {
-        node_id: NodeId,
-        style_id: String,
-    },
     ApplyToSelection {
         style_id: String,
     },

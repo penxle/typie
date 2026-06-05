@@ -84,10 +84,13 @@ export interface Position {
  *   *Upheld by command/transaction implementations; constructors do
  *   not enforce this.*
  *
- * - **Affinity mutual exclusion (non-collapsed)**: when
- *   `anchor != head`, `anchor.affinity` points toward `head` and
- *   `head.affinity` points toward `anchor`.
- *   *Upheld by command/transaction implementations.*
+ * - **Affinity convention (non-collapsed)**: at structural boundaries,
+ *   `anchor.affinity` typically points toward `head` and `head.affinity`
+ *   toward `anchor`. Text-interior positions may preserve their original
+ *   affinity because it disambiguates visual ownership without changing the
+ *   document range.
+ *   *Upheld by command/transaction implementations where boundary ownership
+ *   matters.*
  *
  * - **Affinity agreement (collapsed)**: when `anchor == head` (all
  *   three fields of `Position` match), the two affinities are equal.
@@ -725,6 +728,8 @@ export type PendingModifier = { type: "set"; modifier: Modifier } | { type: "uns
 
 export type PendingModifiers = PendingModifier[];
 
+export type PendingStyle = { type: "set"; style_id: string } | { type: "unset" };
+
 export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph" } & PlainParagraphNode) | ({ type: "blockquote" } & PlainBlockquoteNode) | ({ type: "callout" } & PlainCalloutNode) | ({ type: "text" } & PlainTextNode) | ({ type: "bullet_list" } & PlainBulletListNode) | ({ type: "ordered_list" } & PlainOrderedListNode) | ({ type: "list_item" } & PlainListItemNode) | ({ type: "fold" } & PlainFoldNode) | ({ type: "fold_title" } & PlainFoldTitleNode) | ({ type: "fold_content" } & PlainFoldContentNode) | ({ type: "table" } & PlainTableNode) | ({ type: "table_row" } & PlainTableRowNode) | ({ type: "table_cell" } & PlainTableCellNode) | ({ type: "image" } & PlainImageNode) | ({ type: "file" } & PlainFileNode) | ({ type: "embed" } & PlainEmbedNode) | ({ type: "archived" } & PlainArchivedNode) | ({ type: "hard_break" } & PlainHardBreakNode) | ({ type: "horizontal_rule" } & PlainHorizontalRuleNode) | ({ type: "page_break" } & PlainPageBreakNode) | ({ type: "tab" } & PlainTabNode);
 
 export type PointerStyle = "default" | "text" | "pointer";
@@ -739,7 +744,7 @@ export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "styles" | "tracked_ranges" | "last_history_tag" | "placeholder";
 
-export type StyleOp = { type: "apply"; node_id: NodeId; style_id: string } | { type: "unapply"; node_id: NodeId; style_id: string } | { type: "apply_to_selection"; style_id: string } | { type: "unset_in_selection" } | { type: "create_from_selection"; style_id: string; name: string } | { type: "update_from_selection" } | { type: "define"; style_id: string; name: string; modifiers: Modifier[] } | { type: "delete"; style_id: string } | { type: "rename"; style_id: string; name: string } | { type: "set_modifier"; style_id: string; modifier: Modifier } | { type: "unset_modifier"; style_id: string; modifier_type: ModifierType };
+export type StyleOp = { type: "apply_to_selection"; style_id: string } | { type: "unset_in_selection" } | { type: "create_from_selection"; style_id: string; name: string } | { type: "update_from_selection" } | { type: "define"; style_id: string; name: string; modifiers: Modifier[] } | { type: "delete"; style_id: string } | { type: "rename"; style_id: string; name: string } | { type: "set_modifier"; style_id: string; modifier: Modifier } | { type: "unset_modifier"; style_id: string; modifier_type: ModifierType };
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 

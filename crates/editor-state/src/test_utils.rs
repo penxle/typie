@@ -68,6 +68,11 @@ pub fn assert_state_eq_impl(actual: &State, expected: &State) {
         actual.pending_modifiers, expected.pending_modifiers,
         "Pending modifiers differ",
     );
+
+    assert_eq!(
+        actual.pending_style, expected.pending_style,
+        "Pending style ref differs",
+    );
 }
 
 #[macro_export]

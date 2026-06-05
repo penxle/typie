@@ -1,5 +1,5 @@
 use editor_macros::state;
-use editor_model::{Modifier, NodeId, PlainNode, PlainParagraphNode};
+use editor_model::{Modifier, NodeId, PlainNode, PlainParagraphNode, PlainStyleEntry};
 use editor_transaction::{Step, Transaction};
 use proptest::prelude::*;
 
@@ -219,6 +219,27 @@ mod proptests {
 
 mod tests {
     use super::*;
+
+    #[test]
+    fn set_pending_style_roundtrip_and_inverse() {
+        use editor_state::PendingStyle;
+        let (initial, _t1) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        tr.set_pending_style(Some(PendingStyle::Set {
+            style_id: "s1".into(),
+        }))
+        .unwrap();
+        let (next, ..) = tr.commit();
+        assert_eq!(
+            next.pending_style,
+            Some(PendingStyle::Set {
+                style_id: "s1".into()
+            })
+        );
+    }
 
     #[test]
     fn add_modifier_twice_dispatches_once() {
@@ -448,5 +469,70 @@ mod tests {
         let inverse = step.inverse();
         let restored = inverse.apply(&after_state).unwrap().state;
         assert_eq!(restored.doc.to_plain(), plain_before);
+    }
+
+    #[test]
+    fn text_run_style_resolves_inline_only() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("Hi") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "s1".into(),
+            Some(PlainStyleEntry {
+                name: "s".into(),
+                modifiers: [Modifier::Bold, Modifier::LineHeight { value: 200 }]
+                    .into_iter()
+                    .collect(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(t1, Some("s1".into())).unwrap();
+        let (next, ..) = tr.commit();
+
+        let node = next.doc.node(t1).unwrap();
+        let mods: Vec<Modifier> = node.modifiers_with_style().cloned().collect();
+        assert!(mods.contains(&Modifier::Bold));
+        assert!(
+            !mods
+                .iter()
+                .any(|m| matches!(m, Modifier::LineHeight { .. }))
+        );
+    }
+
+    #[test]
+    fn paragraph_with_style_ref_expands_no_style_modifiers() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("Hi") } } }
+            selection: (t1, 0)
+        };
+        let p1 = initial.doc.node(t1).unwrap().parent().unwrap().id();
+        let mut tr = Transaction::new(&initial);
+        tr.set_style(
+            "s1".into(),
+            Some(PlainStyleEntry {
+                name: "s".into(),
+                modifiers: [Modifier::Bold, Modifier::LineHeight { value: 200 }]
+                    .into_iter()
+                    .collect(),
+            }),
+        )
+        .unwrap();
+        tr.set_node_style(p1, Some("s1".into())).unwrap();
+        let (next, ..) = tr.commit();
+
+        let para = next.doc.node(p1).unwrap();
+        let mods: Vec<Modifier> = para.modifiers_with_style().cloned().collect();
+        assert!(
+            !mods.contains(&Modifier::Bold),
+            "inline must not expand on paragraph"
+        );
+        assert!(
+            !mods
+                .iter()
+                .any(|m| matches!(m, Modifier::LineHeight { .. })),
+            "block must not leak on paragraph"
+        );
     }
 }

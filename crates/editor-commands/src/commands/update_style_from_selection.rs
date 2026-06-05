@@ -2,30 +2,13 @@ use editor_model::{Modifier, ModifierType, Node};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    capture_style_entry, clear_inline_modifier_types_in_selection, collect_textblocks_in_selection,
-    collect_uniform_text_modifiers_in_selection,
+    capture_style_entry, clear_inline_modifier_types_in_selection, collect_run_nodes_in_selection,
+    collect_textblocks_in_selection, collect_uniform_text_modifiers_in_selection,
 };
 use crate::{CommandError, CommandResult};
 
 pub fn update_style_from_selection(tr: &mut Transaction) -> CommandResult {
-    let textblock_ids = collect_textblocks_in_selection(tr.state());
-    if textblock_ids.is_empty() {
-        return Ok(false);
-    }
-
-    let mut canonical: Option<String> = None;
-    for id in &textblock_ids {
-        let Some(entry) = tr.state().doc.get_entry(*id) else {
-            return Ok(false);
-        };
-        let style = entry.style.get().clone();
-        match (style, &canonical) {
-            (Some(s), None) => canonical = Some(s),
-            (Some(s), Some(c)) if &s == c => {}
-            _ => return Ok(false),
-        }
-    }
-    let Some(style_id) = canonical else {
+    let Some(style_id) = current_style_id(tr) else {
         return Ok(false);
     };
 
@@ -62,6 +45,47 @@ pub fn update_style_from_selection(tr: &mut Transaction) -> CommandResult {
 
     let cleared = clear_applied_inline(tr, &applied_types)?;
     Ok(style_changed || cleared)
+}
+
+/// The style id that the current selection's content references. In the
+/// text-style model style refs live on inline runs, so the primary source is
+/// the common style id shared by every selected run. For a collapsed caret (no
+/// run range) or runs that carry no style ref, fall back to the textblock-level
+/// style ref so manually styled blocks are still recognized. Returns `None`
+/// when the referenced styles are mixed or absent.
+fn current_style_id(tr: &mut Transaction) -> Option<String> {
+    let run_ids = collect_run_nodes_in_selection(tr).ok()?;
+    if !run_ids.is_empty() {
+        let doc = tr.doc();
+        let mut iter = run_ids
+            .iter()
+            .map(|id| doc.get_entry(*id).and_then(|e| e.style.get().clone()));
+        if let Some(first) = iter.next() {
+            if iter.clone().all(|s| s == first) {
+                if let Some(style_id) = first {
+                    return Some(style_id);
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+
+    let textblock_ids = collect_textblocks_in_selection(tr.state());
+    if textblock_ids.is_empty() {
+        return None;
+    }
+    let mut canonical: Option<String> = None;
+    for id in &textblock_ids {
+        let entry = tr.state().doc.get_entry(*id)?;
+        let style = entry.style.get().clone();
+        match (style, &canonical) {
+            (Some(s), None) => canonical = Some(s),
+            (Some(s), Some(c)) if &s == c => {}
+            _ => return None,
+        }
+    }
+    canonical
 }
 
 fn clear_applied_inline(
@@ -327,16 +351,21 @@ mod tests {
             "inline FontFamily should be cleared after merge"
         );
 
-        let effective_on_para: Vec<&Modifier> = para
+        assert_eq!(
+            text.entry().style.get().as_deref(),
+            Some("h1"),
+            "the run still references the updated style"
+        );
+        let effective_on_run: Vec<&Modifier> = text
             .modifiers_with_style()
             .filter(|m| matches!(m, Modifier::FontFamily { .. }))
             .collect();
         assert_eq!(
-            effective_on_para,
+            effective_on_run,
             vec![&Modifier::FontFamily {
                 value: "Arial".to_string()
             }],
-            "paragraph (the styled node) resolves FontFamily through its style"
+            "run (the styled node) resolves FontFamily through its style"
         );
     }
 
@@ -389,7 +418,7 @@ mod tests {
 
     #[test]
     fn font_family_propagates_to_other_styled_nodes() {
-        let (initial, ..) = state! {
+        let (initial, t1, t2) = state! {
             doc { root {
                 paragraph { t1: text("Foo") [font_family("Arial".to_string())] }
                 paragraph { t2: text("Bar") }
@@ -404,17 +433,15 @@ mod tests {
                 value: "Pretendard".to_string(),
             }],
         ));
-        let p1 = defined.doc.root().unwrap().children().next().unwrap().id();
-        let p2 = defined.doc.root().unwrap().children().nth(1).unwrap().id();
         let mut tr = Transaction::new(&defined);
-        tr.set_node_style(p1, Some("h1".into())).unwrap();
-        tr.set_node_style(p2, Some("h1".into())).unwrap();
+        tr.set_node_style(t1, Some("h1".into())).unwrap();
+        tr.set_node_style(t2, Some("h1".into())).unwrap();
         let (applied, ..) = tr.commit();
 
         let (actual, ..) = transact!(applied, |tr| update_style_from_selection(&mut tr));
 
-        let para2 = actual.doc.node(p2).unwrap();
-        let effective: Vec<&Modifier> = para2
+        let run2 = actual.doc.node(t2).unwrap();
+        let effective: Vec<&Modifier> = run2
             .modifiers_with_style()
             .filter(|m| matches!(m, Modifier::FontFamily { .. }))
             .collect();
@@ -423,7 +450,7 @@ mod tests {
             vec![&Modifier::FontFamily {
                 value: "Arial".to_string()
             }],
-            "other styled node should see updated FontFamily through cascade"
+            "other styled run should see updated FontFamily through cascade"
         );
     }
 
@@ -454,6 +481,36 @@ mod tests {
                 .modifiers
                 .contains(&Modifier::FontSize { value: 1600 }),
             "non-uniform inline FontSize should not change style"
+        );
+    }
+
+    #[test]
+    fn updates_style_referenced_by_selected_runs() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let (defined, ..) = transact!(initial, |tr| crate::commands::define_style(
+            &mut tr,
+            "h1".into(),
+            "x".into(),
+            vec![]
+        ));
+        let (applied, ..) = transact!(defined, |tr| crate::commands::apply_style_to_selection(
+            &mut tr,
+            "h1".into()
+        ));
+        let (sized, ..) = transact!(applied, |tr| crate::commands::set_modifier(
+            &mut tr,
+            editor_model::Modifier::FontSize { value: 2800 }
+        ));
+        let (actual, ..) = transact!(sized, |tr| update_style_from_selection(&mut tr));
+        let style = actual.doc.style_entry("h1").unwrap();
+        assert!(
+            style
+                .modifiers
+                .iter()
+                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 2800 }))
         );
     }
 }

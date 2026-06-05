@@ -18,6 +18,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
         return editor.transact(|tr| {
             tr.set_composition(None)?;
             tr.set_pending_modifiers(PendingModifiers::new())?;
+            tr.set_pending_style(None)?;
             tr.set_selection(None)?;
             Ok(())
         });
@@ -625,6 +626,36 @@ mod tests {
         assert!(
             editor.state().pending_modifiers.is_empty(),
             "pending cleared"
+        );
+    }
+
+    #[test]
+    fn selection_op_unset_clears_pending_style() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 3)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        editor
+            .transact(|tr| {
+                tr.set_pending_style(Some(editor_state::PendingStyle::Set {
+                    style_id: "s1".to_string(),
+                }))?;
+                Ok(())
+            })
+            .unwrap();
+
+        assert!(editor.state().pending_style.is_some());
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Unset,
+        });
+
+        assert!(editor.state().selection.is_none(), "selection cleared");
+        assert!(
+            editor.state().pending_style.is_none(),
+            "pending_style cleared"
         );
     }
 
