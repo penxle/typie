@@ -11,6 +11,7 @@ export const load = async (event) => {
           id
 
           ...UsersiteWildcardSlugPage_DocumentView_user
+          ...UsersiteWildcardSlugPage_DocumentViewV2_user
         }
 
         entityView(origin: $origin, slug: $slug) {
@@ -19,9 +20,16 @@ export const load = async (event) => {
 
           node {
             __typename
+
+            ... on DocumentView {
+              state {
+                __typename
+              }
+            }
           }
 
           ...UsersiteWildcardSlugPage_DocumentView_entityView
+          ...UsersiteWildcardSlugPage_DocumentViewV2_entityView
           ...UsersiteWildcardSlugPage_FolderView_entityView
         }
       }

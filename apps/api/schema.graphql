@@ -447,6 +447,7 @@ type DocumentView implements IDocument {
   protectContent: Boolean!
   reactions: [DocumentReaction!]!
   snapshot: Binary
+  state: DocumentViewState
   subtitle: String
   thumbnail: Image
   title: String!
@@ -454,10 +455,14 @@ type DocumentView implements IDocument {
   updatedAt: DateTime!
 }
 
-union DocumentViewBody = DocumentViewBodyAvailable | DocumentViewBodyUnavailable
+union DocumentViewBody = DocumentViewBodyAvailable | DocumentViewBodyAvailableV2 | DocumentViewBodyUnavailable
 
 type DocumentViewBodyAvailable {
   snapshot: Binary!
+}
+
+type DocumentViewBodyAvailableV2 {
+  graph: Binary!
 }
 
 type DocumentViewBodyUnavailable {
@@ -468,6 +473,10 @@ enum DocumentViewBodyUnavailableReason {
   REQUIRE_IDENTITY_VERIFICATION
   REQUIRE_MINIMUM_AGE
   REQUIRE_PASSWORD
+}
+
+type DocumentViewState {
+  updatedAt: DateTime!
 }
 
 input DumpLocalStorageInput {

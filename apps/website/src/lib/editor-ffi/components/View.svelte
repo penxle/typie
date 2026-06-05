@@ -51,7 +51,7 @@
 
   const document = createFragment(
     graphql(`
-      fragment Editor_document on Document {
+      fragment Editor_document on IDocument {
         id
 
         editorFontFamilies: fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
@@ -124,7 +124,9 @@
         readyFired = true;
         loadFonts(document.data.editorFontFamilies);
         onReady?.();
-        void tick().then(() => editor.focus());
+        if (active) {
+          void tick().then(() => editor.focus());
+        }
       }
     });
   });

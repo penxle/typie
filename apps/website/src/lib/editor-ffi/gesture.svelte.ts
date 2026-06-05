@@ -91,7 +91,7 @@ const distance = (a: { x: number; y: number }, b: { x: number; y: number }): num
 
 export class TouchGestureController {
   #editor: Editor;
-  #phase: Phase = 'idle';
+  #phase: Phase = $state('idle');
   #pressGeneration = 0;
   #activePointerId: number | null = null;
   #pressStart: { x: number; y: number; time: number } | null = null;
@@ -106,6 +106,10 @@ export class TouchGestureController {
 
   constructor(editor: Editor) {
     this.#editor = editor;
+  }
+
+  get gestureActive(): boolean {
+    return this.#editor.readOnly && this.#phase !== 'idle';
   }
 
   shouldSuppressNativeContextMenu(): boolean {

@@ -148,80 +148,6 @@ IDocument.implement({
     assets: t.field({
       type: [DocumentAsset],
       resolve: async (self) => {
-        const content = await db
-          .select({ snapshot: DocumentContents.snapshot })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, self.id))
-          .then(firstOrThrow);
-
-        const doc = new LoroDoc();
-        doc.import(content.snapshot);
-        const { imageIds, fileIds, embedIds } = extractAssetIdsFromLoroDoc(doc);
-
-        const [existingImageIds, existingFileIds, existingEmbedIds] = await Promise.all([
-          imageIds.length > 0
-            ? db
-                .select({ id: Images.id })
-                .from(Images)
-                .where(inArray(Images.id, imageIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          fileIds.length > 0
-            ? db
-                .select({ id: Files.id })
-                .from(Files)
-                .where(inArray(Files.id, fileIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          embedIds.length > 0
-            ? db
-                .select({ id: Embeds.id })
-                .from(Embeds)
-                .where(inArray(Embeds.id, embedIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-        ]);
-
-        return [...existingImageIds, ...existingFileIds, ...existingEmbedIds];
-      },
-    }),
-
-    fontFamilies: t.field({
-      type: [DocumentFontFamily],
-      args: {
-        sources: t.arg({
-          type: [FontFamilySource],
-          defaultValue: [FontFamilySource.DEFAULT, FontFamilySource.USER],
-        }),
-      },
-      resolve: async (self, args, ctx) => {
-        const entity = await db
-          .select({ userId: Entities.userId })
-          .from(Entities)
-          .innerJoin(Documents, eq(Documents.entityId, Entities.id))
-          .where(eq(Documents.id, self.id))
-          .then(firstOrThrow);
-
-        return await getDocumentFontFamilies(entity.userId, ctx.session?.userId ?? null, args.sources);
-      },
-    }),
-  }),
-});
-
-Document.implement({
-  isTypeOf: isTypeOf(TableCode.DOCUMENTS),
-  interfaces: [IDocument],
-  fields: (t) => ({
-    view: t.expose('id', { type: DocumentView }),
-    password: t.exposeString('password', { nullable: true }),
-    contentRating: t.expose('contentRating', { type: DocumentContentRating }),
-    allowReaction: t.exposeBoolean('allowReaction'),
-    protectContent: t.exposeBoolean('protectContent'),
-    locked: t.exposeBoolean('locked'),
-
-    assets: t.field({
-      type: [DocumentAsset],
-      resolve: async (self) => {
         const state = await db
           .select({ json: DocumentStates.json })
           .from(DocumentStates)
@@ -285,6 +211,39 @@ Document.implement({
         return [...existingImageIds, ...existingFileIds, ...existingEmbedIds, ...existingArchivedIds];
       },
     }),
+
+    fontFamilies: t.field({
+      type: [DocumentFontFamily],
+      args: {
+        sources: t.arg({
+          type: [FontFamilySource],
+          defaultValue: [FontFamilySource.DEFAULT, FontFamilySource.USER],
+        }),
+      },
+      resolve: async (self, args, ctx) => {
+        const entity = await db
+          .select({ userId: Entities.userId })
+          .from(Entities)
+          .innerJoin(Documents, eq(Documents.entityId, Entities.id))
+          .where(eq(Documents.id, self.id))
+          .then(firstOrThrow);
+
+        return await getDocumentFontFamilies(entity.userId, ctx.session?.userId ?? null, args.sources);
+      },
+    }),
+  }),
+});
+
+Document.implement({
+  isTypeOf: isTypeOf(TableCode.DOCUMENTS),
+  interfaces: [IDocument],
+  fields: (t) => ({
+    view: t.expose('id', { type: DocumentView }),
+    password: t.exposeString('password', { nullable: true }),
+    contentRating: t.expose('contentRating', { type: DocumentContentRating }),
+    allowReaction: t.exposeBoolean('allowReaction'),
+    protectContent: t.exposeBoolean('protectContent'),
+    locked: t.exposeBoolean('locked'),
 
     thumbnail: t.field({
       type: Image,
@@ -586,19 +545,37 @@ DocumentView.implement({
           return '(미리보기가 제한된 문서입니다)';
         }
 
-        const loader = ctx.loader({
-          name: 'DocumentView.excerpt',
+        const stateLoader = ctx.loader({
+          name: 'DocumentView.excerpt.v2',
           load: async (ids: string[]) => {
             return await db
-              .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
-              .from(DocumentContents)
-              .where(inArray(DocumentContents.documentId, ids));
+              .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
+              .from(DocumentStates)
+              .where(inArray(DocumentStates.documentId, ids));
           },
           key: ({ documentId }: { documentId: string }) => documentId,
         });
 
-        const content = await loader.load(self.id);
-        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+        const state = await stateLoader.load(self.id);
+
+        let text: string;
+        if (state) {
+          text = state.text.replaceAll(/\s+/g, ' ').trim();
+        } else {
+          const loader = ctx.loader({
+            name: 'DocumentView.excerpt',
+            load: async (ids: string[]) => {
+              return await db
+                .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
+                .from(DocumentContents)
+                .where(inArray(DocumentContents.documentId, ids));
+            },
+            key: ({ documentId }: { documentId: string }) => documentId,
+          });
+
+          const content = await loader.load(self.id);
+          text = content.text.replaceAll(/\s+/g, ' ').trim();
+        }
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
       },
@@ -641,6 +618,9 @@ DocumentView.implement({
           t.builder.simpleObject('DocumentViewBodyAvailable', {
             fields: (t) => ({ snapshot: t.field({ type: 'Binary' }) }),
           }),
+          t.builder.simpleObject('DocumentViewBodyAvailableV2', {
+            fields: (t) => ({ graph: t.field({ type: 'Binary' }) }),
+          }),
           t.builder.simpleObject('DocumentViewBodyUnavailable', {
             fields: (t) => ({ reason: t.field({ type: DocumentViewBodyUnavailableReason }) }),
           }),
@@ -652,6 +632,20 @@ DocumentView.implement({
           return {
             __typename: 'DocumentViewBodyUnavailable' as const,
             reason: access.reason,
+          };
+        }
+
+        const state = await db
+          .select({ graph: DocumentStates.graph })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, self.id))
+          .then(first);
+
+        if (state) {
+          const graph = await readMergedGraph(self.id, state.graph);
+          return {
+            __typename: 'DocumentViewBodyAvailableV2' as const,
+            graph,
           };
         }
 
@@ -702,6 +696,34 @@ DocumentView.implement({
         });
 
         return await loader.load(self.id);
+      },
+    }),
+
+    state: t.field({
+      type: t.builder.simpleObject('DocumentViewState', {
+        fields: (t) => ({
+          updatedAt: t.field({ type: 'DateTime' }),
+        }),
+      }),
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'DocumentView.state',
+          load: async (ids: string[]) => {
+            return await db
+              .select({ documentId: DocumentStates.documentId, updatedAt: DocumentStates.updatedAt })
+              .from(DocumentStates)
+              .where(inArray(DocumentStates.documentId, ids));
+          },
+          key: ({ documentId }: { documentId: string }) => documentId,
+        });
+
+        const row = await loader.load(self.id);
+        if (!row) {
+          return null;
+        }
+
+        return { updatedAt: row.updatedAt };
       },
     }),
   }),
