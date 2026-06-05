@@ -59,5 +59,23 @@ pub fn normalize(children: Vec<Fragment>) -> Vec<Fragment> {
         }
     }
     flush_inline(&mut inline_run, &mut result);
+    for frag in &mut result {
+        normalize_block_descendants(frag);
+    }
     result
+}
+
+fn normalize_block_descendants(frag: &mut Fragment) {
+    match &frag.node {
+        PlainNode::BulletList(_) | PlainNode::OrderedList(_) => {
+            for child in &mut frag.children {
+                normalize_block_descendants(child);
+            }
+        }
+        PlainNode::ListItem(_) => {
+            let children = std::mem::take(&mut frag.children);
+            frag.children = normalize(children);
+        }
+        _ => {}
+    }
 }
