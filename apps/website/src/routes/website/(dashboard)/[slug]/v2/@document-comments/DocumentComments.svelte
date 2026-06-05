@@ -3,6 +3,7 @@
   import { Toast } from '@typie/ui/notification';
   import { onDestroy } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
+  import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
   import { reconcileComments } from '$lib/editor-ffi/comments';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { cache } from '$lib/graphql';
@@ -172,7 +173,7 @@
     ed.requestCommentCompose = () => startComposing();
     const off = ed.registerContextMenuContributor(() => {
       if (ed.isSelectionCollapsed) return [];
-      return [{ label: '코멘트 달기', onclick: () => startComposing() }];
+      return [{ label: '코멘트 달기', icon: MessageSquarePlusIcon, onclick: () => startComposing() }];
     });
     return () => {
       ed.requestCommentCompose = null;
