@@ -61,7 +61,7 @@ impl Paginator {
     }
 
     pub fn paginate(mut self, tree: MeasuredTree) -> PaginatedLayout {
-        let root = self.place_node(&tree.root, NodeId::ROOT, 0);
+        let root = self.place_node(&tree.root, NodeId::ROOT, 0, 0.0);
         let pages = self.finish();
         let tree = LayoutTree { root };
         let page_fragments = build_page_fragment_trees(&tree, &pages);
@@ -77,11 +77,14 @@ impl Paginator {
         node: &MeasuredNode,
         parent_id: NodeId,
         child_index: usize,
+        terminal_chrome_after: f32,
     ) -> LayoutNode {
         match &node.content {
             MeasuredContent::Box(b) => {
                 let mut placed = match b.style.direction {
-                    Direction::Vertical => self.place_vertical(b, node.width),
+                    Direction::Vertical => {
+                        self.place_vertical(b, node.width, terminal_chrome_after)
+                    }
                     Direction::Horizontal => self.place_horizontal(b, node),
                 };
                 if b.style.monolithic
@@ -145,7 +148,12 @@ impl Paginator {
         }
     }
 
-    fn place_vertical(&mut self, measured: &MeasuredBox, width: f32) -> LayoutNode {
+    fn place_vertical(
+        &mut self,
+        measured: &MeasuredBox,
+        width: f32,
+        terminal_chrome_after: f32,
+    ) -> LayoutNode {
         let box_x = self.compute_box_x(measured, width);
         let box_y = self.accumulated_y;
 
@@ -170,8 +178,9 @@ impl Paginator {
         let mut prev_border_bottom: Option<f32> = None;
 
         let mut child_index: usize = 0;
+        let terminal_child_index = terminal_child_index(measured);
 
-        for child in &measured.children {
+        for (raw_child_index, child) in measured.children.iter().enumerate() {
             let is_doc_child = !matches!(child.content, MeasuredContent::Spacing(_));
 
             // 1. Gap absorption at page start (paginated only)
@@ -201,8 +210,14 @@ impl Paginator {
                 continue; // PageBreak consumed, not added to output
             }
 
+            let child_terminal_chrome_after = if Some(raw_child_index) == terminal_child_index {
+                terminal_chrome_after + trailing_chrome_height(measured)
+            } else {
+                0.0
+            };
+
             // 4. Break check
-            if self.should_break_before_child(child) {
+            if self.should_break_before_child(child, child_terminal_chrome_after) {
                 self.break_page(&mut children);
                 // Absorb gap immediately after a forced page break
                 if matches!(child.content, MeasuredContent::Spacing(_)) {
@@ -211,7 +226,12 @@ impl Paginator {
             }
 
             // 5. Place child
-            let layout_child = self.place_node(child, measured.node_id, child_index);
+            let layout_child = self.place_node(
+                child,
+                measured.node_id,
+                child_index,
+                child_terminal_chrome_after,
+            );
             if is_doc_child {
                 child_index += 1;
             }
@@ -340,12 +360,18 @@ impl Paginator {
         self.paginated
     }
 
-    fn should_break_before_child(&self, child: &MeasuredNode) -> bool {
-        self.is_paginated()
-            && !self.is_at_page_start()
-            && child.height > self.remaining()
-            && (child.page_break_policy() == PageBreakPolicy::Avoid
-                || matches!(child.content, MeasuredContent::Spacing(_)))
+    fn should_break_before_child(&self, child: &MeasuredNode, terminal_chrome_after: f32) -> bool {
+        if !self.is_paginated() || self.is_at_page_start() {
+            return false;
+        }
+
+        let remaining = self.remaining();
+
+        if matches!(child.content, MeasuredContent::Spacing(_)) {
+            return child.height > remaining;
+        }
+
+        initial_keep_height(child, terminal_chrome_after).is_some_and(|keep| keep > remaining)
     }
 
     fn page_content_bottom(&self) -> f32 {
@@ -457,6 +483,64 @@ fn child_border_bottom(node: &MeasuredNode) -> Option<f32> {
         MeasuredContent::Box(b) => Some(b.style.border.bottom),
         _ => None,
     }
+}
+
+fn leading_chrome_height(b: &MeasuredBox) -> f32 {
+    let border_top = if b.style.border_mode == BorderMode::Collapse {
+        0.0
+    } else {
+        b.style.border.top
+    };
+    border_top + b.style.padding.top
+}
+
+fn trailing_chrome_height(b: &MeasuredBox) -> f32 {
+    let border_bottom = if b.style.border_mode == BorderMode::Collapse {
+        0.0
+    } else {
+        b.style.border.bottom
+    };
+    b.style.padding.bottom + border_bottom
+}
+
+fn terminal_child_index(b: &MeasuredBox) -> Option<usize> {
+    b.children.iter().rposition(|child| {
+        !matches!(
+            child.content,
+            MeasuredContent::Spacing(_) | MeasuredContent::PageBreak
+        )
+    })
+}
+
+fn initial_child_index(b: &MeasuredBox) -> Option<usize> {
+    b.children
+        .iter()
+        .position(|child| !matches!(child.content, MeasuredContent::Spacing(_)))
+}
+
+fn initial_keep_height(node: &MeasuredNode, terminal_chrome_after: f32) -> Option<f32> {
+    if node.page_break_policy() == PageBreakPolicy::Avoid {
+        return Some(node.height + terminal_chrome_after);
+    }
+
+    let MeasuredContent::Box(b) = &node.content else {
+        return None;
+    };
+    if b.style.direction != Direction::Vertical {
+        return None;
+    }
+
+    let first_child_index = initial_child_index(b)?;
+    let child_terminal_chrome_after = if Some(first_child_index) == terminal_child_index(b) {
+        terminal_chrome_after + trailing_chrome_height(b)
+    } else {
+        0.0
+    };
+
+    Some(
+        leading_chrome_height(b)
+            + initial_keep_height(&b.children[first_child_index], child_terminal_chrome_after)?,
+    )
 }
 
 fn place_node_at(
@@ -573,12 +657,12 @@ mod tests {
     use crate::view::View;
     use crate::view_state::ViewState;
 
-    fn make_line(height: f32) -> Arc<MeasuredNode> {
+    fn make_line_with_id(node_id: NodeId, height: f32) -> Arc<MeasuredNode> {
         Arc::new(MeasuredNode {
             width: 400.0,
             height,
             content: MeasuredContent::Line(MeasuredLine {
-                node_id: NodeId::new(),
+                node_id,
                 baseline: height * 0.8,
                 ascent: height * 0.7,
                 descent: height * 0.1,
@@ -593,6 +677,10 @@ mod tests {
                 content_edge_x: None,
             }),
         })
+    }
+
+    fn make_line(height: f32) -> Arc<MeasuredNode> {
+        make_line_with_id(NodeId::new(), height)
     }
 
     fn make_box(children: Vec<Arc<MeasuredNode>>) -> MeasuredNode {
@@ -632,6 +720,35 @@ mod tests {
             height,
             content: MeasuredContent::Atom(MeasuredAtom {
                 node_id: NodeId::new(),
+            }),
+        })
+    }
+
+    fn make_box_with_style(
+        node_id: NodeId,
+        children: Vec<Arc<MeasuredNode>>,
+        padding: EdgeInsets,
+        border: EdgeInsets,
+        page_break_policy: PageBreakPolicy,
+    ) -> Arc<MeasuredNode> {
+        let children_height: f32 = children.iter().map(|c| c.height).sum();
+        Arc::new(MeasuredNode {
+            width: 400.0,
+            height: children_height + padding.top + padding.bottom + border.top + border.bottom,
+            content: MeasuredContent::Box(MeasuredBox {
+                node_id,
+                style: BoxStyle {
+                    direction: Direction::Vertical,
+                    padding,
+                    border,
+                    border_mode: BorderMode::Separate,
+                    alignment: Alignment::Start,
+                    scope: false,
+                    decorations: vec![],
+                    monolithic: false,
+                },
+                children,
+                page_break_policy,
             }),
         })
     }
@@ -910,6 +1027,216 @@ mod tests {
             "first paragraph line should stay on page 1 when space remains; got y={} page_end={}",
             first_line.rect.y,
             pages[0].y_end
+        );
+    }
+
+    #[test]
+    fn paginated_keeps_leading_chrome_with_first_avoid_child() {
+        // Page content height is 90. The first line leaves exactly 1px, enough
+        // for the fold-like box's top border but not for its title. The box
+        // should move as a group instead of leaving top chrome on page 1.
+        let fold_id = NodeId::new();
+        let title_id = NodeId::new();
+        let title = make_box_with_style(
+            title_id,
+            vec![make_line(20.0)],
+            EdgeInsets::ZERO,
+            EdgeInsets::ZERO,
+            PageBreakPolicy::Avoid,
+        );
+        let fold = make_box_with_style(
+            fold_id,
+            vec![title],
+            EdgeInsets::ZERO,
+            EdgeInsets::all(1.0),
+            PageBreakPolicy::Auto,
+        );
+        let root = make_box(vec![make_line(89.0), fold]);
+
+        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
+        assert_eq!(pages.len(), 2);
+
+        let fold_node = find_node(&tree.root, fold_id).expect("fold-like box");
+        let title_node = find_node(&tree.root, title_id).expect("title box");
+        assert!(
+            fold_node.rect.y >= pages[1].content_y_start,
+            "fold leading chrome must move with title; fold y={} page2_content_start={}",
+            fold_node.rect.y,
+            pages[1].content_y_start
+        );
+        assert!(
+            title_node.rect.y >= pages[1].content_y_start,
+            "title must start on the same page as its leading chrome; title y={} page2_content_start={}",
+            title_node.rect.y,
+            pages[1].content_y_start
+        );
+    }
+
+    #[test]
+    fn paginated_fold_keeps_top_border_with_title() {
+        let (doc, f1) = doc! {
+            root {
+                f1: fold {
+                    fold_title { text("Title") }
+                    fold_content { paragraph { text("Content") } }
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let fold = measurer.measure(&doc, f1, 400.0, &ViewState::new());
+        let root = make_box(vec![make_line(89.0), fold]);
+
+        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
+        assert!(pages.len() >= 2);
+
+        let fold_node = find_node(&tree.root, f1).expect("fold box");
+        assert!(
+            fold_node.rect.y >= pages[1].content_y_start,
+            "measured fold must not leave top border on the previous page; fold y={} page2_content_start={}",
+            fold_node.rect.y,
+            pages[1].content_y_start
+        );
+    }
+
+    #[test]
+    fn paginated_expanded_fold_does_not_reserve_own_bottom_for_title() {
+        // The first line leaves exactly enough space for top border + title.
+        // The fold bottom does not need to fit with the title because content
+        // follows; reserving it for the title strands the top border.
+        let fold_id = NodeId::new();
+        let title_id = NodeId::new();
+        let title = make_box_with_style(
+            title_id,
+            vec![make_line(20.0)],
+            EdgeInsets::ZERO,
+            EdgeInsets::ZERO,
+            PageBreakPolicy::Avoid,
+        );
+        let content = make_box_with_style(
+            NodeId::new(),
+            vec![make_line(20.0)],
+            EdgeInsets::ZERO,
+            EdgeInsets::ZERO,
+            PageBreakPolicy::Auto,
+        );
+        let fold = make_box_with_style(
+            fold_id,
+            vec![title, content],
+            EdgeInsets::ZERO,
+            EdgeInsets::all(1.0),
+            PageBreakPolicy::Auto,
+        );
+        let root = make_box(vec![make_line(69.0), fold]);
+
+        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
+        assert!(pages.len() >= 2);
+
+        let fold_node = find_node(&tree.root, fold_id).expect("fold-like box");
+        let title_node = find_node(&tree.root, title_id).expect("title box");
+        assert!(
+            title_node.rect.y < pages[0].content_y_end,
+            "title should stay with the top border when content follows; title y={} page1_content_end={}",
+            title_node.rect.y,
+            pages[0].content_y_end
+        );
+        assert!(
+            fold_node.rect.y < pages[0].content_y_end,
+            "fold top border should stay on the same page as the title; fold y={} page1_content_end={}",
+            fold_node.rect.y,
+            pages[0].content_y_end
+        );
+    }
+
+    #[test]
+    fn paginated_does_not_reserve_outer_trailing_chrome_for_expanded_first_child() {
+        // The wrapper has only one child, but that child is an expanded
+        // fold-like box. The wrapper's trailing chrome belongs with the fold's
+        // terminal content, not with the fold title.
+        let fold_id = NodeId::new();
+        let title_id = NodeId::new();
+        let title = make_box_with_style(
+            title_id,
+            vec![make_line(20.0)],
+            EdgeInsets::ZERO,
+            EdgeInsets::ZERO,
+            PageBreakPolicy::Avoid,
+        );
+        let content = make_box_with_style(
+            NodeId::new(),
+            vec![make_line(20.0)],
+            EdgeInsets::ZERO,
+            EdgeInsets::ZERO,
+            PageBreakPolicy::Auto,
+        );
+        let fold = make_box_with_style(
+            fold_id,
+            vec![title, content],
+            EdgeInsets::ZERO,
+            EdgeInsets::all(1.0),
+            PageBreakPolicy::Auto,
+        );
+        let wrapper = make_box_with_style(
+            NodeId::new(),
+            vec![fold],
+            EdgeInsets {
+                bottom: 10.0,
+                ..EdgeInsets::ZERO
+            },
+            EdgeInsets::ZERO,
+            PageBreakPolicy::Auto,
+        );
+        let root = make_box(vec![make_line(69.0), wrapper]);
+
+        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
+        assert!(pages.len() >= 2);
+
+        let fold_node = find_node(&tree.root, fold_id).expect("fold-like box");
+        let title_node = find_node(&tree.root, title_id).expect("title box");
+        assert!(
+            title_node.rect.y < pages[0].content_y_end,
+            "title should not move just to reserve outer trailing chrome; title y={} page1_content_end={}",
+            title_node.rect.y,
+            pages[0].content_y_end
+        );
+        assert!(
+            fold_node.rect.y < pages[0].content_y_end,
+            "fold top border should stay with the title even when outer trailing chrome does not fit; fold y={} page1_content_end={}",
+            fold_node.rect.y,
+            pages[0].content_y_end
+        );
+    }
+
+    #[test]
+    fn paginated_keeps_trailing_chrome_with_last_avoid_child() {
+        // Page content height is 90. Inside a splittable wrapper, the first
+        // child leaves exactly 15px. The last line fits by itself, but not with
+        // the wrapper's trailing padding+border, so the line should move.
+        let wrapper_id = NodeId::new();
+        let last_line_id = NodeId::new();
+        let wrapper = make_box_with_style(
+            wrapper_id,
+            vec![make_line(30.0), make_line_with_id(last_line_id, 15.0)],
+            EdgeInsets {
+                bottom: 10.0,
+                ..EdgeInsets::ZERO
+            },
+            EdgeInsets {
+                bottom: 1.0,
+                ..EdgeInsets::ZERO
+            },
+            PageBreakPolicy::Auto,
+        );
+        let root = make_box(vec![make_line(45.0), wrapper]);
+
+        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
+        assert_eq!(pages.len(), 2);
+
+        let last_line = find_line(&tree.root, last_line_id).expect("last avoid line");
+        assert!(
+            last_line.rect.y >= pages[1].content_y_start,
+            "last avoid child must move with trailing chrome; line y={} page2_content_start={}",
+            last_line.rect.y,
+            pages[1].content_y_start
         );
     }
 
@@ -1201,6 +1528,14 @@ mod tests {
             }
         }
         None
+    }
+
+    fn find_line(node: &LayoutNode, id: NodeId) -> Option<&LayoutNode> {
+        match &node.content {
+            LayoutContent::Line(l) if l.node_id == id => Some(node),
+            LayoutContent::Box(b) => b.children.iter().find_map(|c| find_line(c, id)),
+            _ => None,
+        }
     }
 
     fn box_children(node: &LayoutNode) -> Vec<&LayoutNode> {
