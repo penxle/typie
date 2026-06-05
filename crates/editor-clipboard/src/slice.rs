@@ -87,7 +87,7 @@ impl Slice {
         self.fragment.children.is_empty()
             && !matches!(
                 self.fragment.node,
-                PlainNode::Text(_) | PlainNode::HardBreak(_)
+                PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_)
             )
     }
 
@@ -286,6 +286,16 @@ mod tests {
     #[test]
     fn is_empty_keeps_text_leaf_non_empty() {
         let slice = Slice::from_text("hello");
+        assert!(!slice.is_empty());
+    }
+
+    #[test]
+    fn is_empty_keeps_tab_leaf_non_empty() {
+        let slice = Slice {
+            fragment: Fragment::leaf(PlainNode::Tab(editor_model::PlainTabNode::default())),
+            open_start: 0,
+            open_end: 0,
+        };
         assert!(!slice.is_empty());
     }
 

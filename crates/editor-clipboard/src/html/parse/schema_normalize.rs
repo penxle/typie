@@ -17,7 +17,9 @@ pub fn normalize(children: Vec<Fragment>) -> Vec<Fragment> {
     }
     for child in children {
         match &child.node {
-            PlainNode::Text(_) | PlainNode::HardBreak(_) => inline_run.push(child),
+            PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_) => {
+                inline_run.push(child)
+            }
             PlainNode::ListItem(_) => {
                 flush_inline(&mut inline_run, &mut result);
                 result.push(Fragment {

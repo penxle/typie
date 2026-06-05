@@ -66,7 +66,9 @@ fn slice_to_cell_blocks(slice: &Slice) -> Vec<Fragment> {
     };
     for child in top_children {
         match &child.node {
-            PlainNode::Text(_) | PlainNode::HardBreak(_) => inline_run.push(child.clone()),
+            PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_) => {
+                inline_run.push(child.clone())
+            }
             _ => {
                 flush(&mut inline_run, &mut out);
                 out.push(child.clone());
