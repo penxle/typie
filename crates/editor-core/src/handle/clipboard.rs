@@ -299,6 +299,77 @@ mod tests {
     }
 
     #[test]
+    fn paste_empty_paragraph_copy_into_text_middle_inserts_block() {
+        let (source, ..) = state! {
+            doc { r: root { paragraph {} } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+        let (target, _t1) = state! {
+            doc { root { paragraph { t1: text("asd") } } }
+            selection: (t1, 1)
+        };
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                p: paragraph {}
+                paragraph { text("sd") }
+            } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn paste_open_empty_paragraph_range_into_text_middle_inserts_boundary() {
+        let (source, _p1, _t1) = state! {
+            doc { root {
+                p1: paragraph {}
+                paragraph { t1: text("asd") }
+                paragraph {}
+            } }
+            selection: (p1, 0, >) -> (t1, 0, <)
+        };
+        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+        let (target, _t2) = state! {
+            doc { root {
+                paragraph {}
+                paragraph { t2: text("asd") }
+                paragraph {}
+            } }
+            selection: (t2, 1)
+        };
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph {}
+                paragraph { text("a") }
+                paragraph { t3: text("sd") }
+                paragraph {}
+            } }
+            selection: (t3, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn paste_crlf_text_does_not_fail() {
         let (s, ..) = state! {
             doc { root { paragraph { t1: text("") } } }

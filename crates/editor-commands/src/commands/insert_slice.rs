@@ -28,7 +28,9 @@ pub fn insert_slice(tr: &mut Transaction, slice: Slice) -> CommandResult {
 mod tests {
     use editor_clipboard::Slice;
     use editor_macros::state;
-    use editor_model::{Fragment, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode};
+    use editor_model::{
+        Fragment, PlainFoldTitleNode, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
+    };
 
     use super::*;
     use crate::test_utils::*;
@@ -64,6 +66,21 @@ mod tests {
         }
     }
 
+    fn open_fold_title_slice(text: &str) -> Slice {
+        Slice {
+            fragment: Fragment {
+                node: PlainNode::FoldTitle(PlainFoldTitleNode::default()),
+                modifiers: vec![],
+                style: None,
+                children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                    text: text.into(),
+                }))],
+            },
+            open_start: 1,
+            open_end: 1,
+        }
+    }
+
     #[test]
     fn insert_empty_slice_no_op() {
         let (initial, ..) = state! {
@@ -80,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_inline_only_into_paragraph_middle() {
+    fn insert_open_single_paragraph_into_paragraph_middle_merges_both_edges() {
         let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
@@ -95,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_inline_at_block_boundary_wraps_paragraph() {
+    fn insert_open_paragraph_at_block_boundary_inserts_paragraph() {
         let (initial, ..) = state! {
             doc { r: root {
                 paragraph { text("a") }
@@ -103,18 +120,7 @@ mod tests {
             } }
             selection: (r, 1, >)
         };
-        let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                style: None,
-                children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
-                    text: "X".into(),
-                }))],
-            },
-            open_start: 1,
-            open_end: 1,
-        };
+        let slice = root_with_paragraph("X");
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
             doc { root {
@@ -128,7 +134,50 @@ mod tests {
     }
 
     #[test]
-    fn insert_disallowed_block_unwraps_children() {
+    fn insert_open_paragraph_text_into_fold_title_uses_open_inline_content() {
+        let (source, ..) = state! {
+            doc { root { paragraph { t1: text("body") } } }
+            selection: (t1, 0) -> (t1, 4)
+        };
+        let slice = Slice::extract(&source).expect("non-collapsed");
+
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title {}
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
+        let (expected, ..) = state! {
+            doc { root { fold {
+                fold_title { t: text("body") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (t, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_open_fold_title_text_into_paragraph_uses_open_inline_content() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph {} } }
+            selection: (p, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            open_fold_title_slice("title")
+        ));
+        let (expected, ..) = state! {
+            doc { root { paragraph { t: text("title") } } }
+            selection: (t, 5)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn insert_block_slice_into_paragraph_preserves_block_structure() {
         use editor_model::{PlainBulletListNode, PlainListItemNode};
         let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
@@ -156,8 +205,12 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
-            doc { root { paragraph { t: text("HelloX") } } }
-            selection: (t, 6)
+            doc { root {
+                paragraph { text("Hello") }
+                bl: bullet_list { list_item { paragraph { text("X") } } }
+                paragraph {}
+            } }
+            selection: (bl, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -460,7 +513,7 @@ mod tests {
 
         use crate::commands::{apply_style, define_style};
 
-        let (initial, p1, t1) = state! {
+        let (initial, p1, _t1) = state! {
             doc { root { p1: paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };

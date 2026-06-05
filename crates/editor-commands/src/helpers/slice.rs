@@ -1,12 +1,14 @@
 use editor_clipboard::Slice;
 use editor_model::{
-    Fragment, Modifier, Node, NodeId, NodeType, PlainNode, PlainParagraphNode, PlainRootNode,
-    PlainTextNode, Schema, Subtree,
+    Fragment, Modifier, Node, NodeId, NodeType, PlainNode, PlainTextNode, Schema, Subtree,
 };
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use super::{insert_hard_break_at_caret, insert_tab_at_caret, insert_text_at_caret};
+use super::{
+    compact_textblock_preserving_caret, find_ancestor_textblock, insert_hard_break_at_caret,
+    insert_tab_at_caret, insert_text_at_caret,
+};
 use crate::{CommandError, CommandResult};
 
 pub(crate) fn insert_slice_at_position(
@@ -18,157 +20,15 @@ pub(crate) fn insert_slice_at_position(
         return Ok(None);
     }
 
-    let slice = coerce_slice_for_position(tr, position, slice);
-    if slice.is_empty() {
-        return Ok(None);
-    }
-
-    let inline_only = is_inline_only(&slice);
     let in_textblock = position_in_textblock(tr, position);
-    match (inline_only, in_textblock) {
-        (true, true) => insert_inline_at_position(tr, position, &slice),
-        (false, true) => insert_blocks_in_textblock_at_position(tr, position, &slice),
-        (true, false) => insert_inline_at_block_boundary(tr, position, &slice),
-        (false, false) => insert_blocks_at_block_boundary(tr, position, &slice),
-    }
-}
-
-// Coerce slice's top-level block children to types the caret container allows.
-// Disallowed types are unwrapped recursively until either an allowed type or
-// an inline leaf is reached.
-fn coerce_slice_for_position(tr: &Transaction, position: Position, slice: Slice) -> Slice {
-    let container_type = match container_type_for_position(tr, position) {
-        Some(t) => t,
-        None => return slice,
-    };
-
-    let Slice {
-        fragment,
-        open_start,
-        open_end,
-    } = slice;
-
-    match fragment.node {
-        PlainNode::Root(_) => {
-            let coerced: Vec<Fragment> = fragment
-                .children
-                .into_iter()
-                .flat_map(|c| coerce_fragment_for_parent(c, container_type))
-                .collect();
-            Slice {
-                fragment: Fragment {
-                    node: fragment.node,
-                    modifiers: fragment.modifiers,
-                    style: fragment.style,
-                    children: coerced,
-                },
-                open_start,
-                open_end,
-            }
+    if in_textblock {
+        if should_insert_open_content_as_inline(tr, position, &slice) {
+            insert_open_content_as_inline_at_position(tr, position, &slice)
+        } else {
+            insert_blocks_in_textblock_at_position(tr, position, &slice)
         }
-        _ => {
-            let coerced = coerce_fragment_for_parent(
-                Fragment {
-                    node: fragment.node,
-                    modifiers: fragment.modifiers,
-                    style: fragment.style,
-                    children: fragment.children,
-                },
-                container_type,
-            );
-            let wrapped = Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                style: None,
-                children: coerced,
-            };
-            Slice {
-                fragment: wrapped,
-                open_start,
-                open_end,
-            }
-        }
-    }
-}
-
-fn container_type_for_position(tr: &Transaction, position: Position) -> Option<NodeType> {
-    let state = tr.state();
-    let node = state.doc.node(position.node_id)?;
-    // Coerce only against the textblock the caret sits inside — at block
-    // boundaries (Case C/D candidates) we want the slice's blocks to land
-    // as siblings of the existing blocks, not be unwrapped against the
-    // boundary container's schema.
-    match node.node() {
-        Node::Text(_) => node.parent().map(|p| p.as_type()),
-        _ => None,
-    }
-}
-
-fn coerce_fragment_for_parent(f: Fragment, parent_type: NodeType) -> Vec<Fragment> {
-    let f_type = f.node.as_type();
-    let f_spec = Schema::node_spec(f_type);
-    let parent_spec = Schema::node_spec(parent_type);
-
-    // Block content inside a textblock parent (nested textblock, or a block
-    // leaf like Image/HorizontalRule) keeps its boundary so the textblock
-    // gets split around it instead of being recursively unwrapped to nothing.
-    if parent_spec.is_textblock() && (f_spec.is_textblock() || f_spec.is_leaf()) && !f_spec.inline {
-        return vec![f];
-    }
-    // Inline content reaches the inline insertion path as-is.
-    if f_spec.inline {
-        return vec![f];
-    }
-    if child_allowed(parent_type, f_type) {
-        return vec![f];
-    }
-    let mut out = vec![];
-    for child in f.children {
-        out.extend(coerce_fragment_for_parent(child, parent_type));
-    }
-    out
-}
-
-fn child_allowed(parent_type: NodeType, child_type: NodeType) -> bool {
-    let spec = Schema::node_spec(parent_type);
-    spec.content.allowed_types().contains(&child_type)
-}
-
-// An inline-only slice represents pasteable content that fits inside a single
-// textblock — either bare inline (Text/HardBreak) or a single textblock wrapper
-// (Paragraph) around inline. A Root with multiple block children is a
-// block-sequence even if every block happens to be inline-compatible.
-fn is_inline_only(slice: &Slice) -> bool {
-    fn is_textblock_wrapper(n: &PlainNode) -> bool {
-        matches!(n, PlainNode::Paragraph(_))
-    }
-    fn is_inline_leaf(n: &PlainNode) -> bool {
-        matches!(
-            n,
-            PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_)
-        )
-    }
-
-    let frag = &slice.fragment;
-    match &frag.node {
-        n if is_inline_leaf(n) => true,
-        n if is_textblock_wrapper(n) => frag.children.iter().all(|c| is_inline_leaf(&c.node)),
-        PlainNode::Root(_) => {
-            let block_kids: Vec<&Fragment> = frag
-                .children
-                .iter()
-                .filter(|c| !is_inline_leaf(&c.node))
-                .collect();
-            match block_kids.len() {
-                0 => true,
-                1 if is_textblock_wrapper(&block_kids[0].node) => block_kids[0]
-                    .children
-                    .iter()
-                    .all(|c| is_inline_leaf(&c.node)),
-                _ => false,
-            }
-        }
-        _ => false,
+    } else {
+        insert_blocks_at_block_boundary(tr, position, &slice)
     }
 }
 
@@ -179,21 +39,97 @@ fn position_in_textblock(tr: &Transaction, position: Position) -> bool {
         .is_some_and(|resolved| resolved.is_inline_position())
 }
 
-fn enclosing_textblock_id(tr: &Transaction, position: Position) -> Option<NodeId> {
-    let doc = tr.doc();
-    let node = doc.node(position.node_id)?;
-    if matches!(node.node(), Node::Text(_)) {
-        return node.parent().map(|p| p.id());
+fn top_level_fragments(slice: &Slice) -> Vec<&Fragment> {
+    match &slice.fragment.node {
+        PlainNode::Root(_) => slice.fragment.children.iter().collect(),
+        _ => vec![&slice.fragment],
     }
-    if node.spec().is_textblock() {
-        return Some(node.id());
-    }
-    None
 }
 
-fn paragraph_is_empty(tr: &Transaction, para_id: NodeId) -> bool {
+fn open_content_fragments(mut fragments: Vec<&Fragment>, open_depth: u32) -> Vec<&Fragment> {
+    for _ in 0..open_depth {
+        let mut next = Vec::new();
+        for fragment in fragments {
+            if Schema::node_spec(fragment.node.as_type()).is_leaf() || fragment.children.is_empty()
+            {
+                next.push(fragment);
+            } else {
+                next.extend(fragment.children.iter());
+            }
+        }
+        fragments = next;
+    }
+    fragments
+}
+
+fn fragments_fit_parent(parent_type: NodeType, fragments: &[&Fragment]) -> bool {
+    let content = &Schema::node_spec(parent_type).content;
+    fragments
+        .iter()
+        .all(|fragment| content.matches(fragment.node.as_type()))
+}
+
+fn fragments_are_inline(fragments: &[&Fragment]) -> bool {
+    !fragments.is_empty()
+        && fragments
+            .iter()
+            .all(|fragment| Schema::node_spec(fragment.node.as_type()).inline)
+}
+
+fn can_split_textblock_for_structural_insert(
+    doc: &editor_model::Doc,
+    textblock_id: NodeId,
+) -> bool {
+    let Some(textblock) = doc.node(textblock_id) else {
+        return false;
+    };
+    let Some(parent) = textblock.parent() else {
+        return false;
+    };
+    let Some(index) = textblock.index() else {
+        return false;
+    };
+
+    let mut child_types: Vec<NodeType> = parent.children().map(|child| child.as_type()).collect();
+    child_types.insert(index + 1, textblock.as_type());
+    parent.spec().content.validate(&child_types).is_ok()
+}
+
+fn should_insert_open_content_as_inline(
+    tr: &Transaction,
+    position: Position,
+    slice: &Slice,
+) -> bool {
+    if slice.open_start == 0 {
+        return false;
+    }
+
     let doc = tr.doc();
-    let Some(node) = doc.node(para_id) else {
+    let Some(textblock_id) = find_ancestor_textblock(&doc, position.node_id) else {
+        return false;
+    };
+    let Some(textblock) = doc.node(textblock_id) else {
+        return false;
+    };
+    let Some(parent) = textblock.parent() else {
+        return false;
+    };
+
+    let top_level = top_level_fragments(slice);
+    let open_content = open_content_fragments(top_level.clone(), slice.open_start);
+    if !fragments_are_inline(&open_content)
+        || !fragments_fit_parent(textblock.as_type(), &open_content)
+    {
+        return false;
+    }
+
+    !can_split_textblock_for_structural_insert(&doc, textblock_id)
+        || !fragments_fit_parent(parent.as_type(), &top_level)
+}
+
+fn textblock_is_empty(tr: &Transaction, textblock_id: NodeId) -> bool {
+    let doc = tr.doc();
+    let Some(node) = doc.node(textblock_id) else {
         return false;
     };
     if !node.spec().is_textblock() {
@@ -205,72 +141,33 @@ fn paragraph_is_empty(tr: &Transaction, para_id: NodeId) -> bool {
     })
 }
 
-fn source_paragraph_wrapper_style(slice: &Slice) -> Option<String> {
-    match &slice.fragment.node {
-        PlainNode::Paragraph(_) => slice.fragment.style.clone(),
-        PlainNode::Root(_) => {
-            let paras: Vec<&Fragment> = slice
-                .fragment
-                .children
-                .iter()
-                .filter(|c| matches!(c.node, PlainNode::Paragraph(_)))
-                .collect();
-            if paras.len() == 1 {
-                paras[0].style.clone()
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-fn collect_inline(f: &Fragment) -> Vec<&Fragment> {
-    fn walk<'a>(f: &'a Fragment, out: &mut Vec<&'a Fragment>) {
-        match &f.node {
-            PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_) => out.push(f),
-            _ => {
-                for c in &f.children {
-                    walk(c, out);
-                }
-            }
-        }
-    }
-    let mut out = vec![];
-    walk(f, &mut out);
-    out
-}
-
-fn insert_inline_at_caret(tr: &mut Transaction, slice: &Slice) -> CommandResult {
-    let fragments: Vec<Fragment> = collect_inline(&slice.fragment)
-        .into_iter()
-        .cloned()
-        .collect();
-    insert_inline_fragments(tr, fragments)
-}
-
-fn insert_inline_at_position(
+fn insert_open_content_as_inline_at_position(
     tr: &mut Transaction,
     position: Position,
     slice: &Slice,
 ) -> Result<Option<Selection>, CommandError> {
-    let dest_para = enclosing_textblock_id(tr, position);
-    let dest_was_empty = dest_para.is_some_and(|id| paragraph_is_empty(tr, id));
+    let fragments: Vec<Fragment> =
+        open_content_fragments(top_level_fragments(slice), slice.open_start)
+            .into_iter()
+            .cloned()
+            .collect();
+    if fragments.is_empty() {
+        return Ok(None);
+    }
 
     tr.set_selection(Some(Selection::collapsed(position)))?;
-    let start = tr.selection().map(|s| s.head).unwrap_or(position);
-    let inserted = insert_inline_at_caret(tr, slice)?;
+    let start = tr
+        .selection()
+        .expect("selection preserved through mutations")
+        .head;
+    let inserted = insert_inline_fragments(tr, fragments)?;
     if !inserted {
         return Ok(None);
     }
-    if dest_was_empty
-        && let (Some(para_id), Some(style)) = (dest_para, source_paragraph_wrapper_style(slice))
-    {
-        tr.set_node_style(para_id, Some(style))?;
-    }
-    let Some(end) = tr.selection().map(|s| s.head) else {
-        return Ok(None);
-    };
+    let end = tr
+        .selection()
+        .expect("selection preserved through mutations")
+        .head;
     Ok(Some(normalized_selection(tr, start, end)))
 }
 
@@ -375,6 +272,32 @@ enum InsertedRangeEndpoint {
     AfterBlock(NodeId),
 }
 
+#[derive(Default)]
+struct InsertedRange {
+    start: Option<InsertedRangeEndpoint>,
+    end: Option<InsertedRangeEndpoint>,
+}
+
+impl InsertedRange {
+    fn include_position_range(&mut self, start: Position, end: Position) {
+        self.start
+            .get_or_insert(InsertedRangeEndpoint::Position(start));
+        self.end = Some(InsertedRangeEndpoint::Position(end));
+    }
+
+    fn include_block(&mut self, block_id: NodeId) {
+        self.start
+            .get_or_insert(InsertedRangeEndpoint::BeforeBlock(block_id));
+        self.end = Some(InsertedRangeEndpoint::AfterBlock(block_id));
+    }
+
+    fn selection(&self, tr: &Transaction) -> Option<Selection> {
+        let start = resolve_inserted_range_endpoint(tr, self.start?)?;
+        let end = resolve_inserted_range_endpoint(tr, self.end?)?;
+        Some(normalized_selection(tr, start, end))
+    }
+}
+
 fn insert_blocks_in_textblock(
     tr: &mut Transaction,
     slice: &Slice,
@@ -428,6 +351,8 @@ fn insert_blocks_in_textblock(
         (parent.id(), textblock_index)
     };
 
+    let textblock_was_empty = textblock_is_empty(tr, textblock_id);
+
     // Split the textblock at the resolved child index. p2_id becomes the right half.
     let p2_id = NodeId::new();
     tr.split_node(textblock_id, split_index_in_textblock, p2_id)?;
@@ -445,6 +370,9 @@ fn insert_blocks_in_textblock(
         && blocks
             .last()
             .is_some_and(|b| same_textblock_type(&b.node, p2_id, tr));
+    // If one open textblock is both the first and last block, it receives both
+    // split halves instead of being applied once to each side.
+    let merge_end_into_start = merge_start && merge_end && blocks.len() == 1;
 
     let middle_start = if merge_start { 1 } else { 0 };
     let middle_end = if merge_end {
@@ -452,19 +380,21 @@ fn insert_blocks_in_textblock(
     } else {
         blocks.len()
     };
-    // When the same block participates as both first and last (single-block slice with
-    // both ends open and matching textblocks), only merge into the start to avoid
-    // double-applying its inline content.
-    let merge_end = merge_end && middle_end >= middle_start;
+    let merge_end = merge_end && !merge_end_into_start && middle_end >= middle_start;
 
     let mut last_caret: Option<Position> = None;
-    let mut inserted_start: Option<InsertedRangeEndpoint> = None;
-    let mut inserted_end: Option<InsertedRangeEndpoint> = None;
+    let mut inserted_range = InsertedRange::default();
 
     if merge_start {
         let first = blocks[0];
+        if textblock_was_empty && let Some(style) = first.style.clone() {
+            tr.set_node_style(textblock_id, Some(style))?;
+        }
         let inline = first.children.to_vec();
-        position_caret_at_textblock_end(tr, textblock_id)?;
+        tr.set_selection(Some(Selection::collapsed(position_at_end_of_block(
+            tr,
+            textblock_id,
+        )?)))?;
         let start = tr
             .selection()
             .expect("selection preserved through mutations")
@@ -475,10 +405,16 @@ fn insert_blocks_in_textblock(
             .expect("selection preserved through mutations")
             .head;
         if inserted {
-            inserted_start.get_or_insert(InsertedRangeEndpoint::Position(start));
-            inserted_end = Some(InsertedRangeEndpoint::Position(end));
+            inserted_range.include_position_range(start, end);
+            last_caret = Some(end);
         }
-        last_caret = Some(end);
+    }
+
+    if merge_end_into_start {
+        tr.merge_node(p2_id, textblock_id)?;
+        let caret = last_caret.unwrap_or(head);
+        compact_textblock_preserving_caret(tr, caret)?;
+        last_caret = tr.selection().map(|s| s.head);
     }
 
     for (insert_at, block) in
@@ -487,15 +423,16 @@ fn insert_blocks_in_textblock(
         let subtree = (*block).clone().into_subtree();
         let inserted_id = subtree.id;
         tr.insert_subtree(container_id, insert_at, subtree)?;
-        inserted_start.get_or_insert(InsertedRangeEndpoint::BeforeBlock(inserted_id));
-        inserted_end = Some(InsertedRangeEndpoint::AfterBlock(inserted_id));
-        last_caret = Some(position_at_end_of_block(tr, inserted_id));
+        inserted_range.include_block(inserted_id);
+        last_caret = Some(position_at_end_of_block(tr, inserted_id)?);
     }
 
     if merge_end {
         let last = blocks.last().unwrap();
         let inline = last.children.to_vec();
-        position_caret_at_textblock_start(tr, p2_id)?;
+        tr.set_selection(Some(Selection::collapsed(position_at_start_of_block(
+            tr, p2_id,
+        )?)))?;
         let start = tr
             .selection()
             .expect("selection preserved through mutations")
@@ -508,8 +445,7 @@ fn insert_blocks_in_textblock(
             .expect("selection preserved through mutations")
             .head;
         if inserted {
-            inserted_start.get_or_insert(InsertedRangeEndpoint::Position(start));
-            inserted_end = Some(InsertedRangeEndpoint::Position(end));
+            inserted_range.include_position_range(start, end);
         }
         last_caret = Some(end);
     }
@@ -558,11 +494,20 @@ fn insert_blocks_in_textblock(
             affinity: Affinity::Upstream,
         },
     };
-    let inserted_selection = inserted_start.zip(inserted_end).and_then(|(start, end)| {
-        let start = resolve_inserted_range_endpoint(tr, start)?;
-        let end = resolve_inserted_range_endpoint(tr, end)?;
-        Some(normalized_selection(tr, start, end))
-    });
+    let explicit_inserted_selection = inserted_range.selection(tr);
+    let split_boundary_selection = if explicit_inserted_selection.is_none()
+        && tr.doc().node(textblock_id).is_some()
+        && tr.doc().node(p2_id).is_some()
+    {
+        Some(normalized_selection(
+            tr,
+            position_at_end_of_block(tr, textblock_id)?,
+            position_at_start_of_block(tr, p2_id)?,
+        ))
+    } else {
+        None
+    };
+    let inserted_selection = explicit_inserted_selection.or(split_boundary_selection);
     tr.set_selection(Some(Selection::collapsed(final_pos)))?;
 
     Ok(inserted_selection)
@@ -573,77 +518,12 @@ fn normalized_selection(tr: &Transaction, anchor: Position, head: Position) -> S
     selection.normalize(&tr.doc()).unwrap_or(selection)
 }
 
-fn position_caret_at_textblock_end(
-    tr: &mut Transaction,
-    textblock_id: NodeId,
-) -> Result<(), CommandError> {
+fn position_at_end_of_block(tr: &Transaction, block_id: NodeId) -> Result<Position, CommandError> {
     let doc = tr.doc();
-    let tb = doc
-        .node(textblock_id)
-        .ok_or(CommandError::NodeNotFound(textblock_id))?;
-    let pos = match tb.last_child() {
-        Some(c) => match c.node() {
-            Node::Text(t) => Position {
-                node_id: c.id(),
-                offset: t.text.len(),
-                affinity: Affinity::Upstream,
-            },
-            _ => {
-                let child_count = tb.children().count();
-                Position {
-                    node_id: textblock_id,
-                    offset: child_count,
-                    affinity: Affinity::Upstream,
-                }
-            }
-        },
-        None => Position {
-            node_id: textblock_id,
-            offset: 0,
-            affinity: Affinity::Upstream,
-        },
-    };
-    drop(doc);
-    tr.set_selection(Some(Selection::collapsed(pos)))?;
-    Ok(())
-}
-
-fn position_caret_at_textblock_start(
-    tr: &mut Transaction,
-    textblock_id: NodeId,
-) -> Result<(), CommandError> {
-    let doc = tr.doc();
-    let tb = doc
-        .node(textblock_id)
-        .ok_or(CommandError::NodeNotFound(textblock_id))?;
-    let pos = match tb.first_child() {
-        Some(c) => match c.node() {
-            Node::Text(_) => Position {
-                node_id: c.id(),
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            _ => Position {
-                node_id: textblock_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-        },
-        None => Position {
-            node_id: textblock_id,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        },
-    };
-    drop(doc);
-    tr.set_selection(Some(Selection::collapsed(pos)))?;
-    Ok(())
-}
-
-fn position_at_end_of_block(tr: &Transaction, block_id: NodeId) -> Position {
-    let doc = tr.doc();
-    let block = doc.node(block_id).expect("inserted block exists");
-    match block.last_child() {
+    let block = doc
+        .node(block_id)
+        .ok_or(CommandError::NodeNotFound(block_id))?;
+    let position = match block.last_child() {
         Some(c) => match c.node() {
             Node::Text(t) => Position {
                 node_id: c.id(),
@@ -664,37 +544,38 @@ fn position_at_end_of_block(tr: &Transaction, block_id: NodeId) -> Position {
             offset: 0,
             affinity: Affinity::Upstream,
         },
-    }
+    };
+    Ok(position)
 }
 
-fn insert_inline_at_block_boundary(
-    tr: &mut Transaction,
-    position: Position,
-    slice: &Slice,
-) -> Result<Option<Selection>, CommandError> {
-    let inline_clones: Vec<Fragment> = collect_inline(&slice.fragment)
-        .into_iter()
-        .cloned()
-        .collect();
-    if inline_clones.is_empty() {
-        return Ok(None);
-    }
-
-    let new_para_id = NodeId::new();
-    let para_subtree = Subtree::leaf(
-        new_para_id,
-        PlainNode::Paragraph(PlainParagraphNode::default()),
-    )
-    .with_style(source_paragraph_wrapper_style(slice));
-    tr.insert_subtree(position.node_id, position.offset, para_subtree)?;
-
-    position_caret_at_textblock_start(tr, new_para_id)?;
-    insert_inline_fragments(tr, inline_clones)?;
-    Ok(Some(selection_over_inserted_blocks(
-        position.node_id,
-        position.offset,
-        1,
-    )))
+fn position_at_start_of_block(
+    tr: &Transaction,
+    block_id: NodeId,
+) -> Result<Position, CommandError> {
+    let doc = tr.doc();
+    let block = doc
+        .node(block_id)
+        .ok_or(CommandError::NodeNotFound(block_id))?;
+    let position = match block.first_child() {
+        Some(c) => match c.node() {
+            Node::Text(_) => Position {
+                node_id: c.id(),
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            _ => Position {
+                node_id: block_id,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+        },
+        None => Position {
+            node_id: block_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        },
+    };
+    Ok(position)
 }
 
 fn insert_blocks_at_block_boundary(
@@ -732,7 +613,7 @@ fn insert_blocks_at_block_boundary(
     })?;
 
     if let Some(id) = last_inserted {
-        let final_pos = position_at_end_of_block(tr, id);
+        let final_pos = position_at_end_of_block(tr, id)?;
         tr.set_selection(Some(Selection::collapsed(final_pos)))?;
     }
 
@@ -792,49 +673,16 @@ fn same_textblock_type(slice_node: &PlainNode, doc_node_id: NodeId, tr: &Transac
     let Some(doc_node) = doc.node(doc_node_id) else {
         return false;
     };
-    matches!(
-        (slice_node, doc_node.node()),
-        (PlainNode::Paragraph(_), Node::Paragraph(_))
-    )
+    let slice_type = slice_node.as_type();
+    Schema::node_spec(slice_type).is_textblock()
+        && doc_node.spec().is_textblock()
+        && slice_type == doc_node.as_type()
 }
 
 #[cfg(test)]
 mod tests {
     use editor_clipboard::Slice;
-    use editor_model::{Fragment, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode};
-
-    use super::*;
-
-    fn root_with_paragraph(text: &str) -> Slice {
-        Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                style: None,
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    style: None,
-                    children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
-                        text: text.into(),
-                    }))],
-                }],
-            },
-            open_start: 2,
-            open_end: 2,
-        }
-    }
-
-    fn paragraph_fragment(text: &str) -> Fragment {
-        Fragment {
-            node: PlainNode::Paragraph(PlainParagraphNode::default()),
-            modifiers: vec![],
-            style: None,
-            children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
-                text: text.into(),
-            }))],
-        }
-    }
+    use editor_model::{Fragment, PlainNode, PlainRootNode};
 
     #[test]
     fn empty_slice_helper_recognises_bare_container() {
@@ -844,26 +692,5 @@ mod tests {
             open_end: 0,
         };
         assert!(empty.is_empty());
-    }
-
-    #[test]
-    fn is_inline_only_classifies_single_paragraph_slice() {
-        let slice = root_with_paragraph("XY");
-        assert!(is_inline_only(&slice));
-    }
-
-    #[test]
-    fn is_inline_only_classifies_multi_paragraph_slice() {
-        let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                style: None,
-                children: vec![paragraph_fragment("a"), paragraph_fragment("b")],
-            },
-            open_start: 2,
-            open_end: 2,
-        };
-        assert!(!is_inline_only(&slice));
     }
 }

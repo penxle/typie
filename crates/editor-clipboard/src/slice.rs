@@ -1,6 +1,4 @@
-use editor_model::{
-    Fragment, Node, NodeRef, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
-};
+use editor_model::{Fragment, Node, NodeRef, PlainNode, PlainRootNode, PlainTextNode};
 use editor_resource::Resource;
 use editor_state::{CellRect, ResolvedSelection, State, is_prefix_of};
 use serde::{Deserialize, Serialize};
@@ -47,12 +45,11 @@ impl Slice {
         let fragment = build_fragment(&rs, common);
         // When the selection is contained within a single inline node, the
         // common ancestor is that inline node, so build_fragment returns a bare
-        // inline leaf with no way to carry the source paragraph's style. Wrap
-        // it in a synthesized Paragraph that carries the enclosing textblock's
-        // style; bump open_start/open_end so paste paths still see the slice as
-        // inline content to merge.
+        // inline leaf. Wrap it in the enclosing textblock and bump
+        // open_start/open_end so all inline selections keep their source
+        // textblock shape as wider textblock selections.
         let (fragment, open_start, open_end) =
-            wrap_bare_inline_in_textblock(fragment, common, open_start, open_end);
+            wrap_bare_inline_in_enclosing_textblock(fragment, common, open_start, open_end);
         Some(Slice {
             fragment,
             open_start,
@@ -110,12 +107,7 @@ fn nearest_enclosing_textblock<'a>(node: NodeRef<'a>) -> Option<NodeRef<'a>> {
     None
 }
 
-// Only wraps when the source textblock actually has a named style — otherwise
-// returns the bare inline fragment unchanged, preserving the existing slice
-// shape (and open_start/open_end semantics) for unstyled paragraphs. The wrap
-// is the only carrier for style in the single-inline-node case because Text
-// itself has no style slot on its NodeEntry.
-fn wrap_bare_inline_in_textblock(
+fn wrap_bare_inline_in_enclosing_textblock(
     fragment: Fragment,
     common: NodeRef<'_>,
     open_start: u32,
@@ -131,13 +123,10 @@ fn wrap_bare_inline_in_textblock(
     let Some(textblock) = nearest_enclosing_textblock(common) else {
         return (fragment, open_start, open_end);
     };
-    let Some(style_id) = textblock.entry().style.get().clone() else {
-        return (fragment, open_start, open_end);
-    };
     let wrapped = Fragment {
-        node: PlainNode::Paragraph(PlainParagraphNode::default()),
-        modifiers: vec![],
-        style: Some(style_id),
+        node: textblock.node().to_plain(),
+        modifiers: textblock.explicit_modifiers().cloned().collect(),
+        style: textblock.entry().style.get().clone(),
         children: vec![fragment],
     };
     (wrapped, open_start + 1, open_end + 1)
@@ -285,7 +274,13 @@ mod tests {
 
     #[test]
     fn is_empty_keeps_text_leaf_non_empty() {
-        let slice = Slice::from_text("hello");
+        let slice = Slice {
+            fragment: Fragment::leaf(PlainNode::Text(PlainTextNode {
+                text: "hello".into(),
+            })),
+            open_start: 0,
+            open_end: 0,
+        };
         assert!(!slice.is_empty());
     }
 
@@ -306,9 +301,36 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.open_start, 0);
-        assert_eq!(slice.open_end, 0);
-        if let editor_model::PlainNode::Text(t) = &slice.fragment.node {
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 1);
+        assert!(matches!(
+            slice.fragment.node,
+            editor_model::PlainNode::Paragraph(_)
+        ));
+        if let editor_model::PlainNode::Text(t) = &slice.fragment.children[0].node {
+            assert_eq!(t.text, "ell");
+        } else {
+            panic!("expected text node");
+        }
+    }
+
+    #[test]
+    fn extract_inline_within_fold_title_keeps_fold_title_wrapper() {
+        let (s, ..) = state! {
+            doc { root { fold {
+                fold_title { t1: text("Hello World") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 1);
+        assert!(matches!(
+            slice.fragment.node,
+            editor_model::PlainNode::FoldTitle(_)
+        ));
+        if let editor_model::PlainNode::Text(t) = &slice.fragment.children[0].node {
             assert_eq!(t.text, "ell");
         } else {
             panic!("expected text node");
