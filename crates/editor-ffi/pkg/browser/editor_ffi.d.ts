@@ -84,10 +84,13 @@ export interface Position {
  *   *Upheld by command/transaction implementations; constructors do
  *   not enforce this.*
  *
- * - **Affinity mutual exclusion (non-collapsed)**: when
- *   `anchor != head`, `anchor.affinity` points toward `head` and
- *   `head.affinity` points toward `anchor`.
- *   *Upheld by command/transaction implementations.*
+ * - **Affinity convention (non-collapsed)**: at structural boundaries,
+ *   `anchor.affinity` typically points toward `head` and `head.affinity`
+ *   toward `anchor`. Text-interior positions may preserve their original
+ *   affinity because it disambiguates visual ownership without changing the
+ *   document range.
+ *   *Upheld by command/transaction implementations where boundary ownership
+ *   matters.*
  *
  * - **Affinity agreement (collapsed)**: when `anchor == head` (all
  *   three fields of `Position` match), the two affinities are equal.

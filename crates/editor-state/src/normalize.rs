@@ -95,6 +95,20 @@ fn validate_position(doc: &Doc, pos: Position) -> bool {
     pos.offset <= node.children().count()
 }
 
+fn preserve_text_interior_affinity(doc: &Doc, pos: Position, fallback: Affinity) -> Affinity {
+    let Some(node) = doc.node(pos.node_id) else {
+        return fallback;
+    };
+    let Node::Text(t) = node.node() else {
+        return fallback;
+    };
+    if pos.offset > 0 && pos.offset < t.text.len() {
+        pos.affinity
+    } else {
+        fallback
+    }
+}
+
 fn subtree_violation(a_path: &[usize], h_path: &[usize]) -> bool {
     let a_node = &a_path[..a_path.len() - 1];
     let h_node = &h_path[..h_path.len() - 1];
@@ -334,6 +348,8 @@ impl<'a> ResolvedSelection<'a> {
         } else {
             (Affinity::Upstream, Affinity::Downstream)
         };
+        let a_aff = preserve_text_interior_affinity(doc, a_in, a_aff);
+        let h_aff = preserve_text_interior_affinity(doc, h_in, h_aff);
 
         let a = Position {
             affinity: a_aff,
@@ -1130,6 +1146,25 @@ mod tests {
         assert_eq!(canonical.head.node_id, tb);
         assert_eq!(canonical.head.offset, 5);
         assert_eq!(canonical.head.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn normalize_forward_selection_preserves_text_interior_head_affinity() {
+        let (state, t) = state! {
+            doc { root { paragraph { t: text("abcdefghij") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let resolved = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
+        let canonical = resolved.normalize();
+        assert_eq!(canonical.anchor.affinity, Affinity::Downstream);
+        assert_eq!(canonical.head.node_id, t);
+        assert_eq!(canonical.head.offset, 5);
+        assert_eq!(canonical.head.affinity, Affinity::Downstream);
     }
 
     #[test]

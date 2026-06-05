@@ -1113,6 +1113,54 @@ mod tests {
     }
 
     #[test]
+    fn shift_down_from_wrapped_line_start_keeps_extending_downward() {
+        let (state, _t) = state! {
+            doc {
+                root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
+                    paragraph { t: text("aaaaaaaaaaaaaaaaaaaa") }
+                }
+            }
+            selection: (t, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let doc = editor.state.doc.clone();
+
+        let h0 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
+        shift_down(&mut editor);
+        let h1 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
+        shift_down(&mut editor);
+        let h2 = editor
+            .state()
+            .selection
+            .expect("selection exists in test")
+            .head;
+
+        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        assert_eq!(
+            h1.affinity,
+            editor_state::Affinity::Downstream,
+            "1st Shift+Down must keep the wrapped-line head on the lower line"
+        );
+        assert!(
+            r(h1) > r(h0),
+            "1st Shift+Down must reach the wrapped second line"
+        );
+        assert!(
+            r(h2) > r(h1),
+            "2nd Shift+Down must keep extending to the next wrapped line"
+        );
+    }
+
+    #[test]
     fn shift_up_through_consecutive_hard_breaks_visits_each_line() {
         let (state, _p1, _t_a, _t_b) = state! {
             doc {
