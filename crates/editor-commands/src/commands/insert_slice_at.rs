@@ -280,7 +280,7 @@ mod tests {
                 Position {
                     node_id: first_text.id(),
                     offset: 5,
-                    affinity: Affinity::Downstream,
+                    affinity: Affinity::Upstream,
                 },
                 Position {
                     node_id: second_text.id(),

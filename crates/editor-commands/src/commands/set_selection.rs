@@ -57,7 +57,7 @@ mod tests {
                 Position {
                     node_id: t,
                     offset: 8,
-                    affinity: Affinity::Upstream,
+                    affinity: Affinity::Downstream,
                 },
             )),
         );
