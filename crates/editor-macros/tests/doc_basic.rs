@@ -197,3 +197,129 @@ fn doc_root_with_layout_mode_param() {
         _ => panic!("expected Root"),
     }
 }
+
+#[test]
+fn doc_styles_declaration() {
+    let (doc, ..) = doc! {
+        styles {
+            heading: "제목 1" [bold, font_size(2400)]
+            body: [italic]
+        }
+        root {
+            paragraph { text("hi") }
+        }
+    };
+
+    assert!(doc.style_present("heading"));
+    assert!(doc.style_present("body"));
+
+    let heading = doc.style_entry("heading").unwrap();
+    assert_eq!(heading.name.get(), "제목 1");
+    assert!(
+        heading
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, Modifier::Bold))
+    );
+    assert!(
+        heading
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, Modifier::FontSize { value: 2400 }))
+    );
+
+    let body = doc.style_entry("body").unwrap();
+    assert_eq!(body.name.get(), "body");
+    assert!(body.modifiers.iter().any(|m| matches!(m, Modifier::Italic)));
+}
+
+#[test]
+fn doc_node_style_reference() {
+    let (doc, p) = doc! {
+        styles {
+            heading: "제목" [bold]
+        }
+        root {
+            p: paragraph @heading { text("hi") }
+        }
+    };
+
+    let p_entry = doc.get_entry(p).unwrap();
+    assert_eq!(p_entry.style.get().as_deref(), Some("heading"));
+
+    let p_ref = doc.node(p).unwrap();
+    assert!(
+        p_ref
+            .modifiers_with_style()
+            .any(|m| matches!(m, Modifier::Bold))
+    );
+}
+
+#[test]
+fn doc_style_on_text_and_leaf() {
+    let (doc, t, hr) = doc! {
+        styles {
+            emph: [italic]
+            rule: [bold]
+        }
+        root {
+            paragraph {
+                t: text("hi") @emph
+            }
+            hr: horizontal_rule @rule
+        }
+    };
+
+    assert_eq!(
+        doc.get_entry(t).unwrap().style.get().as_deref(),
+        Some("emph")
+    );
+    assert_eq!(
+        doc.get_entry(hr).unwrap().style.get().as_deref(),
+        Some("rule")
+    );
+}
+
+#[test]
+fn doc_style_and_explicit_modifier_coexist() {
+    let (doc, p) = doc! {
+        styles {
+            heading: [bold]
+        }
+        root {
+            p: paragraph @heading [italic] {
+                text("hi")
+            }
+        }
+    };
+
+    let entry = doc.get_entry(p).unwrap();
+    assert_eq!(entry.style.get().as_deref(), Some("heading"));
+    assert!(entry.modifiers.contains_key(&ModifierType::Italic));
+
+    let p_ref = doc.node(p).unwrap();
+    assert!(
+        p_ref
+            .modifiers_with_style()
+            .any(|m| matches!(m, Modifier::Bold))
+    );
+    assert!(
+        p_ref
+            .modifiers_with_style()
+            .any(|m| matches!(m, Modifier::Italic))
+    );
+}
+
+// `doc!`/`state!`의 styles 검증은 컴파일 타임 에러다 (trybuild 미도입 — 아래는 계약 문서).
+//
+// 1. 미선언 style 참조:
+//        root { paragraph @nope { text("x") } }
+//    => error: unknown style `nope`
+//
+// 2. styles 블록 내 중복 id:
+//        styles { a: [bold]  a: [italic] }  root { paragraph { text("x") } }
+//    => error: duplicate style `a`
+//
+// 3. 빈 style def (표시명·modifiers 둘 다 없음):
+//        styles { a: }  root { paragraph { text("x") } }
+//    => error: style definition must have a display name or modifiers

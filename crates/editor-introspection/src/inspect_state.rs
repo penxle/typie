@@ -17,6 +17,8 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     let labeler = Labeler::new(&state.doc, state.selection.as_ref());
     let mut output = String::new();
 
+    write_styles_tree(&state.doc, &mut output);
+
     let root = state.doc.root().unwrap();
     if let Some(l) = labeler.label(root.id()) {
         write!(output, "{l}: ").unwrap();
@@ -25,6 +27,7 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     if options.show_node_ids {
         write!(output, " ({})", root.id()).unwrap();
     }
+    write_node_style_tree(&root, &mut output);
     let mut root_mods: Vec<Modifier> = root.explicit_modifiers().cloned().collect();
     root_mods.sort_by_key(|m| m.as_type());
     write_modifiers_tree(&non_default_root_modifiers(&root_mods), &mut output);
@@ -75,6 +78,7 @@ fn write_tree_node(
         write!(output, " \"{}\"", truncate_text(&s, 50)).unwrap();
     }
 
+    write_node_style_tree(node_ref, output);
     write_node_attrs_tree(node_ref.node(), output);
     let mut mods: Vec<Modifier> = node_ref.explicit_modifiers().cloned().collect();
     mods.sort_by_key(|m| m.as_type());
@@ -179,6 +183,37 @@ fn write_node_attrs_tree(node: &Node, output: &mut String) {
             }
         }
         _ => {}
+    }
+}
+
+fn write_styles_tree(doc: &Doc, output: &mut String) {
+    let mut styles: Vec<(&String, &StyleEntry)> = doc
+        .styles_iter()
+        .filter_map(|(id, _)| doc.style_entry(id).map(|entry| (id, entry)))
+        .collect();
+    if styles.is_empty() {
+        return;
+    }
+    styles.sort_by(|a, b| a.0.cmp(b.0));
+
+    output.push_str("styles:\n");
+    for (id, entry) in styles {
+        let name = entry.name.get();
+        write!(output, "  {id}").unwrap();
+        if name != id {
+            write!(output, " \"{name}\"").unwrap();
+        }
+        let mut mods: Vec<Modifier> = entry.modifiers.iter().cloned().collect();
+        mods.sort_by_key(|m| m.as_type());
+        write_modifiers_tree(&mods, output);
+        output.push('\n');
+    }
+    output.push('\n');
+}
+
+fn write_node_style_tree(node_ref: &NodeRef, output: &mut String) {
+    if let Some(style_id) = node_ref.entry().style.get() {
+        write!(output, " style=\"{style_id}\"").unwrap();
     }
 }
 
@@ -416,5 +451,56 @@ selection: (p1, 0, >)
         };
         let output = inspect_state(&state, &opts());
         assert!(output.contains("...\""));
+    }
+
+    #[test]
+    fn styles_section_and_node_style() {
+        let (state, ..) = state! {
+            doc {
+                styles {
+                    heading: "제목 1" [bold, font_size(2400)]
+                    body: [italic]
+                }
+                root {
+                    paragraph @heading {
+                        t1: text("Hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let output = inspect_state(&state, &opts());
+        assert!(
+            output.starts_with(
+                "styles:\n  body [italic]\n  heading \"제목 1\" [bold, font_size(2400)]\n\nroot\n"
+            ),
+            "got:\n{output}"
+        );
+        let para_line = output.lines().find(|l| l.contains("paragraph")).unwrap();
+        assert!(para_line.contains("style=\"heading\""), "got:\n{output}");
+    }
+
+    #[test]
+    fn node_style_on_text_and_leaf() {
+        let (state, ..) = state! {
+            doc {
+                styles { emph: [italic] }
+                root {
+                    paragraph {
+                        t1: text("hi") @emph
+                    }
+                    horizontal_rule @emph
+                }
+            }
+            selection: (t1, 0)
+        };
+        let output = inspect_state(&state, &opts());
+        let text_line = output.lines().find(|l| l.contains("text")).unwrap();
+        assert!(text_line.contains("style=\"emph\""), "got:\n{output}");
+        let hr_line = output
+            .lines()
+            .find(|l| l.contains("horizontal_rule"))
+            .unwrap();
+        assert!(hr_line.contains("style=\"emph\""), "got:\n{output}");
     }
 }

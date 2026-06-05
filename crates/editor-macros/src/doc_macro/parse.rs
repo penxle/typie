@@ -5,7 +5,14 @@ use syn::parse::{Parse, ParseStream};
 use syn::{Expr, LitStr, Result, Token, bracketed, parenthesized, token};
 
 pub struct DocTree {
+    pub styles: Vec<StyleDef>,
     pub root: NodeDef,
+}
+
+pub struct StyleDef {
+    pub id: Ident,
+    pub name: Option<LitStr>,
+    pub modifiers: Vec<DecorationDef>,
 }
 
 pub struct NodeDef {
@@ -14,6 +21,7 @@ pub struct NodeDef {
     pub params: Vec<FieldValue>,
     pub content: NodeContent,
     pub modifiers: Option<Vec<DecorationDef>>,
+    pub style: Option<Ident>,
 }
 
 pub enum NodeContent {
@@ -40,12 +48,101 @@ pub struct FieldValue {
 
 impl Parse for DocTree {
     fn parse(input: ParseStream) -> Result<Self> {
+        let styles = if peek_styles_kw(input) {
+            parse_styles_block(input)?
+        } else {
+            Vec::new()
+        };
+
         let root = parse_node_def(input)?;
         if root.node_type != "root" {
             return Err(syn::Error::new(root.node_type.span(), "expected `root`"));
         }
-        Ok(DocTree { root })
+
+        let tree = DocTree { styles, root };
+        validate_styles(&tree)?;
+        Ok(tree)
     }
+}
+
+fn validate_styles(tree: &DocTree) -> Result<()> {
+    let mut declared: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for s in &tree.styles {
+        if !declared.insert(s.id.to_string()) {
+            return Err(syn::Error::new(
+                s.id.span(),
+                format!("duplicate style `{}`", s.id),
+            ));
+        }
+    }
+    validate_node_styles(&tree.root, &declared)
+}
+
+fn validate_node_styles(
+    node: &NodeDef,
+    declared: &std::collections::HashSet<String>,
+) -> Result<()> {
+    if let Some(style) = &node.style
+        && !declared.contains(&style.to_string())
+    {
+        return Err(syn::Error::new(
+            style.span(),
+            format!("unknown style `{}`", style),
+        ));
+    }
+    if let NodeContent::Children(children) = &node.content {
+        for child in children {
+            validate_node_styles(child, declared)?;
+        }
+    }
+    Ok(())
+}
+
+fn peek_styles_kw(input: ParseStream) -> bool {
+    let fork = input.fork();
+    matches!(fork.parse::<Ident>(), Ok(id) if id == "styles") && fork.peek(token::Brace)
+}
+
+fn parse_styles_block(input: ParseStream) -> Result<Vec<StyleDef>> {
+    let _kw: Ident = input.parse()?;
+    let content;
+    braced!(content in input);
+
+    let mut styles = Vec::new();
+    while !content.is_empty() {
+        styles.push(parse_style_def(&content)?);
+    }
+    Ok(styles)
+}
+
+fn parse_style_def(input: ParseStream) -> Result<StyleDef> {
+    let id: Ident = input.parse()?;
+    input.parse::<Token![:]>()?;
+
+    let name = if input.peek(LitStr) {
+        Some(input.parse::<LitStr>()?)
+    } else {
+        None
+    };
+
+    let modifiers = if input.peek(token::Bracket) {
+        parse_modifier_list(input)?
+    } else {
+        Vec::new()
+    };
+
+    if name.is_none() && modifiers.is_empty() {
+        return Err(syn::Error::new(
+            id.span(),
+            "style definition must have a display name or modifiers",
+        ));
+    }
+
+    Ok(StyleDef {
+        id,
+        name,
+        modifiers,
+    })
 }
 
 fn parse_node_list(input: ParseStream) -> Result<Vec<NodeDef>> {
@@ -71,6 +168,7 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
 
     if is_text {
         let text = parse_text_content(input)?;
+        let style = parse_optional_style(input)?;
         let modifiers = if input.peek(token::Bracket) {
             Some(parse_modifier_list(input)?)
         } else {
@@ -82,8 +180,11 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
             params: vec![],
             content: NodeContent::Text(text),
             modifiers,
+            style,
         })
     } else {
+        let style = parse_optional_style(input)?;
+
         let params = if input.peek(token::Paren) {
             parse_field_values_in_parens(input)?
         } else {
@@ -110,7 +211,17 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
             params,
             content,
             modifiers,
+            style,
         })
+    }
+}
+
+fn parse_optional_style(input: ParseStream) -> Result<Option<Ident>> {
+    if input.peek(Token![@]) {
+        input.parse::<Token![@]>()?;
+        Ok(Some(input.parse::<Ident>()?))
+    } else {
+        Ok(None)
     }
 }
 

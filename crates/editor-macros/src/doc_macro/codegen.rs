@@ -3,13 +3,14 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 
 use crate::doc_macro::parse::{
-    DecorationDef, DecorationParams, DocTree, FieldValue, NodeContent, NodeDef,
+    DecorationDef, DecorationParams, DocTree, FieldValue, NodeContent, NodeDef, StyleDef,
 };
 
 pub struct CodegenParts {
     pub id_decls: Vec<TokenStream>,
     pub plain_entries: Vec<TokenStream>,
     pub bindings: Vec<Ident>,
+    pub style_entries: Vec<TokenStream>,
 }
 
 pub fn generate_parts(tree: &DocTree) -> CodegenParts {
@@ -25,10 +26,13 @@ pub fn generate_parts(tree: &DocTree) -> CodegenParts {
         &mut bindings,
     );
 
+    let style_entries = tree.styles.iter().map(build_style_entry).collect();
+
     CodegenParts {
         id_decls,
         plain_entries,
         bindings,
+        style_entries,
     }
 }
 
@@ -49,6 +53,7 @@ pub fn generate(tree: &DocTree) -> TokenStream {
 pub(crate) fn emit_doc_construction(parts: &CodegenParts) -> TokenStream {
     let id_decls = &parts.id_decls;
     let plain_entries = &parts.plain_entries;
+    let style_entries = &parts.style_entries;
     quote! {
         use ::editor_model::*;
         use ::std::collections::BTreeMap;
@@ -61,9 +66,43 @@ pub(crate) fn emit_doc_construction(parts: &CodegenParts) -> TokenStream {
                 #(#plain_entries)*
                 __m
             },
-            styles: BTreeMap::new(),
+            styles: {
+                let mut __s: BTreeMap<String, PlainStyleEntry> = BTreeMap::new();
+                #(#style_entries)*
+                __s
+            },
         };
         let (doc, _op_graph) = Doc::from_plain(__plain);
+    }
+}
+
+fn build_style_entry(style: &StyleDef) -> TokenStream {
+    let id_str = style.id.to_string();
+    let name_str = match &style.name {
+        Some(lit) => lit.value(),
+        None => id_str.clone(),
+    };
+    let modifier_inserts: Vec<TokenStream> = style
+        .modifiers
+        .iter()
+        .map(|dec| {
+            let expr = build_modifier_expr(dec);
+            quote! { __ms.insert(#expr); }
+        })
+        .collect();
+    quote! {
+        __s.insert(
+            #id_str.to_string(),
+            PlainStyleEntry {
+                name: #name_str.to_string(),
+                modifiers: {
+                    let mut __ms: ::std::collections::BTreeSet<Modifier> =
+                        ::std::collections::BTreeSet::new();
+                    #(#modifier_inserts)*
+                    __ms
+                },
+            },
+        );
     }
 }
 
@@ -130,12 +169,20 @@ fn collect_node(
         plain_node_expr
     };
 
+    let style_expr = match &node.style {
+        Some(id) => {
+            let s = id.to_string();
+            quote! { Some(#s.to_string()) }
+        }
+        None => quote! { None },
+    };
+
     plain_entries.push(quote! {
         __m.insert(#id_ident, PlainNodeEntry {
             parent: #parent_expr,
             children: #children_expr,
             modifiers: #modifiers_expr,
-            style: None,
+            style: #style_expr,
             node: #plain_node_with_text,
         });
     });

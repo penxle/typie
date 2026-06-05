@@ -12,6 +12,8 @@ pub fn inspect_state_as_macro(state: &State) -> String {
     write_indent(&mut output, 1);
     output.push_str("doc {\n");
 
+    write_styles_macro(&state.doc, &mut output);
+
     let root = state.doc.root().unwrap();
     let children: Vec<_> = root.children().collect();
 
@@ -20,6 +22,7 @@ pub fn inspect_state_as_macro(state: &State) -> String {
         write!(output, "{l}: ").unwrap();
     }
     output.push_str("root");
+    write_node_style(&root, &mut output);
     let mut root_mods: Vec<Modifier> = root.explicit_modifiers().cloned().collect();
     root_mods.sort_by_key(|m| m.as_type());
     write_modifiers_macro(&non_default_root_modifiers(&root_mods), &mut output);
@@ -69,6 +72,7 @@ fn write_macro_node(
         write!(output, "(\"{}\")", escape_str(&s)).unwrap();
     }
 
+    write_node_style(node_ref, output);
     write_node_attrs_macro(node_ref.node(), output);
     let mut mods: Vec<Modifier> = node_ref.explicit_modifiers().cloned().collect();
     mods.sort_by_key(|m| m.as_type());
@@ -86,6 +90,42 @@ fn write_macro_node(
         }
         write_indent(output, indent_level);
         output.push_str("}\n");
+    }
+}
+
+fn write_styles_macro(doc: &Doc, output: &mut String) {
+    let mut styles: Vec<(&String, &StyleEntry)> = doc
+        .styles_iter()
+        .filter_map(|(id, _)| doc.style_entry(id).map(|entry| (id, entry)))
+        .collect();
+    if styles.is_empty() {
+        return;
+    }
+    styles.sort_by(|a, b| a.0.cmp(b.0));
+
+    write_indent(output, 2);
+    output.push_str("styles {\n");
+    for (id, entry) in styles {
+        write_indent(output, 3);
+        let name = entry.name.get();
+        let mut mods: Vec<Modifier> = entry.modifiers.iter().cloned().collect();
+        mods.sort_by_key(|m| m.as_type());
+
+        if name == id && !mods.is_empty() {
+            write!(output, "{id}:").unwrap();
+        } else {
+            write!(output, "{id}: \"{}\"", escape_str(name)).unwrap();
+        }
+        write_modifiers_macro(&mods, output);
+        output.push('\n');
+    }
+    write_indent(output, 2);
+    output.push_str("}\n");
+}
+
+fn write_node_style(node_ref: &NodeRef, output: &mut String) {
+    if let Some(style_id) = node_ref.entry().style.get() {
+        write!(output, " @{style_id}").unwrap();
     }
 }
 
@@ -502,5 +542,52 @@ state! {
         assert!(
             output.contains("text(\"Click\") [link(href: \"https://example.com\".to_string())]")
         );
+    }
+
+    #[test]
+    fn styles_block_and_node_reference() {
+        let (state, ..) = state! {
+            doc {
+                styles {
+                    heading: "제목 1" [bold, font_size(2400)]
+                    body: [italic]
+                }
+                root {
+                    paragraph @heading {
+                        t1: text("Hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(
+            output.contains(
+                "        styles {\n            body: [italic]\n            heading: \"제목 1\" [bold, font_size(2400)]\n        }\n"
+            ),
+            "got:\n{output}"
+        );
+        assert!(output.contains("paragraph @heading {"), "got:\n{output}");
+    }
+
+    #[test]
+    fn style_reference_on_text_and_leaf() {
+        let (state, ..) = state! {
+            doc {
+                styles {
+                    emph: [italic]
+                }
+                root {
+                    paragraph {
+                        t1: text("hi") @emph
+                    }
+                    horizontal_rule @emph
+                }
+            }
+            selection: (t1, 0)
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(output.contains("t1: text(\"hi\") @emph"), "got:\n{output}");
+        assert!(output.contains("horizontal_rule @emph\n"), "got:\n{output}");
     }
 }
