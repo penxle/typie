@@ -1049,6 +1049,7 @@ impl Editor {
         let root_plain_node = root_entry.node.clone();
         let root_modifiers: Vec<editor_model::Modifier> =
             root_entry.modifiers.values().cloned().collect();
+        let root_style: Option<String> = root_entry.style.clone();
         let child_ids: Vec<editor_model::NodeId> = root_entry.children.clone();
 
         let styles = template.styles.clone();
@@ -1088,12 +1089,23 @@ impl Editor {
                     tr.insert_subtree(editor_model::NodeId::ROOT, i, st)?;
                 }
                 tr.set_node(editor_model::NodeId::ROOT, root_plain_node)?;
+
+                let existing_root_mods: Vec<editor_model::Modifier> = tr
+                    .doc()
+                    .node(editor_model::NodeId::ROOT)
+                    .map(|r| r.explicit_modifiers().cloned().collect())
+                    .unwrap_or_default();
+                for m in existing_root_mods {
+                    tr.remove_modifier(editor_model::NodeId::ROOT, m)?;
+                }
                 for modifier in root_modifiers {
                     editor_commands::set_node_modifier(tr, editor_model::NodeId::ROOT, modifier)?;
                 }
+
                 for (name, entry) in styles {
                     tr.set_style(name, Some(entry))?;
                 }
+                tr.set_node_style(editor_model::NodeId::ROOT, root_style)?;
                 for (id, name) in node_styles {
                     tr.set_node_style(id, Some(name))?;
                 }
@@ -4095,6 +4107,38 @@ mod tests {
             entry.style.as_deref(),
             Some("h1"),
             "node style ref must be reapplied"
+        );
+    }
+
+    #[test]
+    fn insert_template_fragment_carries_root_base_style() {
+        use editor_macros::doc;
+        use editor_model::NodeId;
+
+        // destination root has macro-default root.modifiers populated.
+        let (state, _t0) = state! {
+            doc { root { paragraph { t0: text("orig") } } }
+            selection: (t0, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let (tdoc, ..) = doc! {
+            styles { base: "기본" [font_size(1600)] }
+            root @base [] { paragraph { text("tpl") } }
+        };
+        let template = tdoc.to_plain();
+
+        editor.insert_template_fragment(template).unwrap();
+
+        let doc = &editor.state().doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        assert_eq!(root.entry().style.get().as_deref(), Some("base"));
+        assert!(doc.style_entry("base").is_some());
+        // ★ destination's stale root.modifiers must be cleared (no coexistence with base).
+        assert_eq!(
+            root.explicit_modifiers().count(),
+            0,
+            "stale root modifiers must be cleared"
         );
     }
 }

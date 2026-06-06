@@ -2,6 +2,7 @@ import type { LayoutMode, Modifier } from '@typie/editor-ffi/browser';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
 const ROOT_ID = '0';
+const BASE_STYLE_ID = 'base';
 
 export const defaultPaginatedLayout = (): LayoutMode => ({
   type: 'paginated',
@@ -20,5 +21,5 @@ export const setRootLayoutMode = (editor: Editor | undefined, layout_mode: Layou
 };
 
 export const setRootModifier = (editor: Editor | undefined, modifier: Modifier) => {
-  editor?.enqueue({ type: 'modifier', op: { type: 'set_on_node', id: ROOT_ID, modifier } });
+  editor?.enqueue({ type: 'style', op: { type: 'set_modifier', style_id: BASE_STYLE_ID, modifier } });
 };

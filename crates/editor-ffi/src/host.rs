@@ -126,18 +126,6 @@ impl EditorHost {
         }
     }
 
-    pub fn root_modifiers_from_graph(
-        &self,
-        changesets: Vec<u8>,
-    ) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
-        let (doc, _) = doc_from_graph_changesets(changesets)?;
-        let modifiers = doc
-            .node(editor_model::NodeId::ROOT)
-            .map(|n| n.explicit_modifiers().cloned().collect::<Vec<_>>())
-            .unwrap_or_default();
-        Ok(modifiers.into_ffi()?)
-    }
-
     pub fn set_fonts(
         &self,
         families: Vec<Complex<editor_resource::FontFamily>>,

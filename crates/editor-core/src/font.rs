@@ -16,7 +16,7 @@ fn resolve_font_for_node(node: &NodeRef<'_>) -> (String, u16) {
     let mut weight: Option<u16> = None;
 
     for ancestor in node.ancestors() {
-        for m in ancestor.modifiers() {
+        for m in ancestor.modifiers_with_style() {
             match m {
                 Modifier::FontFamily { value } if family.is_none() => {
                     family = Some(value.clone());
@@ -33,8 +33,7 @@ fn resolve_font_for_node(node: &NodeRef<'_>) -> (String, u16) {
         }
     }
 
-    // Root invariant: FontFamily/FontWeight always present
-    (family.unwrap(), weight.unwrap())
+    (family.unwrap_or_default(), weight.unwrap_or(400))
 }
 
 fn collect_for_node(node: &NodeRef<'_>, font_registry: &FontRegistry, output: &mut FontRequests) {
@@ -152,6 +151,9 @@ pub(crate) fn derive_font_updates_from_ops(
             } => {
                 affected_subtrees.insert(*value);
             }
+            DocOp::Style { .. } | DocOp::NodeStyle { .. } => {
+                return collect_font_requests(doc, font_registry);
+            }
             _ => {}
         }
     }
@@ -253,6 +255,59 @@ pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
             ],
         });
         editor.push_event(EditorEvent::RenderInvalidated);
+    }
+}
+
+#[cfg(test)]
+mod base_style_tests {
+    use super::*;
+    use editor_macros::doc;
+    use editor_model::Doc;
+    use editor_resource::FontRegistry;
+
+    fn doc_with_base_font() -> (Doc, NodeId) {
+        let (doc, _p, t1) = doc! {
+            styles { base: "기본" [font_family("Pretendard".to_string()), font_weight(400)] }
+            root @base [] { p: paragraph { t1: text("Hi") } }
+        };
+        (doc, t1)
+    }
+
+    #[test]
+    fn resolve_font_uses_base_style_without_panic() {
+        let (doc, t1) = doc_with_base_font();
+        let text = doc.node(t1).unwrap();
+        let (family, weight) = resolve_font_for_node(&text);
+        assert_eq!(family, "Pretendard");
+        assert_eq!(weight, 400);
+    }
+
+    #[test]
+    fn font_updates_triggered_by_style_op() {
+        use editor_crdt::{Dot, Op, OrSetOp};
+        use editor_model::{Modifier, StyleOp};
+
+        let (doc, _t1) = doc_with_base_font();
+        let registry = FontRegistry::new();
+
+        let ops = vec![Op {
+            id: Dot::new(1, 0),
+            parents: vec![],
+            payload: DocOp::Style {
+                style_id: "base".into(),
+                op: StyleOp::Modifiers(OrSetOp::Add {
+                    elem: Modifier::FontFamily {
+                        value: "Pretendard".into(),
+                    },
+                }),
+            },
+        }];
+
+        let requests = derive_font_updates_from_ops(&doc, &registry, &ops);
+        assert!(
+            !requests.is_empty(),
+            "a base-style font change must derive font requests"
+        );
     }
 }
 

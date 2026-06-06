@@ -51,7 +51,7 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
         Node::Paragraph(_) => {
             let mut seen: Vec<ModifierType> = Vec::new();
             let mut out: Vec<Modifier> = Vec::new();
-            for m in node.modifiers_with_style() {
+            for m in node.modifiers() {
                 let t = m.as_type();
                 if !seen.contains(&t) {
                     seen.push(t);
@@ -1207,6 +1207,25 @@ mod tests {
         assert!(
             eff.contains(&Modifier::Bold),
             "run style's inline modifier must be effective at caret"
+        );
+    }
+
+    #[test]
+    fn inherits_font_size_from_root_base_style() {
+        use editor_model::Modifier;
+        let (state, _p, _t1) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { p: paragraph { t1: text("Hello") } }
+            }
+            selection: (t1, 2)
+        };
+        let pos = state.selection.as_ref().unwrap().head;
+        let eff = resolve_effective_modifiers_at(&state, &pos);
+        assert!(
+            eff.iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1600 })),
+            "text must inherit FontSize from the root's base style"
         );
     }
 

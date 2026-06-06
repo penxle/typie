@@ -249,9 +249,10 @@ fn doc_node_style_reference() {
 
     let p_ref = doc.node(p).unwrap();
     assert!(
-        p_ref
+        !p_ref
             .modifiers_with_style()
-            .any(|m| matches!(m, Modifier::Bold))
+            .any(|m| matches!(m, Modifier::Bold)),
+        "paragraph style ref is a marker; its modifiers do not expand on the paragraph"
     );
 }
 
@@ -299,9 +300,10 @@ fn doc_style_and_explicit_modifier_coexist() {
 
     let p_ref = doc.node(p).unwrap();
     assert!(
-        p_ref
+        !p_ref
             .modifiers_with_style()
-            .any(|m| matches!(m, Modifier::Bold))
+            .any(|m| matches!(m, Modifier::Bold)),
+        "style's Bold does not expand on the paragraph (marker only)"
     );
     assert!(
         p_ref

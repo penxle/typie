@@ -61,35 +61,7 @@ impl EditorServer {
     ) -> EditorResult<Complex<editor_model::PlainDoc>> {
         let root = root.from_ffi()?;
         let modifiers: Vec<editor_model::Modifier> = modifiers.from_ffi()?;
-        let modifier_map = modifiers.into_iter().map(|m| (m.as_type(), m)).collect();
-
-        let paragraph_id = editor_model::NodeId::new();
-        let mut nodes = std::collections::BTreeMap::new();
-        nodes.insert(
-            editor_model::NodeId::ROOT,
-            editor_model::PlainNodeEntry {
-                parent: None,
-                children: vec![paragraph_id],
-                modifiers: modifier_map,
-                style: None,
-                node: editor_model::PlainNode::Root(root),
-            },
-        );
-        nodes.insert(
-            paragraph_id,
-            editor_model::PlainNodeEntry {
-                parent: Some(editor_model::NodeId::ROOT),
-                children: vec![],
-                modifiers: Default::default(),
-                style: None,
-                node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
-            },
-        );
-        Ok(editor_model::PlainDoc {
-            nodes,
-            styles: Default::default(),
-        }
-        .into_ffi()?)
+        Ok(build_default_doc(root, modifiers).into_ffi()?)
     }
 
     pub fn apply(&self, existing: Vec<u8>, new: Vec<u8>) -> EditorResult<Vec<u8>> {
@@ -270,6 +242,8 @@ impl EditorServer {
         doc.verify().map_err(Into::into)
     }
 }
+
+use crate::doc_builder::build_default_doc;
 
 #[cfg(test)]
 mod tests {

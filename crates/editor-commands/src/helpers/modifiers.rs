@@ -67,7 +67,7 @@ fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers)
 pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
     let mut found = Vec::new();
     for ancestor in node.ancestors().skip(1) {
-        for modifier in ancestor.modifiers() {
+        for modifier in ancestor.modifiers_with_style() {
             let t = modifier.as_type();
             if !Schema::modifier_spec(t).inheritable {
                 continue;
@@ -584,6 +584,26 @@ mod tests {
                 .map(|n| n.id())
                 .collect();
         assert_eq!(ids, vec![p1]);
+    }
+
+    #[test]
+    fn inherits_font_size_from_root_base_style() {
+        use editor_model::Modifier;
+        let (state, _p, t1) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { p: paragraph { t1: text("Hello") } }
+            }
+            selection: (t1, 0)
+        };
+        let text = state.doc.node(t1).unwrap();
+        let inherited = resolve_inherited_modifiers(&text);
+        assert!(
+            inherited
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1600 })),
+            "base style on root must be visible to command-side inheritance"
+        );
     }
 
     #[test]

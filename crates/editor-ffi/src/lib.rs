@@ -7,6 +7,8 @@ compile_error!("features \"uniffi\" and \"wasm\" are mutually exclusive");
 compile_error!("features \"wasm-browser\" and \"wasm-server\" are mutually exclusive");
 
 mod convert;
+#[cfg(any(test, feature = "wasm-server"))]
+mod doc_builder;
 pub mod editor;
 mod error;
 pub mod host;

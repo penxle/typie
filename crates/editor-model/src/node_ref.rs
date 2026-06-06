@@ -55,28 +55,16 @@ impl<'a> NodeRef<'a> {
         self.entry().modifiers.iter().map(|(_, v)| v)
     }
 
-    // Explicit modifiers, then the applied style entry's modifiers, then the
-    // node type's implicit modifiers. First-wins lookups get explicit → style
-    // → implicit precedence — so a named style can override node-type defaults
-    // (e.g. FoldTitle's implicit FontSize) while still leaving implicits
-    // visible when no style/explicit overrides them.
-    //
-    // Style modifiers are expanded only on inline run nodes (Text/Tab), and only
-    // those whose target applies to this node type. On a Paragraph (which may hold
-    // a transient marker style ref) no style modifiers are expanded — block modifiers
-    // must not leak into paragraph layout; the empty-paragraph caret's inline preview
-    // is handled separately in editor-state.
     pub fn modifiers_with_style(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
         let self_type = self.as_type();
+        let mut path: Vec<NodeType> = self.ancestors().map(|n| n.as_type()).collect();
+        path.reverse();
         let style_iter: Box<dyn Iterator<Item = &'a Modifier> + 'a> =
             match self.entry().style.get().as_ref() {
                 Some(id) => match self.doc.style_entry(id) {
                     Some(s) => Box::new(s.modifiers.iter().filter(move |m| {
-                        matches!(self_type, NodeType::Text | NodeType::Tab)
-                            && Schema::modifier_spec(m.as_type())
-                                .target
-                                .rightmost_node_types()
-                                .contains(&self_type)
+                        matches!(self_type, NodeType::Text | NodeType::Tab | NodeType::Root)
+                            && Schema::modifier_spec(m.as_type()).context.matches(&path)
                     })),
                     None => Box::new(std::iter::empty()),
                 },
@@ -364,5 +352,47 @@ mod tests {
         assert_eq!(doc.node(t1).unwrap().path(), vec![0, 0]);
         assert_eq!(doc.node(t2).unwrap().path(), vec![0, 1]);
         assert_eq!(doc.node(t3).unwrap().path(), vec![1, 0]);
+    }
+
+    #[test]
+    fn root_with_style_expands_all_admissible_modifiers() {
+        let (doc, ..) = doc! {
+            styles { base: "기본" [font_size(1600), block_gap(150)] }
+            root @base [] { paragraph { text("Hi") } }
+        };
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let mods: Vec<Modifier> = root.modifiers_with_style().cloned().collect();
+        assert!(mods.contains(&Modifier::FontSize { value: 1600 }));
+        assert!(mods.contains(&Modifier::BlockGap { value: 150 }));
+    }
+
+    #[test]
+    fn text_run_with_style_does_not_expand_root_context_modifier() {
+        let (doc, _p, t1) = doc! {
+            styles { s: "s" [font_size(1600), block_gap(150)] }
+            root { p: paragraph { t1: text("Hi") @s } }
+        };
+        let text = doc.node(t1).unwrap();
+        let mods: Vec<Modifier> = text.modifiers_with_style().cloned().collect();
+        assert!(mods.iter().any(|m| matches!(m, Modifier::FontSize { .. })));
+        assert!(
+            !mods.iter().any(|m| matches!(m, Modifier::BlockGap { .. })),
+            "Root-context modifier must not expand on an inline text run"
+        );
+    }
+
+    #[test]
+    fn tab_run_with_style_expands_inline_metric_but_not_block() {
+        let (doc, _p, tab1) = doc! {
+            styles { s: "s" [font_size(1600), block_gap(150)] }
+            root { p: paragraph { tab1: tab @s } }
+        };
+        let tab = doc.node(tab1).unwrap();
+        let mods: Vec<Modifier> = tab.modifiers_with_style().cloned().collect();
+        assert!(
+            mods.iter().any(|m| matches!(m, Modifier::FontSize { .. })),
+            "FontSize (context includes `Paragraph > Tab`) must expand on a Tab run"
+        );
+        assert!(!mods.iter().any(|m| matches!(m, Modifier::BlockGap { .. })));
     }
 }

@@ -98,6 +98,17 @@ mod tests {
     }
 
     #[test]
+    fn resolve_inherited_walks_up_to_base_style() {
+        let (doc, t1) = doc! {
+            styles { base: "기본" [block_gap(150)] }
+            root @base [] { paragraph { t1: text("hi") } }
+        };
+        let node = doc.node(t1).unwrap();
+        let result = resolve_inherited(&node, ModifierType::BlockGap);
+        assert!(matches!(result, Some(Modifier::BlockGap { value: 150 })));
+    }
+
+    #[test]
     fn resolve_inherited_node_own_modifier_overrides_style() {
         let (initial, _p1, t1, ..) = state! {
             doc { root { p1: paragraph { t1: text("Hi") [font_size(1200)] } } }

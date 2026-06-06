@@ -22,7 +22,6 @@ import type {
   InteractiveHit,
   LinkRect,
   Message,
-  Modifier,
   ModifierState,
   ModifierType,
   PageRect,
@@ -160,7 +159,6 @@ export class Editor {
   #linkRects = $state<LinkRect[]>([]);
   #rootAttrs = $state<PlainRootNode>();
   #modifierState = $state<ModifierState | undefined>();
-  #rootModifiers = $state<Modifier[]>();
   #blockState = $state<BlockState | undefined>();
   #styleEntries = $state<StyleInfo[]>([]);
   #appliedStyle = $state<Tri<StyleRefValue>>({ type: 'absent' });
@@ -422,7 +420,7 @@ export class Editor {
   }
 
   get rootModifiers() {
-    return this.#rootModifiers;
+    return this.#styleEntries.find((s) => s.id === 'base')?.modifiers;
   }
 
   get modifierState() {
@@ -1580,7 +1578,6 @@ export class Editor {
 
     if (fields.includes('modifiers')) {
       this.#modifierState = this.#wasm.modifier_state();
-      this.#rootModifiers = this.#wasm.root_modifiers();
     }
 
     if (fields.includes('block')) {

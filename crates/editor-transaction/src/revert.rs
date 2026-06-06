@@ -7,6 +7,7 @@ pub fn build_revert_transaction(state: &State, target: &Doc) -> Result<Transacti
     let mut tr = Transaction::new(state);
     tr.update_meta(|m| m.history = HistoryMeta::Skip);
     tr.batch::<_, StepError>(|tr| {
+        reconcile_styles(tr, target)?;
         reconcile_node(tr, target, NodeId::ROOT)?;
         Ok(())
     })?;
@@ -16,6 +17,7 @@ pub fn build_revert_transaction(state: &State, target: &Doc) -> Result<Transacti
 fn reconcile_node(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
     reconcile_attrs(tr, target, id)?;
     reconcile_modifiers(tr, target, id)?;
+    reconcile_node_style(tr, target, id)?;
     reconcile_text(tr, target, id)?;
     reconcile_children(tr, target, id)?;
     Ok(())
@@ -169,6 +171,54 @@ fn reconcile_attrs(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(),
     };
     if current_plain != target_plain {
         tr.set_node(id, target_plain)?;
+    }
+    Ok(())
+}
+
+fn to_plain_style(entry: &editor_model::StyleEntry) -> editor_model::PlainStyleEntry {
+    editor_model::PlainStyleEntry {
+        name: entry.name.get().clone(),
+        modifiers: entry.modifiers.iter().cloned().collect(),
+    }
+}
+
+fn reconcile_styles(tr: &mut Transaction, target: &Doc) -> Result<(), StepError> {
+    let target_ids: Vec<String> = target.styles_iter().map(|(id, _)| id.clone()).collect();
+    for id in &target_ids {
+        let Some(target_entry) = target.style_entry(id) else {
+            continue;
+        };
+        let target_plain = to_plain_style(target_entry);
+        // presence를 먼저 확인 — Doc은 style_entry와 presence를 분리 관리.
+        let current_plain = if tr.doc().style_present(id) {
+            tr.doc().style_entry(id).map(to_plain_style)
+        } else {
+            None
+        };
+        if current_plain.as_ref() != Some(&target_plain) {
+            tr.set_style(id.clone(), Some(target_plain))?;
+        }
+    }
+    let current_ids: Vec<String> = tr.doc().styles_iter().map(|(id, _)| id.clone()).collect();
+    for id in current_ids {
+        if !target.style_present(&id) {
+            tr.set_style(id, None)?;
+        }
+    }
+    Ok(())
+}
+
+fn reconcile_node_style(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
+    let Some(target_entry) = target.get_entry(id) else {
+        return Ok(());
+    };
+    let target_style = target_entry.style.get().clone();
+    let current_style = match tr.doc().get_entry(id) {
+        Some(e) => e.style.get().clone(),
+        None => return Ok(()),
+    };
+    if current_style != target_style {
+        tr.set_node_style(id, target_style)?;
     }
     Ok(())
 }
@@ -570,5 +620,121 @@ mod tests {
         } else {
             panic!("expected callout");
         }
+    }
+
+    #[test]
+    fn reverts_base_style_modifier_change() {
+        use editor_model::{Modifier, PlainStyleEntry};
+        let (target_state, _t1) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { paragraph { t1: text("hi") } }
+            }
+            selection: (t1, 0)
+        };
+        let mut pre = Transaction::new(&target_state);
+        pre.set_style(
+            "base".into(),
+            Some(PlainStyleEntry {
+                name: "기본".into(),
+                modifiers: std::iter::once(Modifier::FontSize { value: 2400 }).collect(),
+            }),
+        )
+        .unwrap();
+        let (changed_state, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        let mods: Vec<Modifier> = reverted
+            .doc
+            .style_entry("base")
+            .unwrap()
+            .modifiers
+            .iter()
+            .cloned()
+            .collect();
+        assert_eq!(mods, vec![Modifier::FontSize { value: 1600 }]);
+    }
+
+    #[test]
+    fn reverts_node_style_ref_change() {
+        let (target_state, t1) = state! {
+            doc {
+                styles { s: "s" [bold] }
+                root { paragraph { t1: text("hi") } }
+            }
+            selection: (t1, 0)
+        };
+        let mut pre = Transaction::new(&target_state);
+        pre.set_node_style(t1, Some("s".into())).unwrap();
+        let (changed_state, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_eq!(
+            reverted.doc.node(t1).unwrap().entry().style.get().clone(),
+            None
+        );
+    }
+
+    #[test]
+    fn reverts_style_creation() {
+        use editor_model::{Modifier, PlainStyleEntry};
+        let (target_state, _t1) = state! {
+            doc { root { paragraph { t1: text("hi") } } }
+            selection: (t1, 0)
+        };
+        let mut pre = Transaction::new(&target_state);
+        pre.set_style(
+            "s2".into(),
+            Some(PlainStyleEntry {
+                name: "s2".into(),
+                modifiers: std::iter::once(Modifier::Bold).collect(),
+            }),
+        )
+        .unwrap();
+        let (changed_state, ..) = pre.commit();
+        assert!(changed_state.doc.style_present("s2"));
+
+        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert!(
+            !reverted.doc.style_present("s2"),
+            "created style must be removed on revert"
+        );
+    }
+
+    #[test]
+    fn reverts_style_deletion() {
+        use editor_model::Modifier;
+        let (target_state, _t1) = state! {
+            doc {
+                styles { s: "s" [bold] }
+                root { paragraph { t1: text("hi") } }
+            }
+            selection: (t1, 0)
+        };
+        let mut pre = Transaction::new(&target_state);
+        pre.set_style("s".into(), None).unwrap();
+        let (changed_state, ..) = pre.commit();
+        assert!(!changed_state.doc.style_present("s"));
+
+        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert!(
+            reverted.doc.style_present("s"),
+            "deleted style must be restored on revert"
+        );
+        let mods: Vec<Modifier> = reverted
+            .doc
+            .style_entry("s")
+            .unwrap()
+            .modifiers
+            .iter()
+            .cloned()
+            .collect();
+        assert_eq!(mods, vec![Modifier::Bold]);
     }
 }

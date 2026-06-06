@@ -1,10 +1,23 @@
 use editor_model::{ContextExpr, Modifier, Node, NodeId, NodeRef, NodeType};
 use editor_transaction::Transaction;
 
-use crate::CommandResult;
 use crate::helpers::{capture_style_entry, is_text_applicable};
+use crate::{CommandError, CommandResult};
 
 pub fn delete_style(tr: &mut Transaction, style_id: String) -> CommandResult {
+    let root_referenced = tr
+        .state()
+        .doc
+        .node(NodeId::ROOT)
+        .and_then(|r| r.entry().style.get().clone())
+        .as_deref()
+        == Some(style_id.as_str());
+    if root_referenced {
+        return Err(CommandError::InvalidArgument(format!(
+            "cannot delete style {style_id:?}: referenced by the root node (document default)"
+        )));
+    }
+
     let style_modifiers: Vec<Modifier> = capture_style_entry(&tr.state().doc, &style_id)
         .map(|e| e.modifiers.into_iter().collect())
         .unwrap_or_default();
@@ -100,6 +113,7 @@ fn valid_on(node: &NodeRef<'_>, ty: editor_model::ModifierType) -> bool {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::NodeId;
 
     use super::*;
     use crate::commands::define_style;
@@ -120,5 +134,42 @@ mod tests {
         let (deleted, ..) = transact!(defined, |tr| delete_style(&mut tr, "heading-1".into()));
 
         assert!(!deleted.doc.style_present("heading-1"));
+    }
+
+    #[test]
+    fn refuses_delete_of_root_referenced_style() {
+        let (state, ..) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { paragraph { t1: text("hi") } }
+            }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        assert!(delete_style(&mut tr, "base".into()).is_err());
+        assert_eq!(
+            tr.doc()
+                .node(NodeId::ROOT)
+                .unwrap()
+                .entry()
+                .style
+                .get()
+                .as_deref(),
+            Some("base"),
+            "root.style must be preserved"
+        );
+    }
+
+    #[test]
+    fn allows_delete_of_unreferenced_style() {
+        let (state, ..) = state! {
+            doc {
+                styles { s: "s" [bold] }
+                root { paragraph { t1: text("hi") } }
+            }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        assert!(delete_style(&mut tr, "s".into()).is_ok());
     }
 }
