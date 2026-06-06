@@ -178,7 +178,7 @@
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarStyleSelect />
+    <ToolbarStyleSelect {fontFamilies} />
   </div>
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton chevron label="글씨 색" onEscape={() => ctx.editor?.focus()} placement="bottom-start" size="small">

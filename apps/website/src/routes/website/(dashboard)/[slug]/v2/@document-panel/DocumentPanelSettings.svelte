@@ -37,7 +37,6 @@
   import { defaultContinuousLayout, defaultPaginatedLayout, setRootLayoutMode, setRootModifier } from '$lib/editor-ffi/root-attrs';
   import { THEME_COLORS } from '$lib/editor-ffi/theme';
   import { values } from '$lib/editor-ffi/values';
-  import DocumentPanelStyleSelect from './DocumentPanelStyleSelect.svelte';
   import type { LayoutMode, Modifier, ModifierType } from '@typie/editor-ffi/browser';
   import type { PageLayout, PageMarginSide } from '$lib/editor/utils';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
@@ -294,8 +293,6 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '16px', overflowY: 'auto', paddingY: '16px' })}>
-    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>문단 스타일</div>
-    <DocumentPanelStyleSelect />
     <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>기본 스타일</div>
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>

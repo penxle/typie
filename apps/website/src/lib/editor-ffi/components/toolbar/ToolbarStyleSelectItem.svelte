@@ -4,6 +4,7 @@
   import { createFloatingActions } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
+  import PencilIcon from '~icons/lucide/pencil';
   import Trash2Icon from '~icons/lucide/trash-2';
   import type { StyleInfo } from '@typie/editor-ffi/browser';
 
@@ -13,15 +14,16 @@
     preview: string;
     showDelete: boolean;
     onapply: () => void;
+    onedit: () => void;
     ondelete: () => void;
     onrowhover: () => void;
     oniconhover: () => void;
   };
 
-  let { entry, isActive, preview, showDelete, onapply, ondelete, onrowhover, oniconhover }: Props = $props();
+  let { entry, isActive, preview, showDelete, onapply, onedit, ondelete, onrowhover, oniconhover }: Props = $props();
 
   const { anchor, floating } = createFloatingActions({
-    placement: 'bottom-end',
+    placement: 'right-start',
     offset: 4,
   });
 </script>
@@ -79,6 +81,28 @@
         alignItems: 'center',
         gap: '6px',
         paddingX: '8px',
+        width: 'full',
+        height: '28px',
+        borderRadius: '4px',
+        fontSize: '13px',
+        color: 'text.faint',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+      })}
+      onclick={onedit}
+      type="button"
+    >
+      <Icon icon={PencilIcon} size={14} />
+      스타일 수정
+    </button>
+    <button
+      class={css({
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        paddingX: '8px',
+        width: 'full',
         height: '28px',
         borderRadius: '4px',
         fontSize: '13px',
