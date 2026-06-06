@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { computeTouchContextMenuPosition } from './gesture.svelte';
-import type { SelectionEndpoints } from '@typie/editor-ffi/browser';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LONG_PRESS_MS } from './constants';
+import { computeSelectionHandleVisual, computeTouchContextMenuPosition, TouchGestureController } from './gesture.svelte';
+import type { PageRect, SelectionEndpoints } from '@typie/editor-ffi/browser';
 
 const pageRect = (left: number, top: number, width: number, height: number): DOMRect =>
   ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+
+const endpoint = (page_idx: number, x: number, y: number, width: number, height: number): PageRect => ({
+  page_idx,
+  rect: { x, y, width, height },
+});
 
 const viewport = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
 
@@ -107,5 +113,149 @@ describe('computeTouchContextMenuPosition', () => {
     });
     expect(result).not.toBeNull();
     expect(result?.x).toBe(125);
+  });
+});
+
+const makePointerEvent = ({
+  pointerId = 1,
+  clientX = 110,
+  clientY = 220,
+  isPrimary = true,
+}: { pointerId?: number; clientX?: number; clientY?: number; isPrimary?: boolean } = {}): PointerEvent =>
+  ({
+    pointerId,
+    clientX,
+    clientY,
+    isPrimary,
+    preventDefault: vi.fn(),
+  }) as unknown as PointerEvent;
+
+const createGestureEditor = () => {
+  const selection = endpoints(
+    { page_idx: 0, x: 100, y: 200, width: 50, height: 20 },
+    { page_idx: 0, x: 200, y: 200, width: 30, height: 20 },
+  );
+  const menuItems = [{ label: '링크 열기', onclick: vi.fn() }];
+
+  return {
+    selection,
+    readOnly: true,
+    pageSizes: [{ width: 800, height: 1000 }],
+    pageEls: {
+      0: {
+        getBoundingClientRect: () => pageRect(0, 0, 800, 1000),
+      },
+    },
+    safeDisplayZoom: vi.fn(() => 1),
+    selectionEndpoints: vi.fn(() => selection),
+    selectionHitTest: vi.fn(() => true),
+    interactiveHitTest: vi.fn(() => ({ type: 'text' })),
+    collectContextMenuContributions: vi.fn(() => menuItems),
+    openContextMenu: vi.fn(),
+    closeContextMenu: vi.fn(),
+    clientToLocal: vi.fn(() => ({ page: 0, x: 120, y: 220 })),
+    enqueue: vi.fn(),
+    flush: vi.fn(),
+  };
+};
+
+describe('TouchGestureController', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('includes context menu contributions when long-press opens a touch menu on a selection', () => {
+    const editor = createGestureEditor();
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+
+    expect(editor.collectContextMenuContributions).toHaveBeenCalledWith({
+      hit: { type: 'text' },
+      clientX: 110,
+      clientY: 220,
+    });
+    expect(editor.openContextMenu).toHaveBeenCalledWith({
+      x: 165,
+      y: 200,
+      source: 'touch',
+      placement: 'top',
+      extraItems: [{ label: '링크 열기', onclick: expect.any(Function) }],
+    });
+  });
+
+  it('extends the selection from a dragged handle and reopens the touch menu on pointer up', () => {
+    const editor = createGestureEditor();
+    editor.clientToLocal = vi.fn(() => ({ page: 0, x: 250, y: 240 }));
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handleSelectionHandlePointerDown('from', makePointerEvent({ clientX: 110, clientY: 220 }));
+    controller.handleSelectionHandlePointerMove(makePointerEvent({ clientX: 250, clientY: 240 }));
+    controller.handleSelectionHandlePointerUp(makePointerEvent({ clientX: 250, clientY: 240 }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: editor.selection.to_position,
+        head_page: 0,
+        head_x: 250,
+        head_y: 240,
+        base_selection: undefined,
+      },
+    });
+    expect(editor.flush).toHaveBeenCalled();
+    expect(editor.openContextMenu).toHaveBeenLastCalledWith({
+      x: 165,
+      y: 200,
+      source: 'touch',
+      placement: 'top',
+      extraItems: [{ label: '링크 열기', onclick: expect.any(Function) }],
+    });
+  });
+});
+
+describe('computeSelectionHandleVisual', () => {
+  it('places the end (to) handle at the endpoint relative to the surface', () => {
+    const result = computeSelectionHandleVisual({
+      kind: 'to',
+      endpoint: endpoint(0, 200, 200, 30, 20),
+      pageRect: pageRect(0, 0, 800, 1000),
+      surfaceRect: pageRect(0, 0, 800, 1000),
+      zoom: 1,
+    });
+    expect(result).toEqual({ left: 179, top: 196, touchHeight: 44, paintLeft: 14, paintTop: 4, stemHeight: 20 });
+  });
+
+  it('places the start (from) handle above the line with its stem pointing down', () => {
+    const result = computeSelectionHandleVisual({
+      kind: 'from',
+      endpoint: endpoint(0, 100, 200, 50, 20),
+      pageRect: pageRect(0, 0, 800, 1000),
+      surfaceRect: pageRect(0, 0, 800, 1000),
+      zoom: 1,
+    });
+    expect(result).toEqual({ left: 77, top: 180, touchHeight: 44, paintLeft: 14, paintTop: 4, stemHeight: 20 });
+  });
+
+  it('offsets by the surface origin and scales by zoom', () => {
+    const result = computeSelectionHandleVisual({
+      kind: 'to',
+      endpoint: endpoint(0, 200, 200, 30, 20),
+      pageRect: pageRect(50, 100, 800, 1000),
+      surfaceRect: pageRect(10, 5, 800, 1000),
+      zoom: 2,
+    });
+    expect(result).toEqual({ left: 419, top: 495, touchHeight: 56, paintLeft: 14, paintTop: 0, stemHeight: 40 });
   });
 });

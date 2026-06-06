@@ -7,8 +7,10 @@ import {
 } from './constants';
 import { EditorEdgeAutoScroll } from './edge-auto-scroll';
 import { tryHandleInteractiveHit } from './handlers/pointer';
-import type { InputModifiers, Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
+import type { InputModifiers, PageRect, Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
+
+export type SelectionHandleKind = 'from' | 'to';
 
 export type TouchMenuPosition = {
   x: number;
@@ -69,7 +71,66 @@ export const computeTouchContextMenuPosition = ({
   };
 };
 
-type Phase = 'idle' | 'pressing' | 'tapMoved' | 'longPressed';
+export const SELECTION_HANDLE_RADIUS = 8;
+export const SELECTION_HANDLE_STEM_WIDTH = 2;
+export const SELECTION_HANDLE_TOUCH_TARGET_SIZE = 44;
+
+export type SelectionHandleVisual = {
+  left: number;
+  top: number;
+  touchHeight: number;
+  paintLeft: number;
+  paintTop: number;
+  stemHeight: number;
+};
+
+export type SelectionHandleVisualInput = {
+  kind: SelectionHandleKind;
+  endpoint: PageRect;
+  pageRect: DOMRect;
+  surfaceRect: DOMRect;
+  zoom: number;
+};
+
+export const computeSelectionHandleVisual = ({
+  kind,
+  endpoint,
+  pageRect,
+  surfaceRect,
+  zoom,
+}: SelectionHandleVisualInput): SelectionHandleVisual => {
+  const radius = SELECTION_HANDLE_RADIUS;
+  const stemWidth = SELECTION_HANDLE_STEM_WIDTH;
+  const touchTargetSize = SELECTION_HANDLE_TOUCH_TARGET_SIZE;
+
+  const anchorLeft = pageRect.left - surfaceRect.left + endpoint.rect.x * zoom;
+  const anchorTop = pageRect.top - surfaceRect.top + endpoint.rect.y * zoom;
+
+  const stemHeight = endpoint.rect.height * zoom;
+  const totalHeight = radius * 2 + stemHeight;
+  const touchHeight = Math.max(totalHeight, touchTargetSize);
+
+  const customPaintTop = kind === 'from' ? -(radius * 2) : 0;
+  const handleCenterY = customPaintTop + totalHeight / 2;
+  const touchTargetTop = handleCenterY - touchHeight / 2;
+
+  const handleXOffset = kind === 'from' ? -stemWidth / 2 : stemWidth / 2;
+  const touchTargetLeft = handleXOffset - touchTargetSize / 2;
+
+  const paintTop = customPaintTop - touchTargetTop;
+  const paintLeft = (touchTargetSize - radius * 2) / 2;
+
+  return {
+    left: anchorLeft + touchTargetLeft,
+    top: anchorTop + touchTargetTop,
+    touchHeight,
+    paintLeft,
+    paintTop,
+    stemHeight,
+  };
+};
+
+type Phase = 'idle' | 'pressing' | 'tapMoved' | 'longPressed' | 'handleDragging';
 
 type ResolvedTouchPoint = {
   page: number;
@@ -189,6 +250,44 @@ export class TouchGestureController {
     this.#reset();
   }
 
+  handleSelectionHandlePointerDown(type: SelectionHandleKind, e: PointerEvent): void {
+    const endpoints = this.#editor.selectionEndpoints();
+    if (!endpoints) return;
+
+    this.#activePointerId = e.pointerId;
+    this.#phase = 'handleDragging';
+    this.#lastClientPoint = { x: e.clientX, y: e.clientY };
+    this.#dragAnchor = type === 'from' ? endpoints.to_position : endpoints.from_position;
+    this.#baseSelection = undefined;
+    this.#pendingDown = null;
+    this.#selectionHit = false;
+    this.#clearLongPressTimer();
+    this.#editor.closeContextMenu();
+    this.#routeMoveToClientPoint(e.clientX, e.clientY);
+    this.#editor.flush();
+  }
+
+  handleSelectionHandlePointerMove(e: PointerEvent): void {
+    if (this.#phase !== 'handleDragging' || this.#activePointerId !== e.pointerId) return;
+
+    this.#lastClientPoint = { x: e.clientX, y: e.clientY };
+    if (this.#routeMoveToClientPoint(e.clientX, e.clientY)) {
+      this.#editor.flush();
+    }
+    this.#updateEdgeAutoScroll();
+  }
+
+  handleSelectionHandlePointerUp(e: PointerEvent): void {
+    if (this.#phase !== 'handleDragging' || this.#activePointerId !== e.pointerId) return;
+
+    this.#lastClientPoint = { x: e.clientX, y: e.clientY };
+    if (this.#routeMoveToClientPoint(e.clientX, e.clientY)) {
+      this.#editor.flush();
+    }
+    this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);
+    this.#reset();
+  }
+
   destroy(): void {
     this.#clearLongPressTimer();
     this.#reset();
@@ -227,9 +326,11 @@ export class TouchGestureController {
   #requestTouchMenuOpen(generation: number, fallbackPoint: { x: number; y: number } | null = this.#lastClientPoint): void {
     if (generation !== this.#pressGeneration) return;
 
+    const extraItems = this.#collectTouchContextMenuItems(fallbackPoint);
+
     const endpoints = this.#editor.selectionEndpoints();
     if (!endpoints) {
-      this.#openTouchMenuAtFallback(fallbackPoint);
+      this.#openTouchMenuAtFallback(fallbackPoint, extraItems);
       return;
     }
 
@@ -250,7 +351,7 @@ export class TouchGestureController {
 
     const position = computeTouchContextMenuPosition({ endpoints, pageRects, zoom: this.#editor.safeDisplayZoom(), viewport });
     if (!position) {
-      this.#openTouchMenuAtFallback(fallbackPoint);
+      this.#openTouchMenuAtFallback(fallbackPoint, extraItems);
       return;
     }
 
@@ -259,12 +360,28 @@ export class TouchGestureController {
       y: position.y,
       source: 'touch',
       placement: position.placement,
+      extraItems,
     });
   }
 
-  #openTouchMenuAtFallback(point: { x: number; y: number } | null): void {
+  #openTouchMenuAtFallback(
+    point: { x: number; y: number } | null,
+    extraItems: ReturnType<Editor['collectContextMenuContributions']>,
+  ): void {
     if (!point) return;
-    this.#editor.openContextMenu({ x: point.x, y: point.y, source: 'touch', placement: 'bottom' });
+    this.#editor.openContextMenu({ x: point.x, y: point.y, source: 'touch', placement: 'bottom', extraItems });
+  }
+
+  #collectTouchContextMenuItems(point: { x: number; y: number } | null): ReturnType<Editor['collectContextMenuContributions']> {
+    if (!point) return [];
+
+    const local = this.#editor.clientToLocal(point.x, point.y);
+    const hit = local ? this.#editor.interactiveHitTest(local.page, local.x, local.y) : undefined;
+    return this.#editor.collectContextMenuContributions({
+      hit,
+      clientX: point.x,
+      clientY: point.y,
+    });
   }
 
   #flushDeferredDown(): boolean {
@@ -309,7 +426,7 @@ export class TouchGestureController {
   }
 
   #updateEdgeAutoScroll(): void {
-    if (this.#phase !== 'tapMoved' || !this.#lastClientPoint) {
+    if ((this.#phase !== 'tapMoved' && this.#phase !== 'handleDragging') || !this.#lastClientPoint) {
       this.#edgeAutoScroll.stop();
       return;
     }
@@ -319,7 +436,7 @@ export class TouchGestureController {
       { clientX: this.#lastClientPoint.x, clientY: this.#lastClientPoint.y },
       (clientX, clientY) => {
         this.#lastClientPoint = { x: clientX, y: clientY };
-        if (this.#phase === 'tapMoved' && this.#routeMoveToClientPoint(clientX, clientY)) {
+        if ((this.#phase === 'tapMoved' || this.#phase === 'handleDragging') && this.#routeMoveToClientPoint(clientX, clientY)) {
           this.#editor.flush();
         }
       },

@@ -139,6 +139,7 @@ export class Editor {
 
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
+  surfaceEl = $state<HTMLDivElement>();
   scrollContainerEl = $state<HTMLDivElement>();
   displayZoom = $state(1);
   renderZoom = $state(1);

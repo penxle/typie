@@ -9,6 +9,7 @@
   import SquareDashedIcon from '~icons/lucide/square-dashed';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { getContextMenuCapabilityState } from './context-menu-state';
 
   const ctx = getEditorContext();
 
@@ -39,13 +40,20 @@
   const shiftKey = IS_MAC ? '⇧' : 'Shift+';
 
   const extraItems = $derived(ctx.editor?.contextMenu.extraItems ?? []);
+  const capabilityState = $derived(
+    getContextMenuCapabilityState({
+      isSelectionCollapsed: ctx.editor?.isSelectionCollapsed ?? true,
+      readOnly: ctx.editor?.readOnly ?? false,
+      protectContent: ctx.editor?.protectContent ?? false,
+    }),
+  );
 </script>
 
 {#if ctx.editor}
   <Menu {contextMenuPosition} offset={6} placement={contextMenuPlacement} bind:open>
     {#snippet children({ close })}
       <MenuItem
-        disabled={(ctx.editor?.isSelectionCollapsed ?? true) || !!(ctx.editor?.readOnly && ctx.editor?.protectContent)}
+        disabled={capabilityState.copyDisabled}
         icon={CopyIcon}
         onclick={() => {
           void ctx.editor?.requestCopy();
@@ -60,56 +68,56 @@
         {/snippet}
         복사
       </MenuItem>
-      {#if !ctx.editor?.readOnly}
-        <MenuItem
-          disabled={ctx.editor?.isSelectionCollapsed ?? true}
-          icon={ScissorsIcon}
-          onclick={() => {
-            void ctx.editor?.requestCut();
-            close();
-          }}
-        >
-          {#snippet suffix()}
-            <span class={css(shortcutStyle)}>
-              <span class={css(modKeyStyle)}>{modKey}</span>
-              X
-            </span>
-          {/snippet}
-          잘라내기
-        </MenuItem>
-        <MenuItem
-          icon={ClipboardPasteIcon}
-          onclick={() => {
-            void ctx.editor?.requestPaste();
-            close();
-          }}
-        >
-          {#snippet suffix()}
-            <span class={css(shortcutStyle)}>
-              <span class={css(modKeyStyle)}>{modKey}</span>
-              V
-            </span>
-          {/snippet}
-          붙여넣기
-        </MenuItem>
-        <MenuItem
-          icon={ClipboardTypeIcon}
-          onclick={() => {
-            void ctx.editor?.requestPasteTextOnly();
-            close();
-          }}
-        >
-          {#snippet suffix()}
-            <span class={css(shortcutStyle)}>
-              <span class={css(modKeyStyle)}>{modKey}</span>
-              <span>{shiftKey}</span>
-              V
-            </span>
-          {/snippet}
-          서식 없이 붙여넣기
-        </MenuItem>
-        <HorizontalDivider color="secondary" />
-      {/if}
+      <MenuItem
+        disabled={capabilityState.cutDisabled}
+        icon={ScissorsIcon}
+        onclick={() => {
+          void ctx.editor?.requestCut();
+          close();
+        }}
+      >
+        {#snippet suffix()}
+          <span class={css(shortcutStyle)}>
+            <span class={css(modKeyStyle)}>{modKey}</span>
+            X
+          </span>
+        {/snippet}
+        잘라내기
+      </MenuItem>
+      <MenuItem
+        disabled={capabilityState.pasteDisabled}
+        icon={ClipboardPasteIcon}
+        onclick={() => {
+          void ctx.editor?.requestPaste();
+          close();
+        }}
+      >
+        {#snippet suffix()}
+          <span class={css(shortcutStyle)}>
+            <span class={css(modKeyStyle)}>{modKey}</span>
+            V
+          </span>
+        {/snippet}
+        붙여넣기
+      </MenuItem>
+      <MenuItem
+        disabled={capabilityState.pasteDisabled}
+        icon={ClipboardTypeIcon}
+        onclick={() => {
+          void ctx.editor?.requestPasteTextOnly();
+          close();
+        }}
+      >
+        {#snippet suffix()}
+          <span class={css(shortcutStyle)}>
+            <span class={css(modKeyStyle)}>{modKey}</span>
+            <span>{shiftKey}</span>
+            V
+          </span>
+        {/snippet}
+        서식 없이 붙여넣기
+      </MenuItem>
+      <HorizontalDivider color="secondary" />
       <MenuItem
         icon={SquareDashedIcon}
         onclick={() => {

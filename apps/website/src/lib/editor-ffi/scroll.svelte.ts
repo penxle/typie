@@ -62,10 +62,14 @@ export function setupEditorScroll(ctx: EditorContext): void {
       return;
     }
 
-    const scope = new EditorScrollScope(editor, () => ({
-      enabled: app.preference.current.typewriterEnabled,
-      position: app.preference.current.typewriterPosition,
-    }));
+    // app is absent in the public viewer (no AppContext provider); fall back to typewriter off.
+    const scope = new EditorScrollScope(editor, () => {
+      const preference = app?.preference.current;
+      return {
+        enabled: preference?.typewriterEnabled ?? false,
+        position: preference?.typewriterPosition,
+      };
+    });
     ctx.scroll = scope;
     editor.registerScrollIntoView((options) => scope.scrollIntoView(options));
 

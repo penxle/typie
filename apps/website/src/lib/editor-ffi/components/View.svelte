@@ -28,6 +28,7 @@
   import PlaceholderOverlay from './PlaceholderOverlay.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
+  import SelectionHandles from './SelectionHandles.svelte';
   import EditorZoom from './ui/EditorZoom.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
@@ -200,11 +201,13 @@
       <EditorZoom {active} editor={ctx.editor} {isPaginated} {pageWidth} viewportWidth={clientWidth ?? 0}>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
+          bind:this={ctx.editor.surfaceEl}
           style:cursor
           style:min-width={editorMinWidth}
           style:max-width={continuousMaxFrameWidth}
           style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
           class={css({
+            position: 'relative',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -253,6 +256,10 @@
           <PlaceholderOverlay />
 
           <RepasteAsText />
+
+          {#if ctx.editor.readOnly}
+            <SelectionHandles />
+          {/if}
 
           <ContextMenu />
 

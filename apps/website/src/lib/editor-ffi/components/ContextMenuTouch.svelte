@@ -5,16 +5,25 @@
   import { scale } from 'svelte/transition';
   import { TAP_FEEDBACK_MIN_MS, TOUCH_MENU_GAP, TOUCH_MENU_VIEWPORT_PADDING } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { getContextMenuCapabilityState } from './context-menu-state';
 
   const ctx = getEditorContext();
 
-  let pressedAction = $state<'copy' | 'selectAll' | null>(null);
+  let pressedAction = $state<string | null>(null);
 
   const isTouchContextMenuOpen = $derived(!!ctx.editor && ctx.editor.contextMenu.isOpen && ctx.editor.contextMenu.source === 'touch');
   const contextMenuPosition = $derived(
     isTouchContextMenuOpen && ctx.editor ? { x: ctx.editor.contextMenu.x, y: ctx.editor.contextMenu.y } : null,
   );
   const contextMenuPlacement = $derived(ctx.editor?.contextMenu.placement ?? 'bottom');
+  const extraItems = $derived(ctx.editor?.contextMenu.extraItems ?? []);
+  const capabilityState = $derived(
+    getContextMenuCapabilityState({
+      isSelectionCollapsed: ctx.editor?.isSelectionCollapsed ?? true,
+      readOnly: ctx.editor?.readOnly ?? false,
+      protectContent: ctx.editor?.protectContent ?? false,
+    }),
+  );
 
   const { anchor: topAnchorAction, floating: topFloatingAction } = createFloatingActions({
     placement: 'top',
@@ -40,7 +49,7 @@
 
   const waitForTapFeedback = () => new Promise((resolve) => setTimeout(resolve, TAP_FEEDBACK_MIN_MS));
 
-  const runTouchMenuAction = async (action: 'copy' | 'selectAll', fn: () => void | Promise<void>) => {
+  const runTouchMenuAction = async (action: string, fn: () => void | Promise<void>) => {
     pressedAction = action;
     try {
       await fn();
@@ -64,6 +73,31 @@
     clearPressedAction();
     ctx.editor?.closeContextMenu();
   };
+
+  const buttonStyle = (action: string) =>
+    css(
+      {
+        appearance: 'none',
+        border: 'none',
+        background: 'transparent',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '36px',
+        paddingX: '14px',
+        borderRadius: 'full',
+        fontSize: '16px',
+        fontWeight: 'medium',
+        color: 'text.default',
+        whiteSpace: 'nowrap',
+        WebkitTapHighlightColor: 'transparent',
+        _active: { backgroundColor: 'surface.muted' },
+        _disabled: { opacity: '40', cursor: 'default' },
+      },
+      pressedAction === action && { backgroundColor: 'surface.muted' },
+    );
+
+  const dividerStyle = css({ width: '1px', alignSelf: 'stretch', marginY: '4px', backgroundColor: 'border.default' });
 </script>
 
 <svelte:window onpointerdowncapture={handleOutsidePointerDown} />
@@ -87,28 +121,8 @@
     transition:scale={{ start: 0.94, duration: 120 }}
   >
     <button
-      class={css(
-        {
-          appearance: 'none',
-          border: 'none',
-          background: 'transparent',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '36px',
-          paddingX: '14px',
-          borderRadius: 'full',
-          fontSize: '16px',
-          fontWeight: 'medium',
-          color: 'text.default',
-          whiteSpace: 'nowrap',
-          WebkitTapHighlightColor: 'transparent',
-          _active: { backgroundColor: 'surface.muted' },
-          _disabled: { opacity: '40', cursor: 'default' },
-        },
-        pressedAction === 'copy' && { backgroundColor: 'surface.muted' },
-      )}
-      disabled={ctx.editor?.isSelectionCollapsed ?? true}
+      class={buttonStyle('copy')}
+      disabled={capabilityState.copyDisabled}
       onblur={clearPressedAction}
       onclick={(e) => {
         e.stopPropagation();
@@ -126,29 +140,52 @@
     >
       복사
     </button>
-    <div class={css({ width: '1px', alignSelf: 'stretch', marginY: '4px', backgroundColor: 'border.default' })}></div>
+    <div class={dividerStyle}></div>
     <button
-      class={css(
-        {
-          appearance: 'none',
-          border: 'none',
-          background: 'transparent',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '36px',
-          paddingX: '14px',
-          borderRadius: 'full',
-          fontSize: '16px',
-          fontWeight: 'medium',
-          color: 'text.default',
-          whiteSpace: 'nowrap',
-          WebkitTapHighlightColor: 'transparent',
-          _active: { backgroundColor: 'surface.muted' },
-          _disabled: { opacity: '40', cursor: 'default' },
-        },
-        pressedAction === 'selectAll' && { backgroundColor: 'surface.muted' },
-      )}
+      class={buttonStyle('cut')}
+      disabled={capabilityState.cutDisabled}
+      onblur={clearPressedAction}
+      onclick={(e) => {
+        e.stopPropagation();
+        void runTouchMenuAction('cut', async () => {
+          await ctx.editor?.requestCut();
+        });
+      }}
+      onpointercancel={clearPressedAction}
+      onpointerdown={(e) => {
+        e.stopPropagation();
+        pressedAction = 'cut';
+      }}
+      onpointerleave={clearPressedAction}
+      type="button"
+    >
+      잘라내기
+    </button>
+    <div class={dividerStyle}></div>
+    <button
+      class={buttonStyle('paste')}
+      disabled={capabilityState.pasteDisabled}
+      onblur={clearPressedAction}
+      onclick={(e) => {
+        e.stopPropagation();
+        void runTouchMenuAction('paste', async () => {
+          await ctx.editor?.requestPaste();
+        });
+      }}
+      onpointercancel={clearPressedAction}
+      onpointerdown={(e) => {
+        e.stopPropagation();
+        pressedAction = 'paste';
+      }}
+      onpointerleave={clearPressedAction}
+      type="button"
+    >
+      붙여넣기
+    </button>
+    <div class={dividerStyle}></div>
+    <button
+      class={buttonStyle('selectAll')}
+      disabled={capabilityState.selectAllDisabled}
       onblur={clearPressedAction}
       onclick={(e) => {
         e.stopPropagation();
@@ -166,6 +203,28 @@
     >
       전체 선택
     </button>
+    {#each extraItems as item, i (i)}
+      <div class={dividerStyle}></div>
+      <button
+        class={buttonStyle(`extra-${i}`)}
+        onblur={clearPressedAction}
+        onclick={(e) => {
+          e.stopPropagation();
+          void runTouchMenuAction(`extra-${i}`, async () => {
+            await item.onclick();
+          });
+        }}
+        onpointercancel={clearPressedAction}
+        onpointerdown={(e) => {
+          e.stopPropagation();
+          pressedAction = `extra-${i}`;
+        }}
+        onpointerleave={clearPressedAction}
+        type="button"
+      >
+        {item.label}
+      </button>
+    {/each}
   </div>
 {/snippet}
 

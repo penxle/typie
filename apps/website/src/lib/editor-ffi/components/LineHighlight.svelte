@@ -7,6 +7,8 @@
   const app = getAppContext();
 
   const show = $derived(!!editor?.focused && !!editor?.cursor);
+  // app is absent in the public viewer (no AppContext provider); fall back to off.
+  const lineHighlightEnabled = $derived(app?.preference.current.lineHighlightEnabled ?? false);
 
   const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
 
@@ -34,7 +36,7 @@
   });
 </script>
 
-{#if app.preference.current.lineHighlightEnabled}
+{#if lineHighlightEnabled}
   <div
     bind:this={element}
     style:display={show ? 'block' : 'none'}

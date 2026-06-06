@@ -23,6 +23,7 @@
   import { Img } from '$lib/components';
   import { Editor as EditorComponent } from '$lib/editor-ffi/components';
   import { Editor, setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import BodyUnavailable from './BodyUnavailable.svelte';
@@ -289,6 +290,12 @@
     if (ctx.editor) {
       ctx.editor.protectContent = document?.protectContent ?? false;
     }
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
+    return registerLinkContextMenu(editor);
   });
 
   $effect(() => {
