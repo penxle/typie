@@ -235,12 +235,12 @@ fn doc_styles_declaration() {
 
 #[test]
 fn doc_node_style_reference() {
-    let (doc, p) = doc! {
+    let (doc, p, t) = doc! {
         styles {
             heading: "제목" [bold]
         }
         root {
-            p: paragraph @heading { text("hi") }
+            p: paragraph @heading { t: text("hi") }
         }
     };
 
@@ -249,10 +249,15 @@ fn doc_node_style_reference() {
 
     let p_ref = doc.node(p).unwrap();
     assert!(
-        !p_ref
-            .modifiers_with_style()
-            .any(|m| matches!(m, Modifier::Bold)),
-        "paragraph style ref is a marker; its modifiers do not expand on the paragraph"
+        p_ref.effective_modifier(ModifierType::Bold).is_none(),
+        "the paragraph itself is not Bold's target, so the style's Bold does not apply to it"
+    );
+    assert!(
+        doc.node(t)
+            .unwrap()
+            .effective_modifier(ModifierType::Bold)
+            .is_some(),
+        "the child text inherits the paragraph style's Bold"
     );
 }
 
@@ -283,13 +288,13 @@ fn doc_style_on_text_and_leaf() {
 
 #[test]
 fn doc_style_and_explicit_modifier_coexist() {
-    let (doc, p) = doc! {
+    let (doc, p, t) = doc! {
         styles {
             heading: [bold]
         }
         root {
             p: paragraph @heading [italic] {
-                text("hi")
+                t: text("hi")
             }
         }
     };
@@ -300,16 +305,22 @@ fn doc_style_and_explicit_modifier_coexist() {
 
     let p_ref = doc.node(p).unwrap();
     assert!(
-        !p_ref
-            .modifiers_with_style()
-            .any(|m| matches!(m, Modifier::Bold)),
-        "style's Bold does not expand on the paragraph (marker only)"
+        p_ref.own_modifier(ModifierType::Italic).is_some(),
+        "the explicit Italic is part of the paragraph's own modifiers"
     );
     assert!(
-        p_ref
-            .modifiers_with_style()
-            .any(|m| matches!(m, Modifier::Italic))
+        p_ref.own_modifier(ModifierType::Bold).is_some(),
+        "the style's Bold is context-valid at the paragraph, so it is the paragraph's own style modifier"
     );
+    assert!(
+        p_ref.effective_modifier(ModifierType::Bold).is_none(),
+        "neither modifier applies to the paragraph itself (it is not their target)"
+    );
+    assert!(p_ref.effective_modifier(ModifierType::Italic).is_none());
+
+    let t_ref = doc.node(t).unwrap();
+    assert!(t_ref.effective_modifier(ModifierType::Bold).is_some());
+    assert!(t_ref.effective_modifier(ModifierType::Italic).is_some());
 }
 
 // `doc!`/`state!`의 styles 검증은 컴파일 타임 에러다 (trybuild 미도입 — 아래는 계약 문서).

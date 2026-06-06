@@ -12,28 +12,16 @@ use crate::state_field::StateField;
 pub(crate) type FontRequests = HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>;
 
 fn resolve_font_for_node(node: &NodeRef<'_>) -> (String, u16) {
-    let mut family: Option<String> = None;
-    let mut weight: Option<u16> = None;
+    let family = match node.effective_modifier(ModifierType::FontFamily) {
+        Some(Modifier::FontFamily { value }) => value.clone(),
+        _ => String::new(),
+    };
+    let weight = match node.effective_modifier(ModifierType::FontWeight) {
+        Some(Modifier::FontWeight { value }) => *value,
+        _ => 400,
+    };
 
-    for ancestor in node.ancestors() {
-        for m in ancestor.modifiers_with_style() {
-            match m {
-                Modifier::FontFamily { value } if family.is_none() => {
-                    family = Some(value.clone());
-                }
-                Modifier::FontWeight { value } if weight.is_none() => {
-                    weight = Some(*value);
-                }
-                _ => {}
-            }
-        }
-
-        if family.is_some() && weight.is_some() {
-            break;
-        }
-    }
-
-    (family.unwrap_or_default(), weight.unwrap_or(400))
+    (family, weight)
 }
 
 fn collect_for_node(node: &NodeRef<'_>, font_registry: &FontRegistry, output: &mut FontRequests) {
@@ -278,6 +266,17 @@ mod base_style_tests {
         let (doc, t1) = doc_with_base_font();
         let text = doc.node(t1).unwrap();
         let (family, weight) = resolve_font_for_node(&text);
+        assert_eq!(family, "Pretendard");
+        assert_eq!(weight, 400);
+    }
+
+    #[test]
+    fn resolve_font_uses_effective_modifier() {
+        let (doc, _p, t1) = doc! {
+            styles { base: "기본" [font_family("Pretendard".to_string()), font_weight(400)] }
+            root @base [] { p: paragraph { t1: text("Hi") } }
+        };
+        let (family, weight) = resolve_font_for_node(&doc.node(t1).unwrap());
         assert_eq!(family, "Pretendard");
         assert_eq!(weight, 400);
     }

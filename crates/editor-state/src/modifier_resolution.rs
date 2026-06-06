@@ -32,10 +32,10 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
             let at_end = offset == node_len && node_len > 0;
 
             if !at_start && !at_end {
-                return node.modifiers_with_style().cloned().collect::<Vec<_>>();
+                return node.own_modifiers().cloned().collect::<Vec<_>>();
             }
 
-            node.modifiers_with_style()
+            node.own_modifiers()
                 .filter(|m| {
                     let expand = &m.spec().expand;
                     match expand {
@@ -81,16 +81,9 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
 }
 
 fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
-    let mut found = Vec::new();
-    for ancestor in node.ancestors().skip(1) {
-        for modifier in ancestor.modifiers_with_style() {
-            let t = modifier.as_type();
-            if !found.iter().any(|m: &Modifier| m.as_type() == t) {
-                found.push(modifier.clone());
-            }
-        }
-    }
-    found
+    ModifierType::iter()
+        .filter_map(|ty| node.inherited_modifier(ty).cloned())
+        .collect()
 }
 
 fn merge_with_inherited(mut base: Vec<Modifier>, inherited: &[Modifier]) -> Vec<Modifier> {
@@ -226,18 +219,7 @@ fn root_to_node_type_path(node: &NodeRef<'_>) -> Vec<NodeType> {
 }
 
 fn effective_modifier_on_node(node: &NodeRef<'_>, ty: ModifierType) -> Option<Modifier> {
-    if let Some(m) = node.modifiers_with_style().find(|m| m.as_type() == ty) {
-        return Some(m.clone());
-    }
-    if !Schema::modifier_spec(ty).inheritable {
-        return None;
-    }
-    for ancestor in node.ancestors().skip(1) {
-        if let Some(m) = ancestor.modifiers_with_style().find(|m| m.as_type() == ty) {
-            return Some(m.clone());
-        }
-    }
-    None
+    node.effective_modifier(ty).cloned()
 }
 
 pub fn is_node_bold(node: &NodeRef) -> bool {
@@ -1226,6 +1208,23 @@ mod tests {
             eff.iter()
                 .any(|m| matches!(m, Modifier::FontSize { value: 1600 })),
             "text must inherit FontSize from the root's base style"
+        );
+    }
+
+    #[test]
+    fn caret_inherits_base_font_via_resolver() {
+        let (state, _p, _t1) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { p: paragraph { t1: text("Hello") } }
+            }
+            selection: (t1, 2)
+        };
+        let pos = state.selection.as_ref().unwrap().head;
+        assert!(
+            resolve_effective_modifiers_at(&state, &pos)
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1600 }))
         );
     }
 

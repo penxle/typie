@@ -76,14 +76,13 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
 }
 
 /// The modifier value in effect at `node` for `ty`, ignoring `node`'s own explicit
-/// override: the node's applied style ref or type-implicit value (style modifiers
-/// are only expanded on inline run nodes by `modifiers_with_style`), else the
-/// nearest style-aware inheritable ancestor value. Used solely by the collapsed
-/// pending decision; it must NOT feed insertion carry-over, which stays explicit-only.
+/// override: the node's applied style ref or type-implicit value, else the value
+/// inherited from ancestors. Used solely by the collapsed pending decision; it
+/// must NOT feed insertion carry-over, which stays explicit-only.
 fn provided_without_explicit_value(node: &NodeRef, ty: ModifierType) -> Option<Modifier> {
     let has_explicit = node.explicit_modifiers().any(|m| m.as_type() == ty);
-    let mut local = node.modifiers_with_style().filter(|m| m.as_type() == ty);
-    // `modifiers_with_style` yields explicit, then style, then implicit. Skip the
+    let mut local = node.own_modifiers().filter(|m| m.as_type() == ty);
+    // `own_modifiers` yields explicit, then style, then implicit. Skip the
     // explicit entry so only the style/implicit contribution is considered here.
     let local_value = if has_explicit {
         local.nth(1)
@@ -97,12 +96,7 @@ fn provided_without_explicit_value(node: &NodeRef, ty: ModifierType) -> Option<M
     if !Schema::modifier_spec(ty).inheritable {
         return None;
     }
-    for ancestor in node.ancestors().skip(1) {
-        if let Some(m) = ancestor.modifiers_with_style().find(|m| m.as_type() == ty) {
-            return Some(m.clone());
-        }
-    }
-    None
+    node.inherited_modifier(ty).cloned()
 }
 
 fn set_modifier_collapsed_block(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
@@ -745,6 +739,33 @@ mod tests {
                 .modifiers
                 .contains_key(&editor_model::ModifierType::FontSize),
             "trailing text node must carry font_size"
+        );
+    }
+
+    #[test]
+    fn apply_alignment_writes_explicit_even_when_same_as_table() {
+        use editor_model::Alignment;
+        let (initial, p, ..) = state! {
+            doc { root {
+                table [alignment(Alignment::Right)] {
+                    table_row {
+                        table_cell { p: paragraph { tx: text("x") } }
+                    }
+                }
+            } }
+            selection: (tx, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::Alignment {
+                value: Alignment::Right
+            }
+        ));
+        let entry = actual.doc.get_entry(p).unwrap();
+        assert!(
+            entry.modifiers.get(&ModifierType::Alignment).is_some(),
+            "non-inheritable Alignment equal to the enclosing table's value must still be \
+             written as an explicit on the paragraph (no silent skip)"
         );
     }
 

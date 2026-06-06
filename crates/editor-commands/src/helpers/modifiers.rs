@@ -3,6 +3,7 @@ use editor_model::{
 };
 use editor_state::{PendingModifier, PendingModifiers, Position, ResolvedSelection};
 use editor_transaction::Transaction;
+use strum::IntoEnumIterator;
 
 use crate::CommandError;
 
@@ -60,24 +61,13 @@ fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers)
     modifiers
 }
 
-/// Collects inherited modifiers from the ancestor chain (excluding the node itself).
-/// For each modifier type, returns the nearest ancestor's value.
-/// Root has all modifiers (invariant).
-// TODO: dedup with editor_state::modifier_resolution::resolve_inherited_modifiers — follow-up plan
+/// Collects inherited modifiers (ancestor-provided, self excluded) per type.
+/// `inherited_modifier` already encodes inheritable/nearest-target semantics.
 pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
-    let mut found = Vec::new();
-    for ancestor in node.ancestors().skip(1) {
-        for modifier in ancestor.modifiers_with_style() {
-            let t = modifier.as_type();
-            if !Schema::modifier_spec(t).inheritable {
-                continue;
-            }
-            if !found.iter().any(|m: &Modifier| m.as_type() == t) {
-                found.push(modifier.clone());
-            }
-        }
-    }
-    found
+    ModifierType::iter()
+        .filter(|&ty| Schema::modifier_spec(ty).inheritable)
+        .filter_map(|ty| node.inherited_modifier(ty).cloned())
+        .collect()
 }
 
 pub(crate) fn is_tab_metric_modifier(modifier_type: ModifierType) -> bool {
@@ -604,6 +594,19 @@ mod tests {
                 .any(|m| matches!(m, Modifier::FontSize { value: 1600 })),
             "base style on root must be visible to command-side inheritance"
         );
+    }
+
+    #[test]
+    fn inherits_base_font_for_apply() {
+        let (state, _p, t1) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { p: paragraph { t1: text("Hello") } }
+            }
+            selection: (t1, 0)
+        };
+        let text = state.doc.node(t1).unwrap();
+        assert!(text.inherited_modifier(ModifierType::FontSize).is_some());
     }
 
     #[test]

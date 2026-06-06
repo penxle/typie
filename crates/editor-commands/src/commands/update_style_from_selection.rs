@@ -356,15 +356,12 @@ mod tests {
             Some("h1"),
             "the run still references the updated style"
         );
-        let effective_on_run: Vec<&Modifier> = text
-            .modifiers_with_style()
-            .filter(|m| matches!(m, Modifier::FontFamily { .. }))
-            .collect();
+        let effective_on_run = text.own_modifier(ModifierType::FontFamily);
         assert_eq!(
             effective_on_run,
-            vec![&Modifier::FontFamily {
+            Some(&Modifier::FontFamily {
                 value: "Arial".to_string()
-            }],
+            }),
             "run (the styled node) resolves FontFamily through its style"
         );
     }
@@ -441,15 +438,12 @@ mod tests {
         let (actual, ..) = transact!(applied, |tr| update_style_from_selection(&mut tr));
 
         let run2 = actual.doc.node(t2).unwrap();
-        let effective: Vec<&Modifier> = run2
-            .modifiers_with_style()
-            .filter(|m| matches!(m, Modifier::FontFamily { .. }))
-            .collect();
+        let effective = run2.own_modifier(ModifierType::FontFamily);
         assert_eq!(
             effective,
-            vec![&Modifier::FontFamily {
+            Some(&Modifier::FontFamily {
                 value: "Arial".to_string()
-            }],
+            }),
             "other styled run should see updated FontFamily through cascade"
         );
     }

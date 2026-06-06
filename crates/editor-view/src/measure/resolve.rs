@@ -4,12 +4,7 @@ pub fn resolve_inherited<'a>(
     node: &NodeRef<'a>,
     modifier_type: ModifierType,
 ) -> Option<&'a Modifier> {
-    node.modifiers_with_style()
-        .find(|m| ModifierType::from(*m) == modifier_type)
-        .or_else(|| {
-            node.parent()
-                .and_then(|p| resolve_inherited(&p, modifier_type))
-        })
+    node.effective_modifier(modifier_type)
 }
 
 #[cfg(test)]
@@ -22,9 +17,9 @@ mod tests {
 
     #[test]
     fn resolve_inherited_finds_on_self() {
-        let (doc, p1) = doc! { root { p1: paragraph [block_gap(200)] } };
+        let (doc, _p1) = doc! { root [block_gap(200)] { p1: paragraph } };
 
-        let node = doc.node(p1).unwrap();
+        let node = doc.node(NodeId::ROOT).unwrap();
         let result = resolve_inherited(&node, ModifierType::BlockGap);
 
         assert!(matches!(result, Some(Modifier::BlockGap { value: 200 })));
@@ -106,6 +101,20 @@ mod tests {
         let node = doc.node(t1).unwrap();
         let result = resolve_inherited(&node, ModifierType::BlockGap);
         assert!(matches!(result, Some(Modifier::BlockGap { value: 150 })));
+    }
+
+    #[test]
+    fn effective_modifier_block_gap_from_base() {
+        let (doc, _p, t1) = doc! {
+            styles { base: "기본" [block_gap(150)] }
+            root @base [] { p: paragraph { t1: text("hi") } }
+        };
+        assert!(matches!(
+            doc.node(t1)
+                .unwrap()
+                .effective_modifier(ModifierType::BlockGap),
+            Some(Modifier::BlockGap { value: 150 })
+        ));
     }
 
     #[test]

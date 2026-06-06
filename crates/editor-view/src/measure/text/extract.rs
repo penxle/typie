@@ -100,25 +100,16 @@ pub fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String
 }
 
 fn resolve_text_color(node_ref: &NodeRef<'_>) -> String {
-    let mut ancestors = node_ref.ancestors();
-    if let Some(self_node) = ancestors.next() {
-        if let Some(Modifier::TextColor { value }) = self_node
-            .modifiers_with_style()
-            .find(|m| matches!(m, Modifier::TextColor { .. }))
-        {
-            return format!("text.{value}");
-        }
-        if has_link_modifier(&self_node) {
-            return LINK_COLOR.to_string();
-        }
+    if let Some(Modifier::TextColor { value }) = node_ref.own_modifier(ModifierType::TextColor) {
+        return format!("text.{value}");
     }
-    for ancestor in ancestors {
-        if let Some(Modifier::TextColor { value }) = ancestor
-            .modifiers_with_style()
-            .find(|m| matches!(m, Modifier::TextColor { .. }))
-        {
-            return format!("text.{value}");
-        }
+    if has_link_modifier(node_ref) {
+        return LINK_COLOR.to_string();
+    }
+    if let Some(Modifier::TextColor { value }) =
+        node_ref.inherited_modifier(ModifierType::TextColor)
+    {
+        return format!("text.{value}");
     }
     "text.black".to_string()
 }
@@ -621,6 +612,18 @@ mod tests {
         };
         let (color, _) = resolve_text_colors(&doc, t1);
         assert_eq!(color, "text.red");
+    }
+
+    #[test]
+    fn link_color_takes_precedence_over_inherited_text_color() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph [text_color("ff0000".to_string())] {
+                    t1: text("x") [link(href: "https://a".to_string())]
+                }
+            }
+        };
+        assert_eq!(resolve_text_color(&doc.node(t1).unwrap()), LINK_COLOR);
     }
 
     #[test]

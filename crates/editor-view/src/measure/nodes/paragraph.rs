@@ -3,7 +3,7 @@ use std::sync::Arc;
 use editor_common::EdgeInsets;
 
 use crate::style::Alignment as LayoutAlignment;
-use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
+use editor_model::{Alignment, Doc, Modifier, ModifierType, Node, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::text::measure::measure_inline_text;
@@ -19,13 +19,10 @@ pub fn measure_paragraph(
     width: f32,
     view_state: &ViewState,
 ) -> MeasuredNode {
-    let align = node
-        .modifiers_with_style()
-        .find_map(|m| match m {
-            Modifier::Alignment { value } => Some(*value),
-            _ => None,
-        })
-        .unwrap_or_default();
+    let align = match node.own_modifier(ModifierType::Alignment) {
+        Some(Modifier::Alignment { value }) => *value,
+        _ => Alignment::default(),
+    };
 
     let indent = match align {
         Alignment::Left | Alignment::Justify => resolve_paragraph_indent(node),

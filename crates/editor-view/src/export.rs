@@ -90,9 +90,7 @@ fn put(out: &mut BTreeMap<ModifierType, Modifier>, ty: ModifierType, m: Option<M
 }
 
 fn own_modifier(nr: &NodeRef<'_>, ty: ModifierType) -> Option<Modifier> {
-    nr.modifiers_with_style()
-        .find(|m| m.as_type() == ty)
-        .cloned()
+    nr.own_modifier(ty).cloned()
 }
 
 fn strip_color(ty: ModifierType, value: &str) -> Option<Modifier> {

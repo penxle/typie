@@ -1,10 +1,12 @@
 use std::fmt;
 
+use strum::IntoEnumIterator;
+
 use crate::Schema;
 use crate::doc::Doc;
 use crate::entry::NodeEntry;
 use crate::id::NodeId;
-use crate::modifier::Modifier;
+use crate::modifier::{Modifier, ModifierType};
 use crate::nodes::{Node, NodeType};
 
 #[derive(Clone, Copy)]
@@ -55,24 +57,73 @@ impl<'a> NodeRef<'a> {
         self.entry().modifiers.iter().map(|(_, v)| v)
     }
 
-    pub fn modifiers_with_style(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
-        let self_type = self.as_type();
+    pub fn own_modifiers(&self) -> impl Iterator<Item = &'a Modifier> + 'a {
         let mut path: Vec<NodeType> = self.ancestors().map(|n| n.as_type()).collect();
         path.reverse();
-        let style_iter: Box<dyn Iterator<Item = &'a Modifier> + 'a> =
-            match self.entry().style.get().as_ref() {
-                Some(id) => match self.doc.style_entry(id) {
-                    Some(s) => Box::new(s.modifiers.iter().filter(move |m| {
-                        matches!(self_type, NodeType::Text | NodeType::Tab | NodeType::Root)
-                            && Schema::modifier_spec(m.as_type()).context.matches(&path)
-                    })),
-                    None => Box::new(std::iter::empty()),
-                },
-                None => Box::new(std::iter::empty()),
-            };
+        let style_iter: Box<dyn Iterator<Item = &'a Modifier> + 'a> = match self
+            .entry()
+            .style
+            .get()
+            .as_ref()
+            .and_then(|id| self.doc.style_entry(id))
+        {
+            Some(s) => Box::new(
+                s.modifiers
+                    .iter()
+                    .filter(move |m| Schema::modifier_spec(m.as_type()).context.matches(&path)),
+            ),
+            None => Box::new(std::iter::empty()),
+        };
         self.explicit_modifiers()
             .chain(style_iter)
             .chain(self.node().implicit_modifiers().iter())
+    }
+
+    pub fn own_modifier(&self, ty: ModifierType) -> Option<&'a Modifier> {
+        self.own_modifiers().find(|m| m.as_type() == ty)
+    }
+
+    fn is_modifier_target(&self, ty: ModifierType) -> bool {
+        let mut path: Vec<NodeType> = self.ancestors().map(|a| a.as_type()).collect();
+        path.reverse();
+        Schema::modifier_spec(ty).target.matches(&path)
+    }
+
+    pub fn inherited_modifier(&self, ty: ModifierType) -> Option<&'a Modifier> {
+        let inheritable = Schema::modifier_spec(ty).inheritable;
+        let mut cur = self.parent();
+        while let Some(n) = cur {
+            if inheritable {
+                if let Some(m) = n.own_modifier(ty) {
+                    return Some(m);
+                }
+            } else if n.is_modifier_target(ty) {
+                return n.own_modifier(ty);
+            }
+            cur = n.parent();
+        }
+        None
+    }
+
+    pub fn effective_modifier(&self, ty: ModifierType) -> Option<&'a Modifier> {
+        if Schema::modifier_spec(ty).inheritable {
+            if self.is_modifier_target(ty)
+                && let Some(m) = self.own_modifier(ty)
+            {
+                return Some(m);
+            }
+            self.inherited_modifier(ty)
+        } else if self.is_modifier_target(ty) {
+            self.own_modifier(ty)
+        } else {
+            self.inherited_modifier(ty)
+        }
+    }
+
+    pub fn effective_modifiers(&self) -> Vec<&'a Modifier> {
+        ModifierType::iter()
+            .filter_map(|ty| self.effective_modifier(ty))
+            .collect()
     }
 
     pub fn parent(&self) -> Option<NodeRef<'a>> {
@@ -355,29 +406,17 @@ mod tests {
     }
 
     #[test]
-    fn root_with_style_expands_all_admissible_modifiers() {
-        let (doc, ..) = doc! {
-            styles { base: "기본" [font_size(1600), block_gap(150)] }
-            root @base [] { paragraph { text("Hi") } }
-        };
-        let root = doc.node(NodeId::ROOT).unwrap();
-        let mods: Vec<Modifier> = root.modifiers_with_style().cloned().collect();
-        assert!(mods.contains(&Modifier::FontSize { value: 1600 }));
-        assert!(mods.contains(&Modifier::BlockGap { value: 150 }));
-    }
-
-    #[test]
     fn text_run_with_style_does_not_expand_root_context_modifier() {
         let (doc, _p, t1) = doc! {
             styles { s: "s" [font_size(1600), block_gap(150)] }
             root { p: paragraph { t1: text("Hi") @s } }
         };
         let text = doc.node(t1).unwrap();
-        let mods: Vec<Modifier> = text.modifiers_with_style().cloned().collect();
+        let mods: Vec<Modifier> = text.own_modifiers().cloned().collect();
         assert!(mods.iter().any(|m| matches!(m, Modifier::FontSize { .. })));
         assert!(
             !mods.iter().any(|m| matches!(m, Modifier::BlockGap { .. })),
-            "Root-context modifier must not expand on an inline text run"
+            "Root-context modifier must not appear in an inline text run's own modifiers"
         );
     }
 
@@ -388,11 +427,130 @@ mod tests {
             root { p: paragraph { tab1: tab @s } }
         };
         let tab = doc.node(tab1).unwrap();
-        let mods: Vec<Modifier> = tab.modifiers_with_style().cloned().collect();
+        let mods: Vec<Modifier> = tab.own_modifiers().cloned().collect();
         assert!(
             mods.iter().any(|m| matches!(m, Modifier::FontSize { .. })),
-            "FontSize (context includes `Paragraph > Tab`) must expand on a Tab run"
+            "FontSize (context includes `Paragraph > Tab`) is context-valid on a Tab run"
         );
         assert!(!mods.iter().any(|m| matches!(m, Modifier::BlockGap { .. })));
+    }
+
+    #[test]
+    fn own_modifiers_keeps_context_valid_style() {
+        let (doc, ..) = doc! {
+            styles { base: "기본" [font_size(1600), block_gap(150)] }
+            root @base [] { paragraph { text("hi") } }
+        };
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let mods: Vec<Modifier> = root.own_modifiers().cloned().collect();
+        assert!(mods.contains(&Modifier::FontSize { value: 1600 }));
+        assert!(mods.contains(&Modifier::BlockGap { value: 150 }));
+    }
+
+    #[test]
+    fn own_modifiers_drops_context_invalid_style() {
+        let (doc, tbl) = doc! {
+            styles { bad: [line_height(300)] }
+            root { tbl: table @bad { table_row { table_cell { paragraph { text("x") } } } } }
+        };
+        let mods: Vec<Modifier> = doc.node(tbl).unwrap().own_modifiers().cloned().collect();
+        assert!(
+            !mods
+                .iter()
+                .any(|m| matches!(m, Modifier::LineHeight { .. }))
+        );
+    }
+
+    #[test]
+    fn own_modifier_finds_type() {
+        let (doc, _p, t1) =
+            doc! { styles { s: [bold] } root { p: paragraph { t1: text("x") @s } } };
+        assert!(matches!(
+            doc.node(t1).unwrap().own_modifier(ModifierType::Bold),
+            Some(Modifier::Bold)
+        ));
+    }
+
+    #[test]
+    fn effective_modifier_inherits_and_scopes() {
+        let (doc, _p, t1) = doc! {
+            styles { base: "기본" [font_size(1600), block_gap(150)] }
+            root @base [] { p: paragraph [alignment(Alignment::Right)] { t1: text("hi") } }
+        };
+        let t = doc.node(t1).unwrap();
+        assert!(matches!(
+            t.effective_modifier(ModifierType::FontSize),
+            Some(Modifier::FontSize { value: 1600 })
+        ));
+        assert!(matches!(
+            t.effective_modifier(ModifierType::BlockGap),
+            Some(Modifier::BlockGap { value: 150 })
+        ));
+        assert!(matches!(
+            t.effective_modifier(ModifierType::Alignment),
+            Some(Modifier::Alignment {
+                value: Alignment::Right
+            })
+        ));
+    }
+
+    #[test]
+    fn effective_modifier_self_block_does_not_leak_inheritable() {
+        let (doc, _p, t1) = doc! {
+            styles { leaky: [line_height(300)] base: "기본" [line_height(150)] }
+            root @base [] { p: paragraph { t1: text("hi") @leaky } }
+        };
+        assert!(matches!(
+            doc.node(t1)
+                .unwrap()
+                .effective_modifier(ModifierType::LineHeight),
+            Some(Modifier::LineHeight { value: 150 })
+        ));
+    }
+
+    #[test]
+    fn effective_modifier_scoped_stops_at_nearest_target() {
+        let (doc, _p, t1) = doc! {
+            root { table [alignment(Alignment::Right)] { table_row { table_cell { p: paragraph { t1: text("x") } } } } }
+        };
+        assert!(
+            doc.node(t1)
+                .unwrap()
+                .effective_modifier(ModifierType::Alignment)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn effective_modifiers_collects_per_type() {
+        let (doc, _p, t1) = doc! {
+            styles { base: "기본" [font_size(1600)] }
+            root @base [] { p: paragraph { t1: text("hi") [bold] } }
+        };
+        let mods = doc.node(t1).unwrap().effective_modifiers();
+        assert!(mods.iter().any(|m| matches!(m, Modifier::Bold)));
+        assert!(
+            mods.iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1600 }))
+        );
+    }
+
+    #[test]
+    fn inherited_modifier_excludes_self() {
+        let (doc, p) = doc! { root { p: paragraph [alignment(Alignment::Right)] { text("x") } } };
+        assert!(
+            doc.node(p)
+                .unwrap()
+                .inherited_modifier(ModifierType::Alignment)
+                .is_none()
+        );
+        assert!(matches!(
+            doc.node(p)
+                .unwrap()
+                .effective_modifier(ModifierType::Alignment),
+            Some(Modifier::Alignment {
+                value: Alignment::Right
+            })
+        ));
     }
 }

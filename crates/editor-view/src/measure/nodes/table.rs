@@ -3,7 +3,7 @@ use std::sync::Arc;
 use editor_common::EdgeInsets;
 
 use crate::style::Alignment as LayoutAlignment;
-use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
+use editor_model::{Alignment, Doc, Modifier, ModifierType, Node, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
@@ -269,13 +269,10 @@ pub fn measure_table(
     let collapsed_height =
         (row_count + 1) as f32 * TABLE_BORDER_WIDTH + collapsed_row_content_height;
 
-    let align = node
-        .modifiers_with_style()
-        .find_map(|m| match m {
-            Modifier::Alignment { value } => Some(*value),
-            _ => None,
-        })
-        .unwrap_or_default();
+    let align = match node.own_modifier(ModifierType::Alignment) {
+        Some(Modifier::Alignment { value }) => *value,
+        _ => Alignment::default(),
+    };
 
     let alignment = match align {
         Alignment::Left => LayoutAlignment::Start,

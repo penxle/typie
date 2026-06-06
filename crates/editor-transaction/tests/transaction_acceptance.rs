@@ -1,5 +1,7 @@
 use editor_macros::state;
-use editor_model::{Modifier, NodeId, PlainNode, PlainParagraphNode, PlainStyleEntry};
+use editor_model::{
+    Modifier, ModifierType, NodeId, PlainNode, PlainParagraphNode, PlainStyleEntry,
+};
 use editor_transaction::{Step, Transaction};
 use proptest::prelude::*;
 
@@ -492,7 +494,7 @@ mod tests {
         let (next, ..) = tr.commit();
 
         let node = next.doc.node(t1).unwrap();
-        let mods: Vec<Modifier> = node.modifiers_with_style().cloned().collect();
+        let mods: Vec<Modifier> = node.own_modifiers().cloned().collect();
         assert!(mods.contains(&Modifier::Bold));
         assert!(
             !mods
@@ -523,16 +525,21 @@ mod tests {
         let (next, ..) = tr.commit();
 
         let para = next.doc.node(p1).unwrap();
-        let mods: Vec<Modifier> = para.modifiers_with_style().cloned().collect();
         assert!(
-            !mods.contains(&Modifier::Bold),
-            "inline must not expand on paragraph"
+            para.effective_modifier(ModifierType::Bold).is_none(),
+            "inline Bold does not apply to the paragraph itself (paragraph is not its target)"
+        );
+        let text = next.doc.node(t1).unwrap();
+        assert!(
+            text.effective_modifier(ModifierType::Bold).is_some(),
+            "the paragraph's child text inherits the style's Bold"
         );
         assert!(
-            !mods
-                .iter()
-                .any(|m| matches!(m, Modifier::LineHeight { .. })),
-            "block must not leak on paragraph"
+            matches!(
+                para.effective_modifier(ModifierType::LineHeight),
+                Some(Modifier::LineHeight { value: 200 })
+            ),
+            "LineHeight (target Paragraph) applies to the paragraph itself"
         );
     }
 }
