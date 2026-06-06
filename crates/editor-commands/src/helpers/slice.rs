@@ -1,6 +1,7 @@
 use editor_clipboard::Slice;
 use editor_model::{
-    Fragment, Modifier, Node, NodeId, NodeType, PlainNode, PlainTextNode, Schema, Subtree,
+    Fragment, Modifier, Node, NodeId, NodeType, PlainNode, PlainParagraphNode, PlainTextNode,
+    Schema, Subtree,
 };
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
@@ -22,8 +23,9 @@ pub(crate) fn insert_slice_at_position(
 
     let in_textblock = position_in_textblock(tr, position);
     if in_textblock {
-        if should_insert_open_content_as_inline(tr, position, &slice) {
-            insert_open_content_as_inline_at_position(tr, position, &slice)
+        if let Some(fragments) = inline_content_fragments_for_textblock_insert(tr, position, &slice)
+        {
+            insert_content_as_inline_at_position(tr, position, fragments)
         } else {
             insert_blocks_in_textblock_at_position(tr, position, &slice)
         }
@@ -95,36 +97,45 @@ fn can_split_textblock_for_structural_insert(
     parent.spec().content.validate(&child_types).is_ok()
 }
 
-fn should_insert_open_content_as_inline(
+fn inline_content_fragments_for_textblock_insert<'a>(
     tr: &Transaction,
     position: Position,
-    slice: &Slice,
-) -> bool {
-    if slice.open_start == 0 {
-        return false;
-    }
-
+    slice: &'a Slice,
+) -> Option<Vec<&'a Fragment>> {
     let doc = tr.doc();
     let Some(textblock_id) = find_ancestor_textblock(&doc, position.node_id) else {
-        return false;
+        return None;
     };
     let Some(textblock) = doc.node(textblock_id) else {
-        return false;
+        return None;
     };
     let Some(parent) = textblock.parent() else {
-        return false;
+        return None;
     };
 
     let top_level = top_level_fragments(slice);
+    if fragments_are_inline(&top_level) && fragments_fit_parent(textblock.as_type(), &top_level) {
+        return Some(top_level);
+    }
+
+    if slice.open_start == 0 {
+        return None;
+    }
+
     let open_content = open_content_fragments(top_level.clone(), slice.open_start);
     if !fragments_are_inline(&open_content)
         || !fragments_fit_parent(textblock.as_type(), &open_content)
     {
-        return false;
+        return None;
     }
 
-    !can_split_textblock_for_structural_insert(&doc, textblock_id)
+    if !can_split_textblock_for_structural_insert(&doc, textblock_id)
         || !fragments_fit_parent(parent.as_type(), &top_level)
+    {
+        Some(open_content)
+    } else {
+        None
+    }
 }
 
 fn textblock_is_empty(tr: &Transaction, textblock_id: NodeId) -> bool {
@@ -141,16 +152,12 @@ fn textblock_is_empty(tr: &Transaction, textblock_id: NodeId) -> bool {
     })
 }
 
-fn insert_open_content_as_inline_at_position(
+fn insert_content_as_inline_at_position(
     tr: &mut Transaction,
     position: Position,
-    slice: &Slice,
+    fragments: Vec<&Fragment>,
 ) -> Result<Option<Selection>, CommandError> {
-    let fragments: Vec<Fragment> =
-        open_content_fragments(top_level_fragments(slice), slice.open_start)
-            .into_iter()
-            .cloned()
-            .collect();
+    let fragments: Vec<Fragment> = fragments.into_iter().cloned().collect();
     if fragments.is_empty() {
         return Ok(None);
     }
@@ -612,10 +619,12 @@ fn insert_blocks_at_block_boundary(
 ) -> Result<Option<Selection>, CommandError> {
     let container_id = position.node_id;
     let base_index = position.offset;
-    let blocks: Vec<&Fragment> = match &slice.fragment.node {
-        PlainNode::Root(_) => slice.fragment.children.iter().collect(),
-        _ => vec![&slice.fragment],
-    };
+    let container_type = tr
+        .doc()
+        .node(container_id)
+        .ok_or(CommandError::NodeNotFound(container_id))?
+        .as_type();
+    let blocks = block_boundary_fragments(slice, container_type);
     if blocks.is_empty() {
         return Ok(None);
     }
@@ -623,7 +632,7 @@ fn insert_blocks_at_block_boundary(
     let mut last_inserted: Option<NodeId> = None;
     tr.batch(|tr| {
         for (offset, block) in blocks.iter().enumerate() {
-            let subtree = (*block).clone().into_subtree();
+            let subtree = block.clone().into_subtree();
             let inserted_id = subtree.id;
             tr.insert_subtree(container_id, base_index + offset, subtree)?;
             last_inserted = Some(inserted_id);
@@ -649,6 +658,24 @@ fn insert_blocks_at_block_boundary(
         base_index,
         blocks.len(),
     )))
+}
+
+fn block_boundary_fragments(slice: &Slice, container_type: NodeType) -> Vec<Fragment> {
+    let top_level = top_level_fragments(slice);
+    if fragments_are_inline(&top_level)
+        && Schema::node_spec(container_type)
+            .content
+            .matches(NodeType::Paragraph)
+    {
+        return vec![Fragment {
+            node: PlainNode::Paragraph(PlainParagraphNode::default()),
+            modifiers: vec![],
+            style: None,
+            children: top_level.into_iter().cloned().collect(),
+        }];
+    }
+
+    top_level.into_iter().cloned().collect()
 }
 
 fn selection_over_inserted_blocks(

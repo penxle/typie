@@ -43,13 +43,6 @@ impl Slice {
             .saturating_sub(common_depth)) as u32;
 
         let fragment = build_fragment(&rs, common);
-        // When the selection is contained within a single inline node, the
-        // common ancestor is that inline node, so build_fragment returns a bare
-        // inline leaf. Wrap it in the enclosing textblock and bump
-        // open_start/open_end so all inline selections keep their source
-        // textblock shape as wider textblock selections.
-        let (fragment, open_start, open_end) =
-            wrap_bare_inline_in_enclosing_textblock(fragment, common, open_start, open_end);
         Some(Slice {
             fragment,
             open_start,
@@ -94,42 +87,6 @@ impl Slice {
             text: self.to_text(),
         }
     }
-}
-
-fn nearest_enclosing_textblock<'a>(node: NodeRef<'a>) -> Option<NodeRef<'a>> {
-    let mut current = Some(node);
-    while let Some(n) = current {
-        if n.spec().is_textblock() {
-            return Some(n);
-        }
-        current = n.parent();
-    }
-    None
-}
-
-fn wrap_bare_inline_in_enclosing_textblock(
-    fragment: Fragment,
-    common: NodeRef<'_>,
-    open_start: u32,
-    open_end: u32,
-) -> (Fragment, u32, u32) {
-    let is_bare_inline = matches!(
-        fragment.node,
-        PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_)
-    );
-    if !is_bare_inline {
-        return (fragment, open_start, open_end);
-    }
-    let Some(textblock) = nearest_enclosing_textblock(common) else {
-        return (fragment, open_start, open_end);
-    };
-    let wrapped = Fragment {
-        node: textblock.node().to_plain(),
-        modifiers: textblock.explicit_modifiers().cloned().collect(),
-        style: textblock.entry().style.get().clone(),
-        children: vec![fragment],
-    };
-    (wrapped, open_start + 1, open_end + 1)
 }
 
 fn build_fragment<'a>(rs: &ResolvedSelection<'a>, node: NodeRef<'a>) -> Fragment {
@@ -313,19 +270,15 @@ mod tests {
     }
 
     #[test]
-    fn extract_inline_within_single_text_node() {
+    fn extract_inline_within_single_text_node_returns_bare_inline() {
         let (s, ..) = state! {
             doc { root { paragraph { t1: text("Hello World") } } }
             selection: (t1, 1) -> (t1, 4)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.open_start, 1);
-        assert_eq!(slice.open_end, 1);
-        assert!(matches!(
-            slice.fragment.node,
-            editor_model::PlainNode::Paragraph(_)
-        ));
-        if let editor_model::PlainNode::Text(t) = &slice.fragment.children[0].node {
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        if let editor_model::PlainNode::Text(t) = &slice.fragment.node {
             assert_eq!(t.text, "ell");
         } else {
             panic!("expected text node");
@@ -333,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_inline_within_fold_title_keeps_fold_title_wrapper() {
+    fn extract_inline_within_fold_title_returns_bare_inline() {
         let (s, ..) = state! {
             doc { root { fold {
                 fold_title { t1: text("Hello World") }
@@ -342,13 +295,9 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.open_start, 1);
-        assert_eq!(slice.open_end, 1);
-        assert!(matches!(
-            slice.fragment.node,
-            editor_model::PlainNode::FoldTitle(_)
-        ));
-        if let editor_model::PlainNode::Text(t) = &slice.fragment.children[0].node {
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        if let editor_model::PlainNode::Text(t) = &slice.fragment.node {
             assert_eq!(t.text, "ell");
         } else {
             panic!("expected text node");
@@ -590,16 +539,12 @@ mod tests {
         };
         let s = set_run_style(s, t1, "emphasis");
         let slice = Slice::extract(&s).expect("non-collapsed");
-        // A single-inline selection is wrapped in its enclosing textblock, so
-        // the run lives at children[0]; its style ref must be captured there.
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        let run = &slice.fragment.children[0];
-        if let PlainNode::Text(t) = &run.node {
+        if let PlainNode::Text(t) = &slice.fragment.node {
             assert_eq!(t.text, "Hello");
         } else {
             panic!("expected text node");
         }
-        assert_eq!(run.style.as_deref(), Some("emphasis"));
+        assert_eq!(slice.fragment.style.as_deref(), Some("emphasis"));
     }
 
     #[test]
@@ -610,17 +555,14 @@ mod tests {
         };
         let s = set_run_style(s, t1, "emphasis");
         let slice = Slice::extract(&s).expect("non-collapsed");
-        // Mid-run selection: build_fragment carves a partial Text leaf, wrapped
-        // in its enclosing textblock; the partial run must still carry the
-        // source run's style ref.
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        let run = &slice.fragment.children[0];
-        if let PlainNode::Text(t) = &run.node {
+        // Mid-run selection: build_fragment carves a partial Text leaf; the
+        // partial run must still carry the source run's style ref.
+        if let PlainNode::Text(t) = &slice.fragment.node {
             assert_eq!(t.text, "ell");
         } else {
             panic!("expected text node");
         }
-        assert_eq!(run.style.as_deref(), Some("emphasis"));
+        assert_eq!(slice.fragment.style.as_deref(), Some("emphasis"));
     }
 
     #[test]

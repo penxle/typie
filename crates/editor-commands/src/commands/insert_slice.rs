@@ -436,6 +436,19 @@ mod tests {
         }
     }
 
+    fn bare_styled_inline_slice(text: &str, style_id: &str) -> Slice {
+        Slice {
+            fragment: Fragment {
+                node: PlainNode::Text(PlainTextNode { text: text.into() }),
+                modifiers: vec![],
+                style: Some(style_id.into()),
+                children: vec![],
+            },
+            open_start: 0,
+            open_end: 0,
+        }
+    }
+
     fn run_style_of(node: &editor_model::NodeRef<'_>, idx: usize) -> Option<String> {
         node.children()
             .nth(idx)
@@ -470,6 +483,36 @@ mod tests {
         // The new paragraph itself acquires no wrapper style...
         assert_eq!(inserted.entry().style.get().as_deref(), None);
         // ...but the pasted run keeps the source run's style.
+        assert_eq!(run_style_of(&inserted, 0).as_deref(), Some("h1"));
+    }
+
+    #[test]
+    fn paste_bare_inline_at_block_boundary_wraps_unstyled_paragraph() {
+        use editor_model::Modifier;
+
+        use crate::commands::define_style;
+
+        let (initial, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                paragraph { text("b") }
+            } }
+            selection: (r, 1, >)
+        };
+        let (with_style, ..) = transact!(initial, |tr| define_style(
+            &mut tr,
+            "h1".into(),
+            "H1".into(),
+            vec![Modifier::FontSize { value: 2400 }],
+        ));
+
+        let slice = bare_styled_inline_slice("XY", "h1");
+        let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
+
+        let root = actual.doc.root().unwrap();
+        let inserted = root.children().nth(1).unwrap();
+        assert!(matches!(inserted.node(), editor_model::Node::Paragraph(_)));
+        assert_eq!(inserted.entry().style.get().as_deref(), None);
         assert_eq!(run_style_of(&inserted, 0).as_deref(), Some("h1"));
     }
 
@@ -523,8 +566,8 @@ mod tests {
             .map_err(crate::CommandError::Step));
 
         let slice = Slice::extract(&with_style).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        assert_eq!(slice.fragment.children[0].style.as_deref(), Some("h1"));
+        assert!(matches!(slice.fragment.node, PlainNode::Text(_)));
+        assert_eq!(slice.fragment.style.as_deref(), Some("h1"));
     }
 
     #[test]
