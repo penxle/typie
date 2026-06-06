@@ -8,6 +8,7 @@
 
   let show = $derived(ctx.editor !== undefined && !ctx.editor.readOnly && ctx.editor.lastHistoryTag?.type === 'paste_html');
   let point = $state<{ x: number; y: number } | null>(null);
+  let element = $state<HTMLButtonElement>();
 
   $effect(() => {
     const editor = ctx.editor;
@@ -18,6 +19,13 @@
 
     const { page_idx, caret } = editor.cursor;
     point = editor.localToOffset(page_idx, caret.x, caret.y + caret.height + 4);
+  });
+
+  $effect(() => {
+    const container = ctx.editor?.scrollContainerEl;
+    if (container && element && element.parentElement !== container) {
+      container.append(element);
+    }
   });
 
   $effect(() => {
@@ -59,6 +67,7 @@
 
 {#if point}
   <button
+    bind:this={element}
     style:left={`${point.x}px`}
     style:top={`${point.y}px`}
     class={buttonStyle}
