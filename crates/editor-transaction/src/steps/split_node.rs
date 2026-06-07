@@ -332,6 +332,33 @@ mod tests {
     }
 
     #[test]
+    fn split_does_not_propagate_marker_to_new_node() {
+        use editor_model::Marker;
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("HelloWorld") } } }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        tr.set_marker(
+            t1,
+            Some(Marker {
+                modifiers: vec![Modifier::Bold],
+                style: None,
+            }),
+        )
+        .unwrap();
+        let new_id = NodeId::new();
+        tr.split_node(t1, 5, new_id).unwrap();
+        let (next, ..) = tr.commit();
+
+        assert_eq!(
+            next.doc.get_entry(new_id).unwrap().marker.get(),
+            &None,
+            "split-off node must not inherit the marker"
+        );
+    }
+
+    #[test]
     fn split_then_merge_text_roundtrip() {
         let (state, t1) = state! {
             doc {

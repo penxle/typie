@@ -151,7 +151,8 @@ fn affected_node_ids_for_doc_op(op: &DocOp, old_doc: &Doc) -> Vec<NodeId> {
         DocOp::Text { node_id, .. }
         | DocOp::Modifier { node_id, .. }
         | DocOp::Attr { node_id, .. }
-        | DocOp::NodeStyle { node_id, .. } => {
+        | DocOp::NodeStyle { node_id, .. }
+        | DocOp::NodeMarker { node_id, .. } => {
             vec![*node_id]
         }
         DocOp::Style { style_id, .. } => old_doc

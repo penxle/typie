@@ -508,10 +508,12 @@ impl Editor {
             }
         }
 
-        if ops
-            .iter()
-            .any(|op| matches!(&op.payload, DocOp::Style { .. } | DocOp::NodeStyle { .. }))
-        {
+        if ops.iter().any(|op| {
+            matches!(
+                &op.payload,
+                DocOp::Style { .. } | DocOp::NodeStyle { .. } | DocOp::NodeMarker { .. }
+            )
+        }) {
             fields.insert(StateField::Styles);
         }
 
@@ -1348,6 +1350,7 @@ mod tests {
                 children: vec![para_id],
                 modifiers: root_default_font_modifiers(),
                 style: None,
+                marker: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -1358,6 +1361,7 @@ mod tests {
                 children: vec![text_id],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1368,6 +1372,7 @@ mod tests {
                 children: vec![],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: "hi".to_string(),
                 }),
@@ -1396,6 +1401,7 @@ mod tests {
                 children: vec![para1_id, para2_id],
                 modifiers: root_default_font_modifiers(),
                 style: None,
+                marker: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -1406,6 +1412,7 @@ mod tests {
                 children: vec![text1_id],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1416,6 +1423,7 @@ mod tests {
                 children: vec![],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: String::new(),
                 }),
@@ -1428,6 +1436,7 @@ mod tests {
                 children: vec![text2_id],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1438,6 +1447,7 @@ mod tests {
                 children: vec![],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: String::new(),
                 }),

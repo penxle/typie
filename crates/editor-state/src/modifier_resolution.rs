@@ -74,6 +74,36 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
                     }
                 }
             }
+            if node.first_child().is_none()
+                && let Some(marker) = node.marker()
+            {
+                for m in marker.modifiers.iter() {
+                    let t = m.as_type();
+                    let is_inline = Schema::modifier_spec(t)
+                        .target
+                        .rightmost_node_types()
+                        .contains(&NodeType::Text);
+                    if is_inline && !seen.contains(&t) {
+                        seen.push(t);
+                        out.push(m.clone());
+                    }
+                }
+                if let Some(style_id) = marker.style.as_ref()
+                    && let Some(style) = node.doc().style_entry(style_id)
+                {
+                    for m in style.modifiers.iter() {
+                        let t = m.as_type();
+                        let is_inline = Schema::modifier_spec(t)
+                            .target
+                            .rightmost_node_types()
+                            .contains(&NodeType::Text);
+                        if is_inline && !seen.contains(&t) {
+                            seen.push(t);
+                            out.push(m.clone());
+                        }
+                    }
+                }
+            }
             out
         }
         _ => vec![],
@@ -1225,6 +1255,20 @@ mod tests {
             resolve_effective_modifiers_at(&state, &pos)
                 .iter()
                 .any(|m| matches!(m, Modifier::FontSize { value: 1600 }))
+        );
+    }
+
+    #[test]
+    fn empty_paragraph_marker_surfaces_at_caret() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph marker([bold]) {} } }
+            selection: (p1, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        assert!(
+            result.iter().any(|m| matches!(m, Modifier::Bold)),
+            "empty-paragraph marker's inline modifier must surface at caret"
         );
     }
 

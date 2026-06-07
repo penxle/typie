@@ -18,6 +18,7 @@ fn reconcile_node(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), 
     reconcile_attrs(tr, target, id)?;
     reconcile_modifiers(tr, target, id)?;
     reconcile_node_style(tr, target, id)?;
+    reconcile_node_marker(tr, target, id)?;
     reconcile_text(tr, target, id)?;
     reconcile_children(tr, target, id)?;
     Ok(())
@@ -219,6 +220,21 @@ fn reconcile_node_style(tr: &mut Transaction, target: &Doc, id: NodeId) -> Resul
     };
     if current_style != target_style {
         tr.set_node_style(id, target_style)?;
+    }
+    Ok(())
+}
+
+fn reconcile_node_marker(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
+    let Some(target_entry) = target.get_entry(id) else {
+        return Ok(());
+    };
+    let target_marker = target_entry.marker.get().clone();
+    let current_marker = match tr.doc().get_entry(id) {
+        Some(e) => e.marker.get().clone(),
+        None => return Ok(()),
+    };
+    if current_marker != target_marker {
+        tr.set_marker(id, target_marker)?;
     }
     Ok(())
 }
@@ -677,6 +693,29 @@ mod tests {
             reverted.doc.node(t1).unwrap().entry().style.get().clone(),
             None
         );
+    }
+
+    #[test]
+    fn set_marker_and_revert() {
+        use editor_model::{Marker, Modifier};
+        let (target_state, p1, _t1) = state! {
+            doc {
+                root { p1: paragraph { t1: text("hi") } }
+            }
+            selection: (t1, 0)
+        };
+        let m = Marker {
+            modifiers: vec![Modifier::Bold],
+            style: None,
+        };
+        let mut pre = Transaction::new(&target_state);
+        pre.set_marker(p1, Some(m.clone())).unwrap();
+        let (changed_state, ..) = pre.commit();
+        assert_eq!(changed_state.doc.node(p1).unwrap().marker(), Some(&m));
+
+        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert_eq!(reverted.doc.node(p1).unwrap().marker(), None);
     }
 
     #[test]

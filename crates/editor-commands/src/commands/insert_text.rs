@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn insert_text_into_empty_paragraph_with_marker_consumes_marker() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph [bold] {} } }
+            doc { root { p1: paragraph marker([bold]) {} } }
             selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn insert_text_in_middle_split_state_coalesces_with_right_half() {
         let (initial, ..) = state! {
-            doc { root { paragraph [bold] { t1: text("llo") [bold] } } }
+            doc { root { paragraph marker([bold]) { t1: text("llo") [bold] } } }
             selection: (t1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn insert_into_empty_paragraph_with_mixed_markers_carries_only_text_applicable() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph [bold, line_height(220)] {} } }
+            doc { root { p1: paragraph [line_height(220)] marker([bold]) {} } }
             selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn insert_text_clears_paragraph_marker_even_if_text_already_styled() {
         let (initial, ..) = state! {
-            doc { root { paragraph [bold] { t1: text("Hi") [bold] } } }
+            doc { root { paragraph marker([bold]) { t1: text("Hi") [bold] } } }
             selection: (t1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
@@ -376,7 +376,12 @@ mod tests {
             &Resource::new_test()
         ));
         assert_eq!(
-            emptied.doc.node(p1).unwrap().entry().style.get().as_deref(),
+            emptied
+                .doc
+                .node(p1)
+                .unwrap()
+                .marker()
+                .and_then(|m| m.style.as_deref()),
             Some("s1"),
             "marker present while empty"
         );
@@ -388,11 +393,7 @@ mod tests {
                 .any(|c| c.entry().style.get().as_deref() == Some("s1")),
             "retyped run gets marker style"
         );
-        assert_eq!(
-            para.entry().style.get().as_deref(),
-            None,
-            "marker cleared from paragraph"
-        );
+        assert_eq!(para.marker(), None, "marker cleared from paragraph");
     }
 
     #[test]

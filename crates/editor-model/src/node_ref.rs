@@ -6,6 +6,7 @@ use crate::Schema;
 use crate::doc::Doc;
 use crate::entry::NodeEntry;
 use crate::id::NodeId;
+use crate::marker::Marker;
 use crate::modifier::{Modifier, ModifierType};
 use crate::nodes::{Node, NodeType};
 
@@ -36,6 +37,10 @@ impl<'a> NodeRef<'a> {
 
     pub fn node(&self) -> &'a Node {
         &self.entry().node
+    }
+
+    pub fn marker(&self) -> Option<&'a Marker> {
+        self.entry().marker.get().as_ref()
     }
 
     pub fn as_type(&self) -> NodeType {
@@ -533,6 +538,17 @@ mod tests {
             mods.iter()
                 .any(|m| matches!(m, Modifier::FontSize { value: 1600 }))
         );
+    }
+
+    #[test]
+    fn empty_paragraph_marker_not_in_resolver() {
+        let (doc, p) = doc! { root { p: paragraph marker([bold]) {} } };
+        let node = doc.node(p).unwrap();
+        assert!(!node.own_modifiers().any(|m| matches!(m, Modifier::Bold)));
+        assert!(node.own_modifier(ModifierType::Bold).is_none());
+        assert!(node.effective_modifier(ModifierType::Bold).is_none());
+        let marker = node.marker().expect("marker present");
+        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
     #[test]

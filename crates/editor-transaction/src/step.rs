@@ -1,5 +1,7 @@
 use editor_crdt::Op;
-use editor_model::{DocOp, Modifier, ModifierType, NodeId, PlainNode, PlainStyleEntry, Subtree};
+use editor_model::{
+    DocOp, Marker, Modifier, ModifierType, NodeId, PlainNode, PlainStyleEntry, Subtree,
+};
 use editor_state::{
     BatchedState, Composition, PendingModifiers, PendingStyle, StableSelection, State,
 };
@@ -86,6 +88,11 @@ pub enum Step {
         old: Option<String>,
         new: Option<String>,
     },
+    SetNodeMarker {
+        node_id: NodeId,
+        old: Option<Marker>,
+        new: Option<Marker>,
+    },
     SetStyle {
         style_id: String,
         old: Option<PlainStyleEntry>,
@@ -157,7 +164,8 @@ impl Step {
             | Step::SetNode { node_id, .. }
             | Step::AddModifier { node_id, .. }
             | Step::RemoveModifier { node_id, .. }
-            | Step::SetNodeStyle { node_id, .. } => StepScope::Node(*node_id),
+            | Step::SetNodeStyle { node_id, .. }
+            | Step::SetNodeMarker { node_id, .. } => StepScope::Node(*node_id),
 
             Step::SetStyle { .. } => StepScope::Node(NodeId::ROOT),
 
@@ -257,6 +265,9 @@ impl Step {
             Step::SetNodeStyle { node_id, new, .. } => {
                 steps::set_node_style::apply_to(batched, validations, *node_id, new.clone())
             }
+            Step::SetNodeMarker { node_id, new, .. } => {
+                steps::set_node_marker::apply_to(batched, validations, *node_id, new.clone())
+            }
             Step::SetStyle { style_id, new, .. } => {
                 steps::set_style::apply_to(batched, validations, style_id, new.clone())
             }
@@ -333,6 +344,9 @@ impl Step {
             }
             Step::SetNodeStyle { node_id, old, new } => {
                 steps::set_node_style::inverse(*node_id, old.clone(), new.clone())
+            }
+            Step::SetNodeMarker { node_id, old, new } => {
+                steps::set_node_marker::inverse(*node_id, old.clone(), new.clone())
             }
             Step::SetStyle { style_id, old, new } => {
                 steps::set_style::inverse(style_id.clone(), old.clone(), new.clone())
@@ -455,7 +469,7 @@ mod tests {
             },
         ];
 
-        // commitable (10)
+        // commitable (13)
         let commitable: Vec<Step> = vec![
             Step::InsertText {
                 node_id,
@@ -507,9 +521,24 @@ mod tests {
                 node_id,
                 modifier: Modifier::Bold,
             },
+            Step::SetNodeStyle {
+                node_id,
+                old: None,
+                new: Some("h".into()),
+            },
+            Step::SetNodeMarker {
+                node_id,
+                old: None,
+                new: None,
+            },
+            Step::SetStyle {
+                style_id: "h".into(),
+                old: None,
+                new: None,
+            },
         ];
 
-        assert_eq!(non_commitable.len() + commitable.len(), 14);
+        assert_eq!(non_commitable.len() + commitable.len(), 17);
 
         for step in &non_commitable {
             assert!(!step.is_commitable(), "{step:?}");

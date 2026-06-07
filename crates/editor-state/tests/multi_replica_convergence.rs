@@ -30,6 +30,7 @@ fn rooted_plain_doc() -> (PlainDoc, NodeId) {
             children: vec![para_id],
             modifiers: BTreeMap::new(),
             style: None,
+            marker: None,
             node: PlainNode::Root(PlainRootNode::default()),
         },
     );
@@ -40,6 +41,7 @@ fn rooted_plain_doc() -> (PlainDoc, NodeId) {
             children: vec![text_id],
             modifiers: BTreeMap::new(),
             style: None,
+            marker: None,
             node: PlainNode::Paragraph(PlainParagraphNode {}),
         },
     );
@@ -50,6 +52,7 @@ fn rooted_plain_doc() -> (PlainDoc, NodeId) {
             children: vec![],
             modifiers: BTreeMap::new(),
             style: None,
+            marker: None,
             node: PlainNode::Text(PlainTextNode {
                 text: String::new(),
             }),

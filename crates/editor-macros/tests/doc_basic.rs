@@ -323,6 +323,21 @@ fn doc_style_and_explicit_modifier_coexist() {
     assert!(t_ref.effective_modifier(ModifierType::Italic).is_some());
 }
 
+#[test]
+fn doc_marker_clause() {
+    let (doc, p) = doc! {
+        styles { s1: [bold] }
+        root { p: paragraph marker(@s1 [italic]) {} }
+    };
+    let m = doc
+        .node(p)
+        .unwrap()
+        .marker()
+        .expect("paragraph should have a marker");
+    assert_eq!(m.style.as_deref(), Some("s1"));
+    assert!(m.modifiers.iter().any(|x| matches!(x, Modifier::Italic)));
+}
+
 // `doc!`/`state!`의 styles 검증은 컴파일 타임 에러다 (trybuild 미도입 — 아래는 계약 문서).
 //
 // 1. 미선언 style 참조:

@@ -73,7 +73,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph [bold] { t1: text("Hello") [bold] tab } } }
+            doc { root { p1: paragraph marker([bold]) { t1: text("Hello") [bold] tab } } }
             selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
@@ -87,7 +87,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph [font_size(2400)] { t1: text("Hi") [font_size(2400)] tab [font_size(2400)] } } }
+            doc { root { p1: paragraph marker([font_size(2400)]) { t1: text("Hi") [font_size(2400)] tab [font_size(2400)] } } }
             selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
@@ -126,7 +126,12 @@ mod tests {
             &Resource::new_test()
         ));
         assert_eq!(
-            emptied.doc.node(p1).unwrap().entry().style.get().as_deref(),
+            emptied
+                .doc
+                .node(p1)
+                .unwrap()
+                .marker()
+                .and_then(|m| m.style.as_deref()),
             Some("s1"),
             "marker present while empty"
         );
@@ -139,10 +144,25 @@ mod tests {
                     && c.entry().style.get().as_deref() == Some("s1")),
             "inserted tab gets marker style"
         );
-        assert_eq!(
-            para.entry().style.get().as_deref(),
-            None,
-            "marker cleared from paragraph"
+        assert_eq!(para.marker(), None, "marker cleared from paragraph");
+    }
+
+    #[test]
+    fn tab_into_empty_paragraph_with_marker_carries_metric() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph marker([font_size(2400)]) {} } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(state, |tr| insert_tab(&mut tr));
+        let para = actual.doc.node(p1).unwrap();
+        let tab = para
+            .children()
+            .find(|c| matches!(c.node(), editor_model::Node::Tab(_)))
+            .expect("tab inserted");
+        assert!(
+            tab.modifiers()
+                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 2400 })),
+            "tab carries the marker's font_size metric"
         );
     }
 

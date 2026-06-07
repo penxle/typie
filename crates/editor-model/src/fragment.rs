@@ -43,6 +43,7 @@ impl Fragment {
             node: self.node,
             modifiers: self.modifiers,
             style: self.style,
+            marker: None,
             children: self
                 .children
                 .into_iter()

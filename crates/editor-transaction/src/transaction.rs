@@ -1,6 +1,6 @@
 use editor_crdt::Op;
 use editor_model::{
-    Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainNode, PlainStyleEntry, Subtree,
+    Doc, DocOp, Marker, Modifier, ModifierType, Node, NodeId, PlainNode, PlainStyleEntry, Subtree,
 };
 use editor_state::{Composition, PendingModifiers, Selection, StableSelection, State};
 
@@ -324,6 +324,23 @@ impl Transaction {
             node_id,
             old,
             new: style,
+        })
+    }
+
+    pub fn set_marker(&mut self, node_id: NodeId, marker: Option<Marker>) -> Result<(), StepError> {
+        let old = self
+            .state
+            .doc
+            .get_entry(node_id)
+            .map(|e| e.marker.get().clone())
+            .unwrap_or(None);
+        if old == marker {
+            return Ok(());
+        }
+        self.apply_step(Step::SetNodeMarker {
+            node_id,
+            old,
+            new: marker,
         })
     }
 

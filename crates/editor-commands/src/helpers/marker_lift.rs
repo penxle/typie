@@ -55,11 +55,12 @@ pub(crate) fn apply_first_text_marker_lift(
     if still_has_text {
         return Ok(());
     }
-    for m in &captured.first_text_carryable {
-        tr.add_modifier(captured.paragraph_id, m.clone())?;
-    }
-    if let Some(style_id) = &captured.first_text_style {
-        tr.set_node_style(captured.paragraph_id, Some(style_id.clone()))?;
+    let marker = editor_model::Marker {
+        modifiers: captured.first_text_carryable.clone(),
+        style: captured.first_text_style.clone(),
+    };
+    if !marker.is_empty() {
+        tr.set_marker(captured.paragraph_id, Some(marker))?;
     }
     Ok(())
 }
@@ -154,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn lift_attaches_marker_after_text_removal() {
+    fn lift_writes_marker_field() {
         let (state, p1, t1) = state! {
             doc { root { p1: paragraph { t1: text("Hi") [bold, font_weight(700)] } } }
             selection: (t1, 0)
@@ -165,16 +166,23 @@ mod tests {
         apply_first_text_marker_lift(&mut tr, &captured).unwrap();
         let (new_state, _, _, _, _) = tr.commit();
         let p = new_state.doc.node(p1).unwrap();
-        let mods: Vec<_> = p.modifiers().cloned().collect();
-        assert!(mods.iter().any(|m| matches!(m, Modifier::Bold)));
+
+        let marker = p.marker().expect("marker should be written");
+        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
         assert!(
-            mods.iter()
+            marker
+                .modifiers
+                .iter()
                 .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
         );
+        assert_eq!(marker.style, None);
+
+        assert_eq!(p.modifiers().count(), 0);
+        assert_eq!(p.entry().style.get().as_deref(), None);
     }
 
     #[test]
-    fn lift_attaches_style_marker_after_text_removal() {
+    fn lift_writes_style_marker_field() {
         use editor_model::PlainStyleEntry;
         let (state, p1, t1) = state! {
             doc { root { p1: paragraph { t1: text("Hi") } } }
@@ -198,16 +206,13 @@ mod tests {
         tr.remove_subtree(t1).unwrap();
         apply_first_text_marker_lift(&mut tr, &captured).unwrap();
         let (new_state, ..) = tr.commit();
-        assert_eq!(
-            new_state
-                .doc
-                .node(p1)
-                .unwrap()
-                .entry()
-                .style
-                .get()
-                .as_deref(),
-            Some("s1")
-        );
+        let p = new_state.doc.node(p1).unwrap();
+
+        let marker = p.marker().expect("marker should be written");
+        assert_eq!(marker.style.as_deref(), Some("s1"));
+        assert!(marker.modifiers.is_empty());
+
+        assert_eq!(p.entry().style.get().as_deref(), None);
+        assert_eq!(p.modifiers().count(), 0);
     }
 }

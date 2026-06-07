@@ -51,6 +51,7 @@ fn dissolve_into(
             node: node.node().to_plain(),
             modifiers: node.explicit_modifiers().cloned().collect(),
             style: node.entry().style.get().clone(),
+            marker: node.entry().marker.get().clone(),
             children: vec![],
         },
     });

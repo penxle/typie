@@ -157,7 +157,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    p1: paragraph [bold] {
+                    p1: paragraph marker([bold]) {
                         t1: text("Hello") [bold]
                         hard_break
                     }
@@ -178,7 +178,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph [bold] {
+                    paragraph marker([bold]) {
                         t1: text("He") [bold]
                         hard_break
                         t2: text("llo") [bold]

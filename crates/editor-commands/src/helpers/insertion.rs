@@ -35,10 +35,18 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
     let doc = tr.doc();
 
     let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
-    let marker_style: Option<String> = host_paragraph_id
+    let host_marker: Option<editor_model::Marker> = host_paragraph_id
         .and_then(|id| doc.node(id))
-        .filter(|p| !p.children().any(|c| matches!(c.node(), Node::Text(_))))
-        .and_then(|p| p.entry().style.get().clone());
+        .and_then(|p| p.marker().cloned());
+    let host_is_empty = host_paragraph_id
+        .and_then(|id| doc.node(id))
+        .map(|p| !p.children().any(|c| matches!(c.node(), Node::Text(_))))
+        .unwrap_or(false);
+    let marker_style: Option<String> = if host_is_empty {
+        host_marker.as_ref().and_then(|m| m.style.clone())
+    } else {
+        None
+    };
 
     let pending_style_explicit = tr.pending_style().is_some();
     let pending_style: Option<String> = match tr.pending_style() {
@@ -72,15 +80,16 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         }
     }
 
-    let marker_to_clear: Vec<Modifier> = host_paragraph_id
-        .and_then(|id| doc.node(id))
-        .map(|p| {
-            p.modifiers()
-                .filter(|m| is_text_applicable(m.as_type()))
-                .cloned()
-                .collect()
-        })
-        .unwrap_or_default();
+    if let Some(marker) = &host_marker {
+        for m in &marker.modifiers {
+            if !is_text_applicable(m.as_type()) {
+                continue;
+            }
+            if !effective_mods.iter().any(|e| e.as_type() == m.as_type()) {
+                effective_mods.push(m.clone());
+            }
+        }
+    }
 
     match node.node() {
         Node::Text(text_node) => {
@@ -161,16 +170,10 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         tr.set_pending_style(None)?;
     }
 
-    if let Some(p_id) = host_paragraph_id {
-        for m in marker_to_clear {
-            tr.remove_modifier(p_id, m)?;
-        }
-    }
-
     if let Some(p_id) = host_paragraph_id
-        && marker_style.is_some()
+        && host_marker.is_some()
     {
-        tr.set_node_style(p_id, None)?;
+        tr.set_marker(p_id, None)?;
     }
 
     Ok(true)
@@ -276,8 +279,12 @@ pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult 
     }
 
     if let Some(p_id) = host_paragraph_id {
-        for m in carryable {
-            tr.add_modifier(p_id, m)?;
+        let marker = editor_model::Marker {
+            modifiers: carryable,
+            style: None,
+        };
+        if !marker.is_empty() {
+            tr.set_marker(p_id, Some(marker))?;
         }
     }
 
@@ -296,10 +303,11 @@ pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
     let doc = tr.doc();
 
     let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
-    let marker_style: Option<String> = host_paragraph_id
+    let host_marker: Option<editor_model::Marker> = host_paragraph_id
         .and_then(|id| doc.node(id))
         .filter(|p| !p.children().any(|c| matches!(c.node(), Node::Text(_))))
-        .and_then(|p| p.entry().style.get().clone());
+        .and_then(|p| p.marker().cloned());
+    let marker_style: Option<String> = host_marker.as_ref().and_then(|m| m.style.clone());
 
     let pending_style_explicit = tr.pending_style().is_some();
     let pending_style: Option<String> = match tr.pending_style() {
@@ -317,6 +325,18 @@ pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
 
     let mut metric_mods = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
     metric_mods.retain(|m| is_tab_metric_modifier(m.as_type()));
+
+    // An empty host paragraph's marker holds the next-input formatting; fold its tab-metric
+    // modifiers into the tab (the resolver no longer surfaces the marker post de-overload).
+    if let Some(marker) = &host_marker {
+        for m in &marker.modifiers {
+            if is_tab_metric_modifier(m.as_type())
+                && !metric_mods.iter().any(|e| e.as_type() == m.as_type())
+            {
+                metric_mods.push(m.clone());
+            }
+        }
+    }
 
     let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
 
@@ -400,14 +420,20 @@ pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
     }
 
     if let Some(p_id) = host_paragraph_id
-        && marker_style.is_some()
+        && host_marker.is_some()
     {
-        tr.set_node_style(p_id, None)?;
+        tr.set_marker(p_id, None)?;
     }
 
-    if let Some(p_id) = host_paragraph_id {
-        for m in carryable {
-            tr.add_modifier(p_id, m)?;
+    if let Some(p_id) = host_paragraph_id
+        && host_marker.is_none()
+    {
+        let marker = editor_model::Marker {
+            modifiers: carryable,
+            style: None,
+        };
+        if !marker.is_empty() {
+            tr.set_marker(p_id, Some(marker))?;
         }
     }
 

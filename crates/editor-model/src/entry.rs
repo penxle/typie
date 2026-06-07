@@ -1,6 +1,7 @@
 use editor_crdt::{LwwReg, OrMap, Rga};
 
 use crate::id::NodeId;
+use crate::marker::Marker;
 use crate::modifier::{Modifier, ModifierType};
 use crate::nodes::Node;
 
@@ -10,6 +11,7 @@ pub struct NodeEntry {
     pub children: Rga<NodeId>,
     pub modifiers: OrMap<ModifierType, Modifier>,
     pub style: LwwReg<Option<String>>,
+    pub marker: LwwReg<Option<Marker>>,
     pub node: Node,
 }
 
@@ -20,6 +22,7 @@ impl NodeEntry {
             children: Rga::new(),
             modifiers: OrMap::new(),
             style: LwwReg::with_value(None),
+            marker: LwwReg::with_value(None),
             node,
         }
     }
@@ -37,5 +40,11 @@ mod tests {
         assert!(entry.children.is_empty());
         assert!(entry.modifiers.is_empty());
         assert!(entry.style.get().is_none());
+    }
+
+    #[test]
+    fn new_node_marker_is_none() {
+        let entry = NodeEntry::new(Node::Paragraph(ParagraphNode::default()));
+        assert!(entry.marker.get().is_none());
     }
 }

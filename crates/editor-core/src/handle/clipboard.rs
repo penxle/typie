@@ -1329,6 +1329,7 @@ mod tests {
                 children: vec![para_id],
                 modifiers: root_modifiers,
                 style: None,
+                marker: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -1339,6 +1340,7 @@ mod tests {
                 children: vec![text_id],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
             },
         );
@@ -1349,6 +1351,7 @@ mod tests {
                 children: vec![],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Text(PlainTextNode {
                     text: String::new(),
                 }),

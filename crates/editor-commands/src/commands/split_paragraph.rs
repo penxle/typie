@@ -51,8 +51,12 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
         _ => return Ok(false),
     }
 
-    for m in carryable {
-        tr.add_modifier(new_paragraph_id, m)?;
+    let marker = editor_model::Marker {
+        modifiers: carryable,
+        style: None,
+    };
+    if !marker.is_empty() {
+        tr.set_marker(new_paragraph_id, Some(marker))?;
     }
 
     let doc = tr.doc();
@@ -300,16 +304,16 @@ mod tests {
             selection: (t1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("Hello") [bold] }
-                    p2: paragraph [bold] {}
-                }
-            }
-            selection: (p2, 0)
-        };
-        assert_state_eq!(&actual, &expected);
+        let new_paragraph = actual
+            .doc
+            .root()
+            .unwrap()
+            .children()
+            .nth(1)
+            .expect("second paragraph exists");
+        let marker = new_paragraph.marker().expect("marker on new paragraph");
+        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
+        assert_eq!(new_paragraph.modifiers().count(), 0);
     }
 
     #[test]
@@ -319,16 +323,16 @@ mod tests {
             selection: (t1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("He") [bold] }
-                    paragraph [bold] { t2: text("llo") [bold] }
-                }
-            }
-            selection: (t2, 0)
-        };
-        assert_state_eq!(&actual, &expected);
+        let new_paragraph = actual
+            .doc
+            .root()
+            .unwrap()
+            .children()
+            .nth(1)
+            .expect("second paragraph exists");
+        let marker = new_paragraph.marker().expect("marker on new paragraph");
+        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
+        assert_eq!(new_paragraph.modifiers().count(), 0);
     }
 
     #[test]
@@ -338,16 +342,15 @@ mod tests {
             selection: (t1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph {}
-                    paragraph { t1: text("Hello") [bold] }
-                }
-            }
-            selection: (t1, 0)
-        };
-        assert_state_eq!(&actual, &expected);
+        let new_paragraph = actual
+            .doc
+            .root()
+            .unwrap()
+            .children()
+            .next()
+            .expect("first paragraph exists");
+        assert!(new_paragraph.marker().is_none());
+        assert_eq!(new_paragraph.modifiers().count(), 0);
     }
 
     #[test]
@@ -370,13 +373,15 @@ mod tests {
             .children()
             .nth(1)
             .expect("second paragraph exists");
-        let mods: Vec<_> = new_paragraph.modifiers().cloned().collect();
-        assert!(mods.iter().any(|m| matches!(
+        let marker = new_paragraph.marker().expect("marker on new paragraph");
+        assert!(marker.modifiers.iter().any(|m| matches!(
             m,
             Modifier::FontFamily { value } if value == "Arial"
         )));
         assert!(
-            mods.iter()
+            marker
+                .modifiers
+                .iter()
                 .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
         );
     }
@@ -395,10 +400,10 @@ mod tests {
             .children()
             .nth(1)
             .expect("second paragraph exists");
-        assert!(
-            !new_paragraph
-                .modifiers()
+        assert!(new_paragraph.marker().is_none_or(|m| {
+            !m.modifiers
+                .iter()
                 .any(|m| matches!(m, Modifier::Link { .. }))
-        );
+        }));
     }
 }

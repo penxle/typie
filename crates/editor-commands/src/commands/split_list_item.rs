@@ -112,8 +112,12 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
         Ok(())
     })?;
 
-    for m in carryable {
-        tr.add_modifier(new_paragraph_id, m)?;
+    let marker = editor_model::Marker {
+        modifiers: carryable,
+        style: None,
+    };
+    if !marker.is_empty() {
+        tr.set_marker(new_paragraph_id, Some(marker))?;
     }
 
     let doc = tr.doc();
@@ -378,7 +382,7 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { t1: text("Hello") [bold] } }
-                        list_item { p2: paragraph [bold] {} }
+                        list_item { p2: paragraph marker([bold]) {} }
                     }
                     paragraph {}
                 }
@@ -407,7 +411,7 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { t1: text("He") [bold] } }
-                        list_item { paragraph [bold] { t2: text("llo") [bold] } }
+                        list_item { paragraph marker([bold]) { t2: text("llo") [bold] } }
                     }
                     paragraph {}
                 }

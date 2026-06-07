@@ -156,7 +156,7 @@ fn collapsed_base_style(node: &NodeRef<'_>) -> Option<String> {
         return node.entry().style.get().clone();
     }
     if node.spec().is_textblock() && !node.children().any(|c| is_run(&c)) {
-        return node.entry().style.get().clone();
+        return node.marker().and_then(|m| m.style.clone());
     }
     None
 }
@@ -328,7 +328,14 @@ mod tests {
             selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
-        tr.set_node_style(p1, Some("h1".into())).unwrap();
+        tr.set_marker(
+            p1,
+            Some(editor_model::Marker {
+                modifiers: vec![],
+                style: Some("h1".into()),
+            }),
+        )
+        .unwrap();
         let (next, _, _, _, _) = tr.commit();
 
         assert_eq!(

@@ -3,7 +3,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 
 use crate::doc_macro::parse::{
-    DecorationDef, DecorationParams, DocTree, FieldValue, NodeContent, NodeDef, StyleDef,
+    DecorationDef, DecorationParams, DocTree, FieldValue, MarkerDef, NodeContent, NodeDef, StyleDef,
 };
 
 pub struct CodegenParts {
@@ -177,12 +177,15 @@ fn collect_node(
         None => quote! { None },
     };
 
+    let marker_expr = build_marker_expr(&node.marker);
+
     plain_entries.push(quote! {
         __m.insert(#id_ident, PlainNodeEntry {
             parent: #parent_expr,
             children: #children_expr,
             modifiers: #modifiers_expr,
             style: #style_expr,
+            marker: #marker_expr,
             node: #plain_node_with_text,
         });
     });
@@ -279,6 +282,23 @@ fn build_modifiers_expr(node: &NodeDef) -> TokenStream {
                 }
             }
         }
+    }
+}
+
+fn build_marker_expr(marker: &Option<MarkerDef>) -> TokenStream {
+    match marker {
+        Some(m) => {
+            let style_expr = match &m.style {
+                Some(id) => {
+                    let s = id.to_string();
+                    quote! { Some(#s.to_string()) }
+                }
+                None => quote! { None },
+            };
+            let mod_exprs: Vec<TokenStream> = m.modifiers.iter().map(build_modifier_expr).collect();
+            quote! { Some(Marker { modifiers: vec![#(#mod_exprs),*], style: #style_expr }) }
+        }
+        None => quote! { None },
     }
 }
 

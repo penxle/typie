@@ -21,6 +21,7 @@ fn rooted_state() -> State {
             children: vec![],
             modifiers: BTreeMap::new(),
             style: None,
+            marker: None,
             node: PlainNode::Root(PlainRootNode::default()),
         },
     );

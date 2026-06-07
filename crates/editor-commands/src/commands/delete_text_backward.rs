@@ -341,8 +341,8 @@ mod tests {
             &Resource::new_test()
         ));
         let p = actual.doc.node(p1).unwrap();
-        let mods: Vec<_> = p.modifiers().cloned().collect();
-        assert!(mods.iter().any(|m| matches!(m, Modifier::Bold)));
+        let marker = p.marker().expect("paragraph should have a marker");
+        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
     }
 
     #[test]

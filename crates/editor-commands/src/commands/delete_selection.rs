@@ -1080,13 +1080,17 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let p = actual.doc.node(p1).unwrap();
-        let mods: Vec<_> = p.modifiers().cloned().collect();
+        let marker = p.marker().expect("paragraph should have a marker");
         assert!(
-            mods.iter()
+            marker
+                .modifiers
+                .iter()
                 .any(|m| matches!(m, editor_model::Modifier::Bold))
         );
         assert!(
-            mods.iter()
+            marker
+                .modifiers
+                .iter()
                 .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
         );
     }

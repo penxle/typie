@@ -1,5 +1,6 @@
 use crate::doc::Doc;
 use crate::id::NodeId;
+use crate::marker::Marker;
 use crate::modifier::Modifier;
 use crate::nodes::PlainNode;
 
@@ -9,6 +10,7 @@ pub struct Subtree {
     pub node: PlainNode,
     pub modifiers: Vec<Modifier>,
     pub style: Option<String>,
+    pub marker: Option<Marker>,
     pub children: Vec<Subtree>,
 }
 
@@ -19,6 +21,7 @@ impl Subtree {
             node,
             modifiers: vec![],
             style: None,
+            marker: None,
             children: vec![],
         }
     }
@@ -43,11 +46,13 @@ impl Subtree {
             .collect();
         let modifiers: Vec<Modifier> = entry.modifiers.iter().map(|(_, v)| v.clone()).collect();
         let style = entry.style.get().clone();
+        let marker = entry.marker.get().clone();
         Some(Self {
             id: node_id,
             node: entry.node.to_plain(),
             modifiers,
             style,
+            marker,
             children,
         })
     }
@@ -116,6 +121,39 @@ mod tests {
         assert_eq!(tree.id, p1);
         assert_eq!(tree.children.len(), 1);
         assert_eq!(tree.children[0].id, t1);
+    }
+
+    #[test]
+    fn subtree_captures_and_restores_marker() {
+        use crate::doc_op::apply_doc_op;
+        use crate::marker::Marker;
+        use editor_crdt::{LwwRegOp, OpGraph};
+        use editor_macros::doc;
+
+        let (doc, p1, ..) = doc! {
+            root {
+                p1: paragraph {
+                    t1: text("Hi")
+                }
+            }
+        };
+
+        let marker = Marker {
+            modifiers: vec![Modifier::Bold],
+            style: None,
+        };
+        let (_g, op) = OpGraph::<crate::doc_op::DocOp>::new()
+            .add(crate::doc_op::DocOp::NodeMarker {
+                node_id: p1,
+                op: LwwRegOp::Set {
+                    value: Some(marker.clone()),
+                },
+            })
+            .unwrap();
+        let doc = apply_doc_op(doc, &op).unwrap();
+
+        let tree = Subtree::capture(&doc, p1).unwrap();
+        assert_eq!(tree.marker, Some(marker));
     }
 
     #[test]

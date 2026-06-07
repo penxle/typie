@@ -30,6 +30,7 @@ pub(crate) fn build_default_doc(
             children: vec![paragraph_id],
             modifiers: Default::default(),
             style: Some(BASE_STYLE_ID.to_string()),
+            marker: None,
             node: editor_model::PlainNode::Root(root),
         },
     );
@@ -40,6 +41,7 @@ pub(crate) fn build_default_doc(
             children: vec![],
             modifiers: Default::default(),
             style: None,
+            marker: None,
             node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
         },
     );

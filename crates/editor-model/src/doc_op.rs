@@ -65,6 +65,13 @@ pub enum DocOp {
         #[wire(n(1))]
         op: StyleOp,
     },
+    #[wire(n(8))]
+    NodeMarker {
+        #[wire(n(0))]
+        node_id: NodeId,
+        #[wire(n(1))]
+        op: LwwRegOp<Option<crate::marker::Marker>>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
@@ -231,6 +238,19 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 .ok_or(ModelError::NodeNotFound(*node_id))?;
             entry.style = entry
                 .style
+                .apply(op.id, lww_op.clone())
+                .expect("local apply");
+        }
+        DocOp::NodeMarker {
+            node_id,
+            op: lww_op,
+        } => {
+            let entry = doc
+                .entries
+                .get_mut(node_id)
+                .ok_or(ModelError::NodeNotFound(*node_id))?;
+            entry.marker = entry
+                .marker
                 .apply(op.id, lww_op.clone())
                 .expect("local apply");
         }
@@ -759,6 +779,154 @@ mod tests {
         assert_eq!(decoded, css);
     }
 
+    fn build_changeset(payloads: Vec<DocOp>) -> Vec<editor_crdt::Changeset<DocOp>> {
+        let mut g = OpGraph::with_actor(1);
+        for p in payloads {
+            let (ng, _) = g.add(p).unwrap();
+            g = ng;
+        }
+        g.commit().changesets_as_vec()
+    }
+
+    fn assert_round_trip(payloads: Vec<DocOp>) {
+        let css = build_changeset(payloads);
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+        assert_eq!(decoded, css);
+    }
+
+    fn style_op_variants() -> Vec<StyleOp> {
+        use editor_crdt::{LwwRegOp, OrMapOp, OrSetOp};
+        vec![
+            StyleOp::Name(LwwRegOp::Set {
+                value: "heading".to_string(),
+            }),
+            StyleOp::Modifiers(OrSetOp::Add {
+                elem: Modifier::Bold,
+            }),
+            StyleOp::Modifiers(OrSetOp::Remove {
+                observed: editor_crdt::Dot::new(3, 9),
+            }),
+            StyleOp::Presence(OrMapOp::Set {
+                key: "sid".to_string(),
+                value: (),
+            }),
+            StyleOp::Presence(OrMapOp::Unset {
+                observed: vec![editor_crdt::Dot::new(3, 9)],
+            }),
+        ]
+    }
+
+    #[test]
+    fn style_escape_round_trip_explicit_node_id() {
+        for op in style_op_variants() {
+            let id = NodeId::new();
+            assert_round_trip(vec![
+                DocOp::Presence {
+                    node_id: id,
+                    op: editor_crdt::OrMapOp::Set {
+                        key: id,
+                        value: NodeType::Paragraph,
+                    },
+                },
+                DocOp::Style {
+                    style_id: "sid".to_string(),
+                    op,
+                },
+            ]);
+        }
+    }
+
+    #[test]
+    fn style_escape_round_trip_implicit_node_id() {
+        for op in style_op_variants() {
+            assert_round_trip(vec![
+                DocOp::Style {
+                    style_id: "sid".to_string(),
+                    op: StyleOp::Name(editor_crdt::LwwRegOp::Set {
+                        value: "first".to_string(),
+                    }),
+                },
+                DocOp::Style {
+                    style_id: "sid".to_string(),
+                    op,
+                },
+            ]);
+        }
+    }
+
+    #[test]
+    fn non_escape_variant_round_trip() {
+        let id = NodeId::new();
+        assert_round_trip(vec![
+            DocOp::Presence {
+                node_id: id,
+                op: editor_crdt::OrMapOp::Set {
+                    key: id,
+                    value: NodeType::Paragraph,
+                },
+            },
+            DocOp::Modifier {
+                node_id: id,
+                op: editor_crdt::OrMapOp::Set {
+                    key: ModifierType::Bold,
+                    value: Modifier::Bold,
+                },
+            },
+            DocOp::NodeStyle {
+                node_id: id,
+                op: editor_crdt::LwwRegOp::Set {
+                    value: Some("style".to_string()),
+                },
+            },
+        ]);
+    }
+
+    #[test]
+    fn node_marker_op_wire_round_trip() {
+        use crate::marker::Marker;
+        let some_marker = || DocOp::NodeMarker {
+            node_id: NodeId::ROOT,
+            op: editor_crdt::LwwRegOp::Set {
+                value: Some(Marker {
+                    modifiers: vec![Modifier::Bold],
+                    style: Some("s1".to_string()),
+                }),
+            },
+        };
+        let none_marker = || DocOp::NodeMarker {
+            node_id: NodeId::ROOT,
+            op: editor_crdt::LwwRegOp::Set { value: None },
+        };
+
+        let id = NodeId::new();
+        assert_round_trip(vec![
+            DocOp::Presence {
+                node_id: id,
+                op: editor_crdt::OrMapOp::Set {
+                    key: id,
+                    value: NodeType::Paragraph,
+                },
+            },
+            DocOp::NodeMarker {
+                node_id: id,
+                op: editor_crdt::LwwRegOp::Set {
+                    value: Some(Marker {
+                        modifiers: vec![Modifier::Bold],
+                        style: Some("s1".to_string()),
+                    }),
+                },
+            },
+            DocOp::NodeMarker {
+                node_id: id,
+                op: editor_crdt::LwwRegOp::Set { value: None },
+            },
+        ]);
+
+        assert_round_trip(vec![some_marker(), none_marker()]);
+    }
+
     #[test]
     fn empty_bundle_round_trip() {
         let bytes = editor_crdt::wire::encode::<DocOp>(&[]).unwrap();
@@ -779,7 +947,13 @@ const VARIANT_TEXT: u8 = 3;
 const VARIANT_MODIFIER: u8 = 4;
 const VARIANT_ATTR: u8 = 5;
 const VARIANT_NODE_STYLE: u8 = 6;
-const VARIANT_STYLE: u8 = 7;
+
+const VARIANT_ESCAPE: u8 = 7;
+const EXT_STYLE: u8 = 0;
+const EXT_MARKER: u8 = 1;
+
+const VARIANT_STYLE: u8 = 8 + EXT_STYLE;
+const VARIANT_NODE_MARKER: u8 = 8 + EXT_MARKER;
 
 const ENTRY_TAG_RUN_BIT: u8 = 0b1000_0000;
 const ENTRY_TAG_NODE_ID_EXPLICIT: u8 = 0b0100_0000;
@@ -891,6 +1065,22 @@ impl WireChangeset for DocOp {
                 return Err(WireError::RunTagBitsNonZero { tag });
             }
 
+            let variant = if is_run {
+                0
+            } else {
+                let tag_variant = (tag & ENTRY_TAG_VARIANT_MASK) >> ENTRY_TAG_VARIANT_SHIFT;
+                if tag_variant == VARIANT_ESCAPE {
+                    let ext = <u8 as editor_crdt::wire::Wire>::decode(ctx, input)?;
+                    match ext {
+                        EXT_STYLE => VARIANT_STYLE,
+                        EXT_MARKER => VARIANT_NODE_MARKER,
+                        n => return Err(WireError::UnknownPayloadVariant { tag: n }),
+                    }
+                } else {
+                    tag_variant
+                }
+            };
+
             let node_id = if node_id_explicit {
                 let nid = <NodeId as editor_crdt::wire::Wire>::decode(ctx, input)?;
                 prev_node_id = Some(nid);
@@ -916,7 +1106,6 @@ impl WireChangeset for DocOp {
                 }
                 ops.extend(run_ops);
             } else {
-                let variant = (tag & ENTRY_TAG_VARIANT_MASK) >> ENTRY_TAG_VARIANT_SHIFT;
                 let subflag = tag & ENTRY_TAG_SUBFLAG_MASK;
                 let op = decode_single_op_entry(
                     ctx,
@@ -993,14 +1182,22 @@ fn encode_single_op_entry(
     out: &mut Vec<u8>,
 ) -> WireResult<()> {
     let (variant, subflag, node_id) = describe_doc_op(&op.payload);
+    let (tag_variant, ext) = match variant {
+        VARIANT_STYLE => (VARIANT_ESCAPE, Some(EXT_STYLE)),
+        VARIANT_NODE_MARKER => (VARIANT_ESCAPE, Some(EXT_MARKER)),
+        v => (v, None),
+    };
     let node_id_explicit = !matches!(prev_node_id, Some(prev) if *prev == node_id);
     let mut tag: u8 = 0;
     if node_id_explicit {
         tag |= ENTRY_TAG_NODE_ID_EXPLICIT;
     }
-    tag |= (variant << ENTRY_TAG_VARIANT_SHIFT) & ENTRY_TAG_VARIANT_MASK;
+    tag |= (tag_variant << ENTRY_TAG_VARIANT_SHIFT) & ENTRY_TAG_VARIANT_MASK;
     tag |= subflag & ENTRY_TAG_SUBFLAG_MASK;
     out.push(tag);
+    if let Some(ext) = ext {
+        out.push(ext);
+    }
     if node_id_explicit {
         <NodeId as editor_crdt::wire::Wire>::encode(&node_id, ctx, out)?;
         *prev_node_id = Some(node_id);
@@ -1110,6 +1307,11 @@ fn describe_doc_op(p: &DocOp) -> (u8, u8, NodeId) {
             let sub = if value.is_some() { 0 } else { 1 };
             (VARIANT_NODE_STYLE, sub, *node_id)
         }
+        DocOp::NodeMarker { node_id, op } => {
+            let editor_crdt::LwwRegOp::Set { value } = op;
+            let sub = if value.is_some() { 0 } else { 1 };
+            (VARIANT_NODE_MARKER, sub, *node_id)
+        }
         DocOp::Style { op, .. } => {
             // Style variant carries its own style_id (String) inside the payload,
             // so the entry-level node_id slot is unused — use NodeId::ROOT as sentinel.
@@ -1191,6 +1393,12 @@ fn encode_doc_op_payload(
             let editor_crdt::LwwRegOp::Set { value } = op;
             if let Some(v) = value {
                 <String as Wire>::encode(v, ctx, out)?;
+            }
+        }
+        DocOp::NodeMarker { op, .. } => {
+            let editor_crdt::LwwRegOp::Set { value } = op;
+            if let Some(v) = value {
+                <crate::marker::Marker as Wire>::encode(v, ctx, out)?;
             }
         }
         DocOp::Style { style_id, op } => {
@@ -1339,6 +1547,17 @@ fn decode_doc_op_payload(
                 None
             };
             Ok(DocOp::NodeStyle {
+                node_id,
+                op: editor_crdt::LwwRegOp::Set { value },
+            })
+        }
+        VARIANT_NODE_MARKER => {
+            let value = if subflag & 1 == 0 {
+                Some(<crate::marker::Marker as Wire>::decode(ctx, input)?)
+            } else {
+                None
+            };
+            Ok(DocOp::NodeMarker {
                 node_id,
                 op: editor_crdt::LwwRegOp::Set { value },
             })

@@ -189,6 +189,7 @@ mod tests {
                 children: vec![],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );
@@ -707,6 +708,7 @@ mod tests {
                 children: vec![],
                 modifiers: BTreeMap::new(),
                 style: None,
+                marker: None,
                 node: PlainNode::Root(PlainRootNode::default()),
             },
         );

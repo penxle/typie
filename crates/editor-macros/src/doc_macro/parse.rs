@@ -22,6 +22,12 @@ pub struct NodeDef {
     pub content: NodeContent,
     pub modifiers: Option<Vec<DecorationDef>>,
     pub style: Option<Ident>,
+    pub marker: Option<MarkerDef>,
+}
+
+pub struct MarkerDef {
+    pub style: Option<Ident>,
+    pub modifiers: Vec<DecorationDef>,
 }
 
 pub enum NodeContent {
@@ -83,6 +89,15 @@ fn validate_node_styles(
     declared: &std::collections::HashSet<String>,
 ) -> Result<()> {
     if let Some(style) = &node.style
+        && !declared.contains(&style.to_string())
+    {
+        return Err(syn::Error::new(
+            style.span(),
+            format!("unknown style `{}`", style),
+        ));
+    }
+    if let Some(marker) = &node.marker
+        && let Some(style) = &marker.style
         && !declared.contains(&style.to_string())
     {
         return Err(syn::Error::new(
@@ -174,6 +189,7 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
         } else {
             None
         };
+        let marker = parse_optional_marker(input)?;
         Ok(NodeDef {
             binding,
             node_type,
@@ -181,6 +197,7 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
             content: NodeContent::Text(text),
             modifiers,
             style,
+            marker,
         })
     } else {
         let style = parse_optional_style(input)?;
@@ -197,6 +214,8 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
             None
         };
 
+        let marker = parse_optional_marker(input)?;
+
         let content = if input.peek(token::Brace) {
             let inner;
             braced!(inner in input);
@@ -212,8 +231,37 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
             content,
             modifiers,
             style,
+            marker,
         })
     }
+}
+
+fn parse_optional_marker(input: ParseStream) -> Result<Option<MarkerDef>> {
+    let is_marker = matches!(input.fork().parse::<Ident>(), Ok(id) if id == "marker")
+        && input.peek2(token::Paren);
+    if !is_marker {
+        return Ok(None);
+    }
+
+    let kw: Ident = input.parse()?;
+    let content;
+    parenthesized!(content in input);
+
+    let style = parse_optional_style(&content)?;
+    let modifiers = if content.peek(token::Bracket) {
+        parse_modifier_list(&content)?
+    } else {
+        Vec::new()
+    };
+
+    if style.is_none() && modifiers.is_empty() {
+        return Err(syn::Error::new(
+            kw.span(),
+            "marker must have a style or modifiers",
+        ));
+    }
+
+    Ok(Some(MarkerDef { style, modifiers }))
 }
 
 fn parse_optional_style(input: ParseStream) -> Result<Option<Ident>> {

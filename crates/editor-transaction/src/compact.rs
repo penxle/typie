@@ -22,6 +22,7 @@ pub fn compact(node: &NodeRef) -> Vec<Step> {
                     node: children[i].node().to_plain(),
                     modifiers: children[i].modifiers().cloned().collect(),
                     style: children[i].entry().style.get().clone(),
+                    marker: children[i].entry().marker.get().clone(),
                     children: vec![],
                 },
             });

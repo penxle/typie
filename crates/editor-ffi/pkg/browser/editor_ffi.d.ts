@@ -349,6 +349,11 @@ export interface LinkValue {
     href: string;
 }
 
+export interface Marker {
+    modifiers: Modifier[];
+    style: string | undefined;
+}
+
 export interface ModifierState {
     bold: Tri<undefined>;
     italic: Tri<undefined>;
@@ -438,6 +443,7 @@ export interface PlainNodeEntry {
     children: NodeId[];
     modifiers: Record<ModifierType, Modifier>;
     style?: string | undefined;
+    marker?: Marker | undefined;
     node: PlainNode;
 }
 

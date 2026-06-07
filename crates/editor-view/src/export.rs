@@ -19,6 +19,7 @@ pub fn to_plain_resolved(doc: &Doc) -> PlainDoc {
                     children: entry.children.to_plain(),
                     modifiers: export_modifiers(doc, &nr),
                     style: None,
+                    marker: None,
                     node: entry.node.to_plain(),
                 },
             )

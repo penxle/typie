@@ -83,6 +83,7 @@ fn write_tree_node(
     let mut mods: Vec<Modifier> = node_ref.explicit_modifiers().cloned().collect();
     mods.sort_by_key(|m| m.as_type());
     write_modifiers_tree(&mods, output);
+    write_node_marker_tree(node_ref, output);
     output.push('\n');
 
     let child_prefix = if is_last {
@@ -214,6 +215,26 @@ fn write_styles_tree(doc: &Doc, output: &mut String) {
 fn write_node_style_tree(node_ref: &NodeRef, output: &mut String) {
     if let Some(style_id) = node_ref.entry().style.get() {
         write!(output, " style=\"{style_id}\"").unwrap();
+    }
+}
+
+fn write_node_marker_tree(node_ref: &NodeRef, output: &mut String) {
+    let Some(marker) = node_ref.marker().filter(|m| !m.is_empty()) else {
+        return;
+    };
+    output.push_str(" marker=");
+    let mut mods: Vec<Modifier> = marker.modifiers.clone();
+    mods.sort_by_key(|m| m.as_type());
+    output.push('[');
+    for (i, m) in mods.iter().enumerate() {
+        if i > 0 {
+            output.push_str(", ");
+        }
+        write_modifier_tree(m, output);
+    }
+    output.push(']');
+    if let Some(style_id) = &marker.style {
+        write!(output, " @{style_id}").unwrap();
     }
 }
 
@@ -478,6 +499,36 @@ selection: (p1, 0, >)
         );
         let para_line = output.lines().find(|l| l.contains("paragraph")).unwrap();
         assert!(para_line.contains("style=\"heading\""), "got:\n{output}");
+    }
+
+    #[test]
+    fn marker_with_style_and_modifiers_shown() {
+        let (state, ..) = state! {
+            doc {
+                styles {
+                    s1: [italic]
+                }
+                root {
+                    p1: paragraph marker(@s1 [bold]) {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let output = inspect_state(&state, &opts());
+        let para_line = output.lines().find(|l| l.contains("paragraph")).unwrap();
+        assert!(para_line.contains("marker="), "got:\n{output}");
+        assert!(para_line.contains("[bold]"), "got:\n{output}");
+        assert!(para_line.contains("s1"), "got:\n{output}");
+    }
+
+    #[test]
+    fn marker_omitted_when_absent() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        let output = inspect_state(&state, &opts());
+        assert!(!output.contains("marker="), "got:\n{output}");
     }
 
     #[test]

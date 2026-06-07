@@ -77,6 +77,7 @@ fn write_macro_node(
     let mut mods: Vec<Modifier> = node_ref.explicit_modifiers().cloned().collect();
     mods.sort_by_key(|m| m.as_type());
     write_modifiers_macro(&mods, output);
+    write_node_marker_macro(node_ref, output);
 
     let children: Vec<_> = node_ref.children().collect();
     if node_ref.spec().is_leaf() {
@@ -127,6 +128,35 @@ fn write_node_style(node_ref: &NodeRef, output: &mut String) {
     if let Some(style_id) = node_ref.entry().style.get() {
         write!(output, " @{style_id}").unwrap();
     }
+}
+
+fn write_node_marker_macro(node_ref: &NodeRef, output: &mut String) {
+    let Some(marker) = node_ref.marker().filter(|m| !m.is_empty()) else {
+        return;
+    };
+    output.push_str(" marker(");
+    let has_style = if let Some(style_id) = &marker.style {
+        write!(output, "@{style_id}").unwrap();
+        true
+    } else {
+        false
+    };
+    if !marker.modifiers.is_empty() {
+        if has_style {
+            output.push(' ');
+        }
+        let mut mods: Vec<Modifier> = marker.modifiers.clone();
+        mods.sort_by_key(|m| m.as_type());
+        output.push('[');
+        for (i, m) in mods.iter().enumerate() {
+            if i > 0 {
+                output.push_str(", ");
+            }
+            write_modifier_macro(m, output);
+        }
+        output.push(']');
+    }
+    output.push(')');
 }
 
 fn write_selection_macro(
@@ -568,6 +598,73 @@ state! {
             "got:\n{output}"
         );
         assert!(output.contains("paragraph @heading {"), "got:\n{output}");
+    }
+
+    #[test]
+    fn marker_with_style_and_modifiers() {
+        let (state, ..) = state! {
+            doc {
+                styles {
+                    s1: [italic]
+                }
+                root {
+                    p1: paragraph marker(@s1 [bold]) {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(
+            output.contains("paragraph marker(@s1 [bold]) {}"),
+            "got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn marker_with_modifiers_only() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph marker([italic]) {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(
+            output.contains("paragraph marker([italic]) {}"),
+            "got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn marker_with_style_only() {
+        let (state, ..) = state! {
+            doc {
+                styles {
+                    s1: [italic]
+                }
+                root {
+                    p1: paragraph marker(@s1) {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(
+            output.contains("paragraph marker(@s1) {}"),
+            "got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn marker_omitted_when_absent() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(!output.contains("marker("), "got:\n{output}");
     }
 
     #[test]
