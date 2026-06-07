@@ -4,6 +4,7 @@ use editor_model::{Alignment, Doc, Modifier, ModifierType, Node, NodeRef};
 use serde::{Deserialize, Serialize};
 
 use crate::measure::resolve::resolve_inherited;
+use crate::measure::text::resolve::resolve_paragraph_indent;
 use crate::page::LayoutPage;
 use crate::paginate::*;
 
@@ -37,10 +38,11 @@ pub(crate) fn placeholder_metrics(
         .iter()
         .position(|p| node.rect.y >= p.y_start && node.rect.y < p.y_end)?;
     let y_start = pages[page_idx].y_start;
+    let indent = placeholder_indent(&para);
     let rect = Rect::from_xywh(
-        node.rect.x,
+        node.rect.x + indent,
         node.rect.y - y_start,
-        node.rect.width,
+        (node.rect.width - indent).max(0.0),
         node.rect.height,
     );
 
@@ -65,6 +67,17 @@ fn resolve_i32(node: &NodeRef<'_>, ty: ModifierType) -> Option<i32> {
     match resolve_inherited(node, ty) {
         Some(Modifier::LetterSpacing { value }) => Some(*value),
         _ => None,
+    }
+}
+
+fn placeholder_indent(node: &NodeRef<'_>) -> f32 {
+    let align = match node.own_modifier(ModifierType::Alignment) {
+        Some(Modifier::Alignment { value }) => *value,
+        _ => Alignment::default(),
+    };
+    match align {
+        Alignment::Left | Alignment::Justify => resolve_paragraph_indent(node),
+        Alignment::Center | Alignment::Right => 0.0,
     }
 }
 
@@ -143,6 +156,29 @@ mod tests {
         assert!(
             m.rect.width > 0.0,
             "placeholder rect must have content width"
+        );
+    }
+
+    #[test]
+    fn placeholder_metrics_respects_paragraph_indent() {
+        use crate::query::cursor::cursor_metrics;
+        use editor_state::Position;
+
+        let (doc, p1) = doc! { root [paragraph_indent(200)] { p1: paragraph } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let tree = view.layout_tree_for_test().unwrap();
+        let pages = view.pages();
+
+        let m = placeholder_metrics(tree, pages, &doc).expect("empty doc placeholder");
+        let pos = Position::new(p1, 0);
+        let cursor = cursor_metrics(tree, pages, &pos, None).expect("empty paragraph caret");
+
+        assert!(
+            (m.rect.x - cursor.caret.x).abs() < 0.01,
+            "placeholder x ({}) must coincide with the empty-paragraph caret x ({})",
+            m.rect.x,
+            cursor.caret.x,
         );
     }
 
