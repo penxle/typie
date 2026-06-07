@@ -173,9 +173,7 @@
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        gap: '8px',
         width: '140px',
-        paddingX: '10px',
         borderColor: opened ? 'border.strong' : 'border.subtle',
         borderRadius: '6px',
         height: '24px',
@@ -190,12 +188,14 @@
       <input
         bind:this={inputElement}
         class={css({
+          flexGrow: '1',
           minWidth: '0',
           height: 'full',
           fontSize: '13px',
           color: 'text.default',
           backgroundColor: 'transparent',
-          marginRight: '10px',
+          paddingLeft: '10px',
+          paddingRight: '24px',
           border: 'none',
           outline: 'none',
           textOverflow: 'ellipsis',
