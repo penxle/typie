@@ -27,6 +27,7 @@
   type Props = {
     open: boolean;
     mode?: 'create' | 'edit';
+    styleId?: string;
     initialName?: string;
     initialModifiers?: readonly Modifier[];
     fontFamilies?: readonly FontFamily[];
@@ -37,6 +38,7 @@
   let {
     open = $bindable(false),
     mode = 'create',
+    styleId,
     initialName = '',
     initialModifiers = [],
     fontFamilies = [],
@@ -699,7 +701,7 @@
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '10px' })}>
       <div>
-        {#if mode === 'edit' && onDelete}
+        {#if mode === 'edit' && onDelete && styleId !== 'base'}
           <button
             class={flex({
               alignItems: 'center',

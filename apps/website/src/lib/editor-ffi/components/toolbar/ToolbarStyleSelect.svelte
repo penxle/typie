@@ -289,5 +289,6 @@
     if (editingEntry) deleteStyle(editingEntry.id);
   }}
   onSubmit={updateStyle}
+  styleId={editingEntry?.id}
   bind:open={editStyleModalOpen}
 />
