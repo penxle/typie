@@ -25,7 +25,13 @@
 
   const ctx = getEditorContext();
 
-  const styleEntries = $derived(ctx.editor?.styleEntries ?? []);
+  const styleEntries = $derived(
+    (ctx.editor?.styleEntries ?? []).toSorted((a, b) => {
+      if (a.id === 'base') return -1;
+      if (b.id === 'base') return 1;
+      return a.name.localeCompare(b.name);
+    }),
+  );
   const appliedStyle = $derived(ctx.editor?.appliedStyle);
   const currentStyleId = $derived(appliedStyle?.type === 'uniform' ? appliedStyle.value.value : undefined);
   const currentStyle = $derived(styleEntries.find((s) => s.id === currentStyleId));
