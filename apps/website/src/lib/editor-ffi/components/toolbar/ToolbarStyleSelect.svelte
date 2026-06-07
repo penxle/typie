@@ -3,22 +3,16 @@
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { DropdownMenu, DropdownMenuItem, HorizontalDivider, Icon } from '@typie/ui/components';
-  import { getThemeContext } from '@typie/ui/context';
   import { disassemble } from 'es-hangul';
   import { nanoid } from 'nanoid';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import PlusIcon from '~icons/lucide/plus';
-  import RemoveFormattingIcon from '~icons/lucide/remove-formatting';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { THEME_COLORS } from '$lib/editor-ffi/theme';
-  import { values } from '$lib/editor-ffi/values';
-  import { modifiersToCss } from './modifier-css';
   import ToolbarStyleFormModal from './ToolbarStyleFormModal.svelte';
   import ToolbarStyleSelectItem from './ToolbarStyleSelectItem.svelte';
   import type { Modifier } from '@typie/editor-ffi/browser';
-  import type { ThemeVariant } from '$lib/editor-ffi/theme';
 
   type Font = { id?: string | null; weight: number; subfamilyDisplayName?: string | null; state: string };
   type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: readonly Font[] };
@@ -30,21 +24,10 @@
   let { fontFamilies = [] }: Props = $props();
 
   const ctx = getEditorContext();
-  const theme = getThemeContext();
-
-  const themeVariant = $derived(
-    (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
-  );
-  const tc = $derived(THEME_COLORS[themeVariant]);
-  const textColorMap = $derived(new Map<string, string>(values.textColor.map((c) => [c.value, tc[c.themeKey]])));
-  const bgColorMap = $derived(
-    new Map<string, string | null>(values.textBackgroundColor.map((c) => [c.value, c.themeKey ? tc[c.themeKey] : null])),
-  );
 
   const styleEntries = $derived(ctx.editor?.styleEntries ?? []);
   const appliedStyle = $derived(ctx.editor?.appliedStyle);
   const currentStyleId = $derived(appliedStyle?.type === 'uniform' ? appliedStyle.value.value : undefined);
-  const isDefaultActive = $derived(appliedStyle?.type === 'absent');
   const currentStyle = $derived(styleEntries.find((s) => s.id === currentStyleId));
   const styleDivergence = $derived(ctx.editor?.styleDivergence ?? false);
 
@@ -54,7 +37,6 @@
   let createStyleModalOpen = $state(false);
   let editStyleModalOpen = $state(false);
   let editingEntry = $state<(typeof styleEntries)[number] | undefined>();
-  let activeDeleteId = $state<string | null>(null);
   let triggerEl = $state<HTMLDivElement>();
   let floatingEl = $state<HTMLDivElement>();
   let inputElement = $state<HTMLInputElement>();
@@ -80,16 +62,6 @@
     return styleEntries.filter((s) => disassemble(s.name.toLowerCase()).includes(query));
   });
 
-  const showDefault = $derived.by(() => {
-    const query = disassemble(inputValue.toLowerCase().trim());
-    if (!query) return true;
-    return disassemble('기본').includes(query);
-  });
-
-  const previewStyle = (modifiers: Modifier[]) => modifiersToCss(modifiers, { textColorMap, bgColorMap, maxFontSize: 18 });
-
-  const inputPreviewStyle = $derived(!isFocused && currentStyle ? previewStyle(currentStyle.modifiers) : '');
-
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom-start',
     offset: 4,
@@ -103,15 +75,6 @@
     const editor = ctx.editor;
     if (!editor) return;
     editor.enqueue({ type: 'style', op: { type: 'apply_to_selection', style_id: styleId } });
-    opened = false;
-    inputElement?.blur();
-    editor.focus();
-  };
-
-  const unapplyCurrent = () => {
-    const editor = ctx.editor;
-    if (!editor) return;
-    editor.enqueue({ type: 'style', op: { type: 'unset_in_selection' } });
     opened = false;
     inputElement?.blur();
     editor.focus();
@@ -132,6 +95,7 @@
     if (ms.font_size.type === 'uniform') m.push({ type: 'font_size', value: ms.font_size.value.value });
     if (ms.font_family.type === 'uniform') m.push({ type: 'font_family', value: ms.font_family.value.value });
     if (ms.font_weight.type === 'uniform') m.push({ type: 'font_weight', value: ms.font_weight.value.value });
+    if (ms.letter_spacing.type === 'uniform') m.push({ type: 'letter_spacing', value: ms.letter_spacing.value.value });
     if (ms.text_color.type === 'uniform') m.push({ type: 'text_color', value: ms.text_color.value.value });
     if (ms.background_color.type === 'uniform') m.push({ type: 'background_color', value: ms.background_color.value.value });
     return m;
@@ -142,7 +106,6 @@
     editStyleModalOpen = true;
     opened = false;
     inputElement?.blur();
-    activeDeleteId = null;
   };
 
   const updateStyle = (name: string, modifiers: Modifier[]) => {
@@ -190,12 +153,8 @@
         opened = false;
         return;
       }
-      if (showDefault) {
-        unapplyCurrent();
-      } else {
-        const first = filteredEntries[0];
-        if (first) apply(first.id);
-      }
+      const first = filteredEntries[0];
+      if (first) apply(first.id);
     }
   };
 </script>
@@ -224,7 +183,6 @@
     >
       <input
         bind:this={inputElement}
-        style={inputPreviewStyle}
         class={css({
           minWidth: '0',
           height: 'full',
@@ -288,47 +246,14 @@
       in:fly={{ y: -5, duration: 150 }}
     >
       <DropdownMenu autoFocus={false} onclose={() => (opened = false)} {opened}>
-        {#if showDefault}
-          <button
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              paddingX: '16px',
-              paddingY: '8px',
-              textAlign: 'left',
-              fontSize: '13px',
-              color: isDefaultActive ? 'text.brand' : 'text.subtle',
-              backgroundColor: isDefaultActive ? 'surface.subtle' : 'transparent',
-              cursor: 'pointer',
-              _hover: { color: 'text.brand', backgroundColor: 'surface.subtle' },
-              _focus: { color: 'text.brand', backgroundColor: 'surface.subtle' },
-            })}
-            data-active={isDefaultActive}
-            onclick={unapplyCurrent}
-            onmouseenter={() => (activeDeleteId = null)}
-            type="button"
-          >
-            기본
-          </button>
-        {/if}
         {#each filteredEntries as entry (entry.id)}
           {@const isActive = entry.id === currentStyleId}
-          <ToolbarStyleSelectItem
-            {entry}
-            {isActive}
-            onapply={() => apply(entry.id)}
-            ondelete={() => deleteStyle(entry.id)}
-            onedit={() => startEdit(entry)}
-            oniconhover={() => (activeDeleteId = entry.id)}
-            onrowhover={() => (activeDeleteId = null)}
-            preview={previewStyle(entry.modifiers)}
-            showDelete={activeDeleteId === entry.id}
-          />
+          <ToolbarStyleSelectItem {entry} {isActive} onapply={() => apply(entry.id)} onedit={() => startEdit(entry)} />
         {/each}
-        {#if showDefault || filteredEntries.length > 0}
+        {#if filteredEntries.length > 0}
           <HorizontalDivider color="secondary" />
         {/if}
-        <div class={flex({ flexDirection: 'column' })} onmouseenter={() => (activeDeleteId = null)} role="presentation">
+        <div class={flex({ flexDirection: 'column' })}>
           <DropdownMenuItem
             onclick={() => {
               opened = false;
@@ -341,14 +266,6 @@
               <span class={css({ color: 'text.subtle' })}>새 스타일 만들기</span>
             </div>
           </DropdownMenuItem>
-          {#if !isDefaultActive}
-            <DropdownMenuItem onclick={unapplyCurrent}>
-              <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ color: 'text.faint' })} icon={RemoveFormattingIcon} size={14} />
-                <span class={css({ color: 'text.subtle' })}>스타일 해제</span>
-              </div>
-            </DropdownMenuItem>
-          {/if}
         </div>
       </DropdownMenu>
     </div>
@@ -368,6 +285,9 @@
   initialModifiers={editingEntry?.modifiers ?? []}
   initialName={editingEntry?.name ?? ''}
   mode="edit"
+  onDelete={() => {
+    if (editingEntry) deleteStyle(editingEntry.id);
+  }}
   onSubmit={updateStyle}
   bind:open={editStyleModalOpen}
 />
