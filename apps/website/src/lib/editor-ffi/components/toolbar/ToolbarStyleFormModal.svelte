@@ -314,7 +314,29 @@
   const submitLabel = $derived(mode === 'create' ? '생성' : '저장');
 
   const fieldLabel = css.raw({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' });
-  const rowClass = flex.raw({ justifyContent: 'space-between', alignItems: 'center', gap: '16px' });
+  const groupLabel = css.raw({
+    paddingLeft: '2px',
+    fontSize: '12px',
+    fontWeight: 'semibold',
+    letterSpacing: '0.02em',
+    color: 'text.faint',
+  });
+  const trayClass = css.raw({
+    display: 'flex',
+    flexDirection: 'column',
+    borderWidth: '1px',
+    borderColor: 'border.subtle',
+    borderRadius: '10px',
+    backgroundColor: 'surface.default',
+    overflow: 'hidden',
+  });
+  const rowClass = flex.raw({
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '12px',
+    height: '42px',
+    paddingX: '14px',
+  });
   const rowLabelClass = flex.raw({ alignItems: 'center', gap: '8px', flexShrink: '0' });
   const popoverClass = css.raw({
     borderWidth: '1px',
@@ -356,7 +378,7 @@
   });
 </script>
 
-<Modal style={css.raw({ padding: '24px', maxWidth: '480px' })} bind:open>
+<Modal style={css.raw({ padding: '24px', maxWidth: '440px' })} bind:open>
   <form
     class={flex({ flexDirection: 'column', gap: '20px' })}
     onsubmit={(e) => {
@@ -369,332 +391,335 @@
       <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>{description}</div>
     </div>
 
-    <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-      <label class={css(fieldLabel)} for="style-name">스타일 이름</label>
+    <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+      <label class={css(groupLabel)} for="style-name">스타일 이름</label>
       <TextInput id="style-name" autofocus placeholder="새 스타일" size="md" bind:value={name} />
     </div>
 
-    <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-      <div class={css(rowClass)}>
-        <div class={css(rowLabelClass)}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-          <div class={css(fieldLabel)}>글꼴</div>
-        </div>
-        <SearchableDropdown
-          style={dropdownStyle}
-          getLabel={(value) => fontFamilies.find((f) => f.familyName === value)?.displayName ?? '(알 수 없는 폰트)'}
-          items={fontFamilyItems}
-          label=""
-          onchange={(value) => {
-            fontFamily = value;
-          }}
-          placeholder="글꼴 선택"
-          value={fontFamily}
-        >
-          {#snippet renderItem(item)}
-            {@const font = representativeFontMap.get(item.value)}
-            <FontSpecimen
-              fallbacks={familySpecimenFallbacks(item.label, item.value)}
-              fontId={font?.id ?? undefined}
-              text={item.label}
-              weight={font?.weight}
-            />
-          {/snippet}
-        </SearchableDropdown>
-      </div>
-
-      <div class={css(rowClass)}>
-        <div class={css(rowLabelClass)}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-          <div class={css(fieldLabel)}>크기</div>
-        </div>
-        <div
-          bind:this={fontSizeAnchorElement}
-          class={css({
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            borderRadius: '6px',
-            width: '160px',
-            height: '28px',
-            _hover: { backgroundColor: 'surface.muted' },
-            _focusWithin: { backgroundColor: 'surface.muted' },
-          })}
-          use:fontSizeAnchorAction
-        >
-          <input
-            bind:this={fontSizeInputElement}
-            class={css({
-              flexGrow: '1',
-              size: 'full',
-              paddingLeft: '10px',
-              paddingRight: '24px',
-              fontSize: '12px',
-              fontWeight: 'medium',
-              color: 'text.subtle',
-              textAlign: 'right',
-              backgroundColor: 'transparent',
-              border: 'none',
-              outline: 'none',
-            })}
-            onblur={handleFontSizeBlur}
-            onfocus={handleFontSizeFocus}
-            onkeydown={handleFontSizeKeydown}
-            placeholder={fontSize === undefined ? '16' : String(fontSize / 100)}
-            type="text"
-            bind:value={fontSizeInputValue}
-          />
-          <button
-            class={css({ pointerEvents: fontSizeOpened ? 'auto' : 'none', cursor: 'pointer' })}
-            onclick={() => {
-              applyFontSize();
-              fontSizeInputElement?.blur();
-              fontSizeOpened = false;
+    <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+      <div class={css(groupLabel)}>서식</div>
+      <div class={css(trayClass)}>
+        <div class={css(rowClass)}>
+          <div class={css(rowLabelClass)}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
+            <div class={css(fieldLabel)}>글꼴</div>
+          </div>
+          <SearchableDropdown
+            style={dropdownStyle}
+            getLabel={(value) => fontFamilies.find((f) => f.familyName === value)?.displayName ?? '(알 수 없는 폰트)'}
+            items={fontFamilyItems}
+            label=""
+            onchange={(value) => {
+              fontFamily = value;
             }}
-            type="button"
+            placeholder="글꼴 선택"
+            value={fontFamily}
           >
-            <Icon
-              style={css.raw({
-                position: 'absolute',
-                right: '4px',
-                top: '1/2',
-                translate: 'auto',
-                translateY: '-1/2',
-                color: 'text.faint',
-                transform: fontSizeOpened ? 'rotate(-180deg)' : 'rotate(0deg)',
-                transitionDuration: '150ms',
-              })}
-              icon={ChevronDownIcon}
-              size={16}
-            />
-          </button>
-          {#if fontSizeOpened}
-            <div
-              bind:this={fontSizeFloatingElement}
-              class={css(listPopoverClass)}
-              use:fontSizeFloatingAction
-              in:fly={{ y: -5, duration: 150 }}
-            >
-              {#each values.fontSize as { label, value } (value)}
-                <button
-                  class={css(listItemClass, { backgroundColor: fontSize === value ? 'surface.muted' : 'transparent' })}
-                  onclick={() => {
-                    fontSizeInputValue = String(value / 100);
-                    fontSize = value;
-                    fontSizeInputElement?.blur();
-                    fontSizeOpened = false;
-                  }}
-                  tabindex="-1"
-                  type="button"
-                >
-                  {label}
-                </button>
-              {/each}
-            </div>
-          {/if}
+            {#snippet renderItem(item)}
+              {@const font = representativeFontMap.get(item.value)}
+              <FontSpecimen
+                fallbacks={familySpecimenFallbacks(item.label, item.value)}
+                fontId={font?.id ?? undefined}
+                text={item.label}
+                weight={font?.weight}
+              />
+            {/snippet}
+          </SearchableDropdown>
         </div>
-      </div>
 
-      <div class={css(rowClass)}>
-        <div class={css(rowLabelClass)}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-          <div class={css(fieldLabel)}>굵기</div>
-        </div>
-        <SearchableDropdown
-          style={dropdownStyle}
-          getLabel={(value) => {
-            const font = currentFontFamilyAndFonts.fonts.find((f) => f.weight === value);
-            return (
-              values.fontWeight.find((f) => f.value === value)?.label ??
-              (font?.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${value})` : '(알 수 없는 굵기)')
-            );
-          }}
-          items={weightItems}
-          label=""
-          onchange={(value) => {
-            fontWeight = value;
-          }}
-          placeholder="굵기 선택"
-          value={fontWeight}
-        >
-          {#snippet renderItem(item)}
-            {@const font = currentFontFamilyAndFonts.fonts.find((candidate) => candidate.weight === item.value)}
-            <FontSpecimen
-              fallbacks={weightSpecimenFallbacks(item.label, font?.subfamilyDisplayName, item.value)}
-              fontId={weightFontIdMap.get(item.value)}
-              text={item.label}
-              weight={item.value}
-            />
-          {/snippet}
-        </SearchableDropdown>
-      </div>
-
-      <div class={css(rowClass)}>
-        <div class={css(rowLabelClass)}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={LetterSpacingIcon} />
-          <div class={css(fieldLabel)}>자간</div>
-        </div>
-        <div class={css({ position: 'relative' })}>
-          <button
+        <div class={css(rowClass)}>
+          <div class={css(rowLabelClass)}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
+            <div class={css(fieldLabel)}>크기</div>
+          </div>
+          <div
+            bind:this={fontSizeAnchorElement}
             class={css({
               position: 'relative',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'flex-end',
               borderRadius: '6px',
               width: '160px',
               height: '28px',
-              paddingRight: '24px',
               _hover: { backgroundColor: 'surface.muted' },
+              _focusWithin: { backgroundColor: 'surface.muted' },
             })}
-            onclick={() => (letterSpacingOpened = !letterSpacingOpened)}
-            type="button"
-            use:letterSpacingAnchorAction
+            use:fontSizeAnchorAction
           >
-            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-              {values.letterSpacing.find((s) => s.value === (letterSpacing ?? 0))?.label ?? `${letterSpacing ?? 0}%`}
-            </span>
-            <Icon
-              style={css.raw({
-                position: 'absolute',
-                right: '4px',
-                top: '1/2',
-                translate: 'auto',
-                translateY: '-1/2',
-                color: 'text.faint',
-                transform: letterSpacingOpened ? 'rotate(-180deg)' : 'rotate(0deg)',
-                transitionDuration: '150ms',
+            <input
+              bind:this={fontSizeInputElement}
+              class={css({
+                flexGrow: '1',
+                size: 'full',
+                paddingLeft: '10px',
+                paddingRight: '24px',
+                fontSize: '12px',
+                fontWeight: 'medium',
+                color: 'text.subtle',
+                textAlign: 'right',
+                backgroundColor: 'transparent',
+                border: 'none',
+                outline: 'none',
               })}
-              icon={ChevronDownIcon}
-              size={16}
+              onblur={handleFontSizeBlur}
+              onfocus={handleFontSizeFocus}
+              onkeydown={handleFontSizeKeydown}
+              placeholder={fontSize === undefined ? '16' : String(fontSize / 100)}
+              type="text"
+              bind:value={fontSizeInputValue}
             />
-          </button>
-          {#if letterSpacingOpened}
-            <div class={css(listPopoverClass)} use:letterSpacingFloatingAction in:fly={{ y: -5, duration: 150 }}>
-              {#each values.letterSpacing as { label, value } (value)}
-                <button
-                  class={css(listItemClass, { backgroundColor: (letterSpacing ?? 0) === value ? 'surface.muted' : 'transparent' })}
-                  onclick={() => {
-                    letterSpacing = value;
-                    letterSpacingOpened = false;
-                  }}
-                  tabindex="-1"
-                  type="button"
-                >
-                  {label}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <div class={css(rowClass)}>
-        <div class={css(rowLabelClass)}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
-          <div class={css(fieldLabel)}>글자 색</div>
-        </div>
-        <div class={css({ position: 'relative' })}>
-          <button
-            class={flex({
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: '8px',
-              borderRadius: '6px',
-              paddingX: '8px',
-              height: '28px',
-              width: '160px',
-              _hover: { backgroundColor: 'surface.muted' },
-            })}
-            onclick={() => (textColorOpened = !textColorOpened)}
-            type="button"
-            use:textColorAnchorAction
-          >
-            <div
-              style:background-color={currentTextColorItem?.color ?? 'transparent'}
-              class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px', flexShrink: '0' })}
-            ></div>
-            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-              {currentTextColorItem?.label ?? '선택 안 함'}
-            </span>
-          </button>
-          {#if textColorOpened}
-            <div class={css(popoverClass)} use:textColorFloatingAction in:fly={{ y: -5, duration: 150 }}>
-              <ToolbarColorGrid
-                columns={11}
-                currentValue={textColor}
-                items={textColorItems}
-                onClose={() => (textColorOpened = false)}
-                onSelect={(value) => {
-                  textColor = value;
-                  textColorOpened = false;
-                }}
-                opened={textColorOpened}
-              />
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <div class={css(rowClass)}>
-        <div class={css(rowLabelClass)}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
-          <div class={css(fieldLabel)}>배경 색</div>
-        </div>
-        <div class={css({ position: 'relative' })}>
-          <button
-            class={flex({
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: '8px',
-              borderRadius: '6px',
-              paddingX: '8px',
-              height: '28px',
-              width: '160px',
-              _hover: { backgroundColor: 'surface.muted' },
-            })}
-            onclick={() => (bgColorOpened = !bgColorOpened)}
-            type="button"
-            use:bgColorAnchorAction
-          >
-            <div
-              style:background-color={currentBgColorItem?.color ?? 'transparent'}
-              class={css({ borderWidth: '1px', borderRadius: '4px', size: '16px', flexShrink: '0', position: 'relative' })}
+            <button
+              class={css({ pointerEvents: fontSizeOpened ? 'auto' : 'none', cursor: 'pointer' })}
+              onclick={() => {
+                applyFontSize();
+                fontSizeInputElement?.blur();
+                fontSizeOpened = false;
+              }}
+              type="button"
             >
-              {#if backgroundColor === 'none'}
-                <div
-                  class={css({
-                    position: 'absolute',
-                    inset: '0',
-                    margin: 'auto',
-                    width: '1px',
-                    height: '12px',
-                    backgroundColor: 'text.disabled',
-                    transform: 'rotate(45deg)',
-                  })}
-                ></div>
-              {/if}
-            </div>
-            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-              {currentBgColorItem?.label ?? '선택 안 함'}
-            </span>
-          </button>
-          {#if bgColorOpened}
-            <div class={css(popoverClass)} use:bgColorFloatingAction in:fly={{ y: -5, duration: 150 }}>
-              <ToolbarColorGrid
-                columns={8}
-                currentValue={backgroundColor}
-                items={bgColorItems}
-                onClose={() => (bgColorOpened = false)}
-                onSelect={(value) => {
-                  backgroundColor = value;
-                  bgColorOpened = false;
-                }}
-                opened={bgColorOpened}
-                shape="square"
+              <Icon
+                style={css.raw({
+                  position: 'absolute',
+                  right: '4px',
+                  top: '1/2',
+                  translate: 'auto',
+                  translateY: '-1/2',
+                  color: 'text.faint',
+                  transform: fontSizeOpened ? 'rotate(-180deg)' : 'rotate(0deg)',
+                  transitionDuration: '150ms',
+                })}
+                icon={ChevronDownIcon}
+                size={16}
               />
-            </div>
-          {/if}
+            </button>
+            {#if fontSizeOpened}
+              <div
+                bind:this={fontSizeFloatingElement}
+                class={css(listPopoverClass)}
+                use:fontSizeFloatingAction
+                in:fly={{ y: -5, duration: 150 }}
+              >
+                {#each values.fontSize as { label, value } (value)}
+                  <button
+                    class={css(listItemClass, { backgroundColor: fontSize === value ? 'surface.muted' : 'transparent' })}
+                    onclick={() => {
+                      fontSizeInputValue = String(value / 100);
+                      fontSize = value;
+                      fontSizeInputElement?.blur();
+                      fontSizeOpened = false;
+                    }}
+                    tabindex="-1"
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div class={css(rowClass)}>
+          <div class={css(rowLabelClass)}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
+            <div class={css(fieldLabel)}>굵기</div>
+          </div>
+          <SearchableDropdown
+            style={dropdownStyle}
+            getLabel={(value) => {
+              const font = currentFontFamilyAndFonts.fonts.find((f) => f.weight === value);
+              return (
+                values.fontWeight.find((f) => f.value === value)?.label ??
+                (font?.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${value})` : '(알 수 없는 굵기)')
+              );
+            }}
+            items={weightItems}
+            label=""
+            onchange={(value) => {
+              fontWeight = value;
+            }}
+            placeholder="굵기 선택"
+            value={fontWeight}
+          >
+            {#snippet renderItem(item)}
+              {@const font = currentFontFamilyAndFonts.fonts.find((candidate) => candidate.weight === item.value)}
+              <FontSpecimen
+                fallbacks={weightSpecimenFallbacks(item.label, font?.subfamilyDisplayName, item.value)}
+                fontId={weightFontIdMap.get(item.value)}
+                text={item.label}
+                weight={item.value}
+              />
+            {/snippet}
+          </SearchableDropdown>
+        </div>
+
+        <div class={css(rowClass)}>
+          <div class={css(rowLabelClass)}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={LetterSpacingIcon} />
+            <div class={css(fieldLabel)}>자간</div>
+          </div>
+          <div class={css({ position: 'relative' })}>
+            <button
+              class={css({
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                borderRadius: '6px',
+                width: '160px',
+                height: '28px',
+                paddingRight: '24px',
+                _hover: { backgroundColor: 'surface.muted' },
+              })}
+              onclick={() => (letterSpacingOpened = !letterSpacingOpened)}
+              type="button"
+              use:letterSpacingAnchorAction
+            >
+              <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+                {values.letterSpacing.find((s) => s.value === (letterSpacing ?? 0))?.label ?? `${letterSpacing ?? 0}%`}
+              </span>
+              <Icon
+                style={css.raw({
+                  position: 'absolute',
+                  right: '4px',
+                  top: '1/2',
+                  translate: 'auto',
+                  translateY: '-1/2',
+                  color: 'text.faint',
+                  transform: letterSpacingOpened ? 'rotate(-180deg)' : 'rotate(0deg)',
+                  transitionDuration: '150ms',
+                })}
+                icon={ChevronDownIcon}
+                size={16}
+              />
+            </button>
+            {#if letterSpacingOpened}
+              <div class={css(listPopoverClass)} use:letterSpacingFloatingAction in:fly={{ y: -5, duration: 150 }}>
+                {#each values.letterSpacing as { label, value } (value)}
+                  <button
+                    class={css(listItemClass, { backgroundColor: (letterSpacing ?? 0) === value ? 'surface.muted' : 'transparent' })}
+                    onclick={() => {
+                      letterSpacing = value;
+                      letterSpacingOpened = false;
+                    }}
+                    tabindex="-1"
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div class={css(rowClass)}>
+          <div class={css(rowLabelClass)}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
+            <div class={css(fieldLabel)}>글자 색</div>
+          </div>
+          <div class={css({ position: 'relative' })}>
+            <button
+              class={flex({
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '8px',
+                borderRadius: '6px',
+                paddingX: '8px',
+                height: '28px',
+                width: '160px',
+                _hover: { backgroundColor: 'surface.muted' },
+              })}
+              onclick={() => (textColorOpened = !textColorOpened)}
+              type="button"
+              use:textColorAnchorAction
+            >
+              <div
+                style:background-color={currentTextColorItem?.color ?? 'transparent'}
+                class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px', flexShrink: '0' })}
+              ></div>
+              <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+                {currentTextColorItem?.label ?? '선택 안 함'}
+              </span>
+            </button>
+            {#if textColorOpened}
+              <div class={css(popoverClass)} use:textColorFloatingAction in:fly={{ y: -5, duration: 150 }}>
+                <ToolbarColorGrid
+                  columns={11}
+                  currentValue={textColor}
+                  items={textColorItems}
+                  onClose={() => (textColorOpened = false)}
+                  onSelect={(value) => {
+                    textColor = value;
+                    textColorOpened = false;
+                  }}
+                  opened={textColorOpened}
+                />
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div class={css(rowClass)}>
+          <div class={css(rowLabelClass)}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
+            <div class={css(fieldLabel)}>배경 색</div>
+          </div>
+          <div class={css({ position: 'relative' })}>
+            <button
+              class={flex({
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '8px',
+                borderRadius: '6px',
+                paddingX: '8px',
+                height: '28px',
+                width: '160px',
+                _hover: { backgroundColor: 'surface.muted' },
+              })}
+              onclick={() => (bgColorOpened = !bgColorOpened)}
+              type="button"
+              use:bgColorAnchorAction
+            >
+              <div
+                style:background-color={currentBgColorItem?.color ?? 'transparent'}
+                class={css({ borderWidth: '1px', borderRadius: '4px', size: '16px', flexShrink: '0', position: 'relative' })}
+              >
+                {#if backgroundColor === 'none'}
+                  <div
+                    class={css({
+                      position: 'absolute',
+                      inset: '0',
+                      margin: 'auto',
+                      width: '1px',
+                      height: '12px',
+                      backgroundColor: 'text.disabled',
+                      transform: 'rotate(45deg)',
+                    })}
+                  ></div>
+                {/if}
+              </div>
+              <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+                {currentBgColorItem?.label ?? '선택 안 함'}
+              </span>
+            </button>
+            {#if bgColorOpened}
+              <div class={css(popoverClass)} use:bgColorFloatingAction in:fly={{ y: -5, duration: 150 }}>
+                <ToolbarColorGrid
+                  columns={8}
+                  currentValue={backgroundColor}
+                  items={bgColorItems}
+                  onClose={() => (bgColorOpened = false)}
+                  onSelect={(value) => {
+                    backgroundColor = value;
+                    bgColorOpened = false;
+                  }}
+                  opened={bgColorOpened}
+                  shape="square"
+                />
+              </div>
+            {/if}
+          </div>
         </div>
       </div>
     </div>
