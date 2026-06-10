@@ -3,11 +3,13 @@ import {
   calculateImageContainerSize,
   calculateImageHeight,
   calculateImageWidth,
-  createDeleteNodeMessage,
-  createSetImageAttrsMessage,
+  deleteNodeMessage,
   getFirstImageFile,
+  openImagePicker,
   processImageUpload,
+  queuePendingImages,
   resolveImageSrc,
+  setImageAttrsMessage,
 } from './image-flow';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { ImageAsset } from '../types';
@@ -63,7 +65,7 @@ describe('이미지 표시 여부 결정', () => {
 
 describe('v2 image flow messages', () => {
   it('creates a v2 node attrs message for uploaded image id and rounded proportion', () => {
-    expect(createSetImageAttrsMessage('node-1', 'image-1', 74.6)).toEqual({
+    expect(setImageAttrsMessage('node-1', 'image-1', 74.6)).toEqual({
       type: 'node',
       op: {
         type: 'set_attrs',
@@ -78,7 +80,7 @@ describe('v2 image flow messages', () => {
   });
 
   it('creates a v2 node delete message for placeholder cleanup and deletion', () => {
-    expect(createDeleteNodeMessage('node-1')).toEqual({
+    expect(deleteNodeMessage('node-1')).toEqual({
       type: 'node',
       op: {
         type: 'delete',
@@ -102,6 +104,102 @@ describe('v2 image drop filtering', () => {
   });
 });
 
+const createCtx = () => {
+  const messages: Message[] = [];
+  const pendingImageDrops: File[] = [];
+  const editor = {
+    enqueue: (message: Message) => {
+      messages.push(message);
+    },
+  };
+
+  return {
+    ctx: { editor, pendingImageDrops } as never,
+    messages,
+    pendingImageDrops,
+  };
+};
+
+describe('v2 pending image queueing', () => {
+  it('각 파일을 pending 큐에 넣고 빈 이미지 노드 삽입 메시지를 보낸다', () => {
+    const { ctx, messages, pendingImageDrops } = createCtx();
+    const first = createFile('first.png', 'image/png');
+    const second = createFile('second.png', 'image/png');
+
+    queuePendingImages(ctx, [first, second]);
+
+    expect(pendingImageDrops).toEqual([first, second]);
+    expect(messages).toEqual([
+      {
+        type: 'insertion',
+        op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
+      },
+      {
+        type: 'insertion',
+        op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
+      },
+    ]);
+  });
+
+  it('파일이 없으면 아무것도 하지 않는다', () => {
+    const { ctx, messages, pendingImageDrops } = createCtx();
+
+    queuePendingImages(ctx, []);
+
+    expect(pendingImageDrops).toEqual([]);
+    expect(messages).toEqual([]);
+  });
+});
+
+describe('v2 image picker flow', () => {
+  const setPickerFiles = (picker: HTMLInputElement, files: File[]) => {
+    Object.defineProperty(picker, 'files', { value: files });
+  };
+
+  it('파일 선택을 취소하면 노드를 유지한다', () => {
+    const { ctx, messages } = createCtx();
+    const processFile = vi.fn();
+
+    const picker = openImagePicker(ctx, processFile);
+    picker.dispatchEvent(new Event('cancel'));
+
+    expect(processFile).not.toHaveBeenCalled();
+    expect(messages).toEqual([]);
+  });
+
+  it('파일 없이 선택을 마치면 노드를 유지한다', () => {
+    const { ctx, messages } = createCtx();
+    const processFile = vi.fn();
+
+    const picker = openImagePicker(ctx, processFile);
+    setPickerFiles(picker, []);
+    picker.dispatchEvent(new Event('change'));
+
+    expect(processFile).not.toHaveBeenCalled();
+    expect(messages).toEqual([]);
+  });
+
+  it('첫 파일은 현재 노드에 업로드하고 나머지는 새 이미지 노드로 삽입한다', () => {
+    const { ctx, messages, pendingImageDrops } = createCtx();
+    const processFile = vi.fn();
+    const first = createFile('first.png', 'image/png');
+    const second = createFile('second.png', 'image/png');
+
+    const picker = openImagePicker(ctx, processFile);
+    setPickerFiles(picker, [first, second]);
+    picker.dispatchEvent(new Event('change'));
+
+    expect(processFile).toHaveBeenCalledExactlyOnceWith(first);
+    expect(pendingImageDrops).toEqual([second]);
+    expect(messages).toEqual([
+      {
+        type: 'insertion',
+        op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
+      },
+    ]);
+  });
+});
+
 describe('v2 image upload processing', () => {
   it('stores inflight preview, persists uploaded image id, and cleans up object url', async () => {
     const { deps, messages, inflight, assets, focus } = createDeps();
@@ -120,13 +218,13 @@ describe('v2 image upload processing', () => {
 
     expect(result).toBe('uploaded');
     expect(assets.get('image-1')).toEqual(createAsset('image-1'));
-    expect(messages).toEqual([createSetImageAttrsMessage('node-1', 'image-1', 100)]);
+    expect(messages).toEqual([setImageAttrsMessage('node-1', 'image-1', 100)]);
     expect(inflight.get('node-1')).toEqual({ url: 'blob:image', width: 320, height: 240 });
     expect(revokeObjectUrl).not.toHaveBeenCalled();
     expect(focus).toHaveBeenCalled();
   });
 
-  it('cleans up preview and leaves node as empty placeholder when upload fails', async () => {
+  it('업로드가 실패하면 미리보기를 정리하고 빈 노드를 삭제한다', async () => {
     const { deps, messages, inflight, focus } = createDeps();
     const revokeObjectUrl = vi.fn();
 
@@ -144,7 +242,7 @@ describe('v2 image upload processing', () => {
     });
 
     expect(result).toBe('failed');
-    expect(messages).toEqual([]);
+    expect(messages).toEqual([deleteNodeMessage('node-1')]);
     expect(inflight.has('node-1')).toBe(false);
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:image');
     expect(focus).toHaveBeenCalled();

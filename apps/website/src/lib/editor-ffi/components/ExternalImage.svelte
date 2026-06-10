@@ -15,11 +15,13 @@
   import {
     calculateImageContainerSize,
     calculateImageWidth,
-    createDeleteNodeMessage,
-    createSetImageAttrsMessage,
+    deleteNodeMessage,
     deriveImageStage,
+    openImagePicker,
     processImageUpload,
+    queuePendingImages,
     resolveImageSrc,
+    setImageAttrsMessage,
   } from '../handlers/image-flow';
   import { getImageDimensions, uploadImageFile } from '../handlers/upload';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
@@ -102,7 +104,7 @@
   });
 
   const deleteNode = () => {
-    ctx.editor?.enqueue(createDeleteNodeMessage(element.node_id));
+    ctx.editor?.enqueue(deleteNodeMessage(element.node_id));
     ctx.editor?.focus();
   };
 
@@ -133,34 +135,7 @@
   const handleUpload = () => {
     if (!canEdit) return;
 
-    const picker = document.createElement('input');
-    picker.type = 'file';
-    picker.accept = 'image/*';
-    picker.multiple = true;
-
-    picker.addEventListener('change', () => {
-      const files = [...(picker.files ?? [])];
-      if (files.length === 0) {
-        deleteNode();
-        return;
-      }
-
-      void processFile(files[0]);
-
-      for (const file of files.slice(1)) {
-        ctx.pendingImageDrops.push(file);
-        ctx.editor?.enqueue({
-          type: 'insertion',
-          op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
-        });
-      }
-    });
-
-    picker.addEventListener('cancel', () => {
-      deleteNode();
-    });
-
-    picker.click();
+    openImagePicker(ctx, (file) => void processFile(file));
   };
 
   const handleDragOver = (event: DragEvent) => {
@@ -185,13 +160,7 @@
     event.stopPropagation();
     void processFile(file);
 
-    for (const next of rest) {
-      ctx.pendingImageDrops.push(next);
-      ctx.editor?.enqueue({
-        type: 'insertion',
-        op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
-      });
-    }
+    queuePendingImages(ctx, rest);
   };
 
   const getWidthBounds = (boundsWidth: number) => {
@@ -243,7 +212,7 @@
 
     isResizing = false;
     initialResizeData = null;
-    ctx.editor?.enqueue(createSetImageAttrsMessage(element.node_id, imageId, proportion));
+    ctx.editor?.enqueue(setImageAttrsMessage(element.node_id, imageId, proportion));
     ctx.editor?.focus();
   };
 

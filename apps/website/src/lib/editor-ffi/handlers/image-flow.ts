@@ -1,4 +1,5 @@
 import type { Message } from '@typie/editor-ffi/browser';
+import type { EditorContext } from '../editor.svelte';
 import type { ImageAsset, ImageStage } from '../types';
 
 export const deriveImageStage = ({
@@ -19,7 +20,7 @@ export const deriveImageStage = ({
 type UploadImageFile = (file: File) => Promise<ImageAsset>;
 type ReadImageDimensions = (src: string) => Promise<{ width: number; height: number }>;
 
-export const createSetImageAttrsMessage = (nodeId: string, imageId: string | undefined, proportion: number): Message => ({
+export const setImageAttrsMessage = (nodeId: string, imageId: string | undefined, proportion: number): Message => ({
   type: 'node',
   op: {
     type: 'set_attrs',
@@ -32,13 +33,47 @@ export const createSetImageAttrsMessage = (nodeId: string, imageId: string | und
   },
 });
 
-export const createDeleteNodeMessage = (nodeId: string): Message => ({
+export const deleteNodeMessage = (nodeId: string): Message => ({
   type: 'node',
   op: {
     type: 'delete',
     id: nodeId,
   },
 });
+
+const insertEmptyImageMessage = (): Message => ({
+  type: 'insertion',
+  op: { type: 'fragment', fragment: { node: { type: 'image', id: undefined } } },
+});
+
+export const queuePendingImages = (ctx: EditorContext, files: File[]): void => {
+  ctx.pendingImageDrops.push(...files);
+  files.forEach(() => ctx.editor?.enqueue(insertEmptyImageMessage()));
+};
+
+const imagePicker = (ctx: EditorContext, processFile: (file: File) => void): HTMLInputElement => {
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.accept = 'image/*';
+  picker.multiple = true;
+
+  picker.addEventListener('change', () => uploadImages(ctx, processFile, picker.files));
+
+  return picker;
+};
+
+const uploadImages = (ctx: EditorContext, processFile: (file: File) => void, files: FileList | null): void => {
+  const picked = [...(files ?? [])];
+  [picked.shift()].filter((file) => file !== undefined).forEach((file) => processFile(file));
+  queuePendingImages(ctx, picked);
+};
+
+export const openImagePicker = (ctx: EditorContext, processFile: (file: File) => void): HTMLInputElement => {
+  const picker = imagePicker(ctx, processFile);
+  picker.click();
+
+  return picker;
+};
 
 export const getFirstImageFile = (files: Iterable<File>): File | undefined => {
   return [...files].find((file) => file.type.startsWith('image/'));
@@ -113,13 +148,14 @@ export const processImageUpload = async ({
 
     const uploaded = await uploadImageFile(file);
     setImageAsset(uploaded);
-    enqueue(createSetImageAttrsMessage(nodeId, uploaded.id, getProportion()));
+    enqueue(setImageAttrsMessage(nodeId, uploaded.id, getProportion()));
     focus();
 
     return 'uploaded';
   } catch {
     deleteInflightImage(nodeId);
     revokeObjectUrl(objectUrl);
+    enqueue(deleteNodeMessage(nodeId));
     focus();
     return 'failed';
   }
