@@ -35,7 +35,8 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
                 return node.own_modifiers().cloned().collect::<Vec<_>>();
             }
 
-            node.own_modifiers()
+            let mut out: Vec<Modifier> = node
+                .own_modifiers()
                 .filter(|m| {
                     let expand = &m.spec().expand;
                     match expand {
@@ -46,7 +47,13 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
                     }
                 })
                 .cloned()
-                .collect()
+                .collect();
+
+            if at_start {
+                fold_prev_sibling_carryover_own(node, &mut out);
+            }
+
+            out
         }
         Node::Paragraph(_) => {
             let mut seen: Vec<ModifierType> = Vec::new();
@@ -107,6 +114,25 @@ fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
             out
         }
         _ => vec![],
+    }
+}
+
+fn fold_prev_sibling_carryover_own(node: &NodeRef, out: &mut Vec<Modifier>) {
+    let Some(prev) = node.prev_sibling() else {
+        return;
+    };
+    if !matches!(prev.node(), Node::Text(_)) {
+        return;
+    }
+    for m in prev.own_modifiers() {
+        if !matches!(m.spec().expand, Expand::After | Expand::Both) {
+            continue;
+        }
+        let t = m.as_type();
+        if out.iter().any(|e| e.as_type() == t) {
+            continue;
+        }
+        out.push(m.clone());
     }
 }
 
@@ -1308,6 +1334,85 @@ mod tests {
             !eff.iter()
                 .any(|m| matches!(m, Modifier::LineHeight { value: 200 })),
             "block modifier from style must not surface"
+        );
+    }
+
+    #[test]
+    fn boundary_at_start_of_next_text_inherits_preceding_font_size() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                t1: text("hello") [font_size(3000)]
+                t2: text("world") [font_size(1200)]
+            } } }
+            selection: (t2, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        assert!(
+            result
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 3000 })),
+            "preceding sibling's font_size must carry to caret at start of next text"
+        );
+        assert!(
+            !result
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1200 })),
+            "current node's Expand::After modifier must not appear at offset 0"
+        );
+    }
+
+    #[test]
+    fn boundary_at_start_does_not_double_count_existing_modifier_type() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                t1: text("hello") [bold]
+                t2: text("world") [bold]
+            } } }
+            selection: (t2, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        let bolds = result
+            .iter()
+            .filter(|m| matches!(m, Modifier::Bold))
+            .count();
+        assert_eq!(bolds, 1, "prev sibling carryover must not duplicate types");
+    }
+
+    #[test]
+    fn boundary_at_start_excludes_link_from_preceding_sibling() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                t1: text("Click") [link(href: "https://example.com".to_string())]
+                t2: text("World")
+            } } }
+            selection: (t2, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        assert!(
+            !result.iter().any(|m| matches!(m, Modifier::Link { .. })),
+            "Expand::None modifiers must not bleed across sibling boundary"
+        );
+    }
+
+    #[test]
+    fn boundary_skips_fold_when_prev_sibling_is_not_text() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                hard_break {}
+                t2: text("world") [font_size(3000)]
+            } } }
+            selection: (t2, 0)
+        };
+        let head = state.selection.as_ref().unwrap().head;
+        let result = resolve_effective_modifiers_at(&state, &head);
+        assert!(
+            !result
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 3000 })),
+            "non-text prev sibling must not trigger carryover"
         );
     }
 }

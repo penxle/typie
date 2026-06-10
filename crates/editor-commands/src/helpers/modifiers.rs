@@ -27,7 +27,8 @@ pub(crate) fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modif
                 return node.modifiers().cloned().collect();
             }
 
-            node.modifiers()
+            let mut out: Vec<Modifier> = node
+                .modifiers()
                 .filter(|m| {
                     let expand = &m.spec().expand;
                     match expand {
@@ -38,10 +39,35 @@ pub(crate) fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modif
                     }
                 })
                 .cloned()
-                .collect()
+                .collect();
+
+            if at_start {
+                fold_prev_sibling_carryover(node, &mut out);
+            }
+
+            out
         }
         Node::Paragraph(_) => node.modifiers().cloned().collect(),
         _ => vec![],
+    }
+}
+
+fn fold_prev_sibling_carryover(node: &NodeRef, out: &mut Vec<Modifier>) {
+    let Some(prev) = node.prev_sibling() else {
+        return;
+    };
+    if !matches!(prev.node(), Node::Text(_)) {
+        return;
+    }
+    for m in prev.modifiers() {
+        if !matches!(m.spec().expand, Expand::After | Expand::Both) {
+            continue;
+        }
+        let t = m.as_type();
+        if out.iter().any(|e| e.as_type() == t) {
+            continue;
+        }
+        out.push(m.clone());
     }
 }
 
@@ -709,5 +735,84 @@ mod tests {
         assert!(is_tab_metric_modifier(ModifierType::LetterSpacing));
         assert!(!is_tab_metric_modifier(ModifierType::Bold));
         assert!(!is_tab_metric_modifier(ModifierType::TextColor));
+    }
+
+    #[test]
+    fn boundary_at_start_of_next_text_inherits_preceding_font_size() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                t1: text("hello") [font_size(3000)]
+                t2: text("world") [font_size(1200)]
+            } } }
+            selection: (t2, 0)
+        };
+        let node = node_at(&state);
+        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
+        assert!(
+            result
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 3000 })),
+            "preceding sibling's font_size must carry to caret at start of next text"
+        );
+        assert!(
+            !result
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1200 })),
+            "current node's Expand::After modifier must not appear at offset 0"
+        );
+    }
+
+    #[test]
+    fn boundary_at_start_does_not_double_count_existing_modifier_type() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                t1: text("hello") [bold]
+                t2: text("world") [bold]
+            } } }
+            selection: (t2, 0)
+        };
+        let node = node_at(&state);
+        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
+        let bolds = result
+            .iter()
+            .filter(|m| matches!(m, Modifier::Bold))
+            .count();
+        assert_eq!(bolds, 1, "prev sibling carryover must not duplicate types");
+    }
+
+    #[test]
+    fn boundary_at_start_excludes_link_from_preceding_sibling() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                t1: text("Click") [link(href: "https://example.com".to_string())]
+                t2: text("World")
+            } } }
+            selection: (t2, 0)
+        };
+        let node = node_at(&state);
+        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
+        assert!(
+            !result.iter().any(|m| matches!(m, Modifier::Link { .. })),
+            "Expand::None modifiers must not bleed across sibling boundary"
+        );
+    }
+
+    #[test]
+    fn boundary_skips_fold_when_prev_sibling_is_not_text() {
+        let (state, ..) = state! {
+            doc { root { paragraph {
+                hard_break {}
+                t2: text("world") [font_size(3000)]
+            } } }
+            selection: (t2, 0)
+        };
+        let node = node_at(&state);
+        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
+        assert!(
+            !result
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { value: 3000 })),
+            "non-text prev sibling must not trigger carryover"
+        );
     }
 }
