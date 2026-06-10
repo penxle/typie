@@ -1,5 +1,6 @@
 use editor_common::Rect;
 use editor_model::NodeId;
+use editor_state::Position;
 use std::ops::Range;
 
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
@@ -15,7 +16,7 @@ pub struct PaginatedLayout {
     pub page_fragments: Vec<PageFragmentTree>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LayoutTree {
     pub root: LayoutNode,
 }
@@ -34,9 +35,9 @@ pub enum LayoutContent {
     Spacing(SpacingKind),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SpacingKind {
-    Gap,
+    Gap { position: Position },
     Fill,
 }
 

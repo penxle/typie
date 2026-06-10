@@ -5,12 +5,12 @@ use crate::page::{LayoutPage, PageRect};
 use crate::paginate::*;
 
 use super::common::*;
+use super::layout_index::{LayoutEntry, LayoutIndex};
 
 pub type CompositionRect = PageRect;
 
 pub fn composition_rects(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
 ) -> Vec<CompositionRect> {
@@ -18,13 +18,21 @@ pub fn composition_rects(
         return vec![];
     }
 
-    let from_owner = super::search::find_line_at(tree, from);
-    let to_owner = super::search::find_line_at(tree, to);
+    let from_owner = layout_index.entry_for_position(from);
+    let to_owner = layout_index.entry_for_position(to);
     let mut phase = Phase::Before;
     let mut rects = Vec::new();
 
     visit_node(
-        &tree.root, from, to, from_owner, to_owner, &mut phase, &mut rects, pages,
+        &layout_index.tree().root,
+        layout_index,
+        from,
+        to,
+        from_owner,
+        to_owner,
+        &mut phase,
+        &mut rects,
+        layout_index.pages(),
     );
 
     rects
@@ -32,20 +40,41 @@ pub fn composition_rects(
 
 fn visit_node(
     node: &LayoutNode,
+    layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
-    from_owner: Option<&LayoutNode>,
-    to_owner: Option<&LayoutNode>,
+    from_owner: Option<&LayoutEntry>,
+    to_owner: Option<&LayoutEntry>,
     phase: &mut Phase,
     rects: &mut Vec<CompositionRect>,
     pages: &[LayoutPage],
 ) {
     match &node.content {
-        LayoutContent::Box(b) => {
-            visit_box(node, b, from, to, from_owner, to_owner, phase, rects, pages)
-        }
+        LayoutContent::Box(b) => visit_box(
+            node,
+            b,
+            layout_index,
+            from,
+            to,
+            from_owner,
+            to_owner,
+            phase,
+            rects,
+            pages,
+        ),
         LayoutContent::Line(l) => {
-            visit_line(node, l, from, to, from_owner, to_owner, phase, rects, pages);
+            visit_line(
+                node,
+                l,
+                layout_index,
+                from,
+                to,
+                from_owner,
+                to_owner,
+                phase,
+                rects,
+                pages,
+            );
         }
         LayoutContent::Atom(_) | LayoutContent::Spacing(_) => {}
     }
@@ -54,16 +83,17 @@ fn visit_node(
 fn visit_line(
     node: &LayoutNode,
     line: &LayoutLine,
+    layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
-    from_owner: Option<&LayoutNode>,
-    to_owner: Option<&LayoutNode>,
+    from_owner: Option<&LayoutEntry>,
+    to_owner: Option<&LayoutEntry>,
     phase: &mut Phase,
     rects: &mut Vec<CompositionRect>,
     pages: &[LayoutPage],
 ) {
-    let contains_from = from_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
-    let contains_to = to_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
+    let contains_from = from_owner.is_some_and(|entry| entry.is_node(layout_index, node));
+    let contains_to = to_owner.is_some_and(|entry| entry.is_node(layout_index, node));
 
     let (x_start, x_end) = match (*phase, contains_from, contains_to) {
         (Phase::Before, true, true) => {
@@ -104,10 +134,11 @@ fn visit_line(
 fn visit_box(
     _node: &LayoutNode,
     bx: &LayoutBox,
+    layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
-    from_owner: Option<&LayoutNode>,
-    to_owner: Option<&LayoutNode>,
+    from_owner: Option<&LayoutEntry>,
+    to_owner: Option<&LayoutEntry>,
     phase: &mut Phase,
     rects: &mut Vec<CompositionRect>,
     pages: &[LayoutPage],
@@ -116,7 +147,17 @@ fn visit_box(
         if *phase == Phase::After {
             break;
         }
-        visit_node(child, from, to, from_owner, to_owner, phase, rects, pages);
+        visit_node(
+            child,
+            layout_index,
+            from,
+            to,
+            from_owner,
+            to_owner,
+            phase,
+            rects,
+            pages,
+        );
     }
 }
 

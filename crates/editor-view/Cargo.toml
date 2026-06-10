@@ -41,6 +41,7 @@ hashbrown.workspace = true
 icu_segmenter = { workspace = true, features = ["serde"] }
 log.workspace = true
 parley.workspace = true
+rstar.workspace = true
 serde.workspace = true
 smallvec.workspace = true
 tsify = { workspace = true, optional = true }

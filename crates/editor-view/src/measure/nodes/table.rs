@@ -127,7 +127,6 @@ pub fn measure_table_cell(
         PaddedLayoutConfig {
             padding: EdgeInsets::all(TABLE_CELL_PADDING),
             border: EdgeInsets::all(TABLE_BORDER_WIDTH),
-            scope: true,
             alignment: LayoutAlignment::Start,
             page_break_policy: PageBreakPolicy::Avoid,
         },
@@ -159,7 +158,6 @@ pub fn measure_table(
                     border: EdgeInsets::all(TABLE_BORDER_WIDTH),
                     border_mode: BorderMode::Collapse,
                     alignment: LayoutAlignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: node.spec().monolithic,
                 },
@@ -249,7 +247,6 @@ pub fn measure_table(
                     border: EdgeInsets::all(TABLE_BORDER_WIDTH),
                     border_mode: BorderMode::Collapse,
                     alignment: LayoutAlignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: row.spec().monolithic,
                 },
@@ -291,7 +288,6 @@ pub fn measure_table(
                 border: EdgeInsets::all(TABLE_BORDER_WIDTH),
                 border_mode: BorderMode::Collapse,
                 alignment,
-                scope: false,
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
@@ -314,7 +310,7 @@ mod tests {
     }
 
     #[test]
-    fn table_cell_has_padding_border_scope() {
+    fn table_cell_has_padding_border() {
         let (doc, c1) = doc! {
             root {
                 table {
@@ -338,7 +334,6 @@ mod tests {
         assert_eq!(style.padding.top, TABLE_CELL_PADDING);
         assert_eq!(style.border.left, TABLE_BORDER_WIDTH);
         assert_eq!(style.border.top, TABLE_BORDER_WIDTH);
-        assert!(style.scope);
     }
 
     #[test]

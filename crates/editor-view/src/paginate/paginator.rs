@@ -2,6 +2,7 @@ use editor_common::{EdgeInsets, Rect, Size};
 
 use crate::style::Alignment;
 use editor_model::NodeId;
+use editor_state::Position;
 
 use crate::measure::*;
 use crate::page::LayoutPage;
@@ -135,15 +136,20 @@ impl Paginator {
             }
             MeasuredContent::Spacing(h) => {
                 let y = self.accumulated_y;
+                let x = self.current_x;
                 self.accumulated_y += h;
                 LayoutNode {
-                    rect: Rect::from_xywh(0.0, y, 0.0, *h),
-                    content: LayoutContent::Spacing(SpacingKind::Gap),
+                    rect: Rect::from_xywh(x, y, node.width, *h),
+                    content: LayoutContent::Spacing(SpacingKind::Gap {
+                        position: Position::new(parent_id, child_index),
+                    }),
                 }
             }
             MeasuredContent::PageBreak => LayoutNode {
                 rect: Rect::from_xywh(0.0, self.accumulated_y, 0.0, 0.0),
-                content: LayoutContent::Spacing(SpacingKind::Gap),
+                content: LayoutContent::Spacing(SpacingKind::Gap {
+                    position: Position::new(parent_id, child_index),
+                }),
             },
         }
     }
@@ -634,12 +640,16 @@ fn place_node_at(
             }),
         },
         MeasuredContent::Spacing(h) => LayoutNode {
-            rect: Rect::from_xywh(x, y, 0.0, *h),
-            content: LayoutContent::Spacing(SpacingKind::Gap),
+            rect: Rect::from_xywh(x, y, node.width, *h),
+            content: LayoutContent::Spacing(SpacingKind::Gap {
+                position: Position::new(parent_id, child_index),
+            }),
         },
         MeasuredContent::PageBreak => LayoutNode {
             rect: Rect::from_xywh(x, y, 0.0, 0.0),
-            content: LayoutContent::Spacing(SpacingKind::Gap),
+            content: LayoutContent::Spacing(SpacingKind::Gap {
+                position: Position::new(parent_id, child_index),
+            }),
         },
     }
 }
@@ -653,7 +663,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::measure::Measurer;
-    use crate::query::search::find_box_by_node_id;
+    use crate::query::layout_index::LayoutIndex;
     use crate::view::View;
     use crate::view_state::ViewState;
 
@@ -696,7 +706,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: false,
                 },
@@ -743,7 +752,6 @@ mod tests {
                     border,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: false,
                 },
@@ -875,6 +883,12 @@ mod tests {
             // spacing at y=10 (margin_top), height=10
             assert_eq!(b.children[0].rect.y, 10.0);
             assert_eq!(b.children[0].rect.height, 10.0);
+            assert!(matches!(
+                b.children[0].content,
+                LayoutContent::Spacing(SpacingKind::Gap {
+                    position
+                }) if position == editor_state::Position::new(NodeId::ROOT, 0)
+            ));
             // line at y=20 (after spacing)
             assert_eq!(b.children[1].rect.y, 20.0);
         } else {
@@ -909,7 +923,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: false,
                 },
@@ -929,7 +942,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: false,
                 },
@@ -1621,8 +1633,9 @@ mod tests {
         );
     }
 
-    fn nav_of(tree: &LayoutTree, id: NodeId) -> Option<NavUnit> {
-        match &find_box_by_node_id(&tree.root, id)?.content {
+    fn nav_of(tree: &LayoutTree, pages: &[LayoutPage], id: NodeId) -> Option<NavUnit> {
+        let layout_index = LayoutIndex::new(tree.clone(), pages);
+        match &layout_index.box_entry(id)?.content(&layout_index)? {
             LayoutContent::Box(b) => b.nav,
             _ => None,
         }
@@ -1640,8 +1653,9 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&st.doc);
         let tree = view.layout_tree_for_test().expect("laid out");
+        let pages = view.pages();
         assert_eq!(
-            nav_of(tree, f),
+            nav_of(tree, pages, f),
             Some(NavUnit {
                 parent_id: r,
                 index: 0
@@ -1663,8 +1677,9 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&st.doc);
         let tree = view.layout_tree_for_test().expect("laid out");
+        let pages = view.pages();
         assert_eq!(
-            nav_of(tree, f),
+            nav_of(tree, pages, f),
             Some(NavUnit {
                 parent_id: tc,
                 index: 0

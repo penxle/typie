@@ -301,7 +301,6 @@ private fun List<Message>.singleNavigationMoveOrNull(): NavigationMoveIntent? {
 
 private fun Movement.directionOrNull(): Direction? =
   when (this) {
-    is Movement.Block -> direction
     is Movement.Document -> direction
     is Movement.Grapheme -> direction
     is Movement.Line -> direction

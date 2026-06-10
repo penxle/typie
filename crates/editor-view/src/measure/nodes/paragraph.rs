@@ -58,7 +58,6 @@ pub fn measure_paragraph(
                 border: EdgeInsets::ZERO,
                 border_mode: BorderMode::Separate,
                 alignment,
-                scope: false,
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },

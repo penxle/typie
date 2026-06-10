@@ -170,7 +170,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: false,
                 },
@@ -276,7 +275,9 @@ mod tests {
                     make_layout_line(NodeId::new(), 0.0, 20.0),
                     LayoutNode {
                         rect: Rect::from_xywh(0.0, 20.0, 0.0, 16.0),
-                        content: LayoutContent::Spacing(SpacingKind::Gap),
+                        content: LayoutContent::Spacing(SpacingKind::Gap {
+                            position: editor_state::Position::new(NodeId::ROOT, 0),
+                        }),
                     },
                     make_layout_line(NodeId::new(), 36.0, 20.0),
                 ],

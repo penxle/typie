@@ -1,58 +1,191 @@
-use editor_model::{Doc, NodeId};
+use editor_common::Rect;
+use editor_model::{Doc, Node, NodeId};
 use editor_state::Position;
 
-use crate::page::LayoutPage;
 use crate::paginate::*;
+use crate::style::Direction;
 use crate::{DropIndicator, DropTarget};
 
-use super::hit_test::HitTester;
+use super::layout_index::{LayoutEntry, LayoutIndex, LayoutPoint};
 
 pub(crate) fn drop_target_at(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     doc: &Doc,
     page_idx: usize,
     x: f32,
     page_y: f32,
 ) -> Option<DropTarget> {
-    let page = pages.get(page_idx)?;
-    let hit = HitTester::for_page(tree, page, x, page_y);
-    let position = dnd_position(&hit, doc)?;
-    let indicator = drop_indicator_from_position(tree, pages, doc, position)?;
+    let point = layout_index.point(page_idx, x, page_y)?;
+    let position = dnd_position(layout_index, doc, point)?;
+    let position = promote_outer_edge_drop_position(doc, position).unwrap_or(position);
+    let indicator = drop_indicator_from_position(layout_index, doc, position)?;
     Some(DropTarget {
         position,
         indicator,
     })
 }
 
-fn dnd_position(hit: &HitTester<'_>, doc: &Doc) -> Option<Position> {
-    let position = if let Some(position) = hit.block_gap_position(doc) {
-        promote_block_container_edge_position(doc, position).unwrap_or(position)
-    } else {
-        let target_x = hit.target_x();
-        hit.exact_target()
-            .or_else(|| hit.closest_target())
-            .map(|target| target.selection(target_x).head)?
-    };
+fn dnd_position(layout_index: &LayoutIndex, doc: &Doc, point: LayoutPoint) -> Option<Position> {
+    let position = layout_index
+        .exact_entry_with(point, |entry, node| {
+            dnd_position_for_candidate(layout_index, doc, entry, node, point)
+        })
+        .or_else(|| {
+            layout_index.closest_entry_with(point, |entry, node| {
+                dnd_position_for_candidate(layout_index, doc, entry, node, point)
+            })
+        })
+        .map(|(_, position)| position)?;
 
-    Some(position)
+    position.resolve(doc).is_some().then_some(position)
 }
 
-/// Convert an edge position inside a block container to the equivalent parent
-/// boundary. This is not root-specific: leading/trailing padding inside a
-/// blockquote, callout, list item, fold, or table means "before/after that
-/// container" from the parent's point of view.
-///
-/// Structural containers such as fold_content and table_cell keep their own
-/// boundary because they are confinement scopes rather than independently
-/// movable siblings.
-fn promote_block_container_edge_position(doc: &Doc, position: Position) -> Option<Position> {
+fn is_dnd_entry(_entry: &LayoutEntry, node: &LayoutNode) -> bool {
+    matches!(
+        node.content,
+        LayoutContent::Line(_)
+            | LayoutContent::Atom(_)
+            | LayoutContent::Box(_)
+            | LayoutContent::Spacing(SpacingKind::Gap { .. })
+    )
+}
+
+fn dnd_position_for_candidate(
+    layout_index: &LayoutIndex,
+    doc: &Doc,
+    entry: &LayoutEntry,
+    node: &LayoutNode,
+    point: LayoutPoint,
+) -> Option<Position> {
+    is_dnd_entry(entry, node)
+        .then(|| dnd_position_for_entry(layout_index, doc, entry, point))
+        .flatten()
+}
+
+fn dnd_position_for_entry(
+    layout_index: &LayoutIndex,
+    doc: &Doc,
+    entry: &LayoutEntry,
+    point: LayoutPoint,
+) -> Option<Position> {
+    match entry.content(layout_index)? {
+        LayoutContent::Line(line) => Some(position_in_line(line, &entry.rect, point.x)),
+        LayoutContent::Atom(atom) => Some(Position::new(atom.parent_id, atom.index + 1)),
+        LayoutContent::Box(b) => box_edge_position(layout_index, doc, b, point),
+        LayoutContent::Spacing(SpacingKind::Gap { position }) => Some(*position),
+        LayoutContent::Spacing(SpacingKind::Fill) => None,
+    }
+}
+
+fn position_in_line(line: &LayoutLine, rect: &Rect, x: f32) -> Position {
+    super::grapheme::position_at_x(line, x - rect.x)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DropChild {
+    offset: usize,
+    rect: Rect,
+}
+
+fn box_edge_position(
+    layout_index: &LayoutIndex,
+    doc: &Doc,
+    b: &LayoutBox,
+    point: LayoutPoint,
+) -> Option<Position> {
+    if b.style.direction != Direction::Vertical {
+        return None;
+    }
+
+    let page = layout_index.page(point.page_idx)?;
+    if point.y < page.content_y_start {
+        let first = drop_children_in_y_range(
+            layout_index,
+            doc,
+            b.node_id,
+            page.content_y_start,
+            page.content_y_end,
+        )
+        .into_iter()
+        .next()?;
+        return Some(Position::new(b.node_id, first.offset));
+    }
+    if point.y > page.content_y_end {
+        let last = drop_children_in_y_range(
+            layout_index,
+            doc,
+            b.node_id,
+            page.content_y_start,
+            page.content_y_end,
+        )
+        .into_iter()
+        .last()?;
+        return Some(Position::new(b.node_id, last.offset + 1));
+    }
+
+    let children = drop_children(layout_index, doc, b.node_id);
+    let first = children.first()?;
+    if point.y < first.rect.y {
+        return Some(Position::new(b.node_id, first.offset));
+    }
+
+    let last = children.last().expect("children is not empty");
+    if point.y > last.rect.bottom() {
+        return Some(Position::new(b.node_id, last.offset + 1));
+    }
+
+    None
+}
+
+fn drop_children(layout_index: &LayoutIndex, doc: &Doc, parent_id: NodeId) -> Vec<DropChild> {
+    layout_index
+        .direct_child_entries(parent_id)
+        .filter_map(|entry| drop_child(layout_index, doc, parent_id, entry))
+        .collect()
+}
+
+fn drop_children_in_y_range(
+    layout_index: &LayoutIndex,
+    doc: &Doc,
+    parent_id: NodeId,
+    y_start: f32,
+    y_end: f32,
+) -> Vec<DropChild> {
+    layout_index
+        .direct_child_entries_in_y_range(parent_id, y_start, y_end)
+        .filter_map(|entry| drop_child(layout_index, doc, parent_id, entry))
+        .collect()
+}
+
+fn drop_child(
+    layout_index: &LayoutIndex,
+    doc: &Doc,
+    parent_id: NodeId,
+    entry: &LayoutEntry,
+) -> Option<DropChild> {
+    match entry.content(layout_index)? {
+        LayoutContent::Box(b) => {
+            let child_ref = doc.node(b.node_id)?;
+            (child_ref.parent()?.id() == parent_id).then(|| DropChild {
+                offset: child_ref.index().unwrap_or(0),
+                rect: entry.rect,
+            })
+        }
+        LayoutContent::Atom(atom) => (atom.parent_id == parent_id).then(|| DropChild {
+            offset: atom.index,
+            rect: entry.rect,
+        }),
+        LayoutContent::Line(_) | LayoutContent::Spacing(_) => None,
+    }
+}
+
+fn promote_outer_edge_drop_position(doc: &Doc, position: Position) -> Option<Position> {
     if position.node_id == NodeId::ROOT {
         return None;
     }
 
     let node = doc.node(position.node_id)?;
-    if node.spec().structural {
+    if !promotes_edge_drop_to_parent(node.node()) {
         return None;
     }
 
@@ -72,15 +205,18 @@ fn promote_block_container_edge_position(doc: &Doc, position: Position) -> Optio
     }
 }
 
+fn promotes_edge_drop_to_parent(node: &Node) -> bool {
+    matches!(node, Node::Fold(_) | Node::Table(_) | Node::ListItem(_))
+}
+
 fn drop_indicator_from_position(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     doc: &Doc,
     position: Position,
 ) -> Option<DropIndicator> {
     let resolved = position.resolve(doc)?;
     if resolved.is_inline_position() {
-        let metrics = super::cursor::cursor_metrics(tree, pages, &position, None)?;
+        let metrics = super::cursor::cursor_metrics(layout_index, &position, None)?;
         return Some(DropIndicator::Inline {
             page_idx: metrics.page_idx,
             x: metrics.caret.x,
@@ -89,34 +225,26 @@ fn drop_indicator_from_position(
         });
     }
 
-    block_drop_indicator(tree, pages, position)
+    block_drop_indicator(layout_index, position)
 }
 
-fn block_drop_indicator(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
-    position: Position,
-) -> Option<DropIndicator> {
-    let node = super::search::find_box_by_node_id(&tree.root, position.node_id)?;
-    let LayoutContent::Box(b) = &node.content else {
-        return None;
-    };
-    let children: Vec<_> = b
-        .children
-        .iter()
-        .filter(|child| !matches!(child.content, LayoutContent::Spacing(_)))
+fn block_drop_indicator(layout_index: &LayoutIndex, position: Position) -> Option<DropIndicator> {
+    let node_rect = layout_index.box_rect(position.node_id)?;
+    let children: Vec<_> = layout_index
+        .direct_child_entries(position.node_id)
+        .filter(|entry| !matches!(entry.content(layout_index), Some(LayoutContent::Spacing(_))))
         .collect();
     let (x, width) = children
         .first()
         .map(|child| (child.rect.x, child.rect.width))
-        .unwrap_or((node.rect.x, node.rect.width));
+        .unwrap_or((node_rect.x, node_rect.width));
     let y_abs = match (position.offset, children.get(position.offset)) {
         (0, Some(first)) => first.rect.y,
-        (0, None) => node.rect.y,
+        (0, None) => node_rect.y,
         (offset, Some(next)) => {
             let prev = children.get(offset.saturating_sub(1))?;
-            let next_page_idx = page_idx_for_y(pages, next.rect.y)?;
-            let prev_page_idx = page_idx_for_y(pages, prev.rect.bottom())?;
+            let next_page_idx = layout_index.page_idx_for_y(next.rect.y)?;
+            let prev_page_idx = layout_index.page_idx_for_y(prev.rect.bottom())?;
             if prev_page_idx == next_page_idx {
                 (prev.rect.bottom() + next.rect.y) * 0.5
             } else {
@@ -126,22 +254,16 @@ fn block_drop_indicator(
         (offset, None) => children
             .get(offset.saturating_sub(1))
             .map(|prev| prev.rect.bottom())
-            .unwrap_or(node.rect.y),
+            .unwrap_or(node_rect.y),
     };
-    let page_idx = page_idx_for_y(pages, y_abs)?;
-    let page = &pages[page_idx];
+    let page_idx = layout_index.page_idx_for_y(y_abs)?;
+    let page_y_start = layout_index.page_y_start(page_idx)?;
     Some(DropIndicator::Block {
         page_idx,
         x,
-        y: y_abs - page.y_start,
+        y: y_abs - page_y_start,
         width,
     })
-}
-
-fn page_idx_for_y(pages: &[LayoutPage], y_abs: f32) -> Option<usize> {
-    pages
-        .iter()
-        .position(|page| y_abs >= page.y_start && y_abs <= page.y_end)
 }
 
 #[cfg(test)]
@@ -152,6 +274,7 @@ mod tests {
     use editor_state::Affinity;
 
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
+    use crate::page::LayoutPage;
     use crate::style::*;
     use crate::view::View;
 
@@ -203,7 +326,6 @@ mod tests {
             id,
             Rect::from_xywh(x, y, w, h),
             Direction::Vertical,
-            false,
             children,
         )
     }
@@ -212,7 +334,6 @@ mod tests {
         id: NodeId,
         rect: Rect,
         direction: Direction,
-        scope: bool,
         children: Vec<LayoutNode>,
     ) -> LayoutNode {
         LayoutNode {
@@ -225,7 +346,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope,
                     decorations: vec![],
                     monolithic: false,
                 },
@@ -241,6 +361,18 @@ mod tests {
             y_end,
             editor_common::Size::new(440.0, y_end - y_start),
         )
+    }
+
+    fn drop_target_in_tree(
+        tree: &LayoutTree,
+        pages: &[LayoutPage],
+        doc: &Doc,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> Option<DropTarget> {
+        let layout_index = LayoutIndex::new(tree.clone(), pages);
+        drop_target_at(&layout_index, doc, page_idx, x, y)
     }
 
     #[test]
@@ -301,6 +433,71 @@ mod tests {
     }
 
     #[test]
+    fn dnd_hit_test_second_page_top_margin_returns_first_block_position_on_page() {
+        let (doc, p1, t1, p2, t2) = doc! {
+            root {
+                p1: paragraph { t1: text("one") }
+                p2: paragraph { t2: text("two") }
+            }
+        };
+        let tree = LayoutTree {
+            root: make_box_node(
+                NodeId::ROOT,
+                20.0,
+                20.0,
+                180.0,
+                140.0,
+                vec![
+                    make_box_node(
+                        p1,
+                        20.0,
+                        20.0,
+                        180.0,
+                        40.0,
+                        vec![make_line_node(t1, 20.0, 20.0, "one", 10.0)],
+                    ),
+                    make_box_node(
+                        p2,
+                        20.0,
+                        120.0,
+                        180.0,
+                        40.0,
+                        vec![make_line_node(t2, 20.0, 120.0, "two", 10.0)],
+                    ),
+                ],
+            ),
+        };
+        let pages = [
+            LayoutPage::with_content(
+                0.0,
+                100.0,
+                20.0,
+                80.0,
+                editor_common::Size::new(240.0, 100.0),
+            ),
+            LayoutPage::with_content(
+                100.0,
+                200.0,
+                120.0,
+                180.0,
+                editor_common::Size::new(240.0, 100.0),
+            ),
+        ];
+
+        let target = drop_target_in_tree(&tree, &pages, &doc, 1, 40.0, 0.0)
+            .expect("second page top margin should be a page-local block boundary");
+
+        assert_eq!(target.position, Position::new(NodeId::ROOT, 1));
+        match target.indicator {
+            crate::DropIndicator::Block { page_idx, y, .. } => {
+                assert_eq!(page_idx, 1);
+                assert_eq!(y, 20.0);
+            }
+            other => panic!("expected block indicator, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn dnd_hit_test_page_bottom_margin_returns_root_end_block_position() {
         let (doc,) = doc! {
             root { paragraph { text("hello") } }
@@ -346,7 +543,9 @@ mod tests {
                     ),
                     LayoutNode {
                         rect: Rect::from_xywh(20.0, 20.0, 180.0, 40.0),
-                        content: LayoutContent::Spacing(SpacingKind::Gap),
+                        content: LayoutContent::Spacing(SpacingKind::Gap {
+                            position: Position::new(NodeId::ROOT, 1),
+                        }),
                     },
                     make_box_node(
                         p2,
@@ -361,7 +560,7 @@ mod tests {
         };
         let page = make_page(0.0, 100.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 40.0)
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 30.0, 40.0)
             .expect("gap between root blocks must be a drop target");
 
         assert_eq!(
@@ -423,7 +622,9 @@ mod tests {
                                 make_box_node(p1, 20.0, 20.0, 180.0, 20.0, vec![]),
                                 LayoutNode {
                                     rect: Rect::from_xywh(20.0, 40.0, 180.0, 40.0),
-                                    content: LayoutContent::Spacing(SpacingKind::Gap),
+                                    content: LayoutContent::Spacing(SpacingKind::Gap {
+                                        position: Position::new(fc, 1),
+                                    }),
                                 },
                                 make_box_node(p2, 20.0, 80.0, 180.0, 20.0, vec![]),
                             ],
@@ -434,7 +635,7 @@ mod tests {
         };
         let page = make_page(0.0, 120.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 60.0)
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 30.0, 60.0)
             .expect("gap inside fold_content must be a DnD target");
 
         assert_eq!(target.position, Position::new(fc, 1));
@@ -473,17 +674,17 @@ mod tests {
                             row,
                             Rect::from_xywh(0.0, 0.0, 220.0, 100.0),
                             Direction::Horizontal,
-                            false,
                             vec![make_box_node_with_style(
                                 cell,
                                 Rect::from_xywh(10.0, 10.0, 200.0, 80.0),
                                 Direction::Vertical,
-                                true,
                                 vec![
                                     make_box_node(p1, 20.0, 20.0, 180.0, 20.0, vec![]),
                                     LayoutNode {
                                         rect: Rect::from_xywh(20.0, 40.0, 180.0, 30.0),
-                                        content: LayoutContent::Spacing(SpacingKind::Gap),
+                                        content: LayoutContent::Spacing(SpacingKind::Gap {
+                                            position: Position::new(cell, 1),
+                                        }),
                                     },
                                     make_box_node(p2, 20.0, 70.0, 180.0, 20.0, vec![]),
                                 ],
@@ -492,7 +693,9 @@ mod tests {
                     ),
                     LayoutNode {
                         rect: Rect::from_xywh(0.0, 100.0, 0.0, 20.0),
-                        content: LayoutContent::Spacing(SpacingKind::Gap),
+                        content: LayoutContent::Spacing(SpacingKind::Gap {
+                            position: Position::new(NodeId::ROOT, 1),
+                        }),
                     },
                     make_box_node(NodeId::new(), 0.0, 120.0, 220.0, 20.0, vec![]),
                 ],
@@ -500,8 +703,8 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 55.0)
-            .expect("gap inside table_cell scope must be a DnD target");
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 30.0, 55.0)
+            .expect("gap inside table_cell must be a DnD target");
 
         assert_eq!(target.position, Position::new(cell, 1));
     }
@@ -536,12 +739,10 @@ mod tests {
                         row,
                         Rect::from_xywh(0.0, 0.0, 220.0, 80.0),
                         Direction::Horizontal,
-                        false,
                         vec![make_box_node_with_style(
                             cell,
                             Rect::from_xywh(10.0, 10.0, 200.0, 60.0),
                             Direction::Vertical,
-                            true,
                             vec![make_box_node(p1, 20.0, 40.0, 180.0, 20.0, vec![])],
                         )],
                     )],
@@ -550,7 +751,7 @@ mod tests {
         };
         let page = make_page(0.0, 100.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 30.0, 20.0)
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 30.0, 20.0)
             .expect("table-cell leading padding should be a scoped cell drop target");
 
         assert_eq!(target.position, Position::new(cell, 0));
@@ -589,17 +790,17 @@ mod tests {
                             row,
                             Rect::from_xywh(0.0, 0.0, 100.0, 100.0),
                             Direction::Horizontal,
-                            false,
                             vec![make_box_node_with_style(
                                 cell,
                                 Rect::from_xywh(0.0, 0.0, 100.0, 100.0),
                                 Direction::Vertical,
-                                true,
                                 vec![
                                     make_box_node(p1, 10.0, 10.0, 80.0, 20.0, vec![]),
                                     LayoutNode {
                                         rect: Rect::from_xywh(10.0, 30.0, 80.0, 40.0),
-                                        content: LayoutContent::Spacing(SpacingKind::Gap),
+                                        content: LayoutContent::Spacing(SpacingKind::Gap {
+                                            position: Position::new(cell, 1),
+                                        }),
                                     },
                                     make_box_node(p2, 10.0, 70.0, 80.0, 20.0, vec![]),
                                 ],
@@ -612,14 +813,14 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 180.0, 50.0)
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 180.0, 50.0)
             .expect("same-row side margin should use the nearest table-cell gap");
 
         assert_eq!(target.position, Position::new(cell, 1));
     }
 
     #[test]
-    fn dnd_hit_test_in_root_child_leading_padding_returns_root_boundary() {
+    fn dnd_hit_test_in_blockquote_leading_padding_stays_inside_blockquote() {
         let (doc, before, bq, inner, after) = doc! {
             root {
                 before: paragraph {}
@@ -650,14 +851,14 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 50.0, 50.0)
-            .expect("leading padding before a root child container should be a root boundary");
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 50.0, 50.0)
+            .expect("blockquote leading padding should be an internal drop target");
 
-        assert_eq!(target.position, Position::new(NodeId::ROOT, 1));
+        assert_eq!(target.position, Position::new(bq, 0));
     }
 
     #[test]
-    fn dnd_hit_test_in_root_child_trailing_padding_returns_root_boundary() {
+    fn dnd_hit_test_in_blockquote_trailing_padding_stays_inside_blockquote() {
         let (doc, before, bq, inner, after) = doc! {
             root {
                 before: paragraph {}
@@ -688,14 +889,93 @@ mod tests {
         };
         let page = make_page(0.0, 160.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 50.0, 90.0)
-            .expect("trailing padding after a root child container should be a root boundary");
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 50.0, 90.0)
+            .expect("blockquote trailing padding should be an internal drop target");
 
-        assert_eq!(target.position, Position::new(NodeId::ROOT, 2));
+        assert_eq!(target.position, Position::new(bq, 1));
     }
 
     #[test]
-    fn dnd_hit_test_in_nested_container_edge_padding_returns_parent_boundary() {
+    fn dnd_hit_test_in_callout_edge_padding_stays_inside_callout() {
+        let (doc, before, callout, inner, after) = doc! {
+            root {
+                before: paragraph {}
+                callout: callout { inner: paragraph {} }
+                after: paragraph {}
+            }
+        };
+        let tree = LayoutTree {
+            root: make_box_node(
+                NodeId::ROOT,
+                0.0,
+                0.0,
+                220.0,
+                140.0,
+                vec![
+                    make_box_node(before, 20.0, 0.0, 180.0, 20.0, vec![]),
+                    make_box_node(
+                        callout,
+                        20.0,
+                        40.0,
+                        180.0,
+                        60.0,
+                        vec![make_box_node(inner, 40.0, 60.0, 140.0, 20.0, vec![])],
+                    ),
+                    make_box_node(after, 20.0, 120.0, 180.0, 20.0, vec![]),
+                ],
+            ),
+        };
+        let pages = [make_page(0.0, 160.0)];
+
+        let leading = drop_target_in_tree(&tree, &pages, &doc, 0, 50.0, 50.0)
+            .expect("callout leading padding should be an internal drop target");
+        let trailing = drop_target_in_tree(&tree, &pages, &doc, 0, 50.0, 90.0)
+            .expect("callout trailing padding should be an internal drop target");
+
+        assert_eq!(leading.position, Position::new(callout, 0));
+        assert_eq!(trailing.position, Position::new(callout, 1));
+    }
+
+    #[test]
+    fn dnd_closest_fallback_includes_box_spanning_requested_page() {
+        let (doc, before, callout, inner, after) = doc! {
+            root {
+                before: paragraph {}
+                callout: callout { inner: paragraph {} }
+                after: paragraph {}
+            }
+        };
+        let tree = LayoutTree {
+            root: make_box_node(
+                NodeId::ROOT,
+                0.0,
+                0.0,
+                220.0,
+                200.0,
+                vec![
+                    make_box_node(before, 40.0, 0.0, 140.0, 20.0, vec![]),
+                    make_box_node(
+                        callout,
+                        40.0,
+                        50.0,
+                        140.0,
+                        100.0,
+                        vec![make_box_node(inner, 60.0, 60.0, 100.0, 20.0, vec![])],
+                    ),
+                    make_box_node(after, 40.0, 170.0, 140.0, 20.0, vec![]),
+                ],
+            ),
+        };
+        let pages = [make_page(0.0, 100.0), make_page(100.0, 200.0)];
+
+        let target = drop_target_in_tree(&tree, &pages, &doc, 1, 20.0, 20.0)
+            .expect("closest fallback should include a box that started on the previous page");
+
+        assert_eq!(target.position, Position::new(callout, 1));
+    }
+
+    #[test]
+    fn dnd_hit_test_in_nested_blockquote_edge_padding_stays_inside_blockquote() {
         let (doc, fc, before, bq, inner, after) = doc! {
             root {
                 fold {
@@ -757,13 +1037,56 @@ mod tests {
         };
         let pages = [make_page(0.0, 180.0)];
 
-        let leading = drop_target_at(&tree, &pages, &doc, 0, 70.0, 90.0)
-            .expect("leading padding before nested container should target parent boundary");
-        let trailing = drop_target_at(&tree, &pages, &doc, 0, 70.0, 130.0)
-            .expect("trailing padding after nested container should target parent boundary");
+        let leading = drop_target_in_tree(&tree, &pages, &doc, 0, 70.0, 90.0)
+            .expect("nested blockquote leading padding should be an internal drop target");
+        let trailing = drop_target_in_tree(&tree, &pages, &doc, 0, 70.0, 130.0)
+            .expect("nested blockquote trailing padding should be an internal drop target");
 
-        assert_eq!(leading.position, Position::new(fc, 1));
-        assert_eq!(trailing.position, Position::new(fc, 2));
+        assert_eq!(leading.position, Position::new(bq, 0));
+        assert_eq!(trailing.position, Position::new(bq, 1));
+    }
+
+    #[test]
+    fn dnd_hit_test_in_list_item_leading_padding_returns_list_boundary() {
+        let (doc, list, item, p1) = doc! {
+            root {
+                list: bullet_list {
+                    item: list_item {
+                        p1: paragraph {}
+                    }
+                }
+            }
+        };
+        let tree = LayoutTree {
+            root: make_box_node(
+                NodeId::ROOT,
+                0.0,
+                0.0,
+                220.0,
+                80.0,
+                vec![make_box_node(
+                    list,
+                    20.0,
+                    0.0,
+                    180.0,
+                    80.0,
+                    vec![make_box_node(
+                        item,
+                        20.0,
+                        0.0,
+                        180.0,
+                        60.0,
+                        vec![make_box_node(p1, 40.0, 30.0, 140.0, 20.0, vec![])],
+                    )],
+                )],
+            ),
+        };
+        let page = make_page(0.0, 100.0);
+
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 50.0, 10.0)
+            .expect("list item leading padding should target the parent list boundary");
+
+        assert_eq!(target.position, Position::new(list, 0));
     }
 
     #[test]
@@ -814,7 +1137,7 @@ mod tests {
         };
         let page = make_page(0.0, 120.0);
 
-        let target = drop_target_at(&tree, &[page], &doc, 0, 70.0, 40.0)
+        let target = drop_target_in_tree(&tree, &[page], &doc, 0, 70.0, 40.0)
             .expect("fold_content leading padding should stay inside fold_content");
 
         assert_eq!(target.position, Position::new(fc, 0));
@@ -835,17 +1158,20 @@ mod tests {
                     make_box_node(p1, 20.0, 0.0, 180.0, 20.0, vec![]),
                     LayoutNode {
                         rect: Rect::from_xywh(20.0, 20.0, 180.0, 40.0),
-                        content: LayoutContent::Spacing(SpacingKind::Gap),
+                        content: LayoutContent::Spacing(SpacingKind::Gap {
+                            position: Position::new(NodeId::ROOT, 1),
+                        }),
                     },
                     make_box_node(p2, 20.0, 60.0, 180.0, 20.0, vec![]),
                 ],
             ),
         };
         let page = make_page(0.0, 100.0);
+        let pages = [page];
+        let layout_index = LayoutIndex::new(tree.clone(), &pages);
 
         let indicator = block_drop_indicator(
-            &tree,
-            &[page],
+            &layout_index,
             Position {
                 node_id: NodeId::ROOT,
                 offset: 1,

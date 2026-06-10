@@ -41,8 +41,6 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     direction: Direction::Backward
                 } | Movement::Sentence {
                     direction: Direction::Backward
-                } | Movement::Block {
-                    direction: Direction::Backward
                 } | Movement::Page {
                     direction: Direction::Backward
                 } | Movement::Document {
@@ -194,7 +192,6 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     Movement::Grapheme { .. }
                         | Movement::Word { .. }
                         | Movement::Sentence { .. }
-                        | Movement::Block { .. }
                         | Movement::Line { .. }
                 );
 

@@ -7,10 +7,11 @@ use crate::paginate::*;
 use crate::viewport::Viewport;
 
 use super::cursor::x_at_offset;
-use super::{search, segmentation};
+use super::layout_index::{LayoutEntry, LayoutIndex};
+use super::segmentation;
 
 pub fn resolve_movement(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     pos: &Position,
     movement: &Movement,
     viewport: &Viewport,
@@ -21,72 +22,69 @@ pub fn resolve_movement(
     match movement {
         Movement::Grapheme {
             direction: Direction::Forward,
-        } => (move_grapheme_forward(tree, pos), None),
+        } => (move_grapheme_forward(layout_index, pos), None),
         Movement::Grapheme {
             direction: Direction::Backward,
-        } => (move_grapheme_backward(tree, pos), None),
+        } => (move_grapheme_backward(layout_index, pos), None),
         Movement::Word {
             direction: Direction::Forward,
-        } => (segmentation::move_word_forward(tree, pos, segmenters), None),
+        } => (
+            segmentation::move_word_forward(layout_index, pos, segmenters),
+            None,
+        ),
         Movement::Word {
             direction: Direction::Backward,
         } => (
-            segmentation::move_word_backward(tree, pos, segmenters),
+            segmentation::move_word_backward(layout_index, pos, segmenters),
             None,
         ),
         Movement::Sentence {
             direction: Direction::Forward,
         } => (
-            segmentation::move_sentence_forward(tree, pos, segmenters),
+            segmentation::move_sentence_forward(layout_index, pos, segmenters),
             None,
         ),
         Movement::Sentence {
             direction: Direction::Backward,
         } => (
-            segmentation::move_sentence_backward(tree, pos, segmenters),
+            segmentation::move_sentence_backward(layout_index, pos, segmenters),
             None,
         ),
         Movement::Line {
             direction: Direction::Forward,
             axis: Axis::Horizontal,
-        } => (move_line_horizontal_forward(tree, pos), None),
+        } => (move_line_horizontal_forward(layout_index, pos), None),
         Movement::Line {
             direction: Direction::Backward,
             axis: Axis::Horizontal,
-        } => (move_line_horizontal_backward(tree, pos), None),
+        } => (move_line_horizontal_backward(layout_index, pos), None),
         Movement::Line {
             direction: Direction::Forward,
             axis: Axis::Vertical,
-        } => move_line_vertical_forward(tree, pos, preferred_x),
+        } => move_line_vertical_forward(layout_index, pos, preferred_x),
         Movement::Line {
             direction: Direction::Backward,
             axis: Axis::Vertical,
-        } => move_line_vertical_backward(tree, pos, preferred_x),
-        Movement::Block {
-            direction: Direction::Forward,
-        } => (move_block_forward(tree, pos), None),
-        Movement::Block {
-            direction: Direction::Backward,
-        } => (move_block_backward(tree, pos), None),
+        } => move_line_vertical_backward(layout_index, pos, preferred_x),
         Movement::Page {
             direction: Direction::Forward,
-        } => move_page_forward(tree, pos, viewport, preferred_x),
+        } => move_page_forward(layout_index, pos, viewport, preferred_x),
         Movement::Page {
             direction: Direction::Backward,
-        } => move_page_backward(tree, pos, viewport, preferred_x),
+        } => move_page_backward(layout_index, pos, viewport, preferred_x),
         Movement::Document {
             direction: Direction::Forward,
-        } => (move_document_forward(tree), None),
+        } => (move_document_forward(layout_index), None),
         Movement::Document {
             direction: Direction::Backward,
-        } => (move_document_backward(tree), None),
+        } => (move_document_backward(layout_index), None),
     }
 }
 
-fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
+fn move_grapheme_forward(layout_index: &LayoutIndex, pos: &Position) -> Option<Selection> {
+    let entry = layout_index.entry_for_position(pos)?;
 
-    match &line_node.content {
+    match entry.content(layout_index)? {
         LayoutContent::Line(line) => {
             // An empty hard_break line owns paragraph offsets via child_range
             // but has no glyph runs to step through; the new affinity keeps
@@ -141,11 +139,11 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     }
                 }
             }
-            let next = search::find_navigable_after(&tree.root, line_node)?;
+            let next = next_navigable_entry(layout_index, entry)?;
             // If the next line is a soft-wrap continuation of the same text node,
             // advance directly into its first grapheme rather than landing at
             // the same offset (which would visually be the same caret).
-            if let LayoutContent::Line(next_line) = &next.content
+            if let Some(LayoutContent::Line(next_line)) = next.content(layout_index)
                 && let Some(first_run) = next_line.glyph_runs.first()
                 && first_run.node_id == pos.node_id
                 && first_run.offset == pos.offset
@@ -159,7 +157,7 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
             // Landing at the empty line's start would re-stage the same
             // caret; normalize then locks head Upstream and the next press
             // loops on the upper line.
-            if let LayoutContent::Line(next_line) = &next.content
+            if let Some(LayoutContent::Line(next_line)) = next.content(layout_index)
                 && next_line.glyph_runs.is_empty()
                 && let Some(range) = &next_line.child_range
                 && pos.node_id == next_line.node_id
@@ -172,12 +170,12 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     affinity: Affinity::Upstream,
                 }));
             }
-            Some(landed(next, false, true))
+            Some(landed_entry(layout_index, next, false, true))
         }
         _ => {
-            let nv = nav_anchor(line_node)?;
-            if let Some(next) = search::find_navigable_after(&tree.root, line_node) {
-                Some(landed(next, false, true))
+            let nv = nav_unit(layout_index, entry)?;
+            if let Some(next) = next_navigable_entry(layout_index, entry) {
+                Some(landed_entry(layout_index, next, false, true))
             } else {
                 Some(Selection::collapsed(Position::new(
                     nv.parent_id,
@@ -188,10 +186,10 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
     }
 }
 
-fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
+fn move_grapheme_backward(layout_index: &LayoutIndex, pos: &Position) -> Option<Selection> {
+    let entry = layout_index.entry_for_position(pos)?;
 
-    match &line_node.content {
+    match entry.content(layout_index)? {
         LayoutContent::Line(line) => {
             // Symmetric to forward; Downstream keeps the result on this line.
             if line.glyph_runs.is_empty()
@@ -247,11 +245,11 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                     }
                 }
             }
-            let prev = search::find_navigable_before(&tree.root, line_node)?;
+            let prev = prev_navigable_entry(layout_index, entry)?;
             // If the previous line is a soft-wrap continuation of the same
             // text node, retreat into its last grapheme rather than landing
             // at the same offset (which would visually be the same caret).
-            if let LayoutContent::Line(prev_line) = &prev.content
+            if let Some(LayoutContent::Line(prev_line)) = prev.content(layout_index)
                 && let Some(last_run) = prev_line.glyph_runs.last()
                 && last_run.node_id == pos.node_id
                 && last_run.offset + super::grapheme::run_codepoint_count(last_run) == pos.offset
@@ -265,7 +263,7 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
             // Mirror of forward. `normalize_position` may have descended a
             // paragraph-level pos into the adjacent text node's start, so
             // accept both shapes.
-            if let LayoutContent::Line(prev_line) = &prev.content
+            if let Some(LayoutContent::Line(prev_line)) = prev.content(layout_index)
                 && prev_line.glyph_runs.is_empty()
                 && let Some(prev_range) = &prev_line.child_range
                 && prev_range.start < prev_range.end
@@ -284,12 +282,12 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                     }));
                 }
             }
-            Some(landed(prev, true, false))
+            Some(landed_entry(layout_index, prev, true, false))
         }
         _ => {
-            let nv = nav_anchor(line_node)?;
-            if let Some(prev) = search::find_navigable_before(&tree.root, line_node) {
-                Some(landed(prev, true, false))
+            let nv = nav_unit(layout_index, entry)?;
+            if let Some(prev) = prev_navigable_entry(layout_index, entry) {
+                Some(landed_entry(layout_index, prev, true, false))
             } else {
                 Some(Selection::collapsed(Position::new(nv.parent_id, nv.index)))
             }
@@ -297,58 +295,70 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
     }
 }
 
-fn move_line_horizontal_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
-    match &line_node.content {
+fn move_line_horizontal_forward(layout_index: &LayoutIndex, pos: &Position) -> Option<Selection> {
+    let entry = layout_index.entry_for_position(pos)?;
+    match entry.content(layout_index)? {
         LayoutContent::Line(line) => Some(Selection::collapsed(last_position_in_line(line))),
         _ => None,
     }
 }
 
-fn move_line_horizontal_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
-    match &line_node.content {
+fn move_line_horizontal_backward(layout_index: &LayoutIndex, pos: &Position) -> Option<Selection> {
+    let entry = layout_index.entry_for_position(pos)?;
+    match entry.content(layout_index)? {
         LayoutContent::Line(line) => Some(Selection::collapsed(first_position_in_line(line))),
         _ => None,
     }
 }
 
 fn move_line_vertical_forward(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     pos: &Position,
     preferred_x: Option<f32>,
 ) -> (Option<Selection>, Option<f32>) {
-    let Some(line_node) = search::find_line_at(tree, pos) else {
+    let Some(entry) = layout_index.entry_for_position(pos) else {
         return (None, preferred_x);
     };
-    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
-    let y = line_node.rect.bottom();
-    let target = search::find_navigable_below_at_x(&tree.root, y, x);
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(layout_index, entry, pos));
+    let y = entry.rect.bottom();
+    let target = navigable_below_at_x(layout_index, y, x);
     let sel = if let Some(t) = target {
-        let s = escape_empty_line_trap(navigate_to(t, x), Some(t), pos, true);
-        Some(skip_over_when_stuck(tree, s, t, pos, x, true))
+        let s = escape_empty_line_trap(
+            layout_index,
+            navigate_to_entry(layout_index, t, x),
+            Some(t),
+            pos,
+            true,
+        );
+        Some(skip_over_when_stuck(layout_index, s, t, pos, x, true))
     } else {
-        line_end_fallback(line_node, true)
+        line_end_fallback(layout_index, entry, true)
     };
     (sel, Some(x))
 }
 
 fn move_line_vertical_backward(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     pos: &Position,
     preferred_x: Option<f32>,
 ) -> (Option<Selection>, Option<f32>) {
-    let Some(line_node) = search::find_line_at(tree, pos) else {
+    let Some(entry) = layout_index.entry_for_position(pos) else {
         return (None, preferred_x);
     };
-    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
-    let y = line_node.rect.y;
-    let target = search::find_navigable_above_at_x(&tree.root, y, x);
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(layout_index, entry, pos));
+    let y = entry.rect.y;
+    let target = navigable_above_at_x(layout_index, y, x);
     let sel = if let Some(t) = target {
-        let s = escape_empty_line_trap(navigate_to(t, x), Some(t), pos, false);
-        Some(skip_over_when_stuck(tree, s, t, pos, x, false))
+        let s = escape_empty_line_trap(
+            layout_index,
+            navigate_to_entry(layout_index, t, x),
+            Some(t),
+            pos,
+            false,
+        );
+        Some(skip_over_when_stuck(layout_index, s, t, pos, x, false))
     } else {
-        line_end_fallback(line_node, false)
+        line_end_fallback(layout_index, entry, false)
     };
     (sel, Some(x))
 }
@@ -356,14 +366,14 @@ fn move_line_vertical_backward(
 /// A trailing empty line owns no children (zero-width `child_range`), so
 /// `escape_empty_line_trap` can't push off it.
 fn skip_over_when_stuck(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     sel: Selection,
-    target: &LayoutNode,
+    target: &LayoutEntry,
     pos: &Position,
     x: f32,
     forward: bool,
 ) -> Selection {
-    let LayoutContent::Line(line) = &target.content else {
+    let Some(LayoutContent::Line(line)) = target.content(layout_index) else {
         return sel;
     };
     if !line.glyph_runs.is_empty() {
@@ -379,17 +389,22 @@ fn skip_over_when_stuck(
         return sel;
     }
     let next = if forward {
-        search::find_navigable_below_at_x(&tree.root, target.rect.bottom(), x)
+        navigable_below_at_x(layout_index, target.rect.bottom(), x)
     } else {
-        search::find_navigable_above_at_x(&tree.root, target.rect.y, x)
+        navigable_above_at_x(layout_index, target.rect.y, x)
     };
-    next.map(|n| navigate_to(n, x)).unwrap_or(sel)
+    next.map(|entry| navigate_to_entry(layout_index, entry, x))
+        .unwrap_or(sel)
 }
 
 /// At the document edge return the current line's end instead of `None`, so
 /// the navigation handler doesn't silently swallow the keypress.
-fn line_end_fallback(line_node: &LayoutNode, forward: bool) -> Option<Selection> {
-    let LayoutContent::Line(line) = &line_node.content else {
+fn line_end_fallback(
+    layout_index: &LayoutIndex,
+    entry: &LayoutEntry,
+    forward: bool,
+) -> Option<Selection> {
+    let Some(LayoutContent::Line(line)) = entry.content(layout_index) else {
         return None;
     };
     let pos = if forward {
@@ -405,13 +420,14 @@ fn line_end_fallback(line_node: &LayoutNode, forward: bool) -> Option<Selection>
 /// — making the press a visible no-op. Push to the far end of the range so
 /// the next press exits in the same direction.
 fn escape_empty_line_trap(
+    layout_index: &LayoutIndex,
     sel: Selection,
-    target: Option<&LayoutNode>,
+    target: Option<&LayoutEntry>,
     pos: &Position,
     forward: bool,
 ) -> Selection {
     let Some(t) = target else { return sel };
-    let LayoutContent::Line(line) = &t.content else {
+    let Some(LayoutContent::Line(line)) = t.content(layout_index) else {
         return sel;
     };
     if !line.glyph_runs.is_empty() {
@@ -438,68 +454,50 @@ fn escape_empty_line_trap(
     })
 }
 
-fn move_block_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let container = search::find_scope_container_at(&tree.root, pos)?;
-    let b = match &container.content {
-        LayoutContent::Box(b) => b,
-        _ => return None,
-    };
-    let nav = b
-        .children
-        .iter()
-        .rev()
-        .find_map(search::find_last_navigable)?;
-    Some(landed(nav, true, true))
-}
-
-fn move_block_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let container = search::find_scope_container_at(&tree.root, pos)?;
-    let b = match &container.content {
-        LayoutContent::Box(b) => b,
-        _ => return None,
-    };
-    let nav = b.children.iter().find_map(search::find_first_navigable)?;
-    Some(landed(nav, false, false))
-}
-
 fn move_page_forward(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     pos: &Position,
     viewport: &Viewport,
     preferred_x: Option<f32>,
 ) -> (Option<Selection>, Option<f32>) {
-    let Some(line_node) = search::find_line_at(tree, pos) else {
+    let Some(entry) = layout_index.entry_for_position(pos) else {
         return (None, preferred_x);
     };
-    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
-    let y = line_node.rect.y + viewport.height;
-    let target = search::find_navigable_below_at_x(&tree.root, y, x);
-    (target.map(|t| navigate_to(t, x)), Some(x))
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(layout_index, entry, pos));
+    let y = entry.rect.y + viewport.height;
+    let target = navigable_below_at_x(layout_index, y, x);
+    (
+        target.map(|t| navigate_to_entry(layout_index, t, x)),
+        Some(x),
+    )
 }
 
 fn move_page_backward(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     pos: &Position,
     viewport: &Viewport,
     preferred_x: Option<f32>,
 ) -> (Option<Selection>, Option<f32>) {
-    let Some(line_node) = search::find_line_at(tree, pos) else {
+    let Some(entry) = layout_index.entry_for_position(pos) else {
         return (None, preferred_x);
     };
-    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
-    let y = line_node.rect.bottom() - viewport.height;
-    let target = search::find_navigable_above_at_x(&tree.root, y, x);
-    (target.map(|t| navigate_to(t, x)), Some(x))
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(layout_index, entry, pos));
+    let y = entry.rect.bottom() - viewport.height;
+    let target = navigable_above_at_x(layout_index, y, x);
+    (
+        target.map(|t| navigate_to_entry(layout_index, t, x)),
+        Some(x),
+    )
 }
 
-fn move_document_forward(tree: &LayoutTree) -> Option<Selection> {
-    let nav = search::find_last_navigable(&tree.root)?;
-    Some(landed(nav, true, true))
+fn move_document_forward(layout_index: &LayoutIndex) -> Option<Selection> {
+    let nav = last_navigable_entry(layout_index)?;
+    Some(landed_entry(layout_index, nav, true, true))
 }
 
-fn move_document_backward(tree: &LayoutTree) -> Option<Selection> {
-    let nav = search::find_first_navigable(&tree.root)?;
-    Some(landed(nav, false, false))
+fn move_document_backward(layout_index: &LayoutIndex) -> Option<Selection> {
+    let nav = first_navigable_entry(layout_index)?;
+    Some(landed_entry(layout_index, nav, false, false))
 }
 
 fn first_position_in_line(line: &LayoutLine) -> Position {
@@ -523,24 +521,32 @@ fn last_position_in_line(line: &LayoutLine) -> Position {
     super::grapheme::last_position_in_line(line)
 }
 
-pub(crate) fn first_position_in(node: &LayoutNode) -> Position {
-    if let LayoutContent::Line(line) = &node.content {
-        return first_position_in_line(line);
+fn first_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Position {
+    match entry.content(layout_index) {
+        Some(LayoutContent::Line(line)) => first_position_in_line(line),
+        Some(LayoutContent::Atom(atom)) => Position::new(atom.parent_id, atom.index),
+        Some(LayoutContent::Box(b)) if b.nav.is_some() => {
+            let unit = b.nav.expect("checked is_some");
+            Position::new(unit.parent_id, unit.index)
+        }
+        _ => {
+            unreachable!("first_position_in_entry called on non-navigable entry")
+        }
     }
-    if let Some(nv) = nav_anchor(node) {
-        return Position::new(nv.parent_id, nv.index);
-    }
-    unreachable!()
 }
 
-pub(crate) fn last_position_in(node: &LayoutNode) -> Position {
-    if let LayoutContent::Line(line) = &node.content {
-        return last_position_in_line(line);
+fn last_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Position {
+    match entry.content(layout_index) {
+        Some(LayoutContent::Line(line)) => last_position_in_line(line),
+        Some(LayoutContent::Atom(atom)) => Position::new(atom.parent_id, atom.index),
+        Some(LayoutContent::Box(b)) if b.nav.is_some() => {
+            let unit = b.nav.expect("checked is_some");
+            Position::new(unit.parent_id, unit.index)
+        }
+        _ => {
+            unreachable!("last_position_in_entry called on non-navigable entry")
+        }
     }
-    if let Some(nv) = nav_anchor(node) {
-        return Position::new(nv.parent_id, nv.index);
-    }
-    unreachable!()
 }
 
 /// First (`at_end=false`) / last (`at_end=true`) editable caret position
@@ -548,27 +554,15 @@ pub(crate) fn last_position_in(node: &LayoutNode) -> Position {
 /// bracket into its children. `None` when the node is not a Box (atoms
 /// have no inner navigable) or has no navigable descendant.
 pub(crate) fn editable_position_inside(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     node_id: NodeId,
     at_end: bool,
 ) -> Option<Position> {
-    let boxed = search::find_box_by_node_id(&tree.root, node_id)?;
-    let b = match &boxed.content {
-        LayoutContent::Box(b) => b,
-        _ => return None,
-    };
-    let nav = if at_end {
-        b.children
-            .iter()
-            .rev()
-            .find_map(search::find_last_navigable)
-    } else {
-        b.children.iter().find_map(search::find_first_navigable)
-    }?;
+    let nav = first_navigable_entry_inside(layout_index, node_id, at_end)?;
     Some(if at_end {
-        last_position_in(nav)
+        last_position_in_entry(layout_index, nav)
     } else {
-        first_position_in(nav)
+        first_position_in_entry(layout_index, nav)
     })
 }
 
@@ -576,9 +570,9 @@ pub(crate) fn editable_position_inside(
 /// when vertical gap entry bypasses `resolve_movement` (which is the
 /// usual recorder). Returning `None` is safe: a missing seed just falls
 /// back to recomputation on the next vertical move.
-pub(crate) fn compute_preferred_x_at(tree: &LayoutTree, pos: &Position) -> Option<f32> {
-    let line_node = search::find_line_at(tree, pos)?;
-    Some(compute_preferred_x(line_node, pos))
+pub(crate) fn compute_preferred_x_at(layout_index: &LayoutIndex, pos: &Position) -> Option<f32> {
+    let entry = layout_index.entry_for_position(pos)?;
+    Some(compute_preferred_x(layout_index, entry, pos))
 }
 
 /// A caret Position at `x` on the first (`at_end=false`) or last
@@ -586,24 +580,13 @@ pub(crate) fn compute_preferred_x_at(tree: &LayoutTree, pos: &Position) -> Optio
 /// edge navigable is an Atom (no column concept) — callers must fall
 /// back to their default exit (node-select or first/last position).
 pub(crate) fn position_at_preferred_x_in(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     node_id: NodeId,
     at_end: bool,
     x: f32,
 ) -> Option<Position> {
-    let boxed = search::find_box_by_node_id(&tree.root, node_id)?;
-    let LayoutContent::Box(b) = &boxed.content else {
-        return None;
-    };
-    let nav = if at_end {
-        b.children
-            .iter()
-            .rev()
-            .find_map(search::find_last_navigable)
-    } else {
-        b.children.iter().find_map(search::find_first_navigable)
-    }?;
-    match &nav.content {
+    let nav = first_navigable_entry_inside(layout_index, node_id, at_end)?;
+    match nav.content(layout_index)? {
         LayoutContent::Line(line) => Some(position_in_line(line, &nav.rect, x)),
         _ => None,
     }
@@ -619,91 +602,217 @@ pub(crate) fn position_at_preferred_x_in(
 /// 그 행 안의 어느 셀이든 가장자리로 본다 — 그래야 마지막 행이 마지막 열뿐
 /// 아니라 어느 열에서도 갭으로 진입한다.
 pub(crate) fn is_at_edge_line_of(
-    tree: &LayoutTree,
+    layout_index: &LayoutIndex,
     node_id: NodeId,
     head: &Position,
     at_end: bool,
 ) -> bool {
-    let Some(cursor_line) = search::find_line_at(tree, head) else {
+    let Some(entry) = layout_index.entry_for_position(head) else {
         return false;
     };
-    let Some(boxed) = search::find_box_by_node_id(&tree.root, node_id) else {
+    if !matches!(entry.content(layout_index), Some(LayoutContent::Line(_))) {
         return false;
-    };
-    let LayoutContent::Box(b) = &boxed.content else {
-        return false;
-    };
-    let edge_child = if at_end {
-        b.children
-            .iter()
-            .rev()
-            .find(|c| search::find_last_navigable(c).is_some())
-    } else {
-        b.children
-            .iter()
-            .find(|c| search::find_first_navigable(c).is_some())
-    };
-    let Some(edge_child) = edge_child else {
-        return false;
-    };
+    }
+    edge_band_contains(layout_index, node_id, entry, at_end)
+}
 
-    // 가장자리 자식이 가로로 나열된 여러 navigable 열(테이블 행의 셀들)을
-    // 직접 품으면, 그 열들은 같은 시각적 행이므로 어느 셀이든 가장자리다.
-    // 그렇지 않으면(단일 흐름이 여러 줄로 접히는 단락 등) 마지막/첫 줄만
-    // 가장자리이므로 그 단일 navigable 라인과 비교한다.
-    if has_multiple_navigable_columns(edge_child) {
-        subtree_contains(edge_child, cursor_line)
+pub(super) fn next_navigable_entry<'a>(
+    layout_index: &'a LayoutIndex,
+    entry: &LayoutEntry,
+) -> Option<&'a LayoutEntry> {
+    let idx = layout_index.entry_index(entry)?;
+    let skipped_subtree = unit_box_id(layout_index, entry);
+    layout_index
+        .entries()
+        .skip(idx + 1)
+        .filter(|entry| skipped_subtree.is_none_or(|node_id| !entry.ancestors().contains(&node_id)))
+        .find(|entry| is_navigable_entry(layout_index, entry))
+}
+
+pub(super) fn prev_navigable_entry<'a>(
+    layout_index: &'a LayoutIndex,
+    entry: &LayoutEntry,
+) -> Option<&'a LayoutEntry> {
+    let idx = layout_index.entry_index(entry)?;
+    let skipped_subtree = unit_box_id(layout_index, entry);
+    layout_index
+        .entries()
+        .take(idx)
+        .rev()
+        .filter(|entry| skipped_subtree.is_none_or(|node_id| !entry.ancestors().contains(&node_id)))
+        .find(|entry| is_navigable_entry(layout_index, entry))
+}
+
+fn first_navigable_entry(layout_index: &LayoutIndex) -> Option<&LayoutEntry> {
+    layout_index
+        .entries()
+        .find(|entry| is_navigable_entry(layout_index, entry))
+}
+
+fn last_navigable_entry(layout_index: &LayoutIndex) -> Option<&LayoutEntry> {
+    layout_index
+        .entries()
+        .rev()
+        .find(|entry| is_navigable_entry(layout_index, entry))
+}
+
+fn first_navigable_entry_inside(
+    layout_index: &LayoutIndex,
+    node_id: NodeId,
+    at_end: bool,
+) -> Option<&LayoutEntry> {
+    let mut entries = layout_index
+        .entries()
+        .filter(|entry| is_navigable_inside(layout_index, entry, node_id));
+    if at_end {
+        entries.next_back()
     } else {
-        let leaf = if at_end {
-            search::find_last_navigable(edge_child)
-        } else {
-            search::find_first_navigable(edge_child)
-        };
-        leaf.is_some_and(|n| std::ptr::eq(n, cursor_line))
+        entries.next()
     }
 }
 
-/// `node`의 직계 자식 중 navigable을 서브트리에 품은 "박스"가 둘 이상이면
-/// true. 테이블 행은 셀(navigable을 품은 Box)이 가로로 여럿이고, 단락은
-/// 직계 자식이 Line(navigable 그 자체, 세로로 접힌 줄들)이므로 false다 —
-/// 이 차이로 둘을 구분한다.
-fn has_multiple_navigable_columns(node: &LayoutNode) -> bool {
-    let LayoutContent::Box(b) = &node.content else {
-        return false;
-    };
-    b.children
-        .iter()
-        .filter(|c| {
-            matches!(c.content, LayoutContent::Box(_)) && search::find_first_navigable(c).is_some()
+pub(crate) fn navigable_below_at_x(
+    layout_index: &LayoutIndex,
+    y_threshold: f32,
+    x: f32,
+) -> Option<&LayoutEntry> {
+    let candidates: Vec<&LayoutEntry> = layout_index
+        .entries()
+        .filter(|entry| is_navigable_entry(layout_index, entry) && entry.rect.y >= y_threshold)
+        .collect();
+    let top = candidates.iter().copied().min_by(|a, b| {
+        a.rect
+            .y
+            .total_cmp(&b.rect.y)
+            .then(a.rect.x.total_cmp(&b.rect.x))
+    })?;
+    let band_end = top.rect.bottom();
+    candidates
+        .into_iter()
+        .filter(|entry| entry.rect.y < band_end)
+        .min_by(|a, b| compare_navigation_band_entry(a, b, x, true))
+}
+
+pub(crate) fn navigable_above_at_x(
+    layout_index: &LayoutIndex,
+    y_threshold: f32,
+    x: f32,
+) -> Option<&LayoutEntry> {
+    let candidates: Vec<&LayoutEntry> = layout_index
+        .entries()
+        .filter(|entry| {
+            is_navigable_entry(layout_index, entry) && entry.rect.bottom() <= y_threshold
         })
-        .nth(1)
-        .is_some()
+        .collect();
+    let bottom = candidates.iter().copied().min_by(|a, b| {
+        b.rect
+            .bottom()
+            .total_cmp(&a.rect.bottom())
+            .then(a.rect.x.total_cmp(&b.rect.x))
+    })?;
+    let band_start = bottom.rect.y;
+    candidates
+        .into_iter()
+        .filter(|entry| entry.rect.bottom() > band_start)
+        .min_by(|a, b| compare_navigation_band_entry(a, b, x, false))
 }
 
-/// `target`(navigable Line/Atom 노드)이 `node` 자신이거나 그 서브트리
-/// 어딘가에 있는지를 포인터 동일성으로 판정한다.
-fn subtree_contains(node: &LayoutNode, target: &LayoutNode) -> bool {
-    if std::ptr::eq(node, target) {
-        return true;
-    }
-    match &node.content {
-        LayoutContent::Box(b) => b.children.iter().any(|c| subtree_contains(c, target)),
-        _ => false,
+fn edge_band_contains(
+    layout_index: &LayoutIndex,
+    node_id: NodeId,
+    entry: &LayoutEntry,
+    at_end: bool,
+) -> bool {
+    let entries = layout_index
+        .entries()
+        .filter(|entry| is_navigable_inside(layout_index, entry, node_id));
+    let Some(edge) = (if at_end {
+        entries.max_by(|a, b| {
+            a.rect
+                .bottom()
+                .total_cmp(&b.rect.bottom())
+                .then(a.rect.x.total_cmp(&b.rect.x))
+        })
+    } else {
+        entries.min_by(|a, b| {
+            a.rect
+                .y
+                .total_cmp(&b.rect.y)
+                .then(a.rect.x.total_cmp(&b.rect.x))
+        })
+    }) else {
+        return false;
+    };
+    if at_end {
+        entry.rect.bottom() > edge.rect.y
+    } else {
+        entry.rect.y < edge.rect.bottom()
     }
 }
 
-/// A navigable unit's `(parent, index)` bracket. An atom carries it directly;
-/// a monolithic box carries it via `nav` (only set at the block's own bracket,
-/// per `collect_lines`). Anything else has no bracket. This is the single read
-/// site that unifies atom and monolithic-block navigation.
-pub(crate) fn nav_anchor(node: &LayoutNode) -> Option<NavUnit> {
-    match &node.content {
-        LayoutContent::Atom(a) => Some(NavUnit {
-            parent_id: a.parent_id,
-            index: a.index,
+fn is_navigable_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> bool {
+    matches!(
+        entry.content(layout_index),
+        Some(LayoutContent::Line(_) | LayoutContent::Atom(_))
+    )
+}
+
+fn is_navigable_inside(layout_index: &LayoutIndex, entry: &LayoutEntry, node_id: NodeId) -> bool {
+    is_navigable_entry(layout_index, entry) && entry.ancestors().contains(&node_id)
+}
+
+fn unit_box_id(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Option<NodeId> {
+    let LayoutContent::Box(b) = entry.content(layout_index)? else {
+        return None;
+    };
+    b.nav.is_some().then_some(b.node_id)
+}
+
+fn compare_navigation_band_entry(
+    a: &LayoutEntry,
+    b: &LayoutEntry,
+    x: f32,
+    forward: bool,
+) -> std::cmp::Ordering {
+    let key = |entry: &LayoutEntry| {
+        let group = if contains_x(&entry.rect, x) { 0u8 } else { 1u8 };
+        let y = if forward {
+            entry.rect.y
+        } else {
+            -entry.rect.bottom()
+        };
+        (group, axis_distance(entry.rect.x, entry.rect.right(), x), y)
+    };
+    let (a_group, a_dx, a_y) = key(a);
+    let (b_group, b_dx, b_y) = key(b);
+    a_group
+        .cmp(&b_group)
+        .then(a_dx.total_cmp(&b_dx))
+        .then(a_y.total_cmp(&b_y))
+}
+
+fn contains_x(rect: &editor_common::Rect, x: f32) -> bool {
+    x >= rect.x && x <= rect.right()
+}
+
+fn axis_distance(start: f32, end: f32, value: f32) -> f32 {
+    if value < start {
+        start - value
+    } else if value > end {
+        value - end
+    } else {
+        0.0
+    }
+}
+
+fn nav_unit(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Option<NavUnit> {
+    match entry.content(layout_index)? {
+        LayoutContent::Atom(atom) => Some(NavUnit {
+            parent_id: atom.parent_id,
+            index: atom.index,
         }),
         LayoutContent::Box(b) => b.nav,
-        _ => None,
+        LayoutContent::Line(_) | LayoutContent::Spacing(_) => None,
     }
 }
 
@@ -729,26 +838,43 @@ fn unit_selection(nv: NavUnit, forward: bool) -> Selection {
 /// Line to place the collapsed caret; `forward` controls the direction of the atom
 /// node selection. An atom does not have a "start/end", so `at_end` is irrelevant
 /// there, and a Line does not have a direction, so `forward` is irrelevant there.
-pub(crate) fn landed(node: &LayoutNode, at_end: bool, forward: bool) -> Selection {
-    if let Some(nv) = nav_anchor(node) {
+pub(crate) fn landed_entry(
+    layout_index: &LayoutIndex,
+    entry: &LayoutEntry,
+    at_end: bool,
+    forward: bool,
+) -> Selection {
+    if let Some(nv) = nav_unit(layout_index, entry) {
         return unit_selection(nv, forward);
     }
     let pos = if at_end {
-        last_position_in(node)
+        last_position_in_entry(layout_index, entry)
     } else {
-        first_position_in(node)
+        first_position_in_entry(layout_index, entry)
     };
     Selection::collapsed(pos)
 }
 
-fn navigate_to(node: &LayoutNode, preferred_x: f32) -> Selection {
-    if let LayoutContent::Line(line) = &node.content {
-        return Selection::collapsed(position_in_line(line, &node.rect, preferred_x));
+fn navigate_to_entry(
+    layout_index: &LayoutIndex,
+    entry: &LayoutEntry,
+    preferred_x: f32,
+) -> Selection {
+    match entry.content(layout_index) {
+        Some(LayoutContent::Line(line)) => {
+            Selection::collapsed(position_in_line(line, &entry.rect, preferred_x))
+        }
+        Some(LayoutContent::Atom(atom)) => unit_selection(
+            NavUnit {
+                parent_id: atom.parent_id,
+                index: atom.index,
+            },
+            true,
+        ),
+        _ => {
+            unreachable!("navigate_to_entry called on non-navigable")
+        }
     }
-    if let Some(nv) = nav_anchor(node) {
-        return unit_selection(nv, true);
-    }
-    unreachable!("navigate_to called on non-navigable")
 }
 
 fn position_in_line(line: &LayoutLine, rect: &editor_common::Rect, x: f32) -> Position {
@@ -756,10 +882,10 @@ fn position_in_line(line: &LayoutLine, rect: &editor_common::Rect, x: f32) -> Po
     super::grapheme::position_at_x(line, local_x)
 }
 
-fn compute_preferred_x(line_node: &LayoutNode, pos: &Position) -> f32 {
-    match &line_node.content {
-        LayoutContent::Line(line) => line_node.rect.x + x_at_offset(line, pos),
-        _ => line_node.rect.x,
+fn compute_preferred_x(layout_index: &LayoutIndex, entry: &LayoutEntry, pos: &Position) -> f32 {
+    match entry.content(layout_index) {
+        Some(LayoutContent::Line(line)) => entry.rect.x + x_at_offset(line, pos),
+        _ => entry.rect.x,
     }
 }
 
@@ -767,6 +893,7 @@ fn compute_preferred_x(line_node: &LayoutNode, pos: &Position) -> f32 {
 mod tests {
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
+    use crate::page::LayoutPage;
     use crate::style::Alignment;
     use crate::style::{BorderMode, BoxStyle, Direction as LayoutDirection};
     use crate::view::View;
@@ -819,7 +946,7 @@ mod tests {
         }
     }
 
-    fn make_box_node(y: f32, h: f32, scope: bool, children: Vec<LayoutNode>) -> LayoutNode {
+    fn make_box_node(y: f32, h: f32, children: Vec<LayoutNode>) -> LayoutNode {
         LayoutNode {
             rect: Rect::from_xywh(0.0, y, 200.0, h),
             content: LayoutContent::Box(LayoutBox {
@@ -830,7 +957,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope,
                     decorations: vec![],
                     monolithic: false,
                 },
@@ -843,17 +969,19 @@ mod tests {
     fn make_spacing(y: f32, h: f32) -> LayoutNode {
         LayoutNode {
             rect: Rect::from_xywh(0.0, y, 0.0, h),
-            content: LayoutContent::Spacing(SpacingKind::Gap),
+            content: LayoutContent::Spacing(SpacingKind::Gap {
+                position: Position::new(NodeId::ROOT, 0),
+            }),
         }
     }
 
     /// Shared fixture:
     ///
     /// ```text
-    /// Block1 (scope, y=0..40):
+    /// Block1 (y=0..40):
     ///   Line0: "hello world"  (y=0,  h=20)
     ///   Line1: "foo bar"      (y=20, h=20)
-    /// Block2 (scope, y=40..120):
+    /// Block2 (y=40..120):
     ///   Atom                  (y=40, h=20, parent=atom_parent, index=0)
     ///   Line2: "baz"          (y=60, h=20)
     ///   Line3: "qux quux"     (y=80, h=20)
@@ -874,12 +1002,10 @@ mod tests {
             root: make_box_node(
                 0.0,
                 120.0,
-                false,
                 vec![
                     make_box_node(
                         0.0,
                         40.0,
-                        true,
                         vec![
                             make_line_node(lines[0], 0.0, "hello world"),
                             make_line_node(lines[1], 20.0, "foo bar"),
@@ -888,7 +1014,6 @@ mod tests {
                     make_box_node(
                         40.0,
                         80.0,
-                        true,
                         vec![
                             make_atom_node(atom_parent, atom_id, 40.0, 0),
                             make_line_node(lines[2], 60.0, "baz"),
@@ -914,7 +1039,31 @@ mod tests {
     };
 
     fn mov(tree: &LayoutTree, pos: Position, movement: Movement) -> Option<Selection> {
-        resolve_movement(tree, &pos, &movement, &VP, &Resource::new_test(), None).0
+        resolve(tree, &pos, &movement, &VP, &Resource::new_test(), None).0
+    }
+
+    fn resolve(
+        tree: &LayoutTree,
+        pos: &Position,
+        movement: &Movement,
+        viewport: &Viewport,
+        resource: &Resource,
+        preferred_x: Option<f32>,
+    ) -> (Option<Selection>, Option<f32>) {
+        let pages = [LayoutPage::new(
+            0.0,
+            10_000.0,
+            editor_common::Size::new(1_000.0, 10_000.0),
+        )];
+        let layout_index = LayoutIndex::new(tree.clone(), &pages);
+        super::resolve_movement(
+            &layout_index,
+            pos,
+            movement,
+            viewport,
+            resource,
+            preferred_x,
+        )
     }
 
     /// Tree with a single text node `t` soft-wrapped onto two visual lines:
@@ -958,7 +1107,7 @@ mod tests {
             }),
         };
         LayoutTree {
-            root: make_box_node(0.0, 40.0, false, vec![line_a, line_b]),
+            root: make_box_node(0.0, 40.0, vec![line_a, line_b]),
         }
     }
 
@@ -987,7 +1136,7 @@ mod tests {
 
     #[test]
     fn line_horizontal_forward_in_upper_soft_wrap_renders_at_upper_end() {
-        // After making `find_line_at` affinity-aware, `last_position_in_line`
+        // After making position ownership affinity-aware, `last_position_in_line`
         // must produce a position that resolves back to the upper line; otherwise
         // pressing End in the upper wrapped line silently jumps to the start
         // of the lower wrapped line.
@@ -1003,8 +1152,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sel.head.offset, 5);
-        let line_node = search::find_line_at(&tree, &sel.head).unwrap();
-        assert_eq!(line_node.rect.y, 0.0, "must resolve to upper wrapped line");
+        let pages = [LayoutPage::new(
+            0.0,
+            10_000.0,
+            editor_common::Size::new(1_000.0, 10_000.0),
+        )];
+        let layout_index = LayoutIndex::new(tree.clone(), &pages);
+        let entry = layout_index.entry_for_position(&sel.head).unwrap();
+        assert_eq!(entry.rect.y, 0.0, "must resolve to upper wrapped line");
     }
 
     #[test]
@@ -1204,7 +1359,6 @@ mod tests {
             root: make_box_node(
                 0.0,
                 56.0,
-                false,
                 vec![
                     make_line_node(id1, 0.0, "hello"),
                     make_spacing(20.0, 16.0),
@@ -1225,89 +1379,6 @@ mod tests {
     }
 
     #[test]
-    fn block_forward() {
-        let f = fixture();
-        let sel = mov(
-            &f.tree,
-            Position::new(f.lines[0], 2),
-            Movement::Block {
-                direction: Direction::Forward,
-            },
-        )
-        .unwrap();
-        assert_eq!(sel.head, sel.anchor);
-        assert_eq!(sel.head.node_id, f.lines[1]);
-        assert_eq!(sel.head.offset, 7);
-    }
-
-    #[test]
-    fn block_backward() {
-        let f = fixture();
-        let sel = mov(
-            &f.tree,
-            Position::new(f.lines[1], 3),
-            Movement::Block {
-                direction: Direction::Backward,
-            },
-        )
-        .unwrap();
-        assert_eq!(sel.head, sel.anchor);
-        assert_eq!(sel.head.node_id, f.lines[0]);
-        assert_eq!(sel.head.offset, 0);
-    }
-
-    #[test]
-    fn block_forward_from_atom() {
-        let f = fixture();
-        let sel = mov(
-            &f.tree,
-            Position::new(f.atom_parent, 0),
-            Movement::Block {
-                direction: Direction::Forward,
-            },
-        )
-        .unwrap();
-        assert_eq!(sel.head, sel.anchor);
-        assert_eq!(sel.head.node_id, f.lines[4]);
-        assert_eq!(sel.head.offset, 3);
-    }
-
-    #[test]
-    fn block_backward_to_atom() {
-        let f = fixture();
-        let sel = mov(
-            &f.tree,
-            Position::new(f.lines[2], 1),
-            Movement::Block {
-                direction: Direction::Backward,
-            },
-        )
-        .unwrap();
-        // Invariant: landing on an atom must produce a node selection, not a collapsed caret.
-        assert!(
-            !sel.is_collapsed(),
-            "block-backward onto atom must be node selection, got {:?}",
-            sel
-        );
-        assert_eq!(
-            sel.anchor,
-            Position {
-                node_id: f.atom_parent,
-                offset: 1,
-                affinity: Affinity::Upstream
-            }
-        );
-        assert_eq!(
-            sel.head,
-            Position {
-                node_id: f.atom_parent,
-                offset: 0,
-                affinity: Affinity::Downstream
-            }
-        );
-    }
-
-    #[test]
     fn page_forward_skips_lines() {
         let f = fixture();
         let vp = Viewport {
@@ -1315,7 +1386,7 @@ mod tests {
             height: 50.0,
             scale_factor: 1.0,
         };
-        let sel = resolve_movement(
+        let sel = resolve(
             &f.tree,
             &Position::new(f.lines[0], 0),
             &Movement::Page {
@@ -1339,7 +1410,7 @@ mod tests {
             height: 50.0,
             scale_factor: 1.0,
         };
-        let (sel, _) = resolve_movement(
+        let (sel, _) = resolve(
             &f.tree,
             &Position::new(f.lines[4], 0),
             &Movement::Page {
@@ -1410,12 +1481,7 @@ mod tests {
             }),
         };
         let tree = LayoutTree {
-            root: make_box_node(
-                0.0,
-                20.0,
-                false,
-                vec![make_box_node(0.0, 20.0, true, vec![line_node])],
-            ),
+            root: make_box_node(0.0, 20.0, vec![make_box_node(0.0, 20.0, vec![line_node])]),
         };
 
         let sel = mov(
@@ -1458,12 +1524,7 @@ mod tests {
             }),
         };
         let tree = LayoutTree {
-            root: make_box_node(
-                0.0,
-                20.0,
-                false,
-                vec![make_box_node(0.0, 20.0, true, vec![line_node])],
-            ),
+            root: make_box_node(0.0, 20.0, vec![make_box_node(0.0, 20.0, vec![line_node])]),
         };
 
         let sel = mov(
@@ -1515,11 +1576,9 @@ mod tests {
             root: make_box_node(
                 0.0,
                 60.0,
-                false,
                 vec![make_box_node(
                     0.0,
                     60.0,
-                    true,
                     vec![
                         make_line_node(ids[0], 0.0, "hello world"),
                         make_line_node(ids[1], 20.0, "foo"),
@@ -1529,7 +1588,7 @@ mod tests {
             ),
         };
 
-        let (sel1, px1) = resolve_movement(
+        let (sel1, px1) = resolve(
             &tree,
             &Position::new(ids[0], 8),
             &Movement::Line {
@@ -1545,7 +1604,7 @@ mod tests {
         assert_eq!(sel1.head.offset, 3);
         assert_eq!(px1, Some(80.0));
 
-        let (sel2, px2) = resolve_movement(
+        let (sel2, px2) = resolve(
             &tree,
             &sel1.head,
             &Movement::Line {
@@ -1565,7 +1624,7 @@ mod tests {
     #[test]
     fn horizontal_movement_resets_preferred_x() {
         let f = fixture();
-        let (_, px) = resolve_movement(
+        let (_, px) = resolve(
             &f.tree,
             &Position::new(f.lines[0], 5),
             &Movement::Line {
@@ -1578,7 +1637,7 @@ mod tests {
         );
         assert!(px.is_some());
 
-        let (_, px2) = resolve_movement(
+        let (_, px2) = resolve(
             &f.tree,
             &Position::new(f.lines[1], 3),
             &Movement::Grapheme {
@@ -1594,7 +1653,7 @@ mod tests {
     #[test]
     fn vertical_movement_without_preferred_x_computes_fresh() {
         let f = fixture();
-        let (sel, px) = resolve_movement(
+        let (sel, px) = resolve(
             &f.tree,
             &Position::new(f.lines[0], 3),
             &Movement::Line {
@@ -1619,7 +1678,7 @@ mod tests {
             scale_factor: 1.0,
         };
 
-        let (_, px) = resolve_movement(
+        let (_, px) = resolve(
             &f.tree,
             &Position::new(f.lines[0], 5),
             &Movement::Line {
@@ -1632,7 +1691,7 @@ mod tests {
         );
         assert_eq!(px, Some(50.0));
 
-        let (_, px2) = resolve_movement(
+        let (_, px2) = resolve(
             &f.tree,
             &Position::new(f.lines[1], 5),
             &Movement::Page {
@@ -1779,7 +1838,6 @@ mod tests {
             root: make_box_node(
                 0.0,
                 40.0,
-                false,
                 vec![
                     make_atom_node(atom_parent, atom_id, 0.0, 0),
                     make_line_node(line_id, 20.0, "tail"),
@@ -1794,8 +1852,8 @@ mod tests {
             },
         )
         .unwrap();
-        // document-backward calls landed(nav, at_end=false, forward=false), so the backward
-        // form is: anchor=(parent, idx+1, Upstream), head=(parent, idx, Downstream).
+        // document-backward lands on the first entry with forward=false, so the
+        // backward form is: anchor=(parent, idx+1, Upstream), head=(parent, idx, Downstream).
         assert!(!sel.is_collapsed(), "got {:?}", sel);
         assert_eq!(
             sel.anchor,
@@ -2105,14 +2163,14 @@ mod tests {
     }
 
     #[test]
-    fn word_forward_at_cell_end_does_not_cross_cell_boundary() {
-        let (state, t1) = state! {
+    fn word_forward_at_cell_end_moves_to_next_cell() {
+        let (state, t1, p2) = state! {
             doc {
                 root {
                     table {
                         table_row {
                             table_cell { paragraph { t1: text("hi") } }
-                            table_cell { paragraph {} }
+                            table_cell { p2: paragraph {} }
                         }
                         table_row {
                             table_cell { paragraph {} }
@@ -2128,18 +2186,19 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&state.doc);
 
-        let sel = view.resolve_movement(
-            &Position::new(t1, 2),
-            &Movement::Word {
-                direction: Direction::Forward,
-            },
-            &Resource::new_test(),
-        );
+        let sel = view
+            .resolve_movement(
+                &Position::new(t1, 2),
+                &Movement::Word {
+                    direction: Direction::Forward,
+                },
+                &Resource::new_test(),
+            )
+            .unwrap();
 
-        assert!(
-            sel.is_none(),
-            "word-forward at the end of a cell must not leave the cell"
-        );
+        assert_eq!(sel.head, sel.anchor);
+        assert_eq!(sel.head.node_id, p2);
+        assert_eq!(sel.head.offset, 0);
     }
 
     #[test]

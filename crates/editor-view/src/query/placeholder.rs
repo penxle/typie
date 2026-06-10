@@ -3,12 +3,9 @@ use editor_macros::ffi;
 use editor_model::{Alignment, Doc, Modifier, ModifierType, Node, NodeRef};
 use serde::{Deserialize, Serialize};
 
+use super::layout_index::LayoutIndex;
 use crate::measure::resolve::resolve_inherited;
 use crate::measure::text::resolve::resolve_paragraph_indent;
-use crate::page::LayoutPage;
-use crate::paginate::*;
-
-use super::search;
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,8 +20,7 @@ pub struct PlaceholderMetrics {
 }
 
 pub(crate) fn placeholder_metrics(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     doc: &Doc,
 ) -> Option<PlaceholderMetrics> {
     if !is_single_empty_paragraph(doc) {
@@ -33,21 +29,18 @@ pub(crate) fn placeholder_metrics(
     let para = doc.root()?.first_child()?;
     let para_id = para.id();
 
-    let node = search::find_box_by_node_id(&tree.root, para_id)?;
-    let page_idx = pages
-        .iter()
-        .position(|p| node.rect.y >= p.y_start && node.rect.y < p.y_end)?;
-    let y_start = pages[page_idx].y_start;
+    let entry = layout_index.box_entry(para_id)?;
+    let page_rect = layout_index.page_rect(entry.rect)?;
     let indent = placeholder_indent(&para);
     let rect = Rect::from_xywh(
-        node.rect.x + indent,
-        node.rect.y - y_start,
-        (node.rect.width - indent).max(0.0),
-        node.rect.height,
+        page_rect.rect.x + indent,
+        page_rect.rect.y,
+        (page_rect.rect.width - indent).max(0.0),
+        page_rect.rect.height,
     );
 
     Some(PlaceholderMetrics {
-        page_idx,
+        page_idx: page_rect.page_idx,
         rect,
         font_size: resolve_u32(&para, ModifierType::FontSize),
         line_height: resolve_u32(&para, ModifierType::LineHeight),
@@ -110,6 +103,7 @@ pub(crate) fn is_single_empty_paragraph(doc: &Doc) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::query::layout_index::LayoutIndex;
     use crate::view::View;
     use editor_macros::doc;
 
@@ -150,8 +144,9 @@ mod tests {
         view.layout(&doc);
         let tree = view.layout_tree_for_test().unwrap();
         let pages = view.pages();
+        let layout_index = LayoutIndex::new(tree.clone(), pages);
 
-        let m = placeholder_metrics(tree, pages, &doc).expect("empty doc has placeholder");
+        let m = placeholder_metrics(&layout_index, &doc).expect("empty doc has placeholder");
         assert_eq!(m.page_idx, 0);
         assert!(
             m.rect.width > 0.0,
@@ -169,10 +164,11 @@ mod tests {
         view.layout(&doc);
         let tree = view.layout_tree_for_test().unwrap();
         let pages = view.pages();
+        let layout_index = LayoutIndex::new(tree.clone(), pages);
 
-        let m = placeholder_metrics(tree, pages, &doc).expect("empty doc placeholder");
+        let m = placeholder_metrics(&layout_index, &doc).expect("empty doc placeholder");
         let pos = Position::new(p1, 0);
-        let cursor = cursor_metrics(tree, pages, &pos, None).expect("empty paragraph caret");
+        let cursor = cursor_metrics(&layout_index, &pos, None).expect("empty paragraph caret");
 
         assert!(
             (m.rect.x - cursor.caret.x).abs() < 0.01,
@@ -189,7 +185,8 @@ mod tests {
         view.layout(&doc);
         let tree = view.layout_tree_for_test().unwrap();
         let pages = view.pages();
+        let layout_index = LayoutIndex::new(tree.clone(), pages);
 
-        assert!(placeholder_metrics(tree, pages, &doc).is_none());
+        assert!(placeholder_metrics(&layout_index, &doc).is_none());
     }
 }

@@ -53,7 +53,6 @@ pub(crate) fn measure_node(
             PaddedLayoutConfig {
                 padding: EdgeInsets::ZERO,
                 border: EdgeInsets::ZERO,
-                scope: false,
                 alignment: Alignment::Start,
                 page_break_policy: PageBreakPolicy::Auto,
             },

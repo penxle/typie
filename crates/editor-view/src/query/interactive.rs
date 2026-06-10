@@ -3,8 +3,9 @@ use editor_macros::ffi;
 use editor_model::{CalloutVariant, Doc, Node, NodeId};
 use serde::{Deserialize, Serialize};
 
-use crate::page::LayoutPage;
-use crate::paginate::*;
+use crate::paginate::{LayoutContent, LayoutNode};
+
+use super::layout_index::{LayoutEntry, LayoutIndex, LayoutPoint};
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,49 +22,47 @@ pub enum InteractiveHit {
 }
 
 pub(crate) fn interactive_hit_test(
-    tree: &LayoutTree,
-    page: &LayoutPage,
+    layout_index: &LayoutIndex,
     doc: &Doc,
+    page_idx: usize,
     x: f32,
     page_y: f32,
 ) -> Option<InteractiveHit> {
-    let abs_y = page_y + page.y_start;
-    let hit = hit_node(&tree.root, x, abs_y, doc)?;
-    // page-local output, consistent with cursor_metrics / node_box_rects.
-    Some(match hit {
-        InteractiveHit::FoldTitle { id, text_rect } => InteractiveHit::FoldTitle {
-            id,
-            text_rect: text_rect
-                .map(|r| Rect::from_xywh(r.x, r.y - page.y_start, r.width, r.height)),
-        },
-        other => other,
-    })
+    let point = layout_index.point(page_idx, x, page_y)?;
+    let entry =
+        layout_index.exact_entry(point, |entry, node| is_interactive_entry(entry, node, doc))?;
+    interactive_hit_for_entry(layout_index, doc, point, entry)
 }
 
-fn hit_node(node: &LayoutNode, x: f32, y: f32, doc: &Doc) -> Option<InteractiveHit> {
+fn is_interactive_entry(_entry: &LayoutEntry, node: &LayoutNode, doc: &Doc) -> bool {
     let LayoutContent::Box(b) = &node.content else {
+        return false;
+    };
+    doc.node(b.node_id)
+        .is_some_and(|node| matches!(node.node(), Node::Callout(_) | Node::FoldTitle(_)))
+}
+
+fn interactive_hit_for_entry(
+    layout_index: &LayoutIndex,
+    doc: &Doc,
+    point: LayoutPoint,
+    entry: &LayoutEntry,
+) -> Option<InteractiveHit> {
+    let LayoutContent::Box(b) = entry.content(layout_index)? else {
         return None;
     };
-    if !node.rect.contains(x, y) {
-        return None;
-    }
-    for child in &b.children {
-        if let Some(hit) = hit_node(child, x, y, doc) {
-            return Some(hit);
-        }
-    }
     let node_ref = doc.node(b.node_id)?;
     match node_ref.node() {
         Node::Callout(callout) => {
             // measure_callout assigns the icon decoration id 0.
             let dec = b.style.decorations.iter().find(|d| d.id == 0)?;
             let icon = Rect::from_xywh(
-                node.rect.x + dec.rect.x,
-                node.rect.y + dec.rect.y,
+                entry.rect.x + dec.rect.x,
+                entry.rect.y + dec.rect.y,
                 dec.rect.width,
                 dec.rect.height,
             );
-            if icon.contains(x, y) {
+            if icon.contains(point.x, point.y) {
                 Some(InteractiveHit::CalloutIcon {
                     id: b.node_id,
                     next_variant: callout.variant.get().next(),
@@ -74,59 +73,77 @@ fn hit_node(node: &LayoutNode, x: f32, y: f32, doc: &Doc) -> Option<InteractiveH
         }
         Node::FoldTitle(_) => Some(InteractiveHit::FoldTitle {
             id: node_ref.parent()?.id(),
-            // Legacy navigable_union_in parity: cursor-placeable (Line/Atom)
+            // Legacy parity: cursor-placeable (Line/Atom)
             // leaves, so the host can apply edit-mode passthrough.
-            text_rect: navigable_union(node),
+            text_rect: navigable_union_in(layout_index, point, &entry.rect)
+                .map(|r| Rect::from_xywh(r.x, r.y - point.page_y_start, r.width, r.height)),
         }),
         _ => None,
     }
 }
 
-fn navigable_union(node: &LayoutNode) -> Option<Rect> {
-    fn walk(node: &LayoutNode, acc: &mut Option<Rect>) {
-        match &node.content {
-            LayoutContent::Line(_) | LayoutContent::Atom(_) => {
-                let r = node.rect;
-                *acc = Some(match *acc {
-                    None => r,
-                    Some(p) => {
-                        let x = p.x.min(r.x);
-                        let y = p.y.min(r.y);
-                        Rect::from_xywh(
-                            x,
-                            y,
-                            p.right().max(r.right()) - x,
-                            p.bottom().max(r.bottom()) - y,
-                        )
-                    }
-                });
-            }
-            LayoutContent::Box(b) => {
-                for c in &b.children {
-                    walk(c, acc);
-                }
-            }
-            LayoutContent::Spacing(_) => {}
+fn navigable_union_in(
+    layout_index: &LayoutIndex,
+    point: LayoutPoint,
+    container: &Rect,
+) -> Option<Rect> {
+    layout_index
+        .entries_on_page(point.page_idx)
+        .into_iter()
+        .filter(|entry| {
+            entry.content(layout_index).is_some_and(|content| {
+                matches!(content, LayoutContent::Line(_) | LayoutContent::Atom(_))
+                    && rect_contains_rect(container, &entry.rect)
+            })
+        })
+        .fold(None, |acc, entry| Some(union_rect(acc, entry.rect)))
+}
+
+fn rect_contains_rect(outer: &Rect, inner: &Rect) -> bool {
+    inner.x >= outer.x
+        && inner.right() <= outer.right()
+        && inner.y >= outer.y
+        && inner.bottom() <= outer.bottom()
+}
+
+fn union_rect(acc: Option<Rect>, rect: Rect) -> Rect {
+    match acc {
+        None => rect,
+        Some(prev) => {
+            let x = prev.x.min(rect.x);
+            let y = prev.y.min(rect.y);
+            Rect::from_xywh(
+                x,
+                y,
+                prev.right().max(rect.right()) - x,
+                prev.bottom().max(rect.bottom()) - y,
+            )
         }
     }
-    let mut acc = None;
-    if let LayoutContent::Box(b) = &node.content {
-        for c in &b.children {
-            walk(c, &mut acc);
-        }
-    }
-    acc
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::page::LayoutPage;
+    use crate::paginate::*;
     use crate::style::*;
     use editor_common::{EdgeInsets, Size};
     use editor_macros::doc;
 
     fn page(y_start: f32) -> LayoutPage {
         LayoutPage::new(y_start, y_start + 1000.0, Size::new(800.0, 1000.0))
+    }
+
+    fn hit(
+        tree: &LayoutTree,
+        pages: &[LayoutPage],
+        doc: &Doc,
+        x: f32,
+        y: f32,
+    ) -> Option<InteractiveHit> {
+        let layout_index = LayoutIndex::new(tree.clone(), pages);
+        interactive_hit_test(&layout_index, doc, 0, x, y)
     }
 
     fn line_node(id: NodeId, x: f32, y: f32, w: f32, h: f32) -> LayoutNode {
@@ -169,7 +186,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope: false,
                     decorations,
                     monolithic: false,
                     ..Default::default()
@@ -218,7 +234,8 @@ mod tests {
             ),
         };
         // click point is in the fold-title chevron area (page at y_start 100).
-        let hit = interactive_hit_test(&tree, &page(100.0), &doc, 20.0, 4.0);
+        let pages = [page(100.0)];
+        let hit = hit(&tree, &pages, &doc, 20.0, 4.0);
         match hit {
             Some(InteractiveHit::FoldTitle { id, text_rect }) => {
                 assert_eq!(id, f1, "toggle target = parent fold");
@@ -257,16 +274,13 @@ mod tests {
         };
         // page at y_start 0; (20,18) is inside the icon rect.
         assert_eq!(
-            interactive_hit_test(&tree, &page(0.0), &doc, 20.0, 18.0),
+            hit(&tree, &[page(0.0)], &doc, 20.0, 18.0),
             Some(InteractiveHit::CalloutIcon {
                 id: c1,
                 next_variant: CalloutVariant::Success,
             })
         );
-        assert_eq!(
-            interactive_hit_test(&tree, &page(0.0), &doc, 50.0, 18.0),
-            None
-        );
+        assert_eq!(hit(&tree, &[page(0.0)], &doc, 50.0, 18.0), None);
     }
 
     #[test]
@@ -283,9 +297,6 @@ mod tests {
                 vec![line_node(NodeId::new(), 0.0, 0.0, 50.0, 20.0)],
             ),
         };
-        assert_eq!(
-            interactive_hit_test(&tree, &page(0.0), &doc, 10.0, 10.0),
-            None
-        );
+        assert_eq!(hit(&tree, &[page(0.0)], &doc, 10.0, 10.0), None);
     }
 }

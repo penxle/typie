@@ -8,6 +8,7 @@ use crate::page::{LayoutPage, PageRect};
 use crate::paginate::*;
 
 use super::common::*;
+use super::layout_index::{LayoutEntry, LayoutIndex};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SelectionRectKind {
@@ -35,24 +36,21 @@ pub struct SelectionEndpoints {
 }
 
 pub fn selection_rects(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     selection: &editor_state::ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
-    selection_rect_sets(tree, pages, selection).line_box_rects
+    selection_rect_sets(layout_index, selection).line_box_rects
 }
 
 pub fn selection_text_rects(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     selection: &editor_state::ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
-    selection_rect_sets(tree, pages, selection).text_rects
+    selection_rect_sets(layout_index, selection).text_rects
 }
 
 fn selection_rect_sets(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     selection: &editor_state::ResolvedSelection<'_>,
 ) -> SelectionRectSets {
     if selection.is_collapsed() {
@@ -64,7 +62,7 @@ fn selection_rect_sets(
 
     if let Some(cell_rect) = selection.as_cell_rect() {
         let ids: Vec<_> = cell_rect.cells().map(|cell| cell.id()).collect();
-        let rects = super::search::node_box_rects(tree, pages, &ids);
+        let rects = block_selection_rects(layout_index, &ids);
         return SelectionRectSets {
             line_box_rects: rects.clone(),
             text_rects: rects,
@@ -74,17 +72,21 @@ fn selection_rect_sets(
     let from = Position::from(selection.from());
     let to = Position::from(selection.to());
     // Resolve which Line/Atom each endpoint belongs to up front so soft-wrap
-    // boundary positions are disambiguated by affinity (via `find_line_at`)
+    // boundary positions are disambiguated by affinity
     // rather than by the permissive per-line `line_contains_position`.
     //
-    // `find_line_at` is permissive on purpose for navigation: a monolithic box
+    // `LayoutIndex::entry_for_position` is permissive on purpose for navigation: a monolithic box
     // owns both of its bracket positions, and an atom owns both of its edges.
     // For rect attribution those permissive matches are wrong when the endpoint
     // is semantically a container boundary — the box-level phase machine (and
     // the `fully && monolithic` branch) must fire. Strip an owner whose
     // attachment to the endpoint is not the affinity-selected one.
-    let from_owner = super::search::find_line_at(tree, &from).filter(|n| attached(n, &from));
-    let to_owner = super::search::find_line_at(tree, &to).filter(|n| attached(n, &to));
+    let from_owner = layout_index
+        .entry_for_position(&from)
+        .filter(|entry| attached(layout_index, entry, &from));
+    let to_owner = layout_index
+        .entry_for_position(&to)
+        .filter(|entry| attached(layout_index, entry, &to));
     let mut phase = Phase::Before;
     let mut rects = SelectionRectSets {
         line_box_rects: Vec::new(),
@@ -92,29 +94,40 @@ fn selection_rect_sets(
     };
 
     visit_node(
-        &tree.root,
+        &layout_index.tree().root,
+        layout_index,
         &from,
         &to,
         from_owner,
         to_owner,
         &mut phase,
         &mut rects,
-        pages,
+        layout_index.pages(),
         selection.doc(),
     );
 
     rects
 }
 
+pub(crate) fn block_selection_rects(
+    layout_index: &LayoutIndex,
+    ids: &[editor_model::NodeId],
+) -> Vec<SelectionRect> {
+    layout_index
+        .box_page_rects(ids)
+        .into_iter()
+        .map(|rect| PageRect::with_meta(rect.page_idx, rect.rect, SelectionRectKind::Block))
+        .collect()
+}
+
 pub fn selection_endpoints(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     selection: &editor_state::ResolvedSelection<'_>,
 ) -> Option<SelectionEndpoints> {
     if selection.is_collapsed() {
         return None;
     }
-    let rects = selection_rects(tree, pages, selection);
+    let rects = selection_rects(layout_index, selection);
     let first = rects.first()?;
     let last = rects.last()?;
     Some(SelectionEndpoints {
@@ -137,8 +150,7 @@ pub fn selection_endpoints(
 }
 
 pub fn selection_hit_test(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     selection: &editor_state::ResolvedSelection<'_>,
     page_idx: usize,
     x: f32,
@@ -148,11 +160,11 @@ pub fn selection_hit_test(
         return false;
     }
 
-    if selected_external_atom_hit_test(&tree.root, pages, selection, page_idx, x, y) {
+    if selected_external_atom_hit_test(layout_index, selection, page_idx, x, y) {
         return true;
     }
 
-    let rects: Vec<Rect> = selection_rects(tree, pages, selection)
+    let rects: Vec<Rect> = selection_rects(layout_index, selection)
         .into_iter()
         .filter(|r| r.page_idx == page_idx)
         .map(|r| r.rect)
@@ -195,39 +207,22 @@ pub fn selection_hit_test(
 }
 
 fn selected_external_atom_hit_test(
-    node: &LayoutNode,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     selection: &editor_state::ResolvedSelection<'_>,
     page_idx: usize,
     x: f32,
     y: f32,
 ) -> bool {
-    let Some(page) = pages.get(page_idx) else {
+    let Some(page) = layout_index.page(page_idx) else {
         return false;
     };
-
-    selected_external_atom_hit_test_in_node(node, page, selection, x, y)
-}
-
-fn selected_external_atom_hit_test_in_node(
-    node: &LayoutNode,
-    page: &LayoutPage,
-    selection: &editor_state::ResolvedSelection<'_>,
-    x: f32,
-    y: f32,
-) -> bool {
-    let node_top = node.rect.y;
-    let node_bottom = node_top + node.rect.height;
-    if node_bottom <= page.y_start || node_top >= page.y_end {
-        return false;
-    }
-
-    match &node.content {
-        LayoutContent::Box(b) => b
-            .children
-            .iter()
-            .any(|child| selected_external_atom_hit_test_in_node(child, page, selection, x, y)),
-        LayoutContent::Atom(atom) => {
+    layout_index
+        .entries_on_page(page_idx)
+        .into_iter()
+        .any(|entry| {
+            let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
+                return false;
+            };
             let doc = selection.doc();
             let Some(node_ref) = doc.node(atom.node_id) else {
                 return false;
@@ -236,21 +231,19 @@ fn selected_external_atom_hit_test_in_node(
                 return false;
             }
 
-            let top = node_top.max(page.y_start);
-            let bottom = node_bottom.min(page.y_end);
+            let top = entry.rect.y.max(page.y_start);
+            let bottom = entry.rect.bottom().min(page.y_end);
             Rect::from_xywh(
-                node.rect.x,
+                entry.rect.x,
                 top - page.y_start,
-                node.rect.width,
+                entry.rect.width,
                 bottom - top,
             )
             .contains(x, y)
-        }
-        LayoutContent::Line(_) | LayoutContent::Spacing(_) => false,
-    }
+        })
 }
 
-// Whether `node` (as returned by `find_line_at`) should be treated as the
+// Whether `entry` (as returned by `LayoutIndex::entry_for_position`) should be treated as the
 // owner of `pos` for selection-rect attribution. The two carve-outs encode the
 // same idea — the endpoint sits on a structural container boundary, not in
 // the interior of a Line/Atom — but at different node kinds:
@@ -261,12 +254,12 @@ fn selected_external_atom_hit_test_in_node(
 //   the atom: leading edge with Downstream, or trailing edge with Upstream.
 //   The other two cases are container boundaries — the box machine claims them
 //   via its own phase transitions.
-fn attached(node: &LayoutNode, pos: &Position) -> bool {
-    match &node.content {
-        LayoutContent::Box(b) => b.nav.is_none(),
-        LayoutContent::Atom(a) => {
-            let leading = pos.offset == a.index && pos.affinity == Affinity::Downstream;
-            let trailing = pos.offset == a.index + 1 && pos.affinity == Affinity::Upstream;
+fn attached(layout_index: &LayoutIndex, entry: &LayoutEntry, pos: &Position) -> bool {
+    match entry.content(layout_index) {
+        Some(LayoutContent::Box(b)) => b.nav.is_none(),
+        Some(LayoutContent::Atom(atom)) => {
+            let leading = pos.offset == atom.index && pos.affinity == Affinity::Downstream;
+            let trailing = pos.offset == atom.index + 1 && pos.affinity == Affinity::Upstream;
             leading || trailing
         }
         _ => true,
@@ -311,10 +304,11 @@ fn text_area_height(line: &LayoutLine) -> f32 {
 
 fn visit_node(
     node: &LayoutNode,
+    layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
-    from_owner: Option<&LayoutNode>,
-    to_owner: Option<&LayoutNode>,
+    from_owner: Option<&LayoutEntry>,
+    to_owner: Option<&LayoutEntry>,
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
@@ -322,11 +316,30 @@ fn visit_node(
 ) {
     match &node.content {
         LayoutContent::Box(b) => visit_box(
-            node, b, from, to, from_owner, to_owner, phase, rects, pages, doc,
+            node,
+            b,
+            layout_index,
+            from,
+            to,
+            from_owner,
+            to_owner,
+            phase,
+            rects,
+            pages,
+            doc,
         ),
-        LayoutContent::Line(l) => {
-            visit_line(node, l, from, to, from_owner, to_owner, phase, rects, pages)
-        }
+        LayoutContent::Line(l) => visit_line(
+            node,
+            l,
+            layout_index,
+            from,
+            to,
+            from_owner,
+            to_owner,
+            phase,
+            rects,
+            pages,
+        ),
         LayoutContent::Atom(a) => visit_atom(node, a, from, to, phase, rects, pages, doc),
         LayoutContent::Spacing(_) => {}
     }
@@ -335,16 +348,17 @@ fn visit_node(
 fn visit_line(
     node: &LayoutNode,
     line: &LayoutLine,
+    layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
-    from_owner: Option<&LayoutNode>,
-    to_owner: Option<&LayoutNode>,
+    from_owner: Option<&LayoutEntry>,
+    to_owner: Option<&LayoutEntry>,
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
 ) {
-    let contains_from = from_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
-    let contains_to = to_owner.map(|n| std::ptr::eq(n, node)).unwrap_or(false);
+    let contains_from = from_owner.is_some_and(|entry| entry.is_node(layout_index, node));
+    let contains_to = to_owner.is_some_and(|entry| entry.is_node(layout_index, node));
 
     let hb_placeholder = node.rect.height * 0.15;
     // Without an explicit extension, a trailing hard_break enveloped by the
@@ -477,10 +491,11 @@ fn visit_atom(
 fn visit_box(
     node: &LayoutNode,
     bx: &LayoutBox,
+    layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
-    from_owner: Option<&LayoutNode>,
-    to_owner: Option<&LayoutNode>,
+    from_owner: Option<&LayoutEntry>,
+    to_owner: Option<&LayoutEntry>,
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
@@ -519,7 +534,16 @@ fn visit_box(
         let is_spacing = matches!(child.content, LayoutContent::Spacing(_));
 
         visit_node(
-            child, from, to, from_owner, to_owner, phase, rects, pages, doc,
+            child,
+            layout_index,
+            from,
+            to,
+            from_owner,
+            to_owner,
+            phase,
+            rects,
+            pages,
+            doc,
         );
 
         if !is_spacing {
@@ -849,8 +873,6 @@ mod tests {
             Position::new(NodeId::ROOT, 1),
         );
         let resolved = sel.resolve(&doc).unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rect = view
             .external_elements(&doc, Some(&sel))
             .into_iter()
@@ -859,9 +881,7 @@ mod tests {
             .bounds;
 
         assert!(
-            selection_hit_test(
-                tree,
-                pages,
+            view.selection_hit_test(
                 &resolved,
                 0,
                 rect.x + rect.width * 0.5,
@@ -1339,9 +1359,7 @@ mod tests {
 
         let sel = Selection::collapsed(Position::new(t, 2));
         let resolved = sel.resolve(&doc).unwrap();
-        let layout_tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
-        assert!(selection_endpoints(layout_tree, pages, &resolved).is_none());
+        assert!(view.selection_endpoints(&resolved).is_none());
     }
 
     #[test]
@@ -1351,9 +1369,7 @@ mod tests {
         let resolved = Selection::collapsed(Position::new(t, 2))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
-        assert!(!selection_hit_test(tree, pages, &resolved, 0, 5.0, 5.0));
+        assert!(!view.selection_hit_test(&resolved, 0, 5.0, 5.0));
     }
 
     #[test]
@@ -1363,13 +1379,9 @@ mod tests {
         let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rect = view.selection_rects(&resolved)[0].rect;
 
-        assert!(selection_hit_test(
-            tree,
-            pages,
+        assert!(view.selection_hit_test(
             &resolved,
             0,
             rect.x + rect.width * 0.5,
@@ -1384,13 +1396,9 @@ mod tests {
         let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rect = view.selection_rects(&resolved)[0].rect;
 
-        assert!(!selection_hit_test(
-            tree,
-            pages,
+        assert!(!view.selection_hit_test(
             &resolved,
             0,
             rect.x + rect.width + 5.0,
@@ -1410,8 +1418,6 @@ mod tests {
         let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 18))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rects = view.selection_rects(&resolved);
         let first = rects[0].rect;
         let last = rects[1].rect;
@@ -1421,9 +1427,7 @@ mod tests {
 
         let probe_x = first.x + first.width + (max_x - (first.x + first.width)) * 0.5;
         let probe_y = first.y + first.height * 0.5;
-        assert!(selection_hit_test(
-            tree, pages, &resolved, 0, probe_x, probe_y
-        ));
+        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
     }
 
     #[test]
@@ -1446,8 +1450,6 @@ mod tests {
         let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 5))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rects = view.selection_rects(&resolved);
         let first = rects[0].rect;
         let last = rects.last().unwrap().rect;
@@ -1460,9 +1462,7 @@ mod tests {
 
         let probe_x = min_x + (last.x - min_x) * 0.5;
         let probe_y = last.y + last.height * 0.5;
-        assert!(selection_hit_test(
-            tree, pages, &resolved, 0, probe_x, probe_y
-        ));
+        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
     }
 
     #[test]
@@ -1481,8 +1481,6 @@ mod tests {
         let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 6))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rects: Vec<_> = view
             .selection_rects(&resolved)
             .into_iter()
@@ -1497,9 +1495,7 @@ mod tests {
 
         let probe_y = (gap_top + gap_bottom) * 0.5;
         let probe_x = a.x.min(b.x) + 1.0;
-        assert!(selection_hit_test(
-            tree, pages, &resolved, 0, probe_x, probe_y
-        ));
+        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
     }
 
     #[test]
@@ -1514,16 +1510,12 @@ mod tests {
         let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 18))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rects = view.selection_rects(&resolved);
         let last = rects[1].rect;
 
         let probe_x = last.x + last.width + 50.0;
         let probe_y = last.y + last.height * 0.5;
-        assert!(!selection_hit_test(
-            tree, pages, &resolved, 0, probe_x, probe_y
-        ));
+        assert!(!view.selection_hit_test(&resolved, 0, probe_x, probe_y));
     }
 
     #[test]
@@ -1533,18 +1525,12 @@ mod tests {
         let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
             .resolve(&doc)
             .unwrap();
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
         let rect = view.selection_rects(&resolved)[0].rect;
         let probe_x = rect.x + rect.width * 0.5;
         let probe_y = rect.y + rect.height * 0.5;
 
-        assert!(selection_hit_test(
-            tree, pages, &resolved, 0, probe_x, probe_y
-        ));
-        assert!(!selection_hit_test(
-            tree, pages, &resolved, 1, probe_x, probe_y
-        ));
+        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
+        assert!(!view.selection_hit_test(&resolved, 1, probe_x, probe_y));
     }
 
     #[test]

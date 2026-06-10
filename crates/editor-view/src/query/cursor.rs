@@ -3,10 +3,9 @@ use editor_macros::ffi;
 use editor_state::Position;
 use serde::{Deserialize, Serialize};
 
-use crate::page::LayoutPage;
 use crate::paginate::*;
 
-use super::search;
+use super::layout_index::LayoutIndex;
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -18,24 +17,14 @@ pub struct CursorMetrics {
 }
 
 pub fn cursor_metrics(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     pos: &Position,
     metrics_override: Option<(f32, f32)>,
 ) -> Option<CursorMetrics> {
-    let line_node = search::find_line_at(tree, pos)?;
-    let page_idx = pages
-        .iter()
-        .position(|p| line_node.rect.y >= p.y_start && line_node.rect.y < p.y_end)?;
-    let y_start = pages[page_idx].y_start;
-    let line_rect = Rect::from_xywh(
-        line_node.rect.x,
-        line_node.rect.y - y_start,
-        line_node.rect.width,
-        line_node.rect.height,
-    );
+    let entry = layout_index.entry_for_position(pos)?;
+    let page_rect = layout_index.page_rect(entry.rect)?;
 
-    match &line_node.content {
+    match entry.content(layout_index)? {
         LayoutContent::Line(l) => {
             let x = x_at_offset(l, pos);
             let (cursor_ascent, cursor_descent) =
@@ -43,15 +32,15 @@ pub fn cursor_metrics(
             let cursor_height = cursor_ascent + cursor_descent;
             // Anchor to baseline so mixed-font lines keep the caret aligned with the run's glyphs.
             let caret = Rect::from_xywh(
-                line_node.rect.x + x,
-                line_node.rect.y + l.baseline - cursor_ascent - y_start,
+                entry.rect.x + x,
+                page_rect.rect.y + l.baseline - cursor_ascent,
                 1.0,
                 cursor_height,
             );
             Some(CursorMetrics {
-                page_idx,
+                page_idx: page_rect.page_idx,
                 caret,
-                line: line_rect,
+                line: page_rect.rect,
             })
         }
         // Normalize guarantees a collapsed selection never points at an atom, so this
@@ -70,6 +59,7 @@ pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
 mod tests {
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
+    use crate::page::LayoutPage;
     use crate::style::*;
     use editor_common::{EdgeInsets, Size};
     use editor_model::NodeId;
@@ -96,7 +86,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -124,6 +113,10 @@ mod tests {
         }
     }
 
+    fn layout_index(tree: &LayoutTree, pages: &[LayoutPage]) -> LayoutIndex {
+        LayoutIndex::new(tree.clone(), pages)
+    }
+
     #[test]
     fn cursor_rect_at_offset_0() {
         let id = NodeId::new();
@@ -132,7 +125,7 @@ mod tests {
         let pos = Position::new(id, 0);
         let CursorMetrics {
             page_idx, caret, ..
-        } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        } = cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
         // Caret anchored to baseline: caret.y = baseline(16) - cursor_ascent(14) = 2.
         assert_eq!(page_idx, 0);
@@ -147,7 +140,8 @@ mod tests {
         let tree = make_tree(id);
         let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(id, 3);
-        let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics { caret, .. } =
+            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
         assert_eq!(caret.x, 30.0);
     }
@@ -166,7 +160,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -194,7 +187,8 @@ mod tests {
         };
         let pages = [LayoutPage::new(0.0, 800.0, Size::new(240.0, 800.0))];
         let pos = Position::new(id, 2);
-        let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics { caret, .. } =
+            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
         // x = line.rect.x(20) + run.x(0) + advances[0..2](20) = 40
         assert_eq!(caret.x, 40.0);
@@ -215,7 +209,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -248,7 +241,7 @@ mod tests {
         let pos = Position::new(id, 0);
         let CursorMetrics {
             page_idx, caret, ..
-        } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        } = cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
         assert_eq!(page_idx, 1);
         // Page-local baseline-anchored y: line.y(500) + baseline(16) - cursor_ascent(14) - page_start(400) = 102.
@@ -269,7 +262,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -297,7 +289,8 @@ mod tests {
         };
         let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(id, 0);
-        let CursorMetrics { caret, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics { caret, .. } =
+            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
         assert_eq!(caret.x, 32.0);
     }
@@ -317,7 +310,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -349,7 +341,7 @@ mod tests {
             page_idx,
             caret,
             line,
-        } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        } = cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
         assert_eq!(page_idx, 0);
         // caret: baseline(22) - cursor_ascent(14) = 8 (top), height = 18.
@@ -382,7 +374,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -400,7 +391,7 @@ mod tests {
         };
         let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
         let pos = Position::new(para_id, 0);
-        assert!(cursor_metrics(&tree, &pages, &pos, None).is_none());
+        assert!(cursor_metrics(&layout_index(&tree, &pages), &pos, None).is_none());
     }
 
     #[test]
@@ -418,7 +409,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -470,7 +460,8 @@ mod tests {
             offset: 2,
             affinity: editor_state::Affinity::Downstream,
         };
-        let CursorMetrics { caret, line, .. } = cursor_metrics(&tree, &pages, &pos, None).unwrap();
+        let CursorMetrics { caret, line, .. } =
+            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
         assert!(caret.y >= 20.0);
         assert_eq!(line.y, 20.0);
         assert_eq!(caret.x, 0.0);
@@ -490,7 +481,6 @@ mod tests {
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment: Alignment::Start,
-                        scope: false,
                         decorations: vec![],
                         monolithic: false,
                     },
@@ -522,7 +512,7 @@ mod tests {
         ];
         let pos = Position::new(id, 0);
         let CursorMetrics { page_idx, line, .. } =
-            cursor_metrics(&tree, &pages, &pos, None).unwrap();
+            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
         assert_eq!(page_idx, 1);
         // line.y = 500 - 400 = 100 (페이지 로컬)
@@ -555,7 +545,7 @@ mod tests {
         let expected_x = line_node.rect.x + gap.x + gap.width;
 
         let pos = Position::new(p1, 1);
-        let metrics = cursor_metrics(tree, pages, &pos, None).unwrap();
+        let metrics = cursor_metrics(&layout_index(tree, pages), &pos, None).unwrap();
         assert!(
             (metrics.caret.x - expected_x).abs() < 0.5,
             "caret x {} must equal gap end {}",

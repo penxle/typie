@@ -1,8 +1,8 @@
 use editor_commands::{self as commands};
-use editor_model::NodeId;
+use editor_model::{Doc, NodeId};
 use editor_state::{
     PendingModifiers, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    cell_rect_selection, enclosing_table, enclosing_table_cell, farther_endpoint,
+    cell_rect_selection, enclosing_table, enclosing_table_cell,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion, table_cell_ids,
 };
@@ -192,7 +192,14 @@ fn resolve_extend_to_selection(
                         .as_ref()
                         .and_then(|selection| selection.resolve(doc))
                         .is_some_and(|resolved| resolved.as_cell_rect().is_some());
-                    if (head_cell != anchor_cell || is_cell_mode)
+                    let is_same_cell_exact_box_hit = head_cell == anchor_cell
+                        && editor.view.node_exact_box_hit_test(
+                            head_page,
+                            head_x,
+                            head_y,
+                            anchor_cell,
+                        );
+                    if (head_cell != anchor_cell || is_cell_mode || is_same_cell_exact_box_hit)
                         && let Some(selection) = cell_rect_selection(doc, anchor_cell, head_cell)
                     {
                         return Some(selection);
@@ -203,39 +210,86 @@ fn resolve_extend_to_selection(
         }
     }
 
-    let head_hit = editor.view.hit_test_extending(head_page, head_x, head_y)?;
+    let head_hit = editor
+        .view
+        .hit_test_extending(doc, anchor, head_page, head_x, head_y)?;
 
     let selection = if let Some(base_selection) = base_selection {
-        let initial = base_selection.resolve(doc)?;
-        let head = head_hit.resolve(doc)?;
-        let initial_from = Position::from(initial.from());
-        let initial_to = Position::from(initial.to());
-
-        if head.from() < initial.from() {
-            let head = farther_endpoint(doc, initial_to, head_hit.anchor, head_hit.head);
-            Selection::new(initial_to, head)
-        } else if head.to() > initial.to() {
-            let head = farther_endpoint(doc, initial_from, head_hit.anchor, head_hit.head);
-            Selection::new(initial_from, head)
-        } else {
-            Selection::new(initial_from, initial_to)
-        }
+        extend_base_selection(doc, base_selection, head_hit)?
     } else {
-        let head = farther_endpoint(doc, anchor, head_hit.anchor, head_hit.head);
-        Selection::new(anchor, head)
+        extend_drag_hit(doc, anchor, head_hit)?
     };
 
     (!selection.is_collapsed()).then_some(selection)
 }
 
+fn extend_base_selection(
+    doc: &Doc,
+    base_selection: Selection,
+    head_hit: Selection,
+) -> Option<Selection> {
+    let initial = base_selection.resolve(doc)?;
+    let head = head_hit.resolve(doc)?;
+    let initial_from = Position::from(initial.from());
+    let initial_to = Position::from(initial.to());
+
+    if head.from() < initial.from() {
+        extend_drag_hit(doc, initial_to, head_hit)
+    } else if head.to() > initial.to() {
+        extend_drag_hit(doc, initial_from, head_hit)
+    } else {
+        Some(Selection::new(initial_from, initial_to))
+    }
+}
+
+fn extend_drag_hit(doc: &Doc, anchor: Position, hit: Selection) -> Option<Selection> {
+    let anchor_resolved = anchor.resolve(doc)?;
+    let hit_resolved = hit.resolve(doc)?;
+
+    if &anchor_resolved <= hit_resolved.from() {
+        Some(Selection::new(anchor, Position::from(hit_resolved.to())))
+    } else if &anchor_resolved >= hit_resolved.to() {
+        Some(Selection::new(anchor, Position::from(hit_resolved.from())))
+    } else {
+        Some(Selection::new(
+            Position::from(hit_resolved.from()),
+            Position::from(hit_resolved.to()),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Modifier;
-    use editor_state::{Composition, PendingModifier, Position, Selection, StableSelection};
+    use editor_model::{Modifier, PlainNode};
+    use editor_state::{
+        Affinity, Composition, PendingModifier, Position, Selection, StableSelection,
+    };
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
+
+    fn assert_table_selection_visible(editor: &Editor, table: NodeId) {
+        let doc = &editor.state().doc;
+        let sel = editor.state().selection.expect("selection exists in test");
+        let resolved = sel.resolve(doc).expect("selection resolves in test");
+        let rects = editor.view.selection_rects(&resolved);
+        assert!(
+            rects
+                .iter()
+                .any(|rect| rect.meta == editor_view::SelectionRectKind::Block),
+            "table selection should render as a block rect, got {rects:?}"
+        );
+        let block_state = editor.block_state().expect("block state exists in test");
+        assert!(
+            block_state
+                .nodes
+                .iter()
+                .any(|block| block.id == table && matches!(block.node, PlainNode::Table(_))),
+            "block state should include the selected table, got {:?}",
+            block_state.nodes
+        );
+    }
 
     #[test]
     fn probe_set_same_selection_noop() {
@@ -423,7 +477,7 @@ mod tests {
                 anchor: initial.anchor,
                 head_page: 0,
                 head_x: 9999.0,
-                head_y: 5.0,
+                head_y: 30.0,
                 base_selection: Some(initial),
             },
         });
@@ -453,7 +507,7 @@ mod tests {
                 anchor: Position::new(t, 1),
                 head_page: 0,
                 head_x: 9999.0,
-                head_y: 5.0,
+                head_y: 30.0,
                 base_selection: None,
             },
         });
@@ -486,6 +540,591 @@ mod tests {
 
         assert_eq!(editor.state().selection, before);
         assert!(!before.expect("selection exists in test").is_collapsed());
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_block_gap_from_text_middle_selects_to_block_edge() {
+        let (state, p1, t1, p2) = state! {
+            doc {
+                root {
+                    p1: paragraph { t1: text("hello") }
+                    p2: paragraph { text("world") }
+                }
+            }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let p1_rect = editor.view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = editor.view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 2),
+                head_page: 0,
+                head_x: p1_rect.x + p1_rect.width / 2.0,
+                head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(!sel.is_collapsed(), "block-gap drag collapsed to {:?}", sel);
+        assert_eq!(sel.anchor, Position::new(t1, 2));
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(sel.head.offset, 5);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_up_to_block_gap_from_text_middle_selects_to_block_edge() {
+        let (state, p1, p2, t2) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("hello") }
+                    p2: paragraph { t2: text("world") }
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let p1_rect = editor.view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = editor.view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t2, 2),
+                head_page: 0,
+                head_x: p2_rect.x + p2_rect.width / 2.0,
+                head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(!sel.is_collapsed(), "block-gap drag collapsed to {:?}", sel);
+        assert_eq!(sel.anchor, Position::new(t2, 2));
+        assert_eq!(sel.head.node_id, t2);
+        assert_eq!(sel.head.offset, 0);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_top_margin_from_document_middle_selects_to_document_start() {
+        let (state, p1, t1, _p2, t2) = state! {
+            doc {
+                root {
+                    p1: paragraph { t1: text("hello world") }
+                    _p2: paragraph { t2: text("later text") }
+                }
+            }
+            selection: (t2, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let p1_rect = editor.view.node_box_rects(&[p1])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t2, 5),
+                head_page: 0,
+                head_x: p1_rect.x + p1_rect.width / 2.0,
+                head_y: -100.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(
+            !sel.is_collapsed(),
+            "top-margin drag collapsed to {:?}",
+            sel
+        );
+        assert_eq!(sel.anchor, Position::new(t2, 5));
+        assert_eq!(sel.head, Position::new(t1, 0));
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_monolithic_internal_block_gap_selects_to_block_edge() {
+        let (state, callout, p1, t1, p2) = state! {
+            doc {
+                root {
+                    callout: callout {
+                        p1: paragraph { t1: text("one") }
+                        p2: paragraph { text("two") }
+                    }
+                }
+            }
+            selection: (t1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let callout_rect = editor.view.node_box_rects(&[callout])[0].rect;
+        let p1_rect = editor.view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = editor.view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 1),
+                head_page: 0,
+                head_x: callout_rect.x + callout_rect.width / 2.0,
+                head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(!sel.is_collapsed(), "block-gap drag collapsed to {:?}", sel);
+        assert_eq!(sel.anchor, Position::new(t1, 1));
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(sel.head.offset, 3);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_empty_paragraph_from_text_middle_uses_empty_caret() {
+        let (state, t1, p2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("before") }
+                    p2: paragraph {}
+                }
+            }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let p2_metrics = editor
+            .view
+            .cursor_metrics(&editor.state, &Position::new(p2, 0))
+            .expect("empty paragraph has cursor metrics");
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 2),
+                head_page: p2_metrics.page_idx,
+                head_x: p2_metrics.caret.x,
+                head_y: p2_metrics.line.y + p2_metrics.line.height / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t1, 2));
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: p2,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            }
+        );
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_trailing_empty_line_uses_paragraph_caret() {
+        let (state, p1, _t1, t2) = state! {
+            doc {
+                root {
+                    p1: paragraph { _t1: text("before") hard_break }
+                    paragraph { t2: text("after") }
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let line_metrics = editor
+            .view
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
+            .expect("trailing empty line has cursor metrics");
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t2, 2),
+                head_page: line_metrics.page_idx,
+                head_x: line_metrics.caret.x,
+                head_y: line_metrics.line.y + line_metrics.line.height / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t2, 2));
+        assert_eq!(sel.head.node_id, p1);
+        assert_eq!(sel.head.offset, 2);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_before_callout_to_gap_after_callout_selects_callout() {
+        let (state, t1, callout, p2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("before") }
+                    callout: callout {
+                        paragraph { text("inside") }
+                    }
+                    p2: paragraph { text("after") }
+                }
+            }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let callout_rect = editor.view.node_box_rects(&[callout])[0].rect;
+        let p2_rect = editor.view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            callout_rect.bottom() < p2_rect.y,
+            "test requires a visible block gap"
+        );
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 2),
+                head_page: 0,
+                head_x: callout_rect.x + callout_rect.width / 2.0,
+                head_y: (callout_rect.bottom() + p2_rect.y) / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t1, 2));
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            }
+        );
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_after_callout_to_gap_after_callout_excludes_callout() {
+        let (state, callout, p2, t2) = state! {
+            doc {
+                root {
+                    paragraph { text("before") }
+                    callout: callout {
+                        paragraph { text("inside") }
+                    }
+                    p2: paragraph { t2: text("after") }
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let callout_rect = editor.view.node_box_rects(&[callout])[0].rect;
+        let p2_rect = editor.view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            callout_rect.bottom() < p2_rect.y,
+            "test requires a visible block gap"
+        );
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t2, 2),
+                head_page: 0,
+                head_x: p2_rect.x + p2_rect.width / 2.0,
+                head_y: (callout_rect.bottom() + p2_rect.y) / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t2, 2));
+        assert_eq!(sel.head, Position::new(t2, 0));
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_before_table_to_inside_table_selects_table() {
+        let (state, t1, table, cell) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("before") }
+                    table: table {
+                        table_row {
+                            cell: table_cell { paragraph { text("inside") } }
+                        }
+                    }
+                    paragraph { text("after") }
+                }
+            }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let cell_rect = editor.view.node_box_rects(&[cell])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 2),
+                head_page: 0,
+                head_x: cell_rect.x + cell_rect.width / 2.0,
+                head_y: cell_rect.y + cell_rect.height / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t1, 2));
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+            "dragging from before the table into a cell should select the whole table"
+        );
+        assert_eq!(editor.state().doc.node(table).unwrap().index(), Some(1));
+        assert_table_selection_visible(&editor, table);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_before_table_to_inside_multi_cell_table_selects_table() {
+        let (state, t1, table, cell) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("before") }
+                    table: table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            cell: table_cell { paragraph { text("b") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("c") } }
+                            table_cell { paragraph { text("d") } }
+                        }
+                    }
+                    paragraph { text("after") }
+                }
+            }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let cell_rect = editor.view.node_box_rects(&[cell])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 2),
+                head_page: 0,
+                head_x: cell_rect.x + cell_rect.width / 2.0,
+                head_y: cell_rect.y + cell_rect.height / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t1, 2));
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+            "dragging from before the table into any cell should select the whole table"
+        );
+        assert_table_selection_visible(&editor, table);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_after_table_to_inside_table_selects_table() {
+        let (state, table, cell, t2) = state! {
+            doc {
+                root {
+                    paragraph { text("before") }
+                    table: table {
+                        table_row {
+                            cell: table_cell { paragraph { text("inside") } }
+                        }
+                    }
+                    paragraph { t2: text("after") }
+                }
+            }
+            selection: (t2, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let cell_rect = editor.view.node_box_rects(&[cell])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t2, 2),
+                head_page: 0,
+                head_x: cell_rect.x + cell_rect.width / 2.0,
+                head_y: cell_rect.y + cell_rect.height / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(t2, 2));
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 1,
+                affinity: Affinity::Downstream,
+            },
+            "dragging from after the table into a cell should select the whole table"
+        );
+        assert_eq!(editor.state().doc.node(table).unwrap().index(), Some(1));
+        assert_table_selection_visible(&editor, table);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_before_table_boundary_to_inside_table_selects_table() {
+        let (state, root, table, cell) = state! {
+            doc {
+                root: root {
+                    paragraph { text("before") }
+                    table: table {
+                        table_row {
+                            cell: table_cell { paragraph { text("inside") } }
+                        }
+                    }
+                    paragraph { text("after") }
+                }
+            }
+            selection: (root, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let cell_rect = editor.view.node_box_rects(&[cell])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(root, 1),
+                head_page: 0,
+                head_x: cell_rect.x + cell_rect.width / 2.0,
+                head_y: cell_rect.y + cell_rect.height / 2.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(
+            sel.is_unit_node_selection(&editor.state().doc),
+            "dragging from the table's front boundary into a cell should select the table, got {sel:?}"
+        );
+        assert_eq!(editor.state().doc.node(table).unwrap().index(), Some(1));
+        assert_table_selection_visible(&editor, table);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_inside_cell_to_same_cell_padding_selects_cell() {
+        let (state, cell, t1) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            cell: table_cell { paragraph { t1: text("inside") } }
+                            table_cell { paragraph { text("next") } }
+                        }
+                    }
+                }
+            }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let cell_rect = editor.view.node_box_rects(&[cell])[0].rect;
+        let head_x = cell_rect.x + cell_rect.width / 2.0;
+        let head_y = cell_rect.y + 4.0;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 2),
+                head_page: 0,
+                head_x,
+                head_y,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let resolved = sel.resolve(&editor.state().doc).unwrap();
+        let cell_rect = resolved
+            .as_cell_rect()
+            .expect("dragging to same-cell padding should select that cell");
+        assert_eq!(cell_rect.anchor_cell.id(), cell);
+        assert_eq!(cell_rect.head_cell.id(), cell);
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_inside_callout_to_callout_chrome_selects_callout() {
+        let (state, callout, t1) = state! {
+            doc {
+                root {
+                    callout: callout {
+                        paragraph { t1: text("inside") }
+                    }
+                    paragraph { text("after") }
+                }
+            }
+            selection: (t1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let callout_rect = editor.view.node_box_rects(&[callout])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 2),
+                head_page: 0,
+                head_x: callout_rect.x + callout_rect.width / 2.0,
+                head_y: callout_rect.y + 4.0,
+                base_selection: None,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(sel.is_unit_node_selection(&editor.state().doc));
+        assert_eq!(
+            sel.anchor,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            }
+        );
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            }
+        );
         assert!(!editor.history.can_undo());
     }
 

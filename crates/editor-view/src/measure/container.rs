@@ -116,7 +116,6 @@ pub fn layout_vertical(
 pub struct PaddedLayoutConfig {
     pub padding: EdgeInsets,
     pub border: EdgeInsets,
-    pub scope: bool,
     pub alignment: Alignment,
     pub page_break_policy: PageBreakPolicy,
 }
@@ -132,7 +131,6 @@ pub fn layout_padded(
     let PaddedLayoutConfig {
         padding,
         border,
-        scope,
         alignment,
         page_break_policy,
     } = config;
@@ -151,7 +149,6 @@ pub fn layout_padded(
                 border,
                 border_mode: BorderMode::Separate,
                 alignment,
-                scope,
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
@@ -187,7 +184,6 @@ mod tests {
             PaddedLayoutConfig {
                 padding: EdgeInsets::ZERO,
                 border: EdgeInsets::ZERO,
-                scope: false,
                 alignment: Alignment::Start,
                 page_break_policy: PageBreakPolicy::Auto,
             },

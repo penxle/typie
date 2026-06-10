@@ -4,8 +4,8 @@ use editor_model::{Doc, Node, NodeId};
 use editor_state::Selection;
 use serde::{Deserialize, Serialize};
 
-use crate::page::{LayoutPage, PageRect};
-use crate::paginate::{LayoutContent, LayoutNode, LayoutTree};
+use crate::paginate::LayoutContent;
+use crate::query::layout_index::LayoutIndex;
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -29,78 +29,39 @@ pub struct ExternalElement {
 }
 
 pub(crate) fn external_elements(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
+    layout_index: &LayoutIndex,
     doc: &Doc,
     selection: Option<&Selection>,
 ) -> Vec<ExternalElement> {
     let selection = selection.and_then(|s| s.resolve(doc));
     let mut elements = Vec::new();
-    for (page_idx, page) in pages.iter().enumerate() {
-        collect_from_node(
-            &tree.root,
-            PageRect::new(
-                page_idx,
-                Rect::from_xywh(0.0, page.y_start, page.size.width, page.size.height),
-            ),
-            doc,
-            selection.as_ref(),
-            &mut elements,
-        );
-    }
-    elements
-}
-
-fn collect_from_node(
-    node: &LayoutNode,
-    page: PageRect,
-    doc: &Doc,
-    selection: Option<&editor_state::ResolvedSelection<'_>>,
-    elements: &mut Vec<ExternalElement>,
-) {
-    if !intersects_page(node, &page) {
-        return;
-    }
-
-    match &node.content {
-        LayoutContent::Box(b) => {
-            for child in &b.children {
-                collect_from_node(child, page.without_meta(), doc, selection, elements);
-            }
-        }
-        LayoutContent::Atom(atom) => {
-            let Some(data) = external_element_data(doc, atom.node_id) else {
-                return;
+    for (page_idx, page) in layout_index.pages().iter().enumerate() {
+        for entry in layout_index.entries_on_page(page_idx) {
+            let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
+                continue;
             };
-            let bounds = Rect::from_xywh(
-                node.rect.x,
-                node.rect.y - page.rect.y,
-                node.rect.width,
-                node.rect.height,
-            );
-            let is_selected = selection.is_some_and(|sel| {
+            let Some(data) = external_element_data(doc, atom.node_id) else {
+                continue;
+            };
+            let is_selected = selection.as_ref().is_some_and(|sel| {
                 doc.node(atom.node_id)
                     .is_some_and(|node_ref| sel.contains_subtree(&node_ref))
             });
             elements.push(ExternalElement {
-                page_idx: page.page_idx,
+                page_idx,
                 node_id: atom.node_id,
-                bounds,
+                bounds: Rect::from_xywh(
+                    entry.rect.x,
+                    entry.rect.y - page.y_start,
+                    entry.rect.width,
+                    entry.rect.height,
+                ),
                 data,
                 is_selected,
             });
         }
-        LayoutContent::Line(_) | LayoutContent::Spacing(_) => {}
     }
-}
-
-fn intersects_page(node: &LayoutNode, page: &PageRect) -> bool {
-    let node_top = node.rect.y;
-    let node_bottom = node.rect.y + node.rect.height;
-    let page_top = page.rect.y;
-    let page_bottom = page.rect.y + page.rect.height;
-
-    node_bottom > page_top && node_top < page_bottom
+    elements
 }
 
 fn external_element_data(doc: &Doc, node_id: NodeId) -> Option<ExternalElementData> {

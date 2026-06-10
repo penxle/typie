@@ -30,7 +30,6 @@ pub struct BoxStyle {
     pub border: EdgeInsets,
     pub border_mode: BorderMode,
     pub alignment: Alignment,
-    pub scope: bool,
     pub decorations: Vec<Decoration>,
     pub monolithic: bool,
 }

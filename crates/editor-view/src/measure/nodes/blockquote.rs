@@ -49,7 +49,6 @@ pub fn measure_blockquote(
                         left: BQ_LINE_WIDTH,
                         ..EdgeInsets::ZERO
                     },
-                    scope: false,
                     alignment: Alignment::Start,
                     page_break_policy: PageBreakPolicy::Auto,
                 },
@@ -69,7 +68,6 @@ pub fn measure_blockquote(
                 PaddedLayoutConfig {
                     padding,
                     border: EdgeInsets::ZERO,
-                    scope: false,
                     alignment: Alignment::Start,
                     page_break_policy: PageBreakPolicy::Auto,
                 },
@@ -135,7 +133,6 @@ pub fn measure_blockquote(
                         border: EdgeInsets::ZERO,
                         border_mode: BorderMode::Separate,
                         alignment,
-                        scope: false,
                         decorations: vec![],
                         monolithic: node.spec().monolithic,
                     },

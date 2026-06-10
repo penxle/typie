@@ -1,8 +1,11 @@
-use editor_common::{EdgeInsets, Movement};
+use editor_common::{EdgeInsets, Movement, Rect};
 use editor_crdt::Op;
 use editor_model::{Doc, DocOp, LayoutMode, Node, NodeId};
 use editor_resource::Resource;
-use editor_state::{Position, ResolvedSelection, Selection, State, resolve_effective_modifiers_at};
+use editor_state::{
+    Affinity, Position, ResolvedPosition, ResolvedSelection, Selection, State,
+    resolve_effective_modifiers_at,
+};
 use std::sync::{Arc, Mutex};
 
 use crate::ExternalElement;
@@ -12,7 +15,9 @@ use crate::measure::text::strut::compute_strut;
 use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
 use crate::page_fragment::PageFragmentTree;
-use crate::paginate::{LayoutTree, Paginator};
+use crate::paginate::{
+    LayoutAtom, LayoutContent, LayoutLine, LayoutNode, NavUnit, Paginator, SpacingKind,
+};
 use crate::query;
 use crate::query::{CursorMetrics, PointerStyle, SelectionEndpoints, SelectionRect};
 use crate::view_state::{GapPhantom, GroupDecoration, PendingStyle, ViewState};
@@ -31,10 +36,10 @@ pub struct View {
 
 #[derive(Debug)]
 struct LayoutResult {
-    tree: LayoutTree,
     pages: Vec<LayoutPage>,
     page_fragments: Vec<PageFragmentTree>,
     content_width: f32,
+    layout_index: query::layout_index::LayoutIndex,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -195,11 +200,14 @@ impl View {
 
         let paginated = paginator.paginate(measured_tree);
 
+        let pages = paginated.pages;
+        let page_fragments = paginated.page_fragments;
+        let layout_index = query::layout_index::LayoutIndex::new(paginated.tree, &pages);
         self.layout = Some(LayoutResult {
-            tree: paginated.tree,
-            pages: paginated.pages,
-            page_fragments: paginated.page_fragments,
+            pages,
+            page_fragments,
             content_width,
+            layout_index,
         });
     }
 
@@ -212,31 +220,45 @@ impl View {
     }
 
     pub fn hit_test(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
-        let result = self.layout.as_ref()?;
-        let page = result.pages.get(page_idx)?;
-        let hit = query::HitTester::for_page(&result.tree, page, x, y);
-        let target_x = hit.target_x();
-        hit.exact_target()
-            .or_else(|| hit.closest_target())
-            .map(|target| target.selection(target_x))
+        let layout_index = &self.layout.as_ref()?.layout_index;
+        let point = layout_index.point(page_idx, x, y)?;
+        layout_index
+            .exact_entry(point, is_text_or_atom_hit_entry)
+            .or_else(|| layout_index.closest_entry(point, is_text_or_atom_hit_entry))
+            .and_then(|entry| text_or_atom_selection_for_entry(layout_index, entry, point.x))
     }
 
-    pub fn hit_test_extending(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
+    pub fn hit_test_extending(
+        &self,
+        doc: &Doc,
+        anchor: Position,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> Option<Selection> {
         let result = self.layout.as_ref()?;
-        let page = result.pages.get(page_idx)?;
-        let hit = query::HitTester::for_page(&result.tree, page, x, y);
-        let target_x = hit.target_x();
-        hit.exact_target()
-            .map(|target| target.selection(target_x))
-            .or_else(|| {
-                let target = hit.closest_target()?;
-                Some(query::selection_drag::selection_from_closest_target(
-                    &result.tree.root,
-                    target,
-                    target_x,
-                    hit.document_y(),
-                ))
-            })
+        let point = result.layout_index.point(page_idx, x, y)?;
+        let anchor = anchor.resolve(doc)?;
+
+        if let Some(entry) = result
+            .layout_index
+            .exact_entry(point, is_drag_exact_hit_entry)
+        {
+            return match entry.content(&result.layout_index) {
+                Some(LayoutContent::Line(_) | LayoutContent::Atom(_)) => {
+                    text_or_atom_selection_for_entry(&result.layout_index, entry, point.x)
+                }
+                Some(LayoutContent::Box(b)) if b.nav.is_some() => b.nav.map(select_unit),
+                Some(LayoutContent::Spacing(SpacingKind::Gap { .. })) => {
+                    drag_boundary_fallback(&result.layout_index, doc, &anchor, point)
+                }
+                Some(LayoutContent::Box(_) | LayoutContent::Spacing(SpacingKind::Fill)) | None => {
+                    None
+                }
+            };
+        }
+
+        drag_boundary_fallback(&result.layout_index, doc, &anchor, point)
     }
 
     pub fn drop_target_at(
@@ -247,7 +269,7 @@ impl View {
         y: f32,
     ) -> Option<crate::DropTarget> {
         let result = self.layout.as_ref()?;
-        query::drop_target_at(&result.tree, &result.pages, doc, page_idx, x, y)
+        query::drop_target_at(&result.layout_index, doc, page_idx, x, y)
     }
 
     pub fn interactive_hit_test(
@@ -258,18 +280,14 @@ impl View {
         y: f32,
     ) -> Option<crate::query::InteractiveHit> {
         let result = self.layout.as_ref()?;
-        let page = result.pages.get(page_idx)?;
-        crate::query::interactive_hit_test(&result.tree, page, doc, x, y)
+        crate::query::interactive_hit_test(&result.layout_index, doc, page_idx, x, y)
     }
 
     pub fn page_link_rects(&self, doc: &Doc, page_idx: usize) -> Vec<crate::query::LinkRect> {
         let Some(result) = self.layout.as_ref() else {
             return Vec::new();
         };
-        let Some(page) = result.pages.get(page_idx) else {
-            return Vec::new();
-        };
-        query::page_link_rects(&result.tree, page, page_idx, doc)
+        query::page_link_rects(&result.layout_index, page_idx, doc)
     }
 
     pub fn link_rects(&self, doc: &Doc) -> Vec<crate::query::LinkRect> {
@@ -277,8 +295,8 @@ impl View {
             return Vec::new();
         };
         let mut out = Vec::new();
-        for (idx, page) in result.pages.iter().enumerate() {
-            out.extend(query::page_link_rects(&result.tree, page, idx, doc));
+        for idx in 0..result.pages.len() {
+            out.extend(query::page_link_rects(&result.layout_index, idx, doc));
         }
         out
     }
@@ -291,8 +309,7 @@ impl View {
         y: f32,
     ) -> Option<crate::query::LinkRect> {
         let result = self.layout.as_ref()?;
-        let page = result.pages.get(page_idx)?;
-        query::link_hit_test(&result.tree, page, page_idx, doc, x, y)
+        query::link_hit_test(&result.layout_index, page_idx, doc, x, y)
     }
 
     pub fn pointer_style_at(
@@ -304,10 +321,9 @@ impl View {
         read_only: bool,
     ) -> Option<PointerStyle> {
         let result = self.layout.as_ref()?;
-        let page = result.pages.get(page_idx)?;
         Some(crate::query::pointer_style_at(
-            &result.tree,
-            page,
+            &result.layout_index,
+            page_idx,
             doc,
             x,
             y,
@@ -323,7 +339,7 @@ impl View {
     ) -> Option<Selection> {
         let result = self.layout.as_ref()?;
         let (selection, new_preferred_x) = query::resolve_movement(
-            &result.tree,
+            &result.layout_index,
             pos,
             movement,
             &self.viewport,
@@ -336,14 +352,14 @@ impl View {
 
     pub fn editable_position_inside(&self, node_id: NodeId, at_end: bool) -> Option<Position> {
         let result = self.layout.as_ref()?;
-        query::navigation::editable_position_inside(&result.tree, node_id, at_end)
+        query::navigation::editable_position_inside(&result.layout_index, node_id, at_end)
     }
 
     pub fn is_at_edge_line_of(&self, node_id: NodeId, head: &Position, at_end: bool) -> bool {
         let Some(result) = self.layout.as_ref() else {
             return false;
         };
-        query::navigation::is_at_edge_line_of(&result.tree, node_id, head, at_end)
+        query::navigation::is_at_edge_line_of(&result.layout_index, node_id, head, at_end)
     }
 
     pub fn ensure_preferred_x_at(&mut self, pos: &Position) {
@@ -353,24 +369,25 @@ impl View {
         let Some(result) = self.layout.as_ref() else {
             return;
         };
-        self.view_state.preferred_x = query::navigation::compute_preferred_x_at(&result.tree, pos);
+        self.view_state.preferred_x =
+            query::navigation::compute_preferred_x_at(&result.layout_index, pos);
     }
 
     pub fn position_at_preferred_x_in(&self, node_id: NodeId, at_end: bool) -> Option<Position> {
         let result = self.layout.as_ref()?;
         let x = self.view_state.preferred_x?;
-        query::navigation::position_at_preferred_x_in(&result.tree, node_id, at_end, x)
+        query::navigation::position_at_preferred_x_in(&result.layout_index, node_id, at_end, x)
     }
 
     pub fn cursor_metrics(&self, state: &State, pos: &Position) -> Option<CursorMetrics> {
         let result = self.layout.as_ref()?;
         let metrics_override = self.cursor_metrics_at(state, pos);
-        query::cursor_metrics(&result.tree, &result.pages, pos, metrics_override)
+        query::cursor_metrics(&result.layout_index, pos, metrics_override)
     }
 
     pub fn placeholder_metrics(&self, doc: &Doc) -> Option<crate::query::PlaceholderMetrics> {
         let result = self.layout.as_ref()?;
-        crate::query::placeholder_metrics(&result.tree, &result.pages, doc)
+        crate::query::placeholder_metrics(&result.layout_index, doc)
     }
 
     // 입력 경로(`resolve_effective_modifiers_at`)와 동일한 effective set을 써서
@@ -391,19 +408,19 @@ impl View {
         let Some(ref result) = self.layout else {
             return vec![];
         };
-        query::selection::selection_rects(&result.tree, &result.pages, selection)
+        query::selection::selection_rects(&result.layout_index, selection)
     }
 
     pub fn selection_text_rects(&self, selection: &ResolvedSelection) -> Vec<SelectionRect> {
         let Some(ref result) = self.layout else {
             return vec![];
         };
-        query::selection::selection_text_rects(&result.tree, &result.pages, selection)
+        query::selection::selection_text_rects(&result.layout_index, selection)
     }
 
     pub fn selection_endpoints(&self, selection: &ResolvedSelection) -> Option<SelectionEndpoints> {
         let result = self.layout.as_ref()?;
-        query::selection::selection_endpoints(&result.tree, &result.pages, selection)
+        query::selection::selection_endpoints(&result.layout_index, selection)
     }
 
     pub fn selection_hit_test(
@@ -416,14 +433,14 @@ impl View {
         let Some(ref result) = self.layout else {
             return false;
         };
-        query::selection::selection_hit_test(&result.tree, &result.pages, selection, page_idx, x, y)
+        query::selection::selection_hit_test(&result.layout_index, selection, page_idx, x, y)
     }
 
     pub fn node_box_rects(&self, ids: &[NodeId]) -> Vec<SelectionRect> {
         let Some(ref result) = self.layout else {
             return vec![];
         };
-        query::search::node_box_rects(&result.tree, &result.pages, ids)
+        query::selection::block_selection_rects(&result.layout_index, ids)
     }
 
     pub fn nearest_node_box(
@@ -434,22 +451,32 @@ impl View {
         ids: &[NodeId],
     ) -> Option<NodeId> {
         let result = self.layout.as_ref()?;
-        let page = result.pages.get(page_idx)?;
-        query::search::nearest_node_box(&result.tree, page, x, y, ids)
+        let point = result.layout_index.point(page_idx, x, y)?;
+        result.layout_index.nearest_box(point, ids)
     }
 
     pub fn node_box_contains(&self, page_idx: usize, x: f32, y: f32, id: NodeId) -> bool {
         let Some(ref result) = self.layout else {
             return false;
         };
-        let Some(page) = result.pages.get(page_idx) else {
+        let Some(point) = result.layout_index.point(page_idx, x, y) else {
             return false;
         };
-        let Some(node) = query::search::find_box_by_node_id(&result.tree.root, id) else {
+        result.layout_index.box_contains(point, id)
+    }
+
+    pub fn node_exact_box_hit_test(&self, page_idx: usize, x: f32, y: f32, id: NodeId) -> bool {
+        let Some(ref result) = self.layout else {
             return false;
         };
-        let abs_y = y + page.y_start;
-        query::hit_test::rect_distance_sq(&node.rect, x, abs_y) == 0.0
+        let Some(point) = result.layout_index.point(page_idx, x, y) else {
+            return false;
+        };
+        result
+            .layout_index
+            .exact_entry(point, |_, _| true)
+            .and_then(|entry| entry.content(&result.layout_index))
+            .is_some_and(|content| matches!(content, LayoutContent::Box(b) if b.node_id == id))
     }
 
     pub fn composition_rects(
@@ -460,7 +487,7 @@ impl View {
         let Some(ref result) = self.layout else {
             return vec![];
         };
-        query::composition::composition_rects(&result.tree, &result.pages, from, to)
+        query::composition::composition_rects(&result.layout_index, from, to)
     }
 
     pub fn pages(&self) -> &[LayoutPage] {
@@ -475,7 +502,7 @@ impl View {
         let Some(ref result) = self.layout else {
             return Vec::new();
         };
-        crate::external::external_elements(&result.tree, &result.pages, doc, selection)
+        crate::external::external_elements(&result.layout_index, doc, selection)
     }
 
     pub fn table_overlays(&self, doc: &Doc, selection: Option<&Selection>) -> Vec<TableOverlay> {
@@ -620,7 +647,7 @@ impl View {
         let Some(result) = self.layout.as_ref() else {
             return false;
         };
-        query::navigation::compute_preferred_x_at(&result.tree, pos).is_some()
+        query::navigation::compute_preferred_x_at(&result.layout_index, pos).is_some()
     }
 
     /// Dry-run of `resolve_movement` without mutating state.
@@ -635,13 +662,213 @@ impl View {
     ) -> Option<(Option<Selection>, Option<f32>)> {
         let result = self.layout.as_ref()?;
         Some(query::resolve_movement(
-            &result.tree,
+            &result.layout_index,
             pos,
             movement,
             &self.viewport,
             resource,
             self.view_state.preferred_x,
         ))
+    }
+}
+
+fn is_text_or_atom_hit_entry(_entry: &query::layout_index::LayoutEntry, node: &LayoutNode) -> bool {
+    matches!(
+        node.content,
+        LayoutContent::Line(_) | LayoutContent::Atom(_)
+    )
+}
+
+fn is_drag_exact_hit_entry(_entry: &query::layout_index::LayoutEntry, node: &LayoutNode) -> bool {
+    match &node.content {
+        LayoutContent::Line(_)
+        | LayoutContent::Atom(_)
+        | LayoutContent::Spacing(SpacingKind::Gap { .. }) => true,
+        LayoutContent::Box(b) => b.nav.is_some(),
+        LayoutContent::Spacing(SpacingKind::Fill) => false,
+    }
+}
+
+fn text_or_atom_selection_for_entry(
+    layout_index: &query::layout_index::LayoutIndex,
+    entry: &query::layout_index::LayoutEntry,
+    x: f32,
+) -> Option<Selection> {
+    match entry.content(layout_index)? {
+        LayoutContent::Line(line) => {
+            Some(Selection::collapsed(position_in_line(line, &entry.rect, x)))
+        }
+        LayoutContent::Atom(atom) => Some(select_atom(atom)),
+        LayoutContent::Box(_) | LayoutContent::Spacing(_) => None,
+    }
+}
+
+fn drag_boundary_fallback(
+    layout_index: &query::layout_index::LayoutIndex,
+    doc: &Doc,
+    anchor: &ResolvedPosition,
+    point: query::layout_index::LayoutPoint,
+) -> Option<Selection> {
+    let mut inside: Option<DragFallbackCandidate> = None;
+    let mut before: Option<DragFallbackCandidate> = None;
+    let mut after: Option<DragFallbackCandidate> = None;
+
+    for entry in layout_index.entries_on_page(point.page_idx) {
+        let Some(candidate) = drag_fallback_candidate(layout_index, entry, doc, anchor, point)
+        else {
+            continue;
+        };
+        let slot = if point.y >= entry.rect.y && point.y < entry.rect.bottom() {
+            &mut inside
+        } else if entry.rect.bottom() <= point.y {
+            &mut before
+        } else if entry.rect.y >= point.y {
+            &mut after
+        } else {
+            continue;
+        };
+        if candidate.is_better_than(slot.as_ref()) {
+            *slot = Some(candidate);
+        }
+    }
+
+    if let Some(candidate) = inside {
+        return Some(candidate.selection);
+    }
+
+    let prefer_before = after
+        .as_ref()
+        .and_then(|candidate| candidate.start.resolve(doc))
+        .is_none_or(|after_start| anchor < &after_start);
+    let candidate = if prefer_before {
+        before.or(after)
+    } else {
+        after.or(before)
+    };
+    candidate.map(|candidate| candidate.selection)
+}
+
+struct DragFallbackCandidate {
+    distance: (f32, f32),
+    start: Position,
+    selection: Selection,
+}
+
+impl DragFallbackCandidate {
+    fn new(
+        entry: &query::layout_index::LayoutEntry,
+        point: query::layout_index::LayoutPoint,
+        start: Position,
+        selection: Selection,
+    ) -> Self {
+        Self {
+            distance: distance_key(&entry.rect, point.x, point.y),
+            start,
+            selection,
+        }
+    }
+
+    fn is_better_than(&self, other: Option<&Self>) -> bool {
+        other.is_none_or(|best| compare_distance_key(self.distance, best.distance).is_lt())
+    }
+}
+
+fn drag_fallback_candidate(
+    layout_index: &query::layout_index::LayoutIndex,
+    entry: &query::layout_index::LayoutEntry,
+    doc: &Doc,
+    anchor: &ResolvedPosition,
+    point: query::layout_index::LayoutPoint,
+) -> Option<DragFallbackCandidate> {
+    match entry.content(layout_index)? {
+        LayoutContent::Line(line) => {
+            let start = position_in_line(line, &entry.rect, entry.rect.x);
+            let end = query::grapheme::last_position_in_line(line);
+            let pos = if point.y < entry.rect.y {
+                start
+            } else if point.y >= entry.rect.bottom() {
+                end
+            } else {
+                let point_pos = position_in_line(line, &entry.rect, point.x).resolve(doc)?;
+                if anchor < &point_pos { end } else { start }
+            };
+            Some(DragFallbackCandidate::new(
+                entry,
+                point,
+                start,
+                Selection::collapsed(pos),
+            ))
+        }
+        LayoutContent::Atom(atom) => {
+            let hit = select_atom(atom);
+            Some(DragFallbackCandidate::new(entry, point, hit.anchor, hit))
+        }
+        LayoutContent::Box(b) if b.nav.is_some() => {
+            if point.y >= entry.rect.y && point.y < entry.rect.bottom() {
+                return None;
+            }
+            let hit = select_unit(b.nav?);
+            Some(DragFallbackCandidate::new(entry, point, hit.anchor, hit))
+        }
+        LayoutContent::Box(_) | LayoutContent::Spacing(_) => None,
+    }
+}
+
+fn position_in_line(line: &LayoutLine, rect: &Rect, x: f32) -> Position {
+    query::grapheme::position_at_x(line, x - rect.x)
+}
+
+fn select_atom(atom: &LayoutAtom) -> Selection {
+    Selection::new(
+        Position {
+            node_id: atom.parent_id,
+            offset: atom.index,
+            affinity: Affinity::Downstream,
+        },
+        Position {
+            node_id: atom.parent_id,
+            offset: atom.index + 1,
+            affinity: Affinity::Upstream,
+        },
+    )
+}
+
+fn select_unit(nav: NavUnit) -> Selection {
+    Selection::new(
+        Position {
+            node_id: nav.parent_id,
+            offset: nav.index,
+            affinity: Affinity::Downstream,
+        },
+        Position {
+            node_id: nav.parent_id,
+            offset: nav.index + 1,
+            affinity: Affinity::Upstream,
+        },
+    )
+}
+
+fn compare_distance_key(a: (f32, f32), b: (f32, f32)) -> std::cmp::Ordering {
+    match a.0.total_cmp(&b.0) {
+        std::cmp::Ordering::Equal => a.1.total_cmp(&b.1),
+        ordering => ordering,
+    }
+}
+
+fn distance_key(rect: &Rect, x: f32, y: f32) -> (f32, f32) {
+    (
+        axis_distance(rect.y, rect.bottom(), y),
+        axis_distance(rect.x, rect.right(), x),
+    )
+}
+
+fn axis_distance(start: f32, end: f32, value: f32) -> f32 {
+    if value < start {
+        start - value
+    } else if value > end {
+        value - end
+    } else {
+        0.0
     }
 }
 
@@ -658,7 +885,7 @@ impl View {
     }
 
     pub fn layout_tree_for_test(&self) -> Option<&crate::paginate::LayoutTree> {
-        self.layout.as_ref().map(|r| &r.tree)
+        self.layout.as_ref().map(|r| r.layout_index.tree())
     }
 }
 
@@ -667,6 +894,7 @@ mod tests {
     use super::*;
     use editor_common::Direction;
     use editor_macros::{doc, state};
+    use editor_state::{Affinity, Position};
 
     fn make_op(id: editor_crdt::Dot, payload: DocOp) -> Op<DocOp> {
         Op {
@@ -689,54 +917,197 @@ mod tests {
     }
 
     #[test]
-    fn hit_test_extending_above_top_promotes_to_front_slot() {
-        let (doc,) = doc! {
+    fn hit_test_extending_above_top_returns_first_flow_target() {
+        let (doc, t1, t2) = doc! {
             root {
-                fold {
-                    fold_title { text("title") }
-                    fold_content { paragraph { text("content") } }
-                }
-                paragraph {}
+                paragraph { t1: text("before") }
+                paragraph { t2: text("after") }
             }
         };
         let mut view = View::new_test();
         view.layout(&doc);
 
-        let sel = view.hit_test_extending(0, 20.0, -100.0).unwrap();
+        let sel = view
+            .hit_test_extending(&doc, Position::new(t2, 2), 0, 20.0, -100.0)
+            .unwrap();
         assert!(sel.is_collapsed());
-        assert_eq!(sel.head.node_id, NodeId::ROOT);
-        assert_eq!(sel.head.offset, 0, "above-top escape -> Front slot (idx)");
+        assert_eq!(sel.anchor, Position::new(t1, 0));
+        assert_eq!(sel.head, Position::new(t1, 0));
     }
 
     #[test]
-    fn hit_test_extending_below_bottom_promotes_to_back_slot() {
-        let (doc,) = doc! {
+    fn hit_test_extending_below_bottom_returns_last_flow_target() {
+        let (doc, t1, t2) = doc! {
             root {
-                paragraph {}
-                fold {
-                    fold_title { text("title") }
-                    fold_content { paragraph { text("content") } }
-                }
+                paragraph { t1: text("before") }
+                paragraph { t2: text("after") }
             }
         };
         let mut view = View::new_test();
         view.layout(&doc);
 
-        let sel = view.hit_test_extending(0, 20.0, 99999.0).unwrap();
+        let sel = view
+            .hit_test_extending(&doc, Position::new(t1, 2), 0, 20.0, 99999.0)
+            .unwrap();
+        let end = Position {
+            node_id: t2,
+            offset: 5,
+            affinity: Affinity::Upstream,
+        };
         assert!(sel.is_collapsed());
+        assert_eq!(sel.anchor, end);
+        assert_eq!(sel.head, end);
+    }
+
+    #[test]
+    fn hit_test_extending_selects_monolithic_box_from_leading_padding() {
+        let (doc, callout) = doc! {
+            root {
+                paragraph { text("before") }
+                callout: callout {
+                    paragraph { text("inside") }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let callout_rect = view.node_box_rects(&[callout])[0].rect;
+
+        let sel = view
+            .hit_test_extending(
+                &doc,
+                Position::new(NodeId::ROOT, 0),
+                0,
+                callout_rect.x + callout_rect.width / 2.0,
+                callout_rect.y + 4.0,
+            )
+            .unwrap();
+
+        assert!(!sel.is_collapsed());
+        assert_eq!(sel.anchor.node_id, NodeId::ROOT);
+        assert_eq!(sel.anchor.offset, 1);
+        assert_eq!(sel.anchor.affinity, Affinity::Downstream);
         assert_eq!(sel.head.node_id, NodeId::ROOT);
-        assert_eq!(
-            sel.head.offset, 2,
-            "below-bottom escape -> Back slot (idx+1)"
+        assert_eq!(sel.head.offset, 2);
+        assert_eq!(sel.head.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn hit_test_extending_selects_monolithic_box_from_trailing_padding() {
+        let (doc, callout) = doc! {
+            root {
+                callout: callout {
+                    paragraph { text("inside") }
+                }
+                paragraph { text("after") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let callout_rect = view.node_box_rects(&[callout])[0].rect;
+
+        let sel = view
+            .hit_test_extending(
+                &doc,
+                Position::new(NodeId::ROOT, 1),
+                0,
+                callout_rect.x + callout_rect.width / 2.0,
+                callout_rect.y + callout_rect.height - 4.0,
+            )
+            .unwrap();
+
+        assert!(!sel.is_collapsed());
+        assert_eq!(sel.anchor.node_id, NodeId::ROOT);
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.anchor.affinity, Affinity::Downstream);
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(sel.head.offset, 1);
+        assert_eq!(sel.head.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn hit_test_extending_in_root_block_gap_returns_anchor_side_target() {
+        let (doc, p1, t1, p2) = doc! {
+            root {
+                p1: paragraph { t1: text("one") }
+                p2: paragraph { text("two") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let p1_rect = view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
         );
+
+        let sel = view
+            .hit_test_extending(
+                &doc,
+                Position::new(t1, 1),
+                0,
+                p1_rect.x + p1_rect.width / 2.0,
+                (p1_rect.bottom() + p2_rect.y) / 2.0,
+            )
+            .unwrap();
+
+        let end = Position {
+            node_id: t1,
+            offset: 3,
+            affinity: Affinity::Upstream,
+        };
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.anchor, end);
+        assert_eq!(sel.head, end);
     }
 
     #[test]
-    fn hit_test_in_gutter_does_not_promote() {
-        let (doc,) = doc! {
+    fn hit_test_extending_in_monolithic_internal_block_gap_returns_inner_target() {
+        let (doc, callout, p1, t1, p2) = doc! {
+            root {
+                callout: callout {
+                    p1: paragraph { t1: text("one") }
+                    p2: paragraph { text("two") }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let callout_rect = view.node_box_rects(&[callout])[0].rect;
+        let p1_rect = view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        let sel = view
+            .hit_test_extending(
+                &doc,
+                Position::new(t1, 1),
+                0,
+                callout_rect.x + callout_rect.width / 2.0,
+                (p1_rect.bottom() + p2_rect.y) / 2.0,
+            )
+            .unwrap();
+
+        let end = Position {
+            node_id: t1,
+            offset: 3,
+            affinity: Affinity::Upstream,
+        };
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.anchor, end);
+        assert_eq!(sel.head, end);
+    }
+
+    #[test]
+    fn hit_test_click_in_page_margin_uses_nearest_text_leaf() {
+        let (doc, title) = doc! {
             root {
                 fold {
-                    fold_title { text("title") }
+                    fold_title { title: text("title") }
                     fold_content { paragraph { text("content") } }
                 }
                 paragraph {}
@@ -747,27 +1118,100 @@ mod tests {
 
         let sel = view.hit_test(0, 20.0, -100.0).unwrap();
         assert!(sel.is_collapsed());
-        assert_ne!(
-            sel.head.node_id,
-            NodeId::ROOT,
-            "plain hit test must not promote; head stays on nearest text leaf"
+        assert_eq!(sel.head.node_id, title);
+    }
+
+    #[test]
+    fn hit_test_click_in_block_gap_uses_nearest_text_boundary() {
+        let (doc, p1, t1, p2) = doc! {
+            root {
+                p1: paragraph { t1: text("one") }
+                p2: paragraph { text("two") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let p1_rect = view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
         );
-        let ft_text = doc
-            .node(NodeId::ROOT)
-            .unwrap()
-            .children()
-            .next()
-            .unwrap()
-            .children()
-            .next()
-            .unwrap()
-            .children()
-            .next()
-            .unwrap()
-            .id();
+
+        let sel = view
+            .hit_test(
+                0,
+                p1_rect.x + p1_rect.width / 2.0,
+                (p1_rect.bottom() + p2_rect.y) / 2.0,
+            )
+            .unwrap();
+
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(sel.head.offset, 3);
+    }
+
+    #[test]
+    fn hit_test_click_in_unit_chrome_uses_text_fallback() {
+        let (doc, callout, t) = doc! {
+            root {
+                callout: callout {
+                    paragraph { t: text("inside") }
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let callout_rect = view.node_box_rects(&[callout])[0].rect;
+
+        let sel = view
+            .hit_test(
+                0,
+                callout_rect.x + callout_rect.width / 2.0,
+                callout_rect.y + 4.0,
+            )
+            .unwrap();
+
+        assert!(sel.is_collapsed());
         assert_eq!(
-            sel.head.node_id, ft_text,
-            "plain hit test must land on the nearest text leaf"
+            sel.head.node_id, t,
+            "plain click hit-test must land on text, not select the containing unit"
+        );
+    }
+
+    #[test]
+    fn hit_test_click_on_atom_selects_atom() {
+        let (doc, image) = doc! {
+            root {
+                image: image(id: Some("img".to_string()), proportion: 50)
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let image_rect = view
+            .external_elements(&doc, None)
+            .into_iter()
+            .find(|element| element.node_id == image)
+            .expect("image external element")
+            .bounds;
+
+        let sel = view
+            .hit_test(
+                0,
+                image_rect.x + image_rect.width / 2.0,
+                image_rect.y + image_rect.height / 2.0,
+            )
+            .unwrap();
+
+        assert!(!sel.is_collapsed());
+        assert_eq!(sel.anchor, Position::new(NodeId::ROOT, 0));
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 1,
+                affinity: Affinity::Upstream
+            }
         );
     }
 

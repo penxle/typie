@@ -61,7 +61,6 @@ pub fn measure_fold_title(
                 border: EdgeInsets::ZERO,
                 border_mode: BorderMode::Separate,
                 alignment: LayoutAlignment::Start,
-                scope: false,
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
@@ -108,7 +107,6 @@ pub fn measure_fold_content(
         PaddedLayoutConfig {
             padding,
             border: EdgeInsets::ZERO,
-            scope: false,
             alignment: LayoutAlignment::Start,
             page_break_policy: PageBreakPolicy::Auto,
         },
@@ -151,7 +149,6 @@ pub fn measure_fold(
                 border,
                 border_mode: BorderMode::Separate,
                 alignment: LayoutAlignment::Start,
-                scope: false,
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },

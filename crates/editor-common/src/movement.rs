@@ -19,7 +19,6 @@ pub enum Movement {
     Word { direction: Direction },
     Sentence { direction: Direction },
     Line { direction: Direction, axis: Axis },
-    Block { direction: Direction },
     Page { direction: Direction },
     Document { direction: Direction },
 }

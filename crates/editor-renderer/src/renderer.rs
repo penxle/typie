@@ -1620,7 +1620,6 @@ mod tests {
             border: EdgeInsets::all(TABLE_BORDER_WIDTH),
             border_mode: BorderMode::Collapse,
             alignment: Alignment::Start,
-            scope: false,
             decorations: vec![],
             monolithic: false,
         }
@@ -2490,7 +2489,6 @@ mod tests {
             border: EdgeInsets::ZERO,
             border_mode: BorderMode::Separate,
             alignment: Alignment::Start,
-            scope: false,
             decorations: vec![Decoration {
                 id: 0,
                 rect: icon_rect,

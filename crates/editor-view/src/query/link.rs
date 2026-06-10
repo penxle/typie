@@ -3,8 +3,9 @@ use editor_macros::ffi;
 use editor_model::{Doc, Modifier, NodeId};
 use serde::{Deserialize, Serialize};
 
-use crate::page::LayoutPage;
-use crate::paginate::{LayoutContent, LayoutNode, LayoutTree};
+use crate::paginate::LayoutContent;
+
+use super::layout_index::LayoutIndex;
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -17,64 +18,43 @@ pub struct LinkRect {
 }
 
 pub(crate) fn page_link_rects(
-    tree: &LayoutTree,
-    page: &LayoutPage,
+    layout_index: &LayoutIndex,
     page_idx: usize,
     doc: &Doc,
 ) -> Vec<LinkRect> {
+    let Some(page) = layout_index.page(page_idx) else {
+        return Vec::new();
+    };
     let mut out: Vec<LinkRect> = Vec::new();
-    collect(&tree.root, page, page_idx, doc, &mut out);
+    for entry in layout_index.entries_on_page(page_idx) {
+        if let Some(LayoutContent::Line(line)) = entry.content(layout_index) {
+            for run in &line.glyph_runs {
+                let Some(href) = link_href(doc, run.node_id) else {
+                    continue;
+                };
+                let rect = Rect::from_xywh(
+                    entry.rect.x + run.x,
+                    entry.rect.y - page.y_start,
+                    run.width,
+                    entry.rect.height,
+                );
+                push_rect(&mut out, run.node_id, page_idx, href, rect);
+            }
+        }
+    }
     out
 }
 
 pub(crate) fn link_hit_test(
-    tree: &LayoutTree,
-    page: &LayoutPage,
+    layout_index: &LayoutIndex,
     page_idx: usize,
     doc: &Doc,
     x: f32,
     page_y: f32,
 ) -> Option<LinkRect> {
-    page_link_rects(tree, page, page_idx, doc)
+    page_link_rects(layout_index, page_idx, doc)
         .into_iter()
         .find(|link| link.rects.iter().any(|r| r.contains(x, page_y)))
-}
-
-fn collect(
-    node: &LayoutNode,
-    page: &LayoutPage,
-    page_idx: usize,
-    doc: &Doc,
-    out: &mut Vec<LinkRect>,
-) {
-    let node_top = node.rect.y;
-    let node_bottom = node.rect.y + node.rect.height;
-    if node_bottom <= page.y_start || node_top >= page.y_end {
-        return;
-    }
-
-    match &node.content {
-        LayoutContent::Box(b) => {
-            for child in &b.children {
-                collect(child, page, page_idx, doc, out);
-            }
-        }
-        LayoutContent::Line(l) => {
-            for run in &l.glyph_runs {
-                let Some(href) = link_href(doc, run.node_id) else {
-                    continue;
-                };
-                let rect = Rect::from_xywh(
-                    node.rect.x + run.x,
-                    node.rect.y - page.y_start,
-                    run.width,
-                    node.rect.height,
-                );
-                push_rect(out, run.node_id, page_idx, href, rect);
-            }
-        }
-        LayoutContent::Atom(_) | LayoutContent::Spacing(_) => {}
-    }
 }
 
 fn link_href(doc: &Doc, node_id: NodeId) -> Option<String> {
@@ -104,11 +84,17 @@ mod tests {
 
     use super::*;
     use crate::glyph_run::GlyphRun;
+    use crate::page::LayoutPage;
     use crate::paginate::*;
+    use crate::query::layout_index::LayoutIndex;
     use crate::style::*;
 
     fn page(y_start: f32, height: f32) -> LayoutPage {
         LayoutPage::new(y_start, y_start + height, Size::new(800.0, height))
+    }
+
+    fn index(tree: LayoutTree, pages: Vec<LayoutPage>) -> LayoutIndex {
+        LayoutIndex::new(tree, &pages)
     }
 
     fn box_node(
@@ -129,7 +115,6 @@ mod tests {
                     border: EdgeInsets::ZERO,
                     border_mode: BorderMode::Separate,
                     alignment: Alignment::Start,
-                    scope: false,
                     decorations: vec![],
                     monolithic: false,
                     ..Default::default()
@@ -186,7 +171,8 @@ mod tests {
                 vec![line_node(20.0, 10.0, 180.0, 20.0, vec![run(t, 0.0, 50.0)])],
             ),
         };
-        let links = page_link_rects(&tree, &page(0.0, 100.0), 0, &doc);
+        let layout_index = index(tree, vec![page(0.0, 100.0)]);
+        let links = page_link_rects(&layout_index, 0, &doc);
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].node_id, t);
         assert_eq!(links[0].href, "https://a.example");
@@ -211,7 +197,8 @@ mod tests {
                 vec![line_node(20.0, 10.0, 180.0, 20.0, vec![run(t, 0.0, 50.0)])],
             ),
         };
-        assert!(page_link_rects(&tree, &page(0.0, 100.0), 0, &doc).is_empty());
+        let layout_index = index(tree, vec![page(0.0, 100.0)]);
+        assert!(page_link_rects(&layout_index, 0, &doc).is_empty());
     }
 
     #[test]
@@ -236,7 +223,8 @@ mod tests {
                 ],
             ),
         };
-        let links = page_link_rects(&tree, &page(0.0, 100.0), 0, &doc);
+        let layout_index = index(tree, vec![page(0.0, 100.0)]);
+        let links = page_link_rects(&layout_index, 0, &doc);
         assert_eq!(links.len(), 1);
         assert_eq!(
             links[0].rects,
@@ -273,7 +261,8 @@ mod tests {
                 )],
             ),
         };
-        let links = page_link_rects(&tree, &page(0.0, 100.0), 0, &doc);
+        let layout_index = index(tree, vec![page(0.0, 100.0)]);
+        let links = page_link_rects(&layout_index, 0, &doc);
         assert_eq!(links.len(), 2);
         assert_eq!(links[0].href, "https://a.example");
         assert_eq!(
@@ -306,7 +295,8 @@ mod tests {
                 vec![line_node(20.0, 220.0, 180.0, 20.0, vec![run(t, 0.0, 50.0)])],
             ),
         };
-        let links = page_link_rects(&tree, &page(200.0, 100.0), 1, &doc);
+        let layout_index = index(tree, vec![page(0.0, 100.0), page(200.0, 100.0)]);
+        let links = page_link_rects(&layout_index, 1, &doc);
         assert_eq!(links.len(), 1);
         assert_eq!(
             links[0].rects,
@@ -333,7 +323,8 @@ mod tests {
                 vec![line_node(20.0, 500.0, 180.0, 20.0, vec![run(t, 0.0, 50.0)])],
             ),
         };
-        assert!(page_link_rects(&tree, &page(0.0, 100.0), 0, &doc).is_empty());
+        let layout_index = index(tree, vec![page(0.0, 100.0)]);
+        assert!(page_link_rects(&layout_index, 0, &doc).is_empty());
     }
 
     #[test]
@@ -355,7 +346,8 @@ mod tests {
                 vec![line_node(20.0, 10.0, 180.0, 20.0, vec![run(t, 0.0, 50.0)])],
             ),
         };
-        let hit = link_hit_test(&tree, &page(0.0, 100.0), 0, &doc, 40.0, 20.0);
+        let layout_index = index(tree, vec![page(0.0, 100.0)]);
+        let hit = link_hit_test(&layout_index, 0, &doc, 40.0, 20.0);
         assert_eq!(hit.map(|l| l.href), Some("https://a.example".to_string()));
     }
 
@@ -378,6 +370,7 @@ mod tests {
                 vec![line_node(20.0, 10.0, 180.0, 20.0, vec![run(t, 0.0, 50.0)])],
             ),
         };
-        assert!(link_hit_test(&tree, &page(0.0, 100.0), 0, &doc, 150.0, 20.0).is_none());
+        let layout_index = index(tree, vec![page(0.0, 100.0)]);
+        assert!(link_hit_test(&layout_index, 0, &doc, 150.0, 20.0).is_none());
     }
 }

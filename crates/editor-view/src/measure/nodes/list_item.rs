@@ -68,7 +68,6 @@ pub fn measure_list_item(
         PaddedLayoutConfig {
             padding,
             border: EdgeInsets::ZERO,
-            scope: false,
             alignment: Alignment::Start,
             page_break_policy: PageBreakPolicy::Auto,
         },
