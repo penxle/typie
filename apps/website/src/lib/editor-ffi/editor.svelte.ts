@@ -71,8 +71,21 @@ export type AiFeedback = {
   category: string | null;
 };
 
+export type TrackedRangePosition = Pick<TrackedRange, 'anchor' | 'head' | 'invalid'>;
+
 let wasmInitPromise: Promise<void> | null = null;
 const VIEWPORT_RESIZE_DEBOUNCE_MS = 50;
+
+/**
+ * 검색 결과의 active(현재) 매치에 적용할 selection을 결정한다.
+ *
+ * 유효한 live tracked range가 주어지면 그 위치를 쓰고(문서 편집으로 밀린 위치 반영),
+ * 없으면 검색으로 계산한 `match` 위치로 폴백한다. 호출부는 stale한 tracked range를
+ * 넘기지 않도록 `live`를 가려서 전달한다. (TR-252)
+ */
+export function pickMatchSelection(match: Selection, live?: TrackedRangePosition): Selection {
+  return live && !live.invalid ? { anchor: live.anchor, head: live.head } : match;
+}
 
 function ensureWasmInitialized(): Promise<void> {
   return (wasmInitPromise ??= (async () => {
@@ -950,7 +963,7 @@ export class Editor {
     this.#searchMatches = matches;
     this.#searchActiveIdx = matches.length === 0 ? undefined : 0;
     if (this.#searchActiveIdx !== undefined) {
-      this.#applyActiveMark();
+      this.#applyActiveMark(true);
       this.#scrollToActiveMatch();
     }
   }
@@ -1008,14 +1021,16 @@ export class Editor {
     this.#scrollToActiveMatch();
   }
 
-  #applyActiveMark(): void {
+  #applyActiveMark(preferFresh = false): void {
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
     const idx = this.#searchActiveIdx;
     if (idx === undefined) return;
     const match = this.#searchMatches[idx];
     if (!match) return;
-    const live = this.#wasm.tracked_ranges('search-match').find((r) => r.id === match.id);
-    const selection = live && !live.invalid ? { anchor: live.anchor, head: live.head } : match.selection;
+    // search() 직후엔 새 매치가 아직 flush되지 않아 tracked range가 이전 검색어의 위치를
+    // 들고 있다(인덱스 기반 id 재사용으로 충돌). 이때는 조회를 건너뛰고 검색 결과를 그대로 쓴다.
+    const live = preferFresh ? undefined : this.#wasm.tracked_ranges('search-match').find((r) => r.id === match.id);
+    const selection = pickMatchSelection(match.selection, live);
     this.enqueue({
       type: 'tracked_range',
       op: {
