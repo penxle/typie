@@ -119,11 +119,11 @@ fn arc_to_beziers(
     } else if !sweep && dtheta > 0.0 {
         dtheta -= 2.0 * std::f32::consts::PI;
     }
-    let num_segments = (dtheta.abs() / (std::f32::consts::PI / 2.0))
+    let num_segments = (dtheta.abs() / (std::f32::consts::PI / 2.0) - 1e-4)
         .ceil()
         .max(1.0) as usize;
     let delta = dtheta / num_segments as f32;
-    let t = (delta / 4.0).tan();
+    let t = (delta / 2.0).tan();
     let alpha = delta.sin() * ((4.0 + 3.0 * t * t).sqrt() - 1.0) / 3.0;
     let mut theta = theta1;
     let (mut px, mut py) = (x1, y1);
