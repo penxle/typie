@@ -16,12 +16,12 @@
   "dependencies": {
     "@hono/node-server": "^2.0.4",
     "@typie/lib": "workspace:*",
-    "hono": "^4.12.22"
+    "hono": "^4.12.25"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.61.1",
+    "@sveltejs/kit": "^2.64.0",
     "@typie/tsconfig": "workspace:*",
-    "rolldown": "1.0.2",
+    "rolldown": "1.1.0",
     "typescript": "^6.0.3"
   }
 }

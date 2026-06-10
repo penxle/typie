@@ -135,7 +135,7 @@
       e.stopPropagation();
 
       // NOTE: 현재 선택된 항목이 필터링된 목록에 있으면 에디터로 포커스, 없으면 첫 번째 항목 선택
-      const currentItemInFiltered = filteredItems.find((item) => item.value === value);
+      const currentItemInFiltered = filteredItems.some((item) => item.value === value);
       if (value && currentItemInFiltered) {
         onchange(value, { shouldFocus: true });
       } else {

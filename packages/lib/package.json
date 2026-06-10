@@ -23,24 +23,24 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",
-    "@logtape/logtape": "^2.1.1",
-    "@logtape/sentry": "^2.1.1",
-    "dayjs": "^1.11.20",
-    "graphql": "^16.14.0",
-    "hono": "^4.12.22",
+    "@logtape/logtape": "^2.1.2",
+    "@logtape/sentry": "^2.1.2",
+    "dayjs": "^1.11.21",
+    "graphql": "^16.14.2",
+    "hono": "^4.12.25",
     "ipaddr.js": "^2.4.0",
-    "remeda": "^2.34.1",
+    "remeda": "^2.38.0",
     "ts-pattern": "^5.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.61.1",
+    "@sveltejs/kit": "^2.64.0",
     "@typie/tsconfig": "workspace:*",
     "postcss": "^8.5.15",
-    "svelte": "^5.55.9",
+    "svelte": "^5.56.3",
     "svgo": "^4.0.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14",
+    "vite": "^8.0.16",
     "xmlbuilder2": "^4.0.3"
   }
 }

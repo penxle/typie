@@ -20,5 +20,5 @@ export const decodeDbId = (id: string) => {
 };
 
 export const validateDbId = (tableCode: string) => {
-  return { regex: new RegExp(String.raw`^${tableCode}0[A-Z0-9]+$`) };
+  return { regex: new RegExp(`^${tableCode}0[A-Z0-9]+$`) };
 };

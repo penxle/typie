@@ -575,8 +575,7 @@
           try {
             if (currentDragging.isOutsideDropZone) {
               const { widgetId, widgetRect, offsetX, offsetY } = currentDragging;
-              const widget = query.data.widgets.find((w) => w.id === widgetId);
-              if (widget) {
+              if (query.data.widgets.some((w) => w.id === widgetId)) {
                 const newPosition = calculateWidgetPosition(e.clientX, e.clientY, widgetRect, offsetX, offsetY);
 
                 await widgetContext.moveWidgetToFreePosition?.(widgetId, newPosition);
@@ -692,9 +691,8 @@
 
           try {
             const { widgetId, dropIndex } = currentDragging;
-            const widget = query.data.widgets.find((w) => w.id === widgetId);
 
-            if (widget) {
+            if (query.data.widgets.some((w) => w.id === widgetId)) {
               if (!currentDragging.isOutsideDropZone && dropIndex !== null) {
                 await widgetContext.moveWidgetInGroup?.(widgetId, dropIndex);
               } else if (currentDragging.calculatedPosition) {

@@ -4,6 +4,8 @@ packages:
   - packages/*
   - legacy/*
   - assets
+overrides:
+  ioredis: ^5.11.1
 allowBuilds:
   '@firebase/util': false
   '@sentry/cli': false

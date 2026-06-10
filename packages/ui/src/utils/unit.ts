@@ -1,4 +1,4 @@
-const mmPx = 3.779_527_559_1;
+const mmPx = 3.7795275591;
 
 export const mmToPx = (mm: number) => {
   return mm * mmPx;
