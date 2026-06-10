@@ -31,6 +31,8 @@ export type AppPreference = {
 
   exportFormat: 'DOCX' | 'EPUB' | 'HWP' | 'PDF';
 
+  experimental_v2EditorEnabled: boolean;
+
   referralWelcomeModalShown: boolean;
 
   initialPage: 'blank' | 'last';
@@ -68,6 +70,15 @@ type AppState = {
     entityIds: string[];
     sourceSiteId: string;
   };
+
+  editorSelectContext: {
+    siteId: string;
+    parentEntityId?: string;
+    lowerOrder?: string;
+    upperOrder?: string;
+    via: string;
+    onComplete?: () => void;
+  } | null;
 };
 
 type AppTimerState = {
@@ -114,6 +125,8 @@ export const setupAppContext = (userId: string) => {
     },
 
     openMenuCount: 0,
+
+    editorSelectContext: null,
   });
 
   const context: AppContext = {
@@ -145,6 +158,8 @@ export const setupAppContext = (userId: string) => {
       searchMatchWholeWord: false,
 
       exportFormat: 'PDF',
+
+      experimental_v2EditorEnabled: false,
 
       referralWelcomeModalShown: false,
 

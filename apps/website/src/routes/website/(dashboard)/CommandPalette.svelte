@@ -22,7 +22,6 @@
   import SquarePenIcon from '~icons/lucide/square-pen';
   import XIcon from '~icons/lucide/x';
   import { beforeNavigate, goto, pushState } from '$app/navigation';
-  import { env } from '$env/dynamic/public';
   import { graphql } from '$mearie';
   import EntityIcon from './@context-menu/EntityIcon.svelte';
   import type { Component } from 'svelte';
@@ -190,6 +189,14 @@
       aliases: ['새 문서 생성', '새 글 쓰기', '새 글 생성'],
       icon: SquarePenIcon,
       action: async () => {
+        if (app.preference.current.experimental_v2EditorEnabled) {
+          app.state.editorSelectContext = {
+            siteId: currentSiteId,
+            via: 'command_palette',
+          };
+          return;
+        }
+
         const resp = await createDocument({
           input: {
             siteId: currentSiteId,
@@ -201,24 +208,6 @@
         await goto(`/${resp.createDocument.entity.slug}`);
       },
     },
-    ...(env.PUBLIC_ENVIRONMENT === 'prod'
-      ? []
-      : [
-          {
-            name: 'v2 문서 만들기 (dev)',
-            aliases: ['v2 새 문서', 'sync v2'],
-            icon: SquarePenIcon,
-            action: async () => {
-              const resp = await createDocument({
-                input: {
-                  siteId: currentSiteId,
-                  v2: true,
-                },
-              });
-              await goto(`/${resp.createDocument.entity.slug}`);
-            },
-          } satisfies Command,
-        ]),
     {
       name: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
       aliases: ['zen mode'],

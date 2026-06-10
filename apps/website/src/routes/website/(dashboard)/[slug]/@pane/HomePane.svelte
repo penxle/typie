@@ -303,6 +303,14 @@
               onclick={async () => {
                 if (!query.data || !currentSite) return;
 
+                if (app.preference.current.experimental_v2EditorEnabled) {
+                  app.state.editorSelectContext = {
+                    siteId: currentSite.id,
+                    via: 'empty_home',
+                  };
+                  return;
+                }
+
                 const resp = await createDocument({
                   input: {
                     siteId: currentSite.id,

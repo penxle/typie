@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createSubscription } from '@mearie/svelte';
+  import { createMutation, createSubscription } from '@mearie/svelte';
   import { defaultPlanRules } from '@typie/lib/const';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
@@ -35,6 +35,7 @@
   import StatsModal from './@stats/StatsModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
+  import EditorSelectModal from './EditorSelectModal.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import PlanUpgradeModal from './PlanUpgradeModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -53,6 +54,53 @@
   const query = $derived(hydrateQuery(() => data.query));
 
   const app = setupAppContext(query.data.me.id);
+
+  const [createDocument] = createMutation(
+    graphql(`
+      mutation DashboardLayout_CreateDocument_Mutation($input: CreateDocumentInput!) {
+        createDocument(input: $input) {
+          id
+
+          entity {
+            id
+            slug
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  let editorSelectOpen = $derived(app.state.editorSelectContext !== null);
 
   let currentSite = $derived(query.data.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data.me.sites[0]);
   let siteId = $derived(currentSite.id);
@@ -379,6 +427,35 @@
 <ShortcutsModal />
 
 <PlanUpgradeModal user$key={query.data.me} />
+
+<EditorSelectModal
+  onOpenChange={(open) => {
+    if (!open) {
+      app.state.editorSelectContext = null;
+    }
+  }}
+  onselect={async (editor) => {
+    const context = app.state.editorSelectContext;
+    if (!context) return;
+
+    app.state.editorSelectContext = null;
+
+    const resp = await createDocument({
+      input: {
+        siteId: context.siteId,
+        parentEntityId: context.parentEntityId,
+        lowerOrder: context.lowerOrder,
+        upperOrder: context.upperOrder,
+        v2: editor === 'v2',
+      },
+    });
+
+    mixpanel.track('create_document', { via: context.via, editor });
+    context.onComplete?.();
+    await goto(`/${resp.createDocument.entity.slug}`);
+  }}
+  open={editorSelectOpen}
+/>
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <MarketingConsentModal bind:open={marketingConsentModalOpen} />

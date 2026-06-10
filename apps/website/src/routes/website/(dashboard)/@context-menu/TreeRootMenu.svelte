@@ -237,9 +237,16 @@
 <MenuItem
   icon={SquarePenIcon}
   onclick={async () => {
-    const resp = await createDocument({ input: { siteId } });
-    mixpanel.track('create_document', { via: 'tree_root_menu' });
-    await goto(`/${resp.createDocument.entity.slug}`);
+    if (app.preference.current.experimental_v2EditorEnabled) {
+      app.state.editorSelectContext = {
+        siteId,
+        via: 'tree_root_menu',
+      };
+    } else {
+      const resp = await createDocument({ input: { siteId } });
+      mixpanel.track('create_document', { via: 'tree_root_menu' });
+      await goto(`/${resp.createDocument.entity.slug}`);
+    }
   }}
 >
   새 문서 생성
