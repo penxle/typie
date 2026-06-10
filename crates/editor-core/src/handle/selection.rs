@@ -70,6 +70,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             head_x,
             head_y,
             base_selection,
+            allow_collapse,
         } => {
             let selection = resolve_extend_to_selection(
                 editor,
@@ -78,6 +79,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                 head_x,
                 head_y,
                 base_selection,
+                allow_collapse,
             );
             editor.transact(|tr| {
                 tr.update_meta(|m| m.history = HistoryMeta::Skip);
@@ -173,6 +175,7 @@ fn resolve_extend_to_selection(
     head_x: f32,
     head_y: f32,
     base_selection: Option<Selection>,
+    allow_collapse: bool,
 ) -> Option<Selection> {
     let doc = &editor.state().doc;
     if let Some(anchor_cell) = drag_anchor_cell(editor, &anchor) {
@@ -220,7 +223,7 @@ fn resolve_extend_to_selection(
         extend_drag_hit(doc, anchor, head_hit)?
     };
 
-    (!selection.is_collapsed()).then_some(selection)
+    (allow_collapse || !selection.is_collapsed()).then_some(selection)
 }
 
 fn extend_base_selection(
@@ -479,6 +482,7 @@ mod tests {
                 head_x: 9999.0,
                 head_y: 30.0,
                 base_selection: Some(initial),
+                allow_collapse: false,
             },
         });
 
@@ -509,6 +513,7 @@ mod tests {
                 head_x: 9999.0,
                 head_y: 30.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -535,11 +540,42 @@ mod tests {
                 head_x: 20.0,
                 head_y: -100.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
         assert_eq!(editor.state().selection, before);
         assert!(!before.expect("selection exists in test").is_collapsed());
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_with_allow_collapse_applies_collapsed_result() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t: text("hello") } } }
+            selection: (t, 0) -> (t, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let before = editor.state().selection.expect("selection exists in test");
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: before.anchor,
+                head_page: 0,
+                head_x: 20.0,
+                head_y: -100.0,
+                base_selection: None,
+                allow_collapse: true,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(
+            sel.is_collapsed(),
+            "expected collapsed selection, got {sel:?}"
+        );
+        assert_ne!(sel, before);
         assert!(!editor.history.can_undo());
     }
 
@@ -570,6 +606,7 @@ mod tests {
                 head_x: p1_rect.x + p1_rect.width / 2.0,
                 head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -608,6 +645,7 @@ mod tests {
                 head_x: p2_rect.x + p2_rect.width / 2.0,
                 head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -641,6 +679,7 @@ mod tests {
                 head_x: p1_rect.x + p1_rect.width / 2.0,
                 head_y: -100.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -685,6 +724,7 @@ mod tests {
                 head_x: callout_rect.x + callout_rect.width / 2.0,
                 head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -721,6 +761,7 @@ mod tests {
                 head_x: p2_metrics.caret.x,
                 head_y: p2_metrics.line.y + p2_metrics.line.height / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -762,6 +803,7 @@ mod tests {
                 head_x: line_metrics.caret.x,
                 head_y: line_metrics.line.y + line_metrics.line.height / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -802,6 +844,7 @@ mod tests {
                 head_x: callout_rect.x + callout_rect.width / 2.0,
                 head_y: (callout_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -848,6 +891,7 @@ mod tests {
                 head_x: p2_rect.x + p2_rect.width / 2.0,
                 head_y: (callout_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -884,6 +928,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -935,6 +980,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -980,6 +1026,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -1026,6 +1073,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -1067,6 +1115,7 @@ mod tests {
                 head_x,
                 head_y,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 
@@ -1104,6 +1153,7 @@ mod tests {
                 head_x: callout_rect.x + callout_rect.width / 2.0,
                 head_y: callout_rect.y + 4.0,
                 base_selection: None,
+                allow_collapse: false,
             },
         });
 

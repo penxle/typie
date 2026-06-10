@@ -295,6 +295,7 @@ class EditorInteractionControllerTest {
               headX = 10f,
               headY = 20f,
               baseSelection = null,
+              allowCollapse = true,
             )
           )
         ),
@@ -652,6 +653,7 @@ class EditorInteractionControllerTest {
             headX = 15f,
             headY = 20f,
             baseSelection = selection,
+            allowCollapse = false,
           )
         ),
         fake.enqueued.last(),
@@ -700,6 +702,7 @@ class EditorInteractionControllerTest {
       assertEquals(20f, extend.headX)
       assertEquals(44f, extend.headY)
       assertNull(extend.baseSelection)
+      assertFalse(extend.allowCollapse)
       assertEquals(Offset(20f, 44f), controller.magnifierPosition)
 
       assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.From))
@@ -746,6 +749,7 @@ class EditorInteractionControllerTest {
       assertEquals(50f, extend.headX)
       assertEquals(44f, extend.headY)
       assertNull(extend.baseSelection)
+      assertFalse(extend.allowCollapse)
 
       assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
@@ -918,6 +922,7 @@ class EditorInteractionControllerTest {
       assertEquals(50f, extend.headX)
       assertEquals(70f, extend.headY)
       assertNull(extend.baseSelection)
+      assertFalse(extend.allowCollapse)
 
       assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
     }
@@ -956,6 +961,7 @@ class EditorInteractionControllerTest {
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(endpoints.toPosition, extend.anchor)
       assertNull(extend.baseSelection)
+      assertFalse(extend.allowCollapse)
     }
 
   @Test
@@ -1030,6 +1036,7 @@ class EditorInteractionControllerTest {
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(100f, extend.headY)
+      assertFalse(extend.allowCollapse)
 
       assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
     }
@@ -1210,6 +1217,7 @@ class EditorInteractionControllerTest {
         fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
       assertEquals(selection, extend.baseSelection)
       assertEquals(18f, extend.headX)
+      assertFalse(extend.allowCollapse)
     }
 
   @Test
@@ -1259,6 +1267,7 @@ class EditorInteractionControllerTest {
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(baseSelection, extend.baseSelection)
       assertEquals(15f, extend.headX)
+      assertFalse(extend.allowCollapse)
     }
 
   @Test
@@ -1304,6 +1313,7 @@ class EditorInteractionControllerTest {
       assertEquals(baseSelection.anchor, extend.anchor)
       assertEquals(22f, extend.headX)
       assertEquals(70f, extend.headY)
+      assertFalse(extend.allowCollapse)
 
       assertTrue(
         controller.onPointerUp(pointerId = 2L, position = Offset(22f, 95f), nowMillis = 180L)
@@ -1366,6 +1376,7 @@ class EditorInteractionControllerTest {
       val extend = (fake.enqueued.last() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(wordSelection, extend.baseSelection)
       assertEquals(22f, extend.headX)
+      assertFalse(extend.allowCollapse)
       assertEquals(start + Offset(12f, -6f), controller.magnifierPosition)
 
       assertTrue(controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 700L))

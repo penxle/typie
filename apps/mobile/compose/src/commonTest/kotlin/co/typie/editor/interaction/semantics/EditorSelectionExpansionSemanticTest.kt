@@ -12,6 +12,7 @@ import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.SelectionOp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,6 +55,7 @@ class EditorSelectionExpansionSemanticTest {
               headX = 30f,
               headY = 40f,
               baseSelection = selection,
+              allowCollapse = false,
             )
           )
         )
@@ -113,12 +115,9 @@ class EditorSelectionExpansionSemanticTest {
         )
       )
 
-      assertEquals(
-        baseSelection,
-        (fake.enqueued.single() as Message.Selection).op.let {
-          (it as SelectionOp.ExtendTo).baseSelection
-        },
-      )
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(baseSelection, extend.baseSelection)
+      assertFalse(extend.allowCollapse)
     }
 
   @Test

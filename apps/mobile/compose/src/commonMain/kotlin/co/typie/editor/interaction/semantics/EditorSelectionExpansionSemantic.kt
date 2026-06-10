@@ -100,6 +100,7 @@ internal fun Editor.dispatchSelectionExtension(
         headX = point.x,
         headY = point.y,
         baseSelection = context.baseSelection,
+        allowCollapse = false,
       )
     )
   )

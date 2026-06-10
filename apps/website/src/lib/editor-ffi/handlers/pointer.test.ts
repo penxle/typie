@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handlePointerDown, handlePointerUp, markNativeSelectionDragStarted } from './pointer';
+import { handlePointerDown, handlePointerMove, handlePointerUp, markNativeSelectionDragStarted } from './pointer';
 import type { Editor } from '../editor.svelte';
 
 const collapsedSelection = {
@@ -29,20 +29,26 @@ const createPointerEvent = ({
   button = 0,
   timeStamp = 1000,
   target = createPointerTarget(),
+  clientX = 110,
+  clientY = 220,
+  shiftKey = false,
 }: {
   pointerId?: number;
   button?: number;
   timeStamp?: number;
   target?: ReturnType<typeof createPointerTarget>;
+  clientX?: number;
+  clientY?: number;
+  shiftKey?: boolean;
 } = {}) => {
   return {
     pointerId,
     pointerType: 'mouse',
     button,
     buttons: button === 0 ? 1 : 0,
-    clientX: 110,
-    clientY: 220,
-    shiftKey: false,
+    clientX,
+    clientY,
+    shiftKey,
     ctrlKey: false,
     altKey: false,
     metaKey: false,
@@ -161,5 +167,34 @@ describe('pointer native drag admission', () => {
     expect(target.releasePointerCapture).toHaveBeenCalledWith(1);
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
     expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+  });
+
+  it('allows collapse for regular drag selection extension', () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    const editor = createEditor();
+    const target = createPointerTarget({ captured: true });
+    editor.clientToLocal = vi.fn((clientX: number, clientY: number) => ({ page: 0, x: clientX - 100, y: clientY - 200 }));
+
+    handlePointerDown(editor, createPointerEvent({ target, clientX: 110, clientY: 220 }));
+    editor.enqueue.mockClear();
+
+    handlePointerMove(editor, createPointerEvent({ target, clientX: 130, clientY: 220 }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: collapsedSelection.anchor,
+        head_page: 0,
+        head_x: 30,
+        head_y: 20,
+        base_selection: undefined,
+        allow_collapse: true,
+      },
+    });
+    vi.unstubAllGlobals();
   });
 });

@@ -195,6 +195,8 @@ pub enum SelectionOp {
         head_x: f32,
         head_y: f32,
         base_selection: Option<Selection>,
+        #[serde(default)]
+        allow_collapse: bool,
     },
     SelectUnitAt {
         page: usize,

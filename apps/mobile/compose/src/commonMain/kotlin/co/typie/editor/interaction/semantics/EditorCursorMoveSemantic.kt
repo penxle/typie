@@ -92,6 +92,7 @@ private fun PagePoint.toSelectionMessage(
           headX = x,
           headY = y,
           baseSelection = null,
+          allowCollapse = true,
         )
       clickCount <= 1 -> SelectionOp.SetAt(page = page, x = x, y = y)
       clickCount == 2 ->

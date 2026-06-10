@@ -717,7 +717,7 @@ export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
 
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
-export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_at"; page: number; x: number; y: number } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor: Position; head_page: number; head_x: number; head_y: number; base_selection: Selection | undefined } | { type: "select_unit_at"; page: number; x: number; y: number; unit: SelectionPointUnit } | { type: "expand"; unit: SelectionExpansionUnit };
+export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_at"; page: number; x: number; y: number } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor: Position; head_page: number; head_x: number; head_y: number; base_selection: Selection | undefined; allow_collapse?: boolean } | { type: "select_unit_at"; page: number; x: number; y: number; unit: SelectionPointUnit } | { type: "expand"; unit: SelectionExpansionUnit };
 
 export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 

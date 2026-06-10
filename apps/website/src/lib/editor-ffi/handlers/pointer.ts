@@ -75,6 +75,7 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
           head_x: x,
           head_y: y,
           base_selection: undefined,
+          allow_collapse: true,
         },
       });
     } else if (count === 1) {
@@ -335,6 +336,7 @@ class PointerState {
         head_x: point.x,
         head_y: point.y,
         base_selection: this.#session.baseSelection,
+        allow_collapse: this.#session.baseSelection === undefined,
       },
     });
     return true;

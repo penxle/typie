@@ -420,6 +420,7 @@ export class TouchGestureController {
         head_x: local.x,
         head_y: local.y,
         base_selection: this.#baseSelection,
+        allow_collapse: this.#phase !== 'handleDragging' && this.#baseSelection === undefined,
       },
     });
     return true;

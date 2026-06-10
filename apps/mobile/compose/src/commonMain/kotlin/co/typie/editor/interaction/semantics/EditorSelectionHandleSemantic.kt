@@ -18,6 +18,7 @@ internal fun Editor.dispatchSelectionHandleExtension(point: PagePoint, anchor: P
         headX = point.x,
         headY = point.y,
         baseSelection = null,
+        allowCollapse = false,
       )
     )
   )

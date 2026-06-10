@@ -212,6 +212,7 @@ describe('TouchGestureController', () => {
         head_x: 250,
         head_y: 240,
         base_selection: undefined,
+        allow_collapse: false,
       },
     });
     expect(editor.flush).toHaveBeenCalled();

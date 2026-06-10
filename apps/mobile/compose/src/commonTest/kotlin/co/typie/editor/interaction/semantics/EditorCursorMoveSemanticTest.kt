@@ -96,6 +96,7 @@ class EditorCursorMoveSemanticTest {
               headX = 10f,
               headY = 20f,
               baseSelection = null,
+              allowCollapse = true,
             )
           )
         )
