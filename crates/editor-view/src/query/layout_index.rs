@@ -396,11 +396,13 @@ fn rect_overlaps_y_range(rect: &Rect, y_start: f32, y_end: f32) -> bool {
 
 fn position_matches_node(node: &LayoutNode, pos: &Position) -> bool {
     match &node.content {
-        LayoutContent::Box(b) => b
-            .nav
-            .is_some_and(|unit| position_attaches_to_child(pos, unit.parent_id, unit.index)),
+        LayoutContent::Box(b) => b.attachment.is_some_and(|attachment| {
+            position_attaches_to_child(pos, attachment.parent_id, attachment.index)
+        }),
         LayoutContent::Line(line) => position_matches_line(line, pos),
-        LayoutContent::Atom(atom) => position_attaches_to_child(pos, atom.parent_id, atom.index),
+        LayoutContent::Atom(atom) => {
+            position_attaches_to_child(pos, atom.attachment.parent_id, atom.attachment.index)
+        }
         LayoutContent::Spacing(_) => false,
     }
 }
@@ -519,9 +521,24 @@ mod tests {
                     monolithic: false,
                 },
                 children,
-                nav: None,
+                attachment: None,
             }),
         }
+    }
+
+    fn attached_box_node(
+        id: NodeId,
+        parent_id: NodeId,
+        index: usize,
+        rect: Rect,
+        children: Vec<LayoutNode>,
+    ) -> LayoutNode {
+        let mut node = box_node(id, rect, children);
+        let LayoutContent::Box(b) = &mut node.content else {
+            unreachable!("box_node creates a box");
+        };
+        b.attachment = Some(ChildAttachment { parent_id, index });
+        node
     }
 
     fn line_id(layout_index: &LayoutIndex, entry: &LayoutEntry) -> NodeId {
@@ -578,6 +595,45 @@ mod tests {
             entry.content(&layout_index),
             Some(LayoutContent::Box(b)) if b.node_id == box_id
         ));
+    }
+
+    #[test]
+    fn entry_for_position_resolves_attached_non_monolithic_box_edges() {
+        let box_id = NodeId::new();
+        let tree = LayoutTree {
+            root: box_node(
+                NodeId::ROOT,
+                Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+                vec![attached_box_node(
+                    box_id,
+                    NodeId::ROOT,
+                    0,
+                    Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+                    vec![line_node(NodeId::new(), 0.0, 0.0, "hello", 10.0)],
+                )],
+            ),
+        };
+        let pages = [page(0.0, 100.0)];
+        let layout_index = LayoutIndex::new(tree, &pages);
+
+        for pos in [
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        ] {
+            let entry = layout_index.entry_for_position(&pos).unwrap();
+            assert!(matches!(
+                entry.content(&layout_index),
+                Some(LayoutContent::Box(b)) if b.node_id == box_id
+            ));
+        }
     }
 
     #[test]

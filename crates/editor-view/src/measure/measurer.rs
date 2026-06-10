@@ -331,8 +331,11 @@ mod tests {
             })
             .expect("should find atom");
 
-        assert_eq!(atom.index, 0, "atom index should reflect current position");
-        assert_eq!(atom.parent_id, NodeId::ROOT);
+        assert_eq!(
+            atom.attachment.index, 0,
+            "atom index should reflect current position"
+        );
+        assert_eq!(atom.attachment.parent_id, NodeId::ROOT);
     }
 
     fn make_op(id: editor_crdt::Dot, payload: DocOp) -> Op<DocOp> {

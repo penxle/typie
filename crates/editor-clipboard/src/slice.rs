@@ -203,6 +203,7 @@ fn extract_cell_rect(rect: &CellRect<'_>) -> Slice {
 mod tests {
     use super::*;
     use editor_macros::state;
+    use editor_model::Modifier;
     use editor_resource::Resource;
 
     fn set_run_style(state: State, run_id: editor_model::NodeId, style_id: &str) -> State {
@@ -367,6 +368,98 @@ mod tests {
             editor_model::PlainNode::Root(_)
         ));
         assert_eq!(slice.fragment.children.len(), 2);
+    }
+
+    #[test]
+    fn extract_paragraph_break_only_preserves_plain_text_separator() {
+        let (s, ..) = state! {
+            doc { root {
+                paragraph { t1: text("a") }
+                paragraph { t2: text("b") }
+            } }
+            selection: (t1, 1) -> (t2, 0)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
+        assert_eq!(slice.fragment.children.len(), 2);
+        assert!(
+            slice
+                .fragment
+                .children
+                .iter()
+                .all(|child| matches!(child.node, PlainNode::Paragraph(_)))
+        );
+        assert_eq!(slice.to_text(), "\n\n");
+    }
+
+    #[test]
+    fn extract_paragraph_break_only_preserves_paragraph_modifiers() {
+        let (s, ..) = state! {
+            doc { root {
+                paragraph [bold] { t1: text("a") }
+                paragraph [italic] { t2: text("b") }
+            } }
+            selection: (t1, 1) -> (t2, 0)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+
+        assert_eq!(slice.fragment.children.len(), 2);
+        assert!(
+            slice.fragment.children[0]
+                .modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::Bold))
+        );
+        assert!(
+            slice.fragment.children[1]
+                .modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::Italic))
+        );
+    }
+
+    #[test]
+    fn extract_empty_paragraph_break_before_non_paragraph_copies_empty_paragraph() {
+        let (s, p1, ..) = state! {
+            doc { root {
+                p1: paragraph {}
+                image
+                paragraph {}
+            } }
+            selection: none
+        };
+        let selection = editor_state::paragraph_break_selection_at_paragraph_end(
+            &s.doc,
+            editor_state::Position::new(p1, 0),
+        )
+        .expect("empty paragraph has break");
+        let s = State {
+            selection: Some(selection),
+            ..s
+        };
+
+        let slice = Slice::extract(&s).expect("non-collapsed");
+
+        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.fragment.children.len(), 1);
+        let paragraph = &slice.fragment.children[0];
+        assert!(matches!(paragraph.node, PlainNode::Paragraph(_)));
+        assert!(paragraph.children.is_empty());
+    }
+
+    #[test]
+    fn extract_range_starting_with_paragraph_break_preserves_plain_text_separator() {
+        let (s, ..) = state! {
+            doc { root {
+                paragraph { t1: text("a") }
+                paragraph { t2: text("bc") }
+            } }
+            selection: (t1, 1) -> (t2, 1)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        assert_eq!(slice.to_text(), "\n\nb");
     }
 
     #[test]

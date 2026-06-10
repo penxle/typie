@@ -42,7 +42,7 @@ pub enum SpacingKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NavUnit {
+pub struct ChildAttachment {
     pub parent_id: NodeId,
     pub index: usize,
 }
@@ -52,7 +52,7 @@ pub struct LayoutBox {
     pub node_id: NodeId,
     pub style: BoxStyle,
     pub children: Vec<LayoutNode>,
-    pub nav: Option<NavUnit>,
+    pub attachment: Option<ChildAttachment>,
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +77,5 @@ pub struct LayoutLine {
 #[derive(Debug, Clone)]
 pub struct LayoutAtom {
     pub node_id: NodeId,
-    pub parent_id: NodeId,
-    pub index: usize,
+    pub attachment: ChildAttachment,
 }

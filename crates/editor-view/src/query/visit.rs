@@ -174,7 +174,7 @@ mod tests {
                     monolithic: false,
                 },
                 children,
-                nav: None,
+                attachment: None,
             }),
         }
     }

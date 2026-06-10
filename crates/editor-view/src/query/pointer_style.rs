@@ -139,8 +139,10 @@ mod tests {
             rect: Rect::from_xywh(x, y, w, h),
             content: LayoutContent::Atom(LayoutAtom {
                 node_id: id,
-                parent_id,
-                index: 0,
+                attachment: ChildAttachment {
+                    parent_id,
+                    index: 0,
+                },
             }),
         }
     }
@@ -168,7 +170,7 @@ mod tests {
                     monolithic: false,
                     ..Default::default()
                 },
-                nav: None,
+                attachment: None,
                 children,
             }),
         }

@@ -330,6 +330,50 @@ mod tests {
     }
 
     #[test]
+    fn paste_empty_paragraph_break_before_non_paragraph_into_text_middle_splits_once() {
+        let (source, p1, ..) = state! {
+            doc { root {
+                p1: paragraph {}
+                image
+                paragraph {}
+            } }
+            selection: none
+        };
+        let selection = editor_state::paragraph_break_selection_at_paragraph_end(
+            &source.doc,
+            editor_state::Position::new(p1, 0),
+        )
+        .expect("empty paragraph before non-paragraph has break");
+        let source = editor_state::State {
+            selection: Some(selection),
+            ..source
+        };
+        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+
+        let (target, _t1) = state! {
+            doc { root { paragraph { t1: text("asd") } } }
+            selection: (t1, 1)
+        };
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                paragraph { t2: text("sd") }
+            } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn paste_open_empty_paragraph_range_into_text_middle_inserts_boundary() {
         let (source, _p1, _t1) = state! {
             doc { root {

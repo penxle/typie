@@ -70,7 +70,10 @@ fn dnd_position_for_entry(
 ) -> Option<Position> {
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => Some(position_in_line(line, &entry.rect, point.x)),
-        LayoutContent::Atom(atom) => Some(Position::new(atom.parent_id, atom.index + 1)),
+        LayoutContent::Atom(atom) => Some(Position::new(
+            atom.attachment.parent_id,
+            atom.attachment.index + 1,
+        )),
         LayoutContent::Box(b) => box_edge_position(layout_index, doc, b, point),
         LayoutContent::Spacing(SpacingKind::Gap { position }) => Some(*position),
         LayoutContent::Spacing(SpacingKind::Fill) => None,
@@ -171,8 +174,8 @@ fn drop_child(
                 rect: entry.rect,
             })
         }
-        LayoutContent::Atom(atom) => (atom.parent_id == parent_id).then(|| DropChild {
-            offset: atom.index,
+        LayoutContent::Atom(atom) => (atom.attachment.parent_id == parent_id).then(|| DropChild {
+            offset: atom.attachment.index,
             rect: entry.rect,
         }),
         LayoutContent::Line(_) | LayoutContent::Spacing(_) => None,
@@ -350,7 +353,7 @@ mod tests {
                     monolithic: false,
                 },
                 children,
-                nav: None,
+                attachment: None,
             }),
         }
     }

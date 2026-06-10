@@ -120,7 +120,7 @@ mod tests {
                     ..Default::default()
                 },
                 children,
-                nav: None,
+                attachment: None,
             }),
         }
     }

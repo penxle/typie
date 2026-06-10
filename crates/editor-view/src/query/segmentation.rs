@@ -8,7 +8,9 @@ use crate::measure::TabGap;
 use crate::paginate::*;
 
 use super::layout_index::LayoutIndex;
-use super::navigation::{landed_entry, next_navigable_entry, prev_navigable_entry};
+use super::navigation::{
+    landed_entry, move_box_boundary, next_navigable_entry, prev_navigable_entry,
+};
 
 pub fn move_word_forward(
     layout_index: &LayoutIndex,
@@ -18,9 +20,12 @@ pub fn move_word_forward(
     let entry = layout_index.entry_for_position(pos)?;
     let line = match entry.content(layout_index)? {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) | LayoutContent::Box(LayoutBox { nav: Some(_), .. }) => {
+        LayoutContent::Atom(_) => {
             let next = next_navigable_entry(layout_index, entry)?;
             return Some(landed_entry(layout_index, next, false, true));
+        }
+        LayoutContent::Box(b) => {
+            return move_box_boundary(layout_index, entry, b, pos, true);
         }
         _ => return None,
     };
@@ -43,9 +48,12 @@ pub fn move_word_backward(
     let entry = layout_index.entry_for_position(pos)?;
     let line = match entry.content(layout_index)? {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) | LayoutContent::Box(LayoutBox { nav: Some(_), .. }) => {
+        LayoutContent::Atom(_) => {
             let prev = prev_navigable_entry(layout_index, entry)?;
             return Some(landed_entry(layout_index, prev, true, false));
+        }
+        LayoutContent::Box(b) => {
+            return move_box_boundary(layout_index, entry, b, pos, false);
         }
         _ => return None,
     };
@@ -68,9 +76,12 @@ pub fn move_sentence_forward(
     let entry = layout_index.entry_for_position(pos)?;
     let line = match entry.content(layout_index)? {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) | LayoutContent::Box(LayoutBox { nav: Some(_), .. }) => {
+        LayoutContent::Atom(_) => {
             let next = next_navigable_entry(layout_index, entry)?;
             return Some(landed_entry(layout_index, next, false, true));
+        }
+        LayoutContent::Box(b) => {
+            return move_box_boundary(layout_index, entry, b, pos, true);
         }
         _ => return None,
     };
@@ -93,9 +104,12 @@ pub fn move_sentence_backward(
     let entry = layout_index.entry_for_position(pos)?;
     let line = match entry.content(layout_index)? {
         LayoutContent::Line(l) => l,
-        LayoutContent::Atom(_) | LayoutContent::Box(LayoutBox { nav: Some(_), .. }) => {
+        LayoutContent::Atom(_) => {
             let prev = prev_navigable_entry(layout_index, entry)?;
             return Some(landed_entry(layout_index, prev, true, false));
+        }
+        LayoutContent::Box(b) => {
+            return move_box_boundary(layout_index, entry, b, pos, false);
         }
         _ => return None,
     };
@@ -129,6 +143,16 @@ fn line_items(line: &LayoutLine) -> Vec<LineItem<'_>> {
 }
 
 pub fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
+    if line_items(line).is_empty()
+        && pos.node_id == line.node_id
+        && line
+            .child_range
+            .as_ref()
+            .is_none_or(|range| pos.offset >= range.start && pos.offset <= range.end)
+    {
+        return Some(0);
+    }
+
     let mut char_count = 0;
     for item in line_items(line) {
         match item {
@@ -461,7 +485,7 @@ mod tests {
                         rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
                         content: LayoutContent::Line(line),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         }
@@ -486,8 +510,10 @@ mod tests {
             rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
             content: LayoutContent::Atom(LayoutAtom {
                 node_id: atom_id,
-                parent_id: atom_parent,
-                index: 0,
+                attachment: ChildAttachment {
+                    parent_id: atom_parent,
+                    index: 0,
+                },
             }),
         };
         let tree = LayoutTree {
@@ -497,7 +523,7 @@ mod tests {
                     node_id: NodeId::new(),
                     style: make_box_style(),
                     children: vec![line, atom],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };
@@ -538,8 +564,10 @@ mod tests {
             rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
             content: LayoutContent::Atom(LayoutAtom {
                 node_id: atom_id,
-                parent_id: atom_parent,
-                index: 0,
+                attachment: ChildAttachment {
+                    parent_id: atom_parent,
+                    index: 0,
+                },
             }),
         };
         let line = LayoutNode {
@@ -553,7 +581,7 @@ mod tests {
                     node_id: NodeId::new(),
                     style: make_box_style(),
                     children: vec![atom, line],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };

@@ -1,5 +1,5 @@
-use editor_model::{Doc, Node, NodeId, PlainNode, PlainParagraphNode, Subtree};
-use editor_state::{Affinity, Position, Selection};
+use editor_model::{Doc, Node, NodeId, NodeRef, PlainNode, PlainParagraphNode, Subtree};
+use editor_state::{Affinity, Position, Selection, paragraph_break_selection_at_paragraph_end};
 use editor_transaction::{Transaction, compact, fulfill, prune};
 
 use super::{
@@ -40,6 +40,7 @@ pub(crate) fn selection_for_node(
 }
 
 pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection) -> CommandResult {
+    let selection = lower_exact_empty_paragraph_break_delete_range(&tr.doc(), selection);
     if selection.is_collapsed() {
         return Ok(false);
     }
@@ -175,6 +176,41 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
         apply_first_text_marker_lift(tr, &captured)?;
     }
     Ok(true)
+}
+
+fn lower_exact_empty_paragraph_break_delete_range(doc: &Doc, selection: Selection) -> Selection {
+    let Some(resolved) = selection.resolve(doc) else {
+        return selection;
+    };
+    let from = Position::from(resolved.from());
+    let to = Position::from(resolved.to());
+    let Some(paragraph_break) = paragraph_break_selection_at_paragraph_end(doc, from) else {
+        return selection;
+    };
+    if Selection::new(from, to) != paragraph_break {
+        return selection;
+    }
+    let Some(start) = empty_paragraph_delete_start(doc, from) else {
+        return selection;
+    };
+
+    Selection::new(start, to)
+}
+
+fn empty_paragraph_delete_start(doc: &Doc, position: Position) -> Option<Position> {
+    let paragraph = doc.node(position.node_id)?;
+    if !matches!(paragraph.node(), Node::Paragraph(_)) || paragraph.children().next().is_some() {
+        return None;
+    }
+    before_node_position(&paragraph)
+}
+
+fn before_node_position(node: &NodeRef<'_>) -> Option<Position> {
+    Some(Position {
+        node_id: node.parent()?.id(),
+        offset: node.index()?,
+        affinity: Affinity::Downstream,
+    })
 }
 
 fn ensure_selection_after_child_range_delete(

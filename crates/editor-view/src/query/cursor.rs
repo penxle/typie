@@ -107,7 +107,7 @@ mod tests {
                             content_edge_x: None,
                         }),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         }
@@ -181,7 +181,7 @@ mod tests {
                             content_edge_x: None,
                         }),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };
@@ -230,7 +230,7 @@ mod tests {
                             content_edge_x: None,
                         }),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };
@@ -283,7 +283,7 @@ mod tests {
                             content_edge_x: None,
                         }),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };
@@ -331,7 +331,7 @@ mod tests {
                             content_edge_x: None,
                         }),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };
@@ -381,11 +381,13 @@ mod tests {
                         rect: Rect::from_xywh(10.0, 5.0, 150.0, 40.0),
                         content: LayoutContent::Atom(LayoutAtom {
                             node_id: NodeId::new(),
-                            parent_id: para_id,
-                            index: 0,
+                            attachment: ChildAttachment {
+                                parent_id: para_id,
+                                index: 0,
+                            },
                         }),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };
@@ -450,7 +452,7 @@ mod tests {
                             }),
                         },
                     ],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };
@@ -502,7 +504,7 @@ mod tests {
                             content_edge_x: None,
                         }),
                     }],
-                    nav: None,
+                    attachment: None,
                 }),
             },
         };

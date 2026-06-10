@@ -112,6 +112,24 @@ mod tests {
     }
 
     #[test]
+    fn insert_paragraph_break_slice_into_paragraph_middle_splits_once() {
+        let (initial, ..) = state! {
+            doc { root { paragraph { t1: text("asd") } } }
+            selection: (t1, 1)
+        };
+        let slice = Slice::from_text("\n\n");
+        let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { t1: text("a") }
+                paragraph { t2: text("sd") }
+            } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn insert_open_paragraph_at_block_boundary_inserts_paragraph() {
         let (initial, ..) = state! {
             doc { r: root {

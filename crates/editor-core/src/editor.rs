@@ -8,7 +8,7 @@ use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
     DocFlatExt, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    StableSelection, State,
+    StableSelection, State, closest_empty_paragraph_break_end_between, farther_endpoint,
 };
 use editor_transaction::{Effect, HistoryMeta, HistoryTag, Step, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingStyle, View, Viewport};
@@ -932,20 +932,47 @@ impl Editor {
                 let resource = self.resource.lock().unwrap();
                 self.view.would_resolve_movement(pos, movement, &resource)
             };
-            return match probe_result {
-                Some((sel, would_px)) => {
-                    let sel_changed = sel != current_sel;
-                    let px_changed = would_px != current_px;
-                    if let Mode::Probe { ref mut changed } = self.mode {
-                        *changed |= sel_changed || px_changed;
-                    }
-                    sel
-                }
-                None => None,
+            let (target, px_changed) = match probe_result {
+                Some((sel, would_px)) => (sel, would_px != current_px),
+                None => (None, false),
             };
+            let sel = target;
+            if let Mode::Probe { ref mut changed } = self.mode {
+                *changed |= sel.is_some() && sel != current_sel || px_changed;
+            };
+            return sel;
         }
-        let resource = self.resource.lock().unwrap();
-        self.view.resolve_movement(pos, movement, &resource)
+        let target = {
+            let resource = self.resource.lock().unwrap();
+            self.view.resolve_movement(pos, movement, &resource)
+        };
+        target
+    }
+
+    pub(crate) fn resolve_extend_movement(
+        &mut self,
+        selection: Selection,
+        movement: &Movement,
+    ) -> Option<Selection> {
+        let target = self.resolve_movement(&selection.head, movement)?;
+        let doc = &self.state.doc;
+        let current_is_unit = selection.is_unit_node_selection(doc);
+        let fixed = if current_is_unit {
+            farther_endpoint(doc, target.head, selection.anchor, selection.head)
+        } else {
+            selection.anchor
+        };
+        let mut head = farther_endpoint(doc, fixed, target.anchor, target.head);
+        if !current_is_unit
+            && matches!(
+                movement,
+                Movement::Grapheme { .. } | Movement::Word { .. } | Movement::Sentence { .. }
+            )
+            && let Some(stop) = closest_empty_paragraph_break_end_between(doc, selection.head, head)
+        {
+            head = stop;
+        }
+        Some(Selection::new(fixed, head))
     }
 
     pub fn last_history_tag(&self) -> Option<&HistoryTag> {

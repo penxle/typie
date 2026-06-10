@@ -1,5 +1,5 @@
 use editor_macros::ffi;
-use editor_model::{Doc, NodeId};
+use editor_model::{Doc, Node, NodeId};
 use serde::{Deserialize, Serialize};
 
 use crate::affinity::Affinity;
@@ -67,4 +67,41 @@ impl Position {
     pub fn resolve<'a>(&self, doc: &'a Doc) -> Option<ResolvedPosition<'a>> {
         ResolvedPosition::resolve(doc, *self)
     }
+}
+
+pub(crate) fn logical_boundary(doc: &Doc, pos: Position) -> Option<Vec<usize>> {
+    let node = doc.node(pos.node_id)?;
+    if let Node::Text(text) = node.node() {
+        let len = text.text.len();
+        let mut path = node.path();
+        if pos.offset == 0 {
+            return Some(path);
+        }
+        if pos.offset == len {
+            if let Some(last) = path.last_mut() {
+                *last += 1;
+            }
+            return Some(path);
+        }
+        path.push(pos.offset);
+        return Some(path);
+    }
+
+    let mut path = node.path();
+    path.push(pos.offset);
+    Some(path)
+}
+
+pub fn positions_at_same_logical_boundary(doc: &Doc, a: Position, b: Position) -> bool {
+    logical_boundary(doc, a) == logical_boundary(doc, b)
+}
+
+pub fn position_before_or_same_logical_boundary(doc: &Doc, a: Position, b: Position) -> bool {
+    if positions_at_same_logical_boundary(doc, a, b) {
+        return true;
+    }
+    let (Some(a), Some(b)) = (a.resolve(doc), b.resolve(doc)) else {
+        return false;
+    };
+    a <= b
 }

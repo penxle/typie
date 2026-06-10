@@ -550,6 +550,109 @@ mod tests {
     }
 
     #[test]
+    fn extend_to_visual_paragraph_break_selects_next_paragraph_start() {
+        let (state, _p1, t1, t2) = state! {
+            doc {
+                root {
+                    p1: paragraph { t1: text("aa") }
+                    paragraph { t2: text("bb") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let paragraph_break = editor_state::paragraph_break_selection_at_paragraph_end(
+            &editor.state.doc,
+            Position::new(t1, 2),
+        )
+        .expect("P -> P has PB");
+        let resolved = paragraph_break
+            .resolve(&editor.state.doc)
+            .expect("paragraph break selection resolves");
+        let rect = editor
+            .view
+            .selection_rects(&resolved)
+            .into_iter()
+            .find(|rect| rect.meta == editor_view::SelectionRectKind::ParagraphBreak)
+            .expect("paragraph break rect exists");
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 0),
+                head_page: rect.page_idx,
+                head_x: rect.rect.right() + 4.0,
+                head_y: rect.rect.y + rect.rect.height / 2.0,
+                base_selection: None,
+                allow_collapse: false,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(
+            sel,
+            Selection::new(
+                Position::new(t1, 0),
+                Position {
+                    node_id: t2,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                }
+            )
+        );
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_visual_removable_empty_paragraph_break_stops_before_next_block() {
+        let (state, t1, empty) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("bb") }
+                    empty: paragraph {}
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+        let paragraph_break = editor_state::paragraph_break_selection_at_paragraph_end(
+            &editor.state.doc,
+            Position::new(empty, 0),
+        )
+        .expect("removable empty paragraph has PB");
+        let resolved = paragraph_break
+            .resolve(&editor.state.doc)
+            .expect("paragraph break selection resolves");
+        let rect = editor
+            .view
+            .selection_rects(&resolved)
+            .into_iter()
+            .find(|rect| rect.meta == editor_view::SelectionRectKind::ParagraphBreak)
+            .expect("paragraph break rect exists");
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(t1, 0),
+                head_page: rect.page_idx,
+                head_x: rect.rect.right() + 4.0,
+                head_y: rect.rect.y + rect.rect.height / 2.0,
+                base_selection: None,
+                allow_collapse: false,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(
+            sel,
+            Selection::new(Position::new(t1, 0), paragraph_break.head)
+        );
+        assert!(!editor.history.can_undo());
+    }
+
+    #[test]
     fn extend_to_with_allow_collapse_applies_collapsed_result() {
         let (state, ..) = state! {
             doc { root { paragraph { t: text("hello") } } }
@@ -580,12 +683,12 @@ mod tests {
     }
 
     #[test]
-    fn extend_to_block_gap_from_text_middle_selects_to_block_edge() {
-        let (state, p1, t1, p2) = state! {
+    fn extend_to_paragraph_gap_from_text_middle_selects_paragraph_break() {
+        let (state, p1, t1, p2, t2) = state! {
             doc {
                 root {
                     p1: paragraph { t1: text("hello") }
-                    p2: paragraph { text("world") }
+                    p2: paragraph { t2: text("world") }
                 }
             }
             selection: (t1, 2)
@@ -613,17 +716,23 @@ mod tests {
         let sel = editor.state().selection.expect("selection exists in test");
         assert!(!sel.is_collapsed(), "block-gap drag collapsed to {:?}", sel);
         assert_eq!(sel.anchor, Position::new(t1, 2));
-        assert_eq!(sel.head.node_id, t1);
-        assert_eq!(sel.head.offset, 5);
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: t2,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            }
+        );
         assert!(!editor.history.can_undo());
     }
 
     #[test]
-    fn extend_up_to_block_gap_from_text_middle_selects_to_block_edge() {
-        let (state, p1, p2, t2) = state! {
+    fn extend_up_to_paragraph_gap_from_text_middle_excludes_previous_paragraph_break() {
+        let (state, p1, _t1, p2, t2) = state! {
             doc {
                 root {
-                    p1: paragraph { text("hello") }
+                    p1: paragraph { t1: text("hello") }
                     p2: paragraph { t2: text("world") }
                 }
             }
@@ -652,8 +761,14 @@ mod tests {
         let sel = editor.state().selection.expect("selection exists in test");
         assert!(!sel.is_collapsed(), "block-gap drag collapsed to {:?}", sel);
         assert_eq!(sel.anchor, Position::new(t2, 2));
-        assert_eq!(sel.head.node_id, t2);
-        assert_eq!(sel.head.offset, 0);
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: t2,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            }
+        );
         assert!(!editor.history.can_undo());
     }
 
@@ -695,13 +810,13 @@ mod tests {
     }
 
     #[test]
-    fn extend_to_monolithic_internal_block_gap_selects_to_block_edge() {
-        let (state, callout, p1, t1, p2) = state! {
+    fn extend_to_monolithic_internal_paragraph_gap_selects_paragraph_break() {
+        let (state, callout, p1, t1, p2, t2) = state! {
             doc {
                 root {
                     callout: callout {
                         p1: paragraph { t1: text("one") }
-                        p2: paragraph { text("two") }
+                        p2: paragraph { t2: text("two") }
                     }
                 }
             }
@@ -731,8 +846,14 @@ mod tests {
         let sel = editor.state().selection.expect("selection exists in test");
         assert!(!sel.is_collapsed(), "block-gap drag collapsed to {:?}", sel);
         assert_eq!(sel.anchor, Position::new(t1, 1));
-        assert_eq!(sel.head.node_id, t1);
-        assert_eq!(sel.head.offset, 3);
+        assert_eq!(
+            sel.head,
+            Position {
+                node_id: t2,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            }
+        );
         assert!(!editor.history.can_undo());
     }
 

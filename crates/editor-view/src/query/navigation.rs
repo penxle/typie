@@ -172,8 +172,9 @@ fn move_grapheme_forward(layout_index: &LayoutIndex, pos: &Position) -> Option<S
             }
             Some(landed_entry(layout_index, next, false, true))
         }
+        LayoutContent::Box(b) => move_box_boundary(layout_index, entry, b, pos, true),
         _ => {
-            let nv = nav_unit(layout_index, entry)?;
+            let nv = unit_attachment(layout_index, entry)?;
             if let Some(next) = next_navigable_entry(layout_index, entry) {
                 Some(landed_entry(layout_index, next, false, true))
             } else {
@@ -284,8 +285,9 @@ fn move_grapheme_backward(layout_index: &LayoutIndex, pos: &Position) -> Option<
             }
             Some(landed_entry(layout_index, prev, true, false))
         }
+        LayoutContent::Box(b) => move_box_boundary(layout_index, entry, b, pos, false),
         _ => {
-            let nv = nav_unit(layout_index, entry)?;
+            let nv = unit_attachment(layout_index, entry)?;
             if let Some(prev) = prev_navigable_entry(layout_index, entry) {
                 Some(landed_entry(layout_index, prev, true, false))
             } else {
@@ -299,6 +301,7 @@ fn move_line_horizontal_forward(layout_index: &LayoutIndex, pos: &Position) -> O
     let entry = layout_index.entry_for_position(pos)?;
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => Some(Selection::collapsed(last_position_in_line(line))),
+        LayoutContent::Box(b) => move_box_boundary(layout_index, entry, b, pos, true),
         _ => None,
     }
 }
@@ -307,6 +310,7 @@ fn move_line_horizontal_backward(layout_index: &LayoutIndex, pos: &Position) -> 
     let entry = layout_index.entry_for_position(pos)?;
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => Some(Selection::collapsed(first_position_in_line(line))),
+        LayoutContent::Box(b) => move_box_boundary(layout_index, entry, b, pos, false),
         _ => None,
     }
 }
@@ -524,10 +528,12 @@ fn last_position_in_line(line: &LayoutLine) -> Position {
 fn first_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Position {
     match entry.content(layout_index) {
         Some(LayoutContent::Line(line)) => first_position_in_line(line),
-        Some(LayoutContent::Atom(atom)) => Position::new(atom.parent_id, atom.index),
-        Some(LayoutContent::Box(b)) if b.nav.is_some() => {
-            let unit = b.nav.expect("checked is_some");
-            Position::new(unit.parent_id, unit.index)
+        Some(LayoutContent::Atom(atom)) => {
+            Position::new(atom.attachment.parent_id, atom.attachment.index)
+        }
+        Some(LayoutContent::Box(b)) if b.style.monolithic && b.attachment.is_some() => {
+            let attachment = b.attachment.expect("checked is_some");
+            Position::new(attachment.parent_id, attachment.index)
         }
         _ => {
             unreachable!("first_position_in_entry called on non-navigable entry")
@@ -538,10 +544,12 @@ fn first_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> P
 fn last_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Position {
     match entry.content(layout_index) {
         Some(LayoutContent::Line(line)) => last_position_in_line(line),
-        Some(LayoutContent::Atom(atom)) => Position::new(atom.parent_id, atom.index),
-        Some(LayoutContent::Box(b)) if b.nav.is_some() => {
-            let unit = b.nav.expect("checked is_some");
-            Position::new(unit.parent_id, unit.index)
+        Some(LayoutContent::Atom(atom)) => {
+            Position::new(atom.attachment.parent_id, atom.attachment.index)
+        }
+        Some(LayoutContent::Box(b)) if b.style.monolithic && b.attachment.is_some() => {
+            let attachment = b.attachment.expect("checked is_some");
+            Position::new(attachment.parent_id, attachment.index)
         }
         _ => {
             unreachable!("last_position_in_entry called on non-navigable entry")
@@ -549,9 +557,64 @@ fn last_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Po
     }
 }
 
+pub(super) fn move_box_boundary(
+    layout_index: &LayoutIndex,
+    entry: &LayoutEntry,
+    b: &LayoutBox,
+    pos: &Position,
+    forward: bool,
+) -> Option<Selection> {
+    let pivot = box_boundary_pivot(layout_index, entry, b, pos)?;
+    let target = navigable_from_pivot(layout_index, pivot, forward)?;
+    Some(landed_entry(layout_index, target, !forward, forward))
+}
+
+fn box_boundary_pivot(
+    layout_index: &LayoutIndex,
+    entry: &LayoutEntry,
+    b: &LayoutBox,
+    pos: &Position,
+) -> Option<usize> {
+    b.attachment?;
+    let idx = layout_index.entry_index(entry)?;
+    Some(match pos.affinity {
+        Affinity::Downstream => idx,
+        Affinity::Upstream => index_after_box_subtree(layout_index, idx, b.node_id),
+    })
+}
+
+fn index_after_box_subtree(layout_index: &LayoutIndex, idx: usize, node_id: NodeId) -> usize {
+    layout_index
+        .entries()
+        .enumerate()
+        .skip(idx + 1)
+        .find(|(_, entry)| !entry.ancestors().contains(&node_id))
+        .map(|(idx, _)| idx)
+        .unwrap_or_else(|| layout_index.entries().len())
+}
+
+fn navigable_from_pivot(
+    layout_index: &LayoutIndex,
+    pivot: usize,
+    forward: bool,
+) -> Option<&LayoutEntry> {
+    if forward {
+        layout_index
+            .entries()
+            .skip(pivot)
+            .find(|entry| is_navigable_entry(layout_index, entry))
+    } else {
+        layout_index
+            .entries()
+            .take(pivot)
+            .rev()
+            .find(|entry| is_navigable_entry(layout_index, entry))
+    }
+}
+
 /// First (`at_end=false`) / last (`at_end=true`) editable caret position
-/// *inside* `node_id`'s subtree — descends past the node's own `nav`
-/// bracket into its children. `None` when the node is not a Box (atoms
+/// *inside* `node_id`'s subtree — descends past the node's own attachment
+/// boundary into its children. `None` when the node is not a Box (atoms
 /// have no inner navigable) or has no navigable descendant.
 pub(crate) fn editable_position_inside(
     layout_index: &LayoutIndex,
@@ -621,11 +684,9 @@ pub(super) fn next_navigable_entry<'a>(
     entry: &LayoutEntry,
 ) -> Option<&'a LayoutEntry> {
     let idx = layout_index.entry_index(entry)?;
-    let skipped_subtree = unit_box_id(layout_index, entry);
     layout_index
         .entries()
         .skip(idx + 1)
-        .filter(|entry| skipped_subtree.is_none_or(|node_id| !entry.ancestors().contains(&node_id)))
         .find(|entry| is_navigable_entry(layout_index, entry))
 }
 
@@ -634,12 +695,10 @@ pub(super) fn prev_navigable_entry<'a>(
     entry: &LayoutEntry,
 ) -> Option<&'a LayoutEntry> {
     let idx = layout_index.entry_index(entry)?;
-    let skipped_subtree = unit_box_id(layout_index, entry);
     layout_index
         .entries()
         .take(idx)
         .rev()
-        .filter(|entry| skipped_subtree.is_none_or(|node_id| !entry.ancestors().contains(&node_id)))
         .find(|entry| is_navigable_entry(layout_index, entry))
 }
 
@@ -761,13 +820,6 @@ fn is_navigable_inside(layout_index: &LayoutIndex, entry: &LayoutEntry, node_id:
     is_navigable_entry(layout_index, entry) && entry.ancestors().contains(&node_id)
 }
 
-fn unit_box_id(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Option<NodeId> {
-    let LayoutContent::Box(b) = entry.content(layout_index)? else {
-        return None;
-    };
-    b.nav.is_some().then_some(b.node_id)
-}
-
 fn compare_navigation_band_entry(
     a: &LayoutEntry,
     b: &LayoutEntry,
@@ -805,18 +857,16 @@ fn axis_distance(start: f32, end: f32, value: f32) -> f32 {
     }
 }
 
-fn nav_unit(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Option<NavUnit> {
+fn unit_attachment(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Option<ChildAttachment> {
     match entry.content(layout_index)? {
-        LayoutContent::Atom(atom) => Some(NavUnit {
-            parent_id: atom.parent_id,
-            index: atom.index,
-        }),
-        LayoutContent::Box(b) => b.nav,
+        LayoutContent::Atom(atom) => Some(atom.attachment),
+        LayoutContent::Box(b) if b.style.monolithic => b.attachment,
+        LayoutContent::Box(_) => None,
         LayoutContent::Line(_) | LayoutContent::Spacing(_) => None,
     }
 }
 
-fn unit_selection(nv: NavUnit, forward: bool) -> Selection {
+fn unit_selection(nv: ChildAttachment, forward: bool) -> Selection {
     let front = Position {
         node_id: nv.parent_id,
         offset: nv.index,
@@ -844,7 +894,7 @@ pub(crate) fn landed_entry(
     at_end: bool,
     forward: bool,
 ) -> Selection {
-    if let Some(nv) = nav_unit(layout_index, entry) {
+    if let Some(nv) = unit_attachment(layout_index, entry) {
         return unit_selection(nv, forward);
     }
     let pos = if at_end {
@@ -864,13 +914,7 @@ fn navigate_to_entry(
         Some(LayoutContent::Line(line)) => {
             Selection::collapsed(position_in_line(line, &entry.rect, preferred_x))
         }
-        Some(LayoutContent::Atom(atom)) => unit_selection(
-            NavUnit {
-                parent_id: atom.parent_id,
-                index: atom.index,
-            },
-            true,
-        ),
+        Some(LayoutContent::Atom(atom)) => unit_selection(atom.attachment, true),
         _ => {
             unreachable!("navigate_to_entry called on non-navigable")
         }
@@ -940,17 +984,25 @@ mod tests {
             rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
             content: LayoutContent::Atom(LayoutAtom {
                 node_id,
-                parent_id,
-                index,
+                attachment: ChildAttachment { parent_id, index },
             }),
         }
     }
 
     fn make_box_node(y: f32, h: f32, children: Vec<LayoutNode>) -> LayoutNode {
+        make_box_node_with_id(NodeId::new(), y, h, children)
+    }
+
+    fn make_box_node_with_id(
+        node_id: NodeId,
+        y: f32,
+        h: f32,
+        children: Vec<LayoutNode>,
+    ) -> LayoutNode {
         LayoutNode {
             rect: Rect::from_xywh(0.0, y, 200.0, h),
             content: LayoutContent::Box(LayoutBox {
-                node_id: NodeId::new(),
+                node_id,
                 style: BoxStyle {
                     direction: LayoutDirection::Vertical,
                     padding: EdgeInsets::ZERO,
@@ -961,7 +1013,50 @@ mod tests {
                     monolithic: false,
                 },
                 children,
-                nav: None,
+                attachment: None,
+            }),
+        }
+    }
+
+    fn make_attached_box_node(
+        parent_id: NodeId,
+        index: usize,
+        node_id: NodeId,
+        y: f32,
+        h: f32,
+        children: Vec<LayoutNode>,
+    ) -> LayoutNode {
+        let mut node = make_box_node_with_id(node_id, y, h, children);
+        let LayoutContent::Box(b) = &mut node.content else {
+            unreachable!("make_box_node_with_id returns a box");
+        };
+        b.attachment = Some(ChildAttachment { parent_id, index });
+        node
+    }
+
+    fn make_paragraph_line(
+        paragraph_id: NodeId,
+        text_id: NodeId,
+        y: f32,
+        text: &str,
+    ) -> LayoutNode {
+        let n = text.chars().count();
+        LayoutNode {
+            rect: Rect::from_xywh(0.0, y, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: paragraph_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(text_id, 0, text, 0.0, gs(n))],
+                ruby_annotations: vec![],
+                empty_caret_x: 0.0,
+                child_range: None,
+                tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
             }),
         }
     }
@@ -1768,6 +1863,139 @@ mod tests {
     }
 
     #[test]
+    fn grapheme_forward_from_attached_box_leading_boundary_uses_next_stream_entry() {
+        let paragraph_id = NodeId::new();
+        let text_id = NodeId::new();
+        let tree = LayoutTree {
+            root: make_box_node_with_id(
+                NodeId::ROOT,
+                0.0,
+                20.0,
+                vec![make_attached_box_node(
+                    NodeId::ROOT,
+                    0,
+                    paragraph_id,
+                    0.0,
+                    20.0,
+                    vec![make_paragraph_line(paragraph_id, text_id, 0.0, "ab")],
+                )],
+            ),
+        };
+
+        let sel = mov(
+            &tree,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(sel, Selection::collapsed(Position::new(text_id, 0)));
+    }
+
+    #[test]
+    fn grapheme_backward_from_attached_box_trailing_boundary_uses_prev_stream_entry() {
+        let paragraph_id = NodeId::new();
+        let text_id = NodeId::new();
+        let tree = LayoutTree {
+            root: make_box_node_with_id(
+                NodeId::ROOT,
+                0.0,
+                20.0,
+                vec![make_attached_box_node(
+                    NodeId::ROOT,
+                    0,
+                    paragraph_id,
+                    0.0,
+                    20.0,
+                    vec![make_paragraph_line(paragraph_id, text_id, 0.0, "ab")],
+                )],
+            ),
+        };
+
+        let sel = mov(
+            &tree,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            sel,
+            Selection::collapsed(Position {
+                node_id: text_id,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            })
+        );
+    }
+
+    #[test]
+    fn grapheme_movement_skips_empty_attached_box_by_stream_order() {
+        let before_id = NodeId::new();
+        let empty_box_id = NodeId::new();
+        let after_id = NodeId::new();
+        let tree = LayoutTree {
+            root: make_box_node_with_id(
+                NodeId::ROOT,
+                0.0,
+                60.0,
+                vec![
+                    make_line_node(before_id, 0.0, "aa"),
+                    make_attached_box_node(NodeId::ROOT, 1, empty_box_id, 20.0, 20.0, vec![]),
+                    make_line_node(after_id, 40.0, "bb"),
+                ],
+            ),
+        };
+
+        let forward = mov(
+            &tree,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 1,
+                affinity: Affinity::Downstream,
+            },
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        )
+        .unwrap();
+        assert_eq!(forward, Selection::collapsed(Position::new(after_id, 0)));
+
+        let backward = mov(
+            &tree,
+            Position {
+                node_id: NodeId::ROOT,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            backward,
+            Selection::collapsed(Position {
+                node_id: before_id,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            })
+        );
+    }
+
+    #[test]
     fn grapheme_backward_from_text_after_atom_selects_atom_backward() {
         let f = fixture();
         // Moving backward from the start of "baz" whose previous navigable is an atom must produce a backward node selection.
@@ -2432,14 +2660,14 @@ mod tests {
     }
 
     #[test]
-    fn fold_node_selection_arrow_left_steps_out_backward() {
-        let (st, r, before) = state! {
+    fn fold_trailing_boundary_arrow_left_enters_fold_content() {
+        let (st, r, c) = state! {
             doc { r: root {
-                paragraph { before: text("prev") }
-                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
+                paragraph { text("prev") }
+                fold { fold_title { text("t") } fold_content { paragraph { c: text("c") } } }
                 paragraph { text("after") }
             } }
-            selection: (before, 0)
+            selection: (c, 0)
         };
         let mut view = View::new_test();
         view.layout(&st.doc);
@@ -2456,10 +2684,10 @@ mod tests {
                 },
                 &Resource::new_test(),
             )
-            .expect("arrow-left must move from a fold node-selection");
+            .expect("arrow-left must move from the fold trailing boundary");
         assert!(sel.is_collapsed());
-        assert_eq!(sel.head.node_id, before);
-        assert_eq!(sel.head.offset, 4);
+        assert_eq!(sel.head.node_id, c);
+        assert_eq!(sel.head.offset, 1);
     }
 
     #[test]

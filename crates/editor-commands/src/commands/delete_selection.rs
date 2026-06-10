@@ -387,6 +387,65 @@ mod tests {
     }
 
     #[test]
+    fn delete_empty_paragraph_break_before_non_paragraph_removes_empty_owner() {
+        let (initial, ..) = state! {
+            doc { r: root {
+                p1: paragraph {}
+                callout { paragraph { t2: text("callout") } }
+                paragraph { t3: text("tail") }
+            } }
+            selection: (p1, 0) -> (r, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                callout { paragraph { t2: text("callout") } }
+                paragraph { t3: text("tail") }
+            } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_empty_paragraph_break_before_paragraph_keeps_next_paragraph_identity() {
+        let (initial, ..) = state! {
+            doc { root {
+                p1: paragraph {}
+                p2: paragraph { t2: text("next") }
+            } }
+            selection: (p1, 0) -> (t2, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                p2: paragraph { t2: text("next") }
+            } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_range_containing_empty_paragraph_break_keeps_non_empty_paragraph_identity() {
+        let (initial, ..) = state! {
+            doc { root {
+                p1: paragraph {}
+                p2: paragraph { t2: text("next") }
+            } }
+            selection: (p1, 0) -> (t2, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                p2: paragraph { t2: text("xt") }
+            } }
+            selection: (t2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn delete_selected_trailing_empty_paragraph_after_textblock_creates_new_trailing_paragraph() {
         let (initial, ..) = state! {
             doc { r1: root {

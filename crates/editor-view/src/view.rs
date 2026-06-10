@@ -16,7 +16,7 @@ use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
 use crate::page_fragment::PageFragmentTree;
 use crate::paginate::{
-    LayoutAtom, LayoutContent, LayoutLine, LayoutNode, NavUnit, Paginator, SpacingKind,
+    ChildAttachment, LayoutAtom, LayoutContent, LayoutLine, LayoutNode, Paginator, SpacingKind,
 };
 use crate::query;
 use crate::query::{CursorMetrics, PointerStyle, SelectionEndpoints, SelectionRect};
@@ -244,11 +244,20 @@ impl View {
             .layout_index
             .exact_entry(point, is_drag_exact_hit_entry)
         {
+            if let Some(selection) = query::paragraph_break::drag_selection_for_entry(
+                &result.layout_index,
+                doc,
+                &anchor,
+                entry,
+                point,
+            ) {
+                return Some(selection);
+            }
             return match entry.content(&result.layout_index) {
                 Some(LayoutContent::Line(_) | LayoutContent::Atom(_)) => {
                     text_or_atom_selection_for_entry(&result.layout_index, entry, point.x)
                 }
-                Some(LayoutContent::Box(b)) if b.nav.is_some() => b.nav.map(select_unit),
+                Some(LayoutContent::Box(b)) if b.style.monolithic => b.attachment.map(select_unit),
                 Some(LayoutContent::Spacing(SpacingKind::Gap { .. })) => {
                     drag_boundary_fallback(&result.layout_index, doc, &anchor, point)
                 }
@@ -684,7 +693,7 @@ fn is_drag_exact_hit_entry(_entry: &query::layout_index::LayoutEntry, node: &Lay
         LayoutContent::Line(_)
         | LayoutContent::Atom(_)
         | LayoutContent::Spacing(SpacingKind::Gap { .. }) => true,
-        LayoutContent::Box(b) => b.nav.is_some(),
+        LayoutContent::Box(b) => b.style.monolithic && b.attachment.is_some(),
         LayoutContent::Spacing(SpacingKind::Fill) => false,
     }
 }
@@ -803,11 +812,11 @@ fn drag_fallback_candidate(
             let hit = select_atom(atom);
             Some(DragFallbackCandidate::new(entry, point, hit.anchor, hit))
         }
-        LayoutContent::Box(b) if b.nav.is_some() => {
+        LayoutContent::Box(b) if b.style.monolithic && b.attachment.is_some() => {
             if point.y >= entry.rect.y && point.y < entry.rect.bottom() {
                 return None;
             }
-            let hit = select_unit(b.nav?);
+            let hit = select_unit(b.attachment?);
             Some(DragFallbackCandidate::new(entry, point, hit.anchor, hit))
         }
         LayoutContent::Box(_) | LayoutContent::Spacing(_) => None,
@@ -821,28 +830,28 @@ fn position_in_line(line: &LayoutLine, rect: &Rect, x: f32) -> Position {
 fn select_atom(atom: &LayoutAtom) -> Selection {
     Selection::new(
         Position {
-            node_id: atom.parent_id,
-            offset: atom.index,
+            node_id: atom.attachment.parent_id,
+            offset: atom.attachment.index,
             affinity: Affinity::Downstream,
         },
         Position {
-            node_id: atom.parent_id,
-            offset: atom.index + 1,
+            node_id: atom.attachment.parent_id,
+            offset: atom.attachment.index + 1,
             affinity: Affinity::Upstream,
         },
     )
 }
 
-fn select_unit(nav: NavUnit) -> Selection {
+fn select_unit(attachment: ChildAttachment) -> Selection {
     Selection::new(
         Position {
-            node_id: nav.parent_id,
-            offset: nav.index,
+            node_id: attachment.parent_id,
+            offset: attachment.index,
             affinity: Affinity::Downstream,
         },
         Position {
-            node_id: nav.parent_id,
-            offset: nav.index + 1,
+            node_id: attachment.parent_id,
+            offset: attachment.index + 1,
             affinity: Affinity::Upstream,
         },
     )
@@ -1026,7 +1035,7 @@ mod tests {
     }
 
     #[test]
-    fn hit_test_extending_in_root_block_gap_returns_anchor_side_target() {
+    fn hit_test_extending_in_paragraph_block_gap_returns_paragraph_break() {
         let (doc, p1, t1, p2) = doc! {
             root {
                 p1: paragraph { t1: text("one") }
@@ -1052,18 +1061,256 @@ mod tests {
             )
             .unwrap();
 
-        let end = Position {
-            node_id: t1,
-            offset: 3,
-            affinity: Affinity::Upstream,
-        };
-        assert!(sel.is_collapsed());
-        assert_eq!(sel.anchor, end);
-        assert_eq!(sel.head, end);
+        assert_eq!(
+            sel,
+            editor_state::paragraph_break_selection_at_paragraph_end(&doc, Position::new(t1, 3))
+                .expect("P -> P has PB")
+        );
     }
 
     #[test]
-    fn hit_test_extending_in_monolithic_internal_block_gap_returns_inner_target() {
+    fn hit_test_extending_in_paragraph_gap_selects_paragraph_break() {
+        let (doc, p1, t1, p2, _t2) = doc! {
+            root [block_gap(200)] {
+                p1: paragraph { t1: text("one") }
+                p2: paragraph { t2: text("two") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let p1_rect = view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(t1, 3),
+                0,
+                p1_rect.x + p1_rect.width / 2.0,
+                (p1_rect.bottom() + p2_rect.y) / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(
+            hit,
+            editor_state::paragraph_break_selection_at_paragraph_end(&doc, Position::new(t1, 3))
+                .expect("P -> P has PB")
+        );
+    }
+
+    #[test]
+    fn hit_test_extending_up_to_paragraph_gap_excludes_previous_paragraph_break() {
+        let (doc, p1, _t1, p2, t2) = doc! {
+            root [block_gap(200)] {
+                p1: paragraph { t1: text("one") }
+                p2: paragraph { t2: text("two") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let p1_rect = view.node_box_rects(&[p1])[0].rect;
+        let p2_rect = view.node_box_rects(&[p2])[0].rect;
+        assert!(
+            p1_rect.bottom() < p2_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(t2, 1),
+                0,
+                p2_rect.x + p2_rect.width / 2.0,
+                (p1_rect.bottom() + p2_rect.y) / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(
+            hit,
+            Selection::collapsed(Position {
+                node_id: t2,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            })
+        );
+    }
+
+    #[test]
+    fn hit_test_extending_in_gap_after_text_paragraph_before_atom_is_not_paragraph_break() {
+        let (doc, p1, t1, image) = doc! {
+            root [block_gap(200)] {
+                p1: paragraph { t1: text("one") }
+                image: image
+                paragraph { text("tail") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let p1_rect = view.node_box_rects(&[p1])[0].rect;
+        let image_rect = view
+            .external_elements(&doc, None)
+            .into_iter()
+            .find(|element| element.node_id == image)
+            .expect("image external element exists")
+            .bounds;
+        assert!(
+            p1_rect.bottom() < image_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(t1, 1),
+                0,
+                p1_rect.x + p1_rect.width / 2.0,
+                (p1_rect.bottom() + image_rect.y) / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(
+            hit,
+            Selection::collapsed(Position {
+                node_id: t1,
+                offset: 3,
+                affinity: Affinity::Upstream,
+            })
+        );
+    }
+
+    #[test]
+    fn hit_test_extending_in_gap_after_removable_empty_paragraph_selects_paragraph_break() {
+        let (doc, p1, empty, image) = doc! {
+            root [block_gap(200)] {
+                p1: paragraph { text("one") }
+                empty: paragraph {}
+                image: image
+                paragraph { text("tail") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let empty_rect = view.node_box_rects(&[empty])[0].rect;
+        let image_rect = view
+            .external_elements(&doc, None)
+            .into_iter()
+            .find(|element| element.node_id == image)
+            .expect("image external element exists")
+            .bounds;
+        assert!(
+            empty_rect.bottom() < image_rect.y,
+            "test requires a visible paragraph gap"
+        );
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(p1, 0),
+                0,
+                empty_rect.x + empty_rect.width / 2.0,
+                (empty_rect.bottom() + image_rect.y) / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(
+            hit,
+            editor_state::paragraph_break_selection_at_paragraph_end(&doc, Position::new(empty, 0))
+                .expect("removable empty paragraph has PB")
+        );
+    }
+
+    #[test]
+    fn hit_test_extending_paragraph_break_right_side_returns_next_paragraph_start() {
+        let (doc, _p1, t1, t2) = doc! {
+            root {
+                p1: paragraph { t1: text("aa") }
+                paragraph { t2: text("bb") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let pb_selection =
+            editor_state::paragraph_break_selection_at_paragraph_end(&doc, Position::new(t1, 2))
+                .expect("P -> P has PB")
+                .resolve(&doc)
+                .unwrap();
+        let pb_rect = view
+            .selection_rects(&pb_selection)
+            .into_iter()
+            .find(|rect| rect.meta == crate::query::SelectionRectKind::ParagraphBreak)
+            .expect("paragraph break rect exists");
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(t1, 0),
+                pb_rect.page_idx,
+                pb_rect.rect.right() + 4.0,
+                pb_rect.rect.y + pb_rect.rect.height / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(
+            hit,
+            Selection::new(
+                Position {
+                    node_id: t1,
+                    offset: 2,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: t2,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
+    }
+
+    #[test]
+    fn hit_test_extending_removable_empty_paragraph_break_right_side_returns_block_boundary() {
+        let (doc, root, p1) = doc! {
+            root: root {
+                p1: paragraph {}
+                image
+                paragraph {}
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let pb_end = Position {
+            node_id: root,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let pb_selection = Selection::new(Position::new(p1, 0), pb_end)
+            .resolve(&doc)
+            .unwrap();
+        let pb_rect = view
+            .selection_rects(&pb_selection)
+            .into_iter()
+            .find(|rect| rect.meta == crate::query::SelectionRectKind::ParagraphBreak)
+            .expect("paragraph break rect exists");
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(p1, 0),
+                pb_rect.page_idx,
+                pb_rect.rect.right() + 4.0,
+                pb_rect.rect.y + pb_rect.rect.height / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(hit, Selection::new(Position::new(p1, 0), pb_end));
+    }
+
+    #[test]
+    fn hit_test_extending_in_monolithic_internal_paragraph_gap_returns_paragraph_break() {
         let (doc, callout, p1, t1, p2) = doc! {
             root {
                 callout: callout {
@@ -1092,14 +1339,11 @@ mod tests {
             )
             .unwrap();
 
-        let end = Position {
-            node_id: t1,
-            offset: 3,
-            affinity: Affinity::Upstream,
-        };
-        assert!(sel.is_collapsed());
-        assert_eq!(sel.anchor, end);
-        assert_eq!(sel.head, end);
+        assert_eq!(
+            sel,
+            editor_state::paragraph_break_selection_at_paragraph_end(&doc, Position::new(t1, 3))
+                .expect("P -> P has PB")
+        );
     }
 
     #[test]
@@ -2095,7 +2339,11 @@ mod tests {
             .resolve(&doc)
             .unwrap();
 
-        let rects = view.selection_rects(&resolved);
+        let rects: Vec<_> = view
+            .selection_rects(&resolved)
+            .into_iter()
+            .filter(|rect| rect.meta == crate::query::SelectionRectKind::Text)
+            .collect();
         let first = rects[0].rect;
         let last = rects[1].rect;
         let max_x = last.x + last.width;

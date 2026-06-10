@@ -5,34 +5,13 @@ use editor_model::{Doc, Node, NodeId, NodeRef, Schema};
 
 use crate::affinity::Affinity;
 use crate::gap_cursor::between_monolithic_at;
-use crate::position::Position;
+use crate::paragraph_break::selection_exactly_matches_trailing_paragraph_break;
+use crate::position::{Position, logical_boundary};
 use crate::resolved_selection::ResolvedSelection;
 use crate::selection::Selection;
 
 fn boundary_identity(doc: &Doc, pos: Position) -> Vec<usize> {
-    let node = doc
-        .node(pos.node_id)
-        .expect("boundary_identity: node must exist");
-    if let Node::Text(text) = node.node() {
-        let len = text.text.len();
-        let mut path = node.path();
-        if pos.offset == 0 {
-            return path;
-        }
-        if pos.offset == len {
-            // A text node's path last element is its index inside the parent;
-            // the boundary immediately after the node is that index + 1.
-            if let Some(last) = path.last_mut() {
-                *last += 1;
-            }
-            return path;
-        }
-        path.push(pos.offset);
-        return path;
-    }
-    let mut path = node.path();
-    path.push(pos.offset);
-    path
+    logical_boundary(doc, pos).expect("boundary_identity: node must exist")
 }
 
 fn descend_or_stay_at_textblock<'a>(
@@ -366,6 +345,9 @@ impl<'a> ResolvedSelection<'a> {
         let a_resolved = a.resolve(doc).expect("normalized anchor resolves");
         let h_resolved = h.resolve(doc).expect("normalized head resolves");
         if subtree_violation(a_resolved.path(), h_resolved.path()) {
+            if selection_exactly_matches_trailing_paragraph_break(doc, Selection::new(a, h)) {
+                return Selection { anchor: a, head: h };
+            }
             if let Some(sel) = enclosing_unit_at_subtree_overlap(doc, a_in, h_in) {
                 return sel;
             }

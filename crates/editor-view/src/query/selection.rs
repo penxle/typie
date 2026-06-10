@@ -13,6 +13,7 @@ use super::layout_index::{LayoutEntry, LayoutIndex};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SelectionRectKind {
     Text,
+    ParagraphBreak,
     Atom,
     Block,
 }
@@ -23,6 +24,41 @@ pub type SelectionRect = PageRect<SelectionRectKind>;
 struct SelectionRectSets {
     pub line_box_rects: Vec<SelectionRect>,
     pub text_rects: Vec<SelectionRect>,
+}
+
+impl SelectionRectSets {
+    fn empty() -> Self {
+        Self {
+            line_box_rects: Vec::new(),
+            text_rects: Vec::new(),
+        }
+    }
+
+    fn mirrored(rects: Vec<SelectionRect>) -> Self {
+        Self {
+            line_box_rects: rects.clone(),
+            text_rects: rects,
+        }
+    }
+
+    fn push_same(&mut self, rect: SelectionRect) {
+        self.line_box_rects.push(rect.clone());
+        self.text_rects.push(rect);
+    }
+
+    fn sort_by_position(&mut self) {
+        let mut pairs: Vec<_> = std::mem::take(&mut self.line_box_rects)
+            .into_iter()
+            .zip(std::mem::take(&mut self.text_rects))
+            .collect();
+        pairs.sort_by(|(a, _), (b, _)| {
+            a.page_idx
+                .cmp(&b.page_idx)
+                .then_with(|| a.rect.y.total_cmp(&b.rect.y))
+                .then_with(|| a.rect.x.total_cmp(&b.rect.x))
+        });
+        (self.line_box_rects, self.text_rects) = pairs.into_iter().unzip();
+    }
 }
 
 #[ffi]
@@ -54,20 +90,17 @@ fn selection_rect_sets(
     selection: &editor_state::ResolvedSelection<'_>,
 ) -> SelectionRectSets {
     if selection.is_collapsed() {
-        return SelectionRectSets {
-            line_box_rects: vec![],
-            text_rects: vec![],
-        };
+        return SelectionRectSets::empty();
     }
 
     if let Some(cell_rect) = selection.as_cell_rect() {
         let ids: Vec<_> = cell_rect.cells().map(|cell| cell.id()).collect();
         let rects = block_selection_rects(layout_index, &ids);
-        return SelectionRectSets {
-            line_box_rects: rects.clone(),
-            text_rects: rects,
-        };
+        return SelectionRectSets::mirrored(rects);
     }
+
+    let pages = layout_index.pages();
+    let paragraph_breaks = super::paragraph_break::included_in_selection(layout_index, selection);
 
     let from = Position::from(selection.from());
     let to = Position::from(selection.to());
@@ -75,12 +108,11 @@ fn selection_rect_sets(
     // boundary positions are disambiguated by affinity
     // rather than by the permissive per-line `line_contains_position`.
     //
-    // `LayoutIndex::entry_for_position` is permissive on purpose for navigation: a monolithic box
-    // owns both of its bracket positions, and an atom owns both of its edges.
-    // For rect attribution those permissive matches are wrong when the endpoint
-    // is semantically a container boundary — the box-level phase machine (and
-    // the `fully && monolithic` branch) must fire. Strip an owner whose
-    // attachment to the endpoint is not the affinity-selected one.
+    // `LayoutIndex::entry_for_position` is permissive on purpose for navigation: an attached
+    // box owns its child-boundary positions, and an atom owns both of its edges.
+    // For rect attribution those box matches are structural container boundaries
+    // that the box-level phase machine must claim. Strip them, while keeping atom
+    // ownership only on the affinity-selected edge.
     let from_owner = layout_index
         .entry_for_position(&from)
         .filter(|entry| attached(layout_index, entry, &from));
@@ -88,10 +120,7 @@ fn selection_rect_sets(
         .entry_for_position(&to)
         .filter(|entry| attached(layout_index, entry, &to));
     let mut phase = Phase::Before;
-    let mut rects = SelectionRectSets {
-        line_box_rects: Vec::new(),
-        text_rects: Vec::new(),
-    };
+    let mut rects = SelectionRectSets::empty();
 
     visit_node(
         &layout_index.tree().root,
@@ -102,11 +131,22 @@ fn selection_rect_sets(
         to_owner,
         &mut phase,
         &mut rects,
-        layout_index.pages(),
+        pages,
         selection.doc(),
     );
 
+    for paragraph_break in paragraph_breaks {
+        let rect = paragraph_break_rect(paragraph_break.geometry);
+        rects.push_same(rect);
+    }
+    rects.sort_by_position();
+
     rects
+}
+
+fn paragraph_break_rect(geometry: super::paragraph_break::ParagraphBreakGeometry) -> SelectionRect {
+    let rect = geometry.rect;
+    PageRect::with_meta(rect.page_idx, rect.rect, SelectionRectKind::ParagraphBreak)
 }
 
 pub(crate) fn block_selection_rects(
@@ -256,10 +296,12 @@ fn selected_external_atom_hit_test(
 //   via its own phase transitions.
 fn attached(layout_index: &LayoutIndex, entry: &LayoutEntry, pos: &Position) -> bool {
     match entry.content(layout_index) {
-        Some(LayoutContent::Box(b)) => b.nav.is_none(),
+        Some(LayoutContent::Box(_)) => false,
         Some(LayoutContent::Atom(atom)) => {
-            let leading = pos.offset == atom.index && pos.affinity == Affinity::Downstream;
-            let trailing = pos.offset == atom.index + 1 && pos.affinity == Affinity::Upstream;
+            let leading =
+                pos.offset == atom.attachment.index && pos.affinity == Affinity::Downstream;
+            let trailing =
+                pos.offset == atom.attachment.index + 1 && pos.affinity == Affinity::Upstream;
             leading || trailing
         }
         _ => true,
@@ -285,6 +327,15 @@ fn line_has_trailing_non_text(line: &LayoutLine) -> bool {
         }
     }
     range.end.saturating_sub(range.start) > text_child_count
+}
+
+fn strut_line_has_selectable_child_range(line: &LayoutLine) -> bool {
+    line.glyph_runs.is_empty()
+        && line.tab_gaps.is_empty()
+        && line
+            .child_range
+            .as_ref()
+            .is_some_and(|range| range.start < range.end)
 }
 
 fn ruby_band(line: &LayoutLine) -> f32 {
@@ -417,7 +468,7 @@ fn visit_line(
         from.node_id == line.node_id && to.node_id == line.node_id && from.offset != to.offset;
     let width = if x_end > x_start {
         x_end - x_start
-    } else if line.glyph_runs.is_empty() || spans_hard_break {
+    } else if spans_hard_break || strut_line_has_selectable_child_range(line) {
         hb_placeholder
     } else {
         return;
@@ -454,8 +505,8 @@ fn visit_atom(
     pages: &[LayoutPage],
     doc: &Doc,
 ) {
-    let is_from = from.node_id == atom.parent_id && from.offset == atom.index;
-    let is_to = to.node_id == atom.parent_id && to.offset == atom.index + 1;
+    let is_from = from.node_id == atom.attachment.parent_id && from.offset == atom.attachment.index;
+    let is_to = to.node_id == atom.attachment.parent_id && to.offset == atom.attachment.index + 1;
 
     if *phase == Phase::Before && is_from {
         *phase = Phase::Inside;
@@ -479,8 +530,7 @@ fn visit_atom(
             ),
             SelectionRectKind::Atom,
         );
-        rects.line_box_rects.push(rect.clone());
-        rects.text_rects.push(rect);
+        rects.push_same(rect);
     }
 
     if is_to {
@@ -582,8 +632,7 @@ fn visit_box(
                 ),
                 SelectionRectKind::Block,
             );
-            rects.line_box_rects.push(rect.clone());
-            rects.text_rects.push(rect);
+            rects.push_same(rect);
         }
     }
 }
@@ -592,7 +641,7 @@ fn visit_box(
 mod tests {
     use editor_macros::{doc, state};
     use editor_model::NodeId;
-    use editor_state::{Position, Selection};
+    use editor_state::{Affinity, Position, Selection};
 
     use super::*;
     use crate::view::View;
@@ -609,6 +658,34 @@ mod tests {
             LayoutContent::Box(bx) => bx.children.iter().find_map(first_line),
             LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
         }
+    }
+
+    fn line_y_for_child_range(
+        view: &View,
+        node_id: NodeId,
+        child_range: std::ops::Range<usize>,
+    ) -> Option<f32> {
+        fn find(
+            node: &LayoutNode,
+            node_id: NodeId,
+            child_range: &std::ops::Range<usize>,
+        ) -> Option<f32> {
+            match &node.content {
+                LayoutContent::Line(line)
+                    if line.node_id == node_id
+                        && line.child_range.as_ref() == Some(child_range) =>
+                {
+                    Some(node.rect.y)
+                }
+                LayoutContent::Box(bx) => bx
+                    .children
+                    .iter()
+                    .find_map(|child| find(child, node_id, child_range)),
+                LayoutContent::Line(_) | LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
+            }
+        }
+
+        find(&view.layout_tree_for_test()?.root, node_id, &child_range)
     }
 
     #[test]
@@ -634,6 +711,309 @@ mod tests {
         assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
         assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
+    fn paragraph_break_selection_has_paragraph_break_rect() {
+        let (doc, _p1, t1, _p2, _t2) = doc! {
+            root {
+                p1: paragraph { t1: text("a") }
+                p2: paragraph { t2: text("b") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel =
+            editor_state::paragraph_break_selection_at_paragraph_end(&doc, Position::new(t1, 1))
+                .expect("P -> P has paragraph break");
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(rects.len(), 1);
+        assert_eq!(rects[0].meta, SelectionRectKind::ParagraphBreak);
+        assert!(rects[0].rect.width > 0.0);
+        assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
+    fn removable_empty_paragraph_break_selection_has_paragraph_break_rect() {
+        let (doc, root, p1) = doc! {
+            root: root {
+                p1: paragraph {}
+                callout { paragraph { text("callout") } }
+                paragraph { text("tail") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(
+            Position::new(p1, 0),
+            Position {
+                node_id: root,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(rects.len(), 1);
+        assert_eq!(rects[0].meta, SelectionRectKind::ParagraphBreak);
+        assert!(rects[0].rect.width > 0.0);
+        assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
+    fn selection_containing_paragraph_break_shows_paragraph_break_rect() {
+        let (doc, _p1, t1, _p2, t2) = doc! {
+            root {
+                p1: paragraph { t1: text("a") }
+                p2: paragraph { t2: text("bc") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(
+            Position {
+                node_id: t1,
+                offset: 1,
+                affinity: Affinity::Downstream,
+            },
+            Position::new(t2, 1),
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(
+            rects.iter().any(|r| r.meta == SelectionRectKind::Text),
+            "range must still show selected text, got {rects:?}"
+        );
+        assert!(
+            rects
+                .iter()
+                .any(|r| r.meta == SelectionRectKind::ParagraphBreak),
+            "range containing PB must show PB affordance, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn selection_to_next_paragraph_start_with_upstream_affinity_shows_paragraph_break_rect() {
+        let (state, ..) = state! {
+            doc {
+                root [block_gap(200)] {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 0, <)
+        };
+        let view = layout(&state.doc);
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(
+            rects
+                .iter()
+                .any(|r| r.meta == SelectionRectKind::ParagraphBreak),
+            "range ending at next paragraph start must show PB affordance, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn reversed_selection_from_next_paragraph_text_shows_paragraph_break_rect() {
+        let (state, ..) = state! {
+            doc {
+                root [block_gap(200)] {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t2, 1) -> (t1, 2)
+        };
+        let view = layout(&state.doc);
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(
+            rects
+                .iter()
+                .any(|r| r.meta == SelectionRectKind::ParagraphBreak),
+            "reversed range containing PB must show PB affordance, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn selection_from_text_middle_to_empty_paragraph_shows_text_and_paragraph_break_only() {
+        let (doc, _p1, t1, p2) = doc! {
+            root {
+                p1: paragraph { t1: text("abc") }
+                p2: paragraph {}
+                paragraph { text("tail") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(
+            Position::new(t1, 1),
+            Position {
+                node_id: p2,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+        );
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
+
+        assert_eq!(
+            kinds,
+            vec![SelectionRectKind::Text, SelectionRectKind::ParagraphBreak],
+            "empty paragraph placeholder rect must not be emitted, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn selection_from_empty_paragraph_to_text_shows_paragraph_break_and_text_only() {
+        let (doc, p1, _p2, t2) = doc! {
+            root {
+                p1: paragraph {}
+                p2: paragraph { t2: text("abc") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(p1, 0), Position::new(t2, 1));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
+
+        assert_eq!(
+            kinds,
+            vec![SelectionRectKind::ParagraphBreak, SelectionRectKind::Text],
+            "empty paragraph placeholder rect must not be emitted, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn selection_through_empty_paragraph_shows_paragraph_breaks_without_placeholder() {
+        let (doc, _p1, t1, _p2, _p3, t3) = doc! {
+            root {
+                p1: paragraph { t1: text("abc") }
+                p2: paragraph {}
+                p3: paragraph { t3: text("tail") }
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(t1, 1), Position::new(t3, 1));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
+
+        assert_eq!(
+            kinds,
+            vec![
+                SelectionRectKind::Text,
+                SelectionRectKind::ParagraphBreak,
+                SelectionRectKind::ParagraphBreak,
+                SelectionRectKind::Text,
+            ],
+            "empty paragraph placeholder rect must not be emitted, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn paragraph_boundary_selection_over_two_hard_breaks_shows_each_break_and_pb() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        hard_break
+                        hard_break
+                    }
+                    p2: paragraph {}
+                }
+            }
+            selection: (p1, 0, >) -> (p2, 0, <)
+        };
+        let view = layout(&state.doc);
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
+
+        assert_eq!(
+            kinds,
+            vec![
+                SelectionRectKind::Text,
+                SelectionRectKind::Text,
+                SelectionRectKind::ParagraphBreak,
+            ],
+            "two hard_break rects and the paragraph break must be visible, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn paragraph_break_after_trailing_hard_break_uses_trailing_empty_line() {
+        let (state, p1, _p2) = state! {
+            doc {
+                root [block_gap(200)] {
+                    p1: paragraph {
+                        hard_break
+                        hard_break
+                    }
+                    p2: paragraph {}
+                }
+            }
+            selection: (p1, 2, >) -> (p2, 0, <)
+        };
+        let view = layout(&state.doc);
+        let trailing_line_y = line_y_for_child_range(&view, p1, 2..2)
+            .expect("trailing empty line after hard_breaks exists");
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(rects.len(), 1, "got {rects:?}");
+        assert_eq!(rects[0].meta, SelectionRectKind::ParagraphBreak);
+        assert!(
+            (rects[0].rect.y - trailing_line_y).abs() < 0.01,
+            "PB must be drawn on trailing empty line y={trailing_line_y}, got {rects:?}",
+        );
+    }
+
+    #[test]
+    fn root_selection_over_atom_and_hard_break_paragraph_shows_hard_break_rects() {
+        let (state, ..) = state! {
+            doc {
+                r1: root {
+                    image
+                    paragraph {
+                        hard_break
+                        hard_break
+                    }
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 2, <)
+        };
+        let view = layout(&state.doc);
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+        let text_rect_count = rects
+            .iter()
+            .filter(|rect| rect.meta == SelectionRectKind::Text)
+            .count();
+
+        assert_eq!(
+            text_rect_count, 2,
+            "both hard_breaks in the selected paragraph must be visible, got {rects:?}"
+        );
     }
 
     #[test]
@@ -791,7 +1171,11 @@ mod tests {
             assert_eq!(line_box.meta, text.meta);
             assert!((line_box.rect.x - text.rect.x).abs() < 0.01);
             assert!((line_box.rect.width - text.rect.width).abs() < 0.01);
-            assert!(line_box.rect.height > text.rect.height);
+            if line_box.meta == SelectionRectKind::Text {
+                assert!(line_box.rect.height > text.rect.height);
+            } else {
+                assert!((line_box.rect.height - text.rect.height).abs() < 0.01);
+            }
         }
     }
 
@@ -809,10 +1193,11 @@ mod tests {
         let resolved = sel.resolve(&doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
-        assert_eq!(rects.len(), 2);
+        assert_eq!(rects.len(), 3);
         assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert_eq!(rects[1].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.y < rects[1].rect.y);
+        assert_eq!(rects[1].meta, SelectionRectKind::ParagraphBreak);
+        assert_eq!(rects[2].meta, SelectionRectKind::Text);
+        assert!(rects[0].rect.y < rects[2].rect.y);
     }
 
     #[test]
@@ -1148,8 +1533,8 @@ mod tests {
 
         assert_eq!(
             rects.len(),
-            4,
-            "expected text rects for a/b/c plus an empty-line placeholder for p1, got {:?}",
+            3,
+            "expected text rects for a/b/c without an empty paragraph placeholder for p1, got {:?}",
             rects,
         );
         assert!(
@@ -1279,12 +1664,11 @@ mod tests {
     }
 
     #[test]
-    fn empty_paragraph_after_atom_node_selected_emits_placeholder_rect() {
+    fn empty_paragraph_after_atom_node_selected_emits_no_rect() {
         // Node-selecting the empty paragraph that follows an image atom.
         // (r1, 1, >) means Downstream-attached-to-child[1] (the paragraph),
         // (r1, 2, <) means Upstream-attached-to-child[1] (the paragraph);
         // both endpoints bracket the empty paragraph from the root level.
-        // The empty-line placeholder rect inside that paragraph must render.
         let (state, ..) = state! {
             doc {
                 r1: root {
@@ -1298,17 +1682,14 @@ mod tests {
         let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
-        assert_eq!(rects.len(), 1, "got {:?}", rects);
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.width > 0.0);
-        assert!(rects[0].rect.height > 0.0);
+        assert!(rects.is_empty(), "got {:?}", rects);
     }
 
     #[test]
     fn paragraph_after_atom_node_selected_emits_text_rect() {
         // Non-empty counterpart of the previous test. The same affinity-bracket
         // pattern around child[1] must also paint the line for a populated
-        // paragraph — proving the fix is not limited to the empty-line branch.
+        // paragraph.
         let (state, ..) = state! {
             doc {
                 r1: root {
@@ -1345,11 +1726,9 @@ mod tests {
         let resolved = sel.resolve(&doc).unwrap();
         let rects = view.selection_rects(&resolved);
 
-        assert_eq!(rects.len(), 2);
+        assert_eq!(rects.len(), 1);
         assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
-        assert_eq!(rects[1].meta, SelectionRectKind::Text);
-        assert!(rects[1].rect.width > 0.0);
     }
 
     #[test]
@@ -1511,7 +1890,12 @@ mod tests {
             .resolve(&doc)
             .unwrap();
         let rects = view.selection_rects(&resolved);
-        let last = rects[1].rect;
+        let last = rects
+            .iter()
+            .rev()
+            .find(|rect| rect.meta == SelectionRectKind::Text)
+            .unwrap()
+            .rect;
 
         let probe_x = last.x + last.width + 50.0;
         let probe_y = last.y + last.height * 0.5;

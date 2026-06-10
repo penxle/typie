@@ -67,6 +67,13 @@ impl<'a> ResolvedSelection<'a> {
         self.from() <= pos && pos <= self.to()
     }
 
+    pub fn contains_range(&self, range: Selection) -> bool {
+        let Some(resolved) = range.resolve(self.doc) else {
+            return false;
+        };
+        self.from() <= resolved.from() && resolved.to() <= self.to()
+    }
+
     /// Deepest ancestor that contains both `anchor` and `head`.
     ///
     /// Walks the two ancestor chains from the root downward and returns the last node

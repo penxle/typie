@@ -11,6 +11,7 @@ mod flat;
 mod gap_cursor;
 mod modifier_resolution;
 mod normalize;
+mod paragraph_break;
 mod pending_modifier;
 mod pending_style;
 mod position;
@@ -34,6 +35,9 @@ pub use flat::*;
 pub use gap_cursor::*;
 pub use modifier_resolution::*;
 pub use normalize::farther_endpoint;
+pub use paragraph_break::{
+    closest_empty_paragraph_break_end_between, paragraph_break_selection_at_paragraph_end,
+};
 pub use pending_modifier::*;
 pub use pending_style::*;
 pub use position::*;

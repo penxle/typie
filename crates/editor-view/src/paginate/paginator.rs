@@ -88,10 +88,8 @@ impl Paginator {
                     }
                     Direction::Horizontal => self.place_horizontal(b, node),
                 };
-                if b.style.monolithic
-                    && let LayoutContent::Box(lb) = &mut placed.content
-                {
-                    lb.nav = Some(NavUnit {
+                if let LayoutContent::Box(lb) = &mut placed.content {
+                    lb.attachment = (lb.node_id != parent_id).then_some(ChildAttachment {
                         parent_id,
                         index: child_index,
                     });
@@ -129,8 +127,10 @@ impl Paginator {
                     rect: Rect::from_xywh(x, y, node.width, node.height),
                     content: LayoutContent::Atom(LayoutAtom {
                         node_id: a.node_id,
-                        parent_id,
-                        index: child_index,
+                        attachment: ChildAttachment {
+                            parent_id,
+                            index: child_index,
+                        },
                     }),
                 }
             }
@@ -275,7 +275,7 @@ impl Paginator {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
                 children,
-                nav: None,
+                attachment: None,
             }),
         }
     }
@@ -328,7 +328,7 @@ impl Paginator {
                 node_id: measured.node_id,
                 style: measured.style.clone(),
                 children,
-                nav: None,
+                attachment: None,
             }),
         }
     }
@@ -596,20 +596,17 @@ fn place_node_at(
                         .collect()
                 }
             };
+            let attachment = Some(ChildAttachment {
+                parent_id,
+                index: child_index,
+            });
             LayoutNode {
                 rect: Rect::from_xywh(x, y, node.width, node.height),
                 content: LayoutContent::Box(LayoutBox {
                     node_id: b.node_id,
                     style: b.style.clone(),
                     children,
-                    nav: if b.style.monolithic {
-                        Some(NavUnit {
-                            parent_id,
-                            index: child_index,
-                        })
-                    } else {
-                        None
-                    },
+                    attachment,
                 }),
             }
         }
@@ -635,8 +632,10 @@ fn place_node_at(
             rect: Rect::from_xywh(x, y, node.width, node.height),
             content: LayoutContent::Atom(LayoutAtom {
                 node_id: a.node_id,
-                parent_id,
-                index: child_index,
+                attachment: ChildAttachment {
+                    parent_id,
+                    index: child_index,
+                },
             }),
         },
         MeasuredContent::Spacing(h) => LayoutNode {
@@ -1633,16 +1632,20 @@ mod tests {
         );
     }
 
-    fn nav_of(tree: &LayoutTree, pages: &[LayoutPage], id: NodeId) -> Option<NavUnit> {
+    fn attachment_of(
+        tree: &LayoutTree,
+        pages: &[LayoutPage],
+        id: NodeId,
+    ) -> Option<ChildAttachment> {
         let layout_index = LayoutIndex::new(tree.clone(), pages);
         match &layout_index.box_entry(id)?.content(&layout_index)? {
-            LayoutContent::Box(b) => b.nav,
+            LayoutContent::Box(b) => b.attachment,
             _ => None,
         }
     }
 
     #[test]
-    fn monolithic_box_carries_nav_linkage() {
+    fn monolithic_box_carries_attachment_linkage() {
         let (st, r, f, ..) = state! {
             doc { r: root {
                 f: fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
@@ -1655,8 +1658,8 @@ mod tests {
         let tree = view.layout_tree_for_test().expect("laid out");
         let pages = view.pages();
         assert_eq!(
-            nav_of(tree, pages, f),
-            Some(NavUnit {
+            attachment_of(tree, pages, f),
+            Some(ChildAttachment {
                 parent_id: r,
                 index: 0
             })
@@ -1664,7 +1667,7 @@ mod tests {
     }
 
     #[test]
-    fn monolithic_box_in_table_cell_carries_nav_linkage() {
+    fn monolithic_box_in_table_cell_carries_attachment_linkage() {
         let (st, tc, f, ..) = state! {
             doc { root {
                 table { table_row { tc: table_cell {
@@ -1679,8 +1682,8 @@ mod tests {
         let tree = view.layout_tree_for_test().expect("laid out");
         let pages = view.pages();
         assert_eq!(
-            nav_of(tree, pages, f),
-            Some(NavUnit {
+            attachment_of(tree, pages, f),
+            Some(ChildAttachment {
                 parent_id: tc,
                 index: 0
             }),

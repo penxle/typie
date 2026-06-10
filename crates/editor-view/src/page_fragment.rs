@@ -4,7 +4,9 @@ use editor_model::NodeId;
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::measure::TabGap;
 use crate::page::LayoutPage;
-use crate::paginate::{LayoutAtom, LayoutContent, LayoutLine, LayoutNode, LayoutTree, NavUnit};
+use crate::paginate::{
+    ChildAttachment, LayoutAtom, LayoutContent, LayoutLine, LayoutNode, LayoutTree,
+};
 use crate::query::Edges;
 use crate::style::{BoxStyle, DecorationData};
 
@@ -34,7 +36,7 @@ pub struct PageFragmentBox {
     pub edges: Edges<bool>,
     pub decorations: Vec<PageFragmentDecoration>,
     pub children: Vec<PageFragmentNode>,
-    pub nav: Option<NavUnit>,
+    pub attachment: Option<ChildAttachment>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,8 +63,7 @@ pub struct PageFragmentLine {
 #[derive(Debug, Clone)]
 pub struct PageFragmentAtom {
     pub node_id: NodeId,
-    pub parent_id: NodeId,
-    pub index: usize,
+    pub attachment: ChildAttachment,
 }
 
 impl PageFragmentNode {
@@ -136,7 +137,7 @@ fn fragment_node(node: &LayoutNode, page: &LayoutPage) -> Option<PageFragmentNod
                     .iter()
                     .filter_map(|child| fragment_node(child, page))
                     .collect(),
-                nav: b.nav,
+                attachment: b.attachment,
             });
             return Some(PageFragmentNode { rect, content });
         }
@@ -216,7 +217,6 @@ fn fragment_line(line: &LayoutLine) -> PageFragmentLine {
 fn fragment_atom(atom: &LayoutAtom) -> PageFragmentAtom {
     PageFragmentAtom {
         node_id: atom.node_id,
-        parent_id: atom.parent_id,
-        index: atom.index,
+        attachment: atom.attachment,
     }
 }

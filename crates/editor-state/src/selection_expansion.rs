@@ -2,7 +2,7 @@ use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId, NodeRef};
 use editor_resource::Resource;
 
-use crate::{Affinity, Position, Selection};
+use crate::{Affinity, Position, Selection, paragraph_break_selection_at_paragraph_end};
 
 pub fn resolve_word_selection_expansion(
     doc: &Doc,
@@ -196,20 +196,14 @@ fn paragraph_at(doc: &Doc, position: Position) -> Option<NodeRef<'_>> {
 fn paragraph_selection(paragraph: NodeRef<'_>) -> Option<Selection> {
     let child_count = paragraph.children().count();
     if child_count == 0 {
-        let parent_id = paragraph.parent()?.id();
-        let index = paragraph.index()?;
-        return Some(Selection::new(
+        return paragraph_break_selection_at_paragraph_end(
+            paragraph.doc(),
             Position {
-                node_id: parent_id,
-                offset: index,
+                node_id: paragraph.id(),
+                offset: 0,
                 affinity: Affinity::Downstream,
             },
-            Position {
-                node_id: parent_id,
-                offset: index + 1,
-                affinity: Affinity::Upstream,
-            },
-        ));
+        );
     }
 
     Some(Selection::new(
@@ -241,20 +235,7 @@ fn empty_textblock_selection_at(doc: &Doc, position: Position) -> Option<Selecti
         return None;
     }
 
-    let parent_id = textblock.parent()?.id();
-    let index = textblock.index()?;
-    Some(Selection::new(
-        Position {
-            node_id: parent_id,
-            offset: index,
-            affinity: Affinity::Downstream,
-        },
-        Position {
-            node_id: parent_id,
-            offset: index + 1,
-            affinity: Affinity::Upstream,
-        },
-    ))
+    paragraph_break_selection_at_paragraph_end(doc, position)
 }
 
 #[derive(Clone, Copy)]
@@ -620,34 +601,24 @@ mod tests {
     }
 
     #[test]
-    fn word_expansion_on_empty_paragraph_selects_paragraph_unit() {
+    fn word_expansion_on_required_empty_paragraph_returns_none() {
         let resource = Resource::new_test();
-        let (state, root, _p) = state! {
-            doc { root: root { p: paragraph {} } }
+        let (state, _p) = state! {
+            doc { root { p: paragraph {} } }
             selection: (p, 0)
         };
 
         let actual =
             resolve_word_selection_expansion(&state.doc, state.selection.unwrap(), &resource);
 
-        assert_eq!(
-            actual,
-            Some(Selection::new(
-                Position::new(root, 0),
-                Position {
-                    node_id: root,
-                    offset: 1,
-                    affinity: Affinity::Upstream,
-                },
-            ))
-        );
+        assert_eq!(actual, None);
     }
 
     #[test]
-    fn word_expansion_on_empty_text_paragraph_selects_paragraph_unit() {
+    fn word_expansion_on_empty_paragraph_selects_its_trailing_paragraph_break() {
         let resource = Resource::new_test();
-        let (state, root, _p) = state! {
-            doc { root: root { p: paragraph { text("") } } }
+        let (state, p, t) = state! {
+            doc { root { p: paragraph {} paragraph { t: text("next") } } }
             selection: (p, 0)
         };
 
@@ -657,10 +628,10 @@ mod tests {
         assert_eq!(
             actual,
             Some(Selection::new(
-                Position::new(root, 0),
+                Position::new(p, 0),
                 Position {
-                    node_id: root,
-                    offset: 1,
+                    node_id: t,
+                    offset: 0,
                     affinity: Affinity::Upstream,
                 },
             ))
@@ -740,27 +711,17 @@ mod tests {
     }
 
     #[test]
-    fn sentence_expansion_on_empty_paragraph_selects_paragraph_unit() {
+    fn sentence_expansion_on_required_empty_paragraph_returns_none() {
         let resource = Resource::new_test();
-        let (state, root, _p) = state! {
-            doc { root: root { p: paragraph {} } }
+        let (state, _p) = state! {
+            doc { root { p: paragraph {} } }
             selection: (p, 0)
         };
 
         let actual =
             resolve_sentence_selection_expansion(&state.doc, state.selection.unwrap(), &resource);
 
-        assert_eq!(
-            actual,
-            Some(Selection::new(
-                Position::new(root, 0),
-                Position {
-                    node_id: root,
-                    offset: 1,
-                    affinity: Affinity::Upstream,
-                },
-            ))
-        );
+        assert_eq!(actual, None);
     }
 
     #[test]
@@ -868,9 +829,9 @@ mod tests {
     }
 
     #[test]
-    fn paragraph_expansion_on_empty_paragraph_selects_paragraph_unit() {
-        let (state, root, _p) = state! {
-            doc { root: root { p: paragraph {} } }
+    fn paragraph_expansion_on_empty_paragraph_selects_its_trailing_paragraph_break() {
+        let (state, p, t) = state! {
+            doc { root { p: paragraph {} paragraph { t: text("next") } } }
             selection: (p, 0)
         };
 
@@ -879,10 +840,10 @@ mod tests {
         assert_eq!(
             actual,
             Some(Selection::new(
-                Position::new(root, 0),
+                Position::new(p, 0),
                 Position {
-                    node_id: root,
-                    offset: 1,
+                    node_id: t,
+                    offset: 0,
                     affinity: Affinity::Upstream,
                 },
             ))

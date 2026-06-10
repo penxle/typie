@@ -1,52 +1,54 @@
 use crate::slice::Slice;
-use editor_model::{Fragment, PlainNode};
+use editor_model::{Fragment, PlainNode, Schema};
 
 pub fn to_text(slice: &Slice) -> String {
     let mut out = String::new();
-    walk(&slice.fragment, &mut out);
+    let mut context = TextContext::default();
+    walk(&slice.fragment, &mut out, &mut context);
     out
 }
 
-fn walk(fragment: &Fragment, out: &mut String) {
+#[derive(Default)]
+struct TextContext {
+    seen_textblock: bool,
+}
+
+fn walk(fragment: &Fragment, out: &mut String, context: &mut TextContext) {
     match &fragment.node {
         PlainNode::Text(t) => out.push_str(&t.text),
         PlainNode::HardBreak(_) => out.push('\n'),
         PlainNode::Tab(_) => out.push('\t'),
-        PlainNode::Table(_) => walk_table(fragment, out),
+        PlainNode::Table(_) => walk_table(fragment, out, context),
         _ => {
-            let is_block = is_block_node(&fragment.node);
-            let first_in_block = is_block && !out.is_empty() && !out.ends_with("\n\n");
-            if first_in_block {
-                if out.ends_with('\n') {
-                    out.push('\n');
-                } else {
-                    out.push_str("\n\n");
-                }
+            if is_textblock_node(&fragment.node) {
+                separate_textblock(out, context);
             }
             for child in &fragment.children {
-                walk(child, out);
+                walk(child, out, context);
             }
         }
     }
 }
 
-fn is_block_node(n: &PlainNode) -> bool {
-    !matches!(
-        n,
-        PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_)
-    )
+fn is_textblock_node(n: &PlainNode) -> bool {
+    Schema::node_spec(n.as_type()).is_textblock()
 }
 
-// TSV-style emission: tabs between cells, newlines between rows. Cell content
-// is flattened to inline text so multi-block cells don't shred the row layout.
-fn walk_table(table: &Fragment, out: &mut String) {
-    if !out.is_empty() && !out.ends_with("\n\n") {
+fn separate_textblock(out: &mut String, context: &mut TextContext) {
+    if context.seen_textblock && !out.ends_with("\n\n") {
         if out.ends_with('\n') {
             out.push('\n');
         } else {
             out.push_str("\n\n");
         }
     }
+    context.seen_textblock = true;
+}
+
+// TSV-style emission: tabs between cells, newlines between rows. Cell content
+// is flattened to inline text so multi-block cells don't shred the row layout.
+fn walk_table(table: &Fragment, out: &mut String, context: &mut TextContext) {
+    separate_textblock(out, context);
     let mut first_row = true;
     for row in &table.children {
         if !matches!(row.node, PlainNode::TableRow(_)) {
@@ -110,6 +112,12 @@ mod tests {
         };
         let slice = Slice::extract(&s).unwrap();
         assert_eq!(slice.to_text(), "first\nline\n\nsecond");
+    }
+
+    #[test]
+    fn to_text_preserves_empty_paragraph_separator() {
+        let slice = Slice::from_text("\n\n");
+        assert_eq!(slice.to_text(), "\n\n");
     }
 
     #[test]

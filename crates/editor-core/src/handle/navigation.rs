@@ -1,8 +1,7 @@
-use editor_model::{Doc, Node, NodeId, Schema};
+use editor_model::{Doc, NodeId, Schema};
 use editor_state::{
-    Affinity, GapCursor, Position, ResolvedPosition, Selection, cell_rect_selection,
-    enclosing_table_cell, farther_endpoint, gap_cursor_selection_between,
-    gap_cursor_selection_leading,
+    Affinity, GapCursor, Position, Selection, cell_rect_selection, enclosing_table_cell,
+    gap_cursor_selection_between, gap_cursor_selection_leading,
 };
 use editor_transaction::HistoryMeta;
 
@@ -210,7 +209,6 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     let left_or_right = matches!(movement, Movement::Grapheme { .. });
                     let base_position = Position::from(base);
                     let base_is_inline = base.is_inline_position();
-                    let base_is_block = base.is_block_position();
                     // Drop the doc borrow before calling the mutable wrapper.
                     drop(resolved);
 
@@ -231,25 +229,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     } else {
                         let view_target = editor.resolve_movement(&base_position, &movement);
 
-                        match view_target {
-                            Some(sel) => sel,
-                            None if base_is_block => {
-                                // Block positions are container boundaries, so
-                                // the view has no caret rect to move from.
-                                let resolved = base_position
-                                    .resolve(&editor.state.doc)
-                                    .expect("base position node still exists");
-                                Selection::collapsed(move_from_block_position(
-                                    editor, &resolved, !backward,
-                                ))
-                            }
-                            None => {
-                                // Inline positions have a caret base. If the
-                                // view has no destination, the range simply
-                                // collapses to that base.
-                                Selection::collapsed(base_position)
-                            }
-                        }
+                        view_target.unwrap_or_else(|| Selection::collapsed(base_position))
                     };
 
                     editor.transact(|tr| {
@@ -321,7 +301,12 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 }
             }
 
-            let new_selection = editor.resolve_movement(&selection.head, &movement);
+            let new_selection = if extend {
+                editor.resolve_extend_movement(selection, &movement)
+            } else {
+                editor.resolve_movement(&selection.head, &movement)
+            };
+
             if let Some(new_selection) = new_selection {
                 if extend {
                     let is_cell_movement = matches!(
@@ -356,26 +341,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     }
                 }
 
-                let final_selection = if extend {
-                    let doc = &editor.state.doc;
-                    let fixed = if selection.is_unit_node_selection(doc) {
-                        farther_endpoint(doc, new_selection.head, selection.anchor, selection.head)
-                    } else {
-                        selection.anchor
-                    };
-                    // The farther-from-fixed head rule generalizes to every
-                    // extend: a no-op for collapsed targets, and for a unit
-                    // target it pulls the whole unit in one step.
-                    let head =
-                        farther_endpoint(doc, fixed, new_selection.anchor, new_selection.head);
-                    Selection::new(fixed, head)
-                } else {
-                    new_selection
-                };
-
                 editor.transact(|tr| {
                     tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                    tr.set_selection(Some(final_selection))?;
+                    tr.set_selection(Some(new_selection))?;
                     Ok(())
                 })?;
             }
@@ -428,153 +396,6 @@ fn gap_cursor_from_inner_edge(
         };
     }
     None
-}
-
-fn move_from_block_position(
-    editor: &Editor,
-    position: &ResolvedPosition<'_>,
-    go_forward: bool,
-) -> Position {
-    debug_assert!(position.is_block_position());
-
-    let doc = position.doc();
-    let node = doc
-        .node(position.node_id())
-        .expect("resolved position node exists");
-    let children: Vec<NodeId> = node.children().map(|child| child.id()).collect();
-
-    if go_forward {
-        if position.offset() < children.len()
-            && let Some(pos) = leaf_block_edge(editor, children[position.offset()], false)
-        {
-            return pos;
-        }
-
-        if let Some(next_pos) = find_next_cursor_position_forward(editor, position.node_id()) {
-            return next_pos;
-        }
-
-        if let Some(last) = children.last().copied()
-            && let Some(pos) = leaf_block_edge(editor, last, true)
-        {
-            return pos;
-        }
-
-        if let Some(pos) = leaf_block_edge(editor, NodeId::ROOT, true) {
-            return pos;
-        }
-
-        Position::from(position)
-    } else {
-        if position.offset() > 0 && !children.is_empty() {
-            let child_idx = (position.offset() - 1).min(children.len() - 1);
-            if let Some(pos) = leaf_block_edge(editor, children[child_idx], true) {
-                return pos;
-            }
-        }
-
-        if let Some(prev_pos) = find_prev_cursor_position_backward(editor, position.node_id()) {
-            return prev_pos;
-        }
-
-        if let Some(first) = children.first().copied()
-            && let Some(pos) = leaf_block_edge(editor, first, false)
-        {
-            return pos;
-        }
-
-        if let Some(pos) = leaf_block_edge(editor, NodeId::ROOT, false) {
-            return pos;
-        }
-
-        Position::from(position)
-    }
-}
-
-fn leaf_block_edge(editor: &Editor, node_id: NodeId, at_end: bool) -> Option<Position> {
-    let doc = &editor.state.doc;
-    let node = doc.node(node_id)?;
-    let spec = Schema::node_spec(node.as_type());
-    if let Node::Text(t) = node.node() {
-        return Some(Position {
-            node_id,
-            offset: if at_end { t.text.len() } else { 0 },
-            affinity: if at_end {
-                Affinity::Upstream
-            } else {
-                Affinity::Downstream
-            },
-        });
-    }
-
-    if let Some(pos) = editor.view.editable_position_inside(node_id, at_end) {
-        return Some(pos);
-    }
-
-    if spec.is_textblock() {
-        return Some(Position {
-            node_id,
-            offset: if at_end { node.children().count() } else { 0 },
-            affinity: if at_end {
-                Affinity::Upstream
-            } else {
-                Affinity::Downstream
-            },
-        });
-    }
-
-    let child_id = if at_end {
-        node.last_child().map(|child| child.id())
-    } else {
-        node.first_child().map(|child| child.id())
-    };
-    if spec.is_leaf() || child_id.is_none() {
-        let parent = node.parent()?;
-        let idx = node.index()?;
-        return Some(Position {
-            node_id: parent.id(),
-            offset: if at_end { idx + 1 } else { idx },
-            affinity: if at_end {
-                Affinity::Upstream
-            } else {
-                Affinity::Downstream
-            },
-        });
-    }
-
-    leaf_block_edge(editor, child_id?, at_end)
-}
-
-fn find_next_cursor_position_forward(editor: &Editor, node_id: NodeId) -> Option<Position> {
-    let doc = &editor.state.doc;
-    let mut current_id = node_id;
-    loop {
-        let current = doc.node(current_id)?;
-        let parent = current.parent()?;
-        let idx = current.index()?;
-        let siblings: Vec<NodeId> = parent.children().map(|child| child.id()).collect();
-        if let Some(next) = siblings.get(idx + 1).copied() {
-            return leaf_block_edge(editor, next, false);
-        }
-        current_id = parent.id();
-    }
-}
-
-fn find_prev_cursor_position_backward(editor: &Editor, node_id: NodeId) -> Option<Position> {
-    let doc = &editor.state.doc;
-    let mut current_id = node_id;
-    loop {
-        let current = doc.node(current_id)?;
-        let parent = current.parent()?;
-        let idx = current.index()?;
-        let siblings: Vec<NodeId> = parent.children().map(|child| child.id()).collect();
-        if idx > 0
-            && let Some(prev) = siblings.get(idx - 1).copied()
-        {
-            return leaf_block_edge(editor, prev, true);
-        }
-        current_id = parent.id();
-    }
 }
 
 /// Exit a gap into `node_id`'s inner content; if it has none (e.g. an
@@ -653,7 +474,8 @@ fn step_cell(doc: &Doc, cell_id: NodeId, backward: bool, vertical: bool) -> Opti
 mod tests {
     use editor_macros::state;
     use editor_state::{
-        Position, assert_state_eq, gap_cursor_selection_between, gap_cursor_selection_leading,
+        Affinity, Position, Selection, assert_state_eq, gap_cursor_selection_between,
+        gap_cursor_selection_leading,
     };
 
     use crate::editor::Editor;
@@ -742,6 +564,279 @@ mod tests {
                 extend: true,
             },
         });
+    }
+
+    fn shift_word_right(editor: &mut Editor) {
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Word {
+                    direction: Direction::Forward,
+                },
+                extend: true,
+            },
+        });
+    }
+
+    #[test]
+    fn shift_right_from_range_ending_at_empty_paragraph_start_stops_at_empty_paragraph_break() {
+        let (state, r, t1, _p1) = state! {
+            doc {
+                r: root [block_gap(200)] {
+                    paragraph {
+                        t1: text("bb")
+                    }
+                    p1: paragraph {}
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1, >) -> (p1, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_right(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: t1,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn shift_word_right_from_range_ending_at_empty_paragraph_start_stops_at_empty_paragraph_break()
+    {
+        let (state, r, t1, _p1) = state! {
+            doc {
+                r: root [block_gap(200)] {
+                    paragraph {
+                        t1: text("bb")
+                    }
+                    p1: paragraph {}
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1, >) -> (p1, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_word_right(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: t1,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn shift_left_from_range_ending_at_empty_paragraph_start_stops_at_previous_paragraph_break() {
+        let (state, t1, _p1) = state! {
+            doc {
+                root [block_gap(200)] {
+                    paragraph {
+                        t1: text("bb")
+                    }
+                    p1: paragraph {}
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0, >) -> (p1, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_left(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: t1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: t1,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn shift_left_from_empty_paragraph_break_plus_atom_returns_to_paragraph_break() {
+        let (state, r, p1) = state! {
+            doc {
+                r: root [block_gap(200)] {
+                    p1: paragraph {}
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_right(&mut editor);
+        shift_right(&mut editor);
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+
+        shift_left(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+
+        shift_left(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(Position::new(p1, 0)))
+        );
+    }
+
+    #[test]
+    fn shift_right_from_empty_paragraph_break_enters_following_callout_content() {
+        let (state, _r, p1, p2) = state! {
+            doc {
+                r: root [block_gap(200)] {
+                    p1: paragraph {}
+                    callout {
+                        p2: paragraph {}
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_right(&mut editor);
+        shift_right(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: p2,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn shift_left_from_empty_paragraph_break_plus_callout_returns_to_paragraph_break() {
+        let (state, r, p1, p2) = state! {
+            doc {
+                r: root [block_gap(200)] {
+                    p1: paragraph {}
+                    callout {
+                        p2: paragraph {}
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_right(&mut editor);
+        shift_right(&mut editor);
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: p2,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+
+        shift_left(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: r,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
     }
 
     #[test]
