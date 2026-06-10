@@ -244,6 +244,11 @@ impl View {
             .layout_index
             .exact_entry(point, is_drag_exact_hit_entry)
         {
+            if let Some(selection) =
+                query::hard_break::drag_selection_for_entry(&result.layout_index, doc, entry, point)
+            {
+                return Some(selection);
+            }
             if let Some(selection) = query::paragraph_break::drag_selection_for_entry(
                 &result.layout_index,
                 doc,
@@ -723,8 +728,7 @@ fn drag_boundary_fallback(
     let mut after: Option<DragFallbackCandidate> = None;
 
     for entry in layout_index.entries_on_page(point.page_idx) {
-        let Some(candidate) = drag_fallback_candidate(layout_index, entry, doc, anchor, point)
-        else {
+        let Some(candidate) = drag_fallback_candidate(layout_index, entry, point) else {
             continue;
         };
         let slot = if point.y >= entry.rect.y && point.y < entry.rect.bottom() {
@@ -785,8 +789,6 @@ impl DragFallbackCandidate {
 fn drag_fallback_candidate(
     layout_index: &query::layout_index::LayoutIndex,
     entry: &query::layout_index::LayoutEntry,
-    doc: &Doc,
-    anchor: &ResolvedPosition,
     point: query::layout_index::LayoutPoint,
 ) -> Option<DragFallbackCandidate> {
     match entry.content(layout_index)? {
@@ -798,8 +800,7 @@ fn drag_fallback_candidate(
             } else if point.y >= entry.rect.bottom() {
                 end
             } else {
-                let point_pos = position_in_line(line, &entry.rect, point.x).resolve(doc)?;
-                if anchor < &point_pos { end } else { start }
+                position_in_line(line, &entry.rect, point.x)
             };
             Some(DragFallbackCandidate::new(
                 entry,
@@ -1269,6 +1270,169 @@ mod tests {
                 },
             )
         );
+    }
+
+    #[test]
+    fn hit_test_extending_next_line_page_margin_after_paragraph_break_returns_next_paragraph_start()
+    {
+        let (doc, _p1, t1, t2) = doc! {
+            root {
+                p1: paragraph { t1: text("aa") }
+                paragraph { t2: text("bb") }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let state = mk_state(doc.clone());
+        let next_line = view
+            .cursor_metrics(&state, &Position::new(t2, 0))
+            .expect("line after paragraph break has cursor metrics");
+
+        let hit = view
+            .hit_test_extending(
+                &state.doc,
+                Position::new(t1, 0),
+                next_line.page_idx,
+                next_line.line.x - 12.0,
+                next_line.line.y + next_line.line.height / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(hit, Selection::collapsed(Position::new(t2, 0)));
+    }
+
+    #[test]
+    fn hit_test_extending_hard_break_rect_returns_hard_break_selection() {
+        let (doc, p1, _t1, _t2) = doc! {
+            root {
+                p1: paragraph {
+                    t1: text("a")
+                    hard_break
+                    t2: text("b")
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let hard_break = Selection::new(
+            Position {
+                node_id: p1,
+                offset: 1,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: p1,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let hard_break_rect = view
+            .selection_rects(
+                &hard_break
+                    .resolve(&doc)
+                    .expect("hard_break selection resolves"),
+            )
+            .into_iter()
+            .find(|rect| rect.meta == crate::query::SelectionRectKind::Text)
+            .expect("hard_break rect exists");
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(p1, 0),
+                hard_break_rect.page_idx,
+                hard_break_rect.rect.x + hard_break_rect.rect.width / 2.0,
+                hard_break_rect.rect.y + hard_break_rect.rect.height / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(hit, hard_break);
+    }
+
+    #[test]
+    fn hit_test_extending_hard_break_line_right_side_returns_hard_break_selection() {
+        let (doc, p1, _t1, _t2) = doc! {
+            root {
+                p1: paragraph {
+                    t1: text("a")
+                    hard_break
+                    t2: text("b")
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let hard_break = Selection::new(
+            Position {
+                node_id: p1,
+                offset: 1,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: p1,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let hard_break_rect = view
+            .selection_rects(
+                &hard_break
+                    .resolve(&doc)
+                    .expect("hard_break selection resolves"),
+            )
+            .into_iter()
+            .find(|rect| rect.meta == crate::query::SelectionRectKind::Text)
+            .expect("hard_break rect exists");
+
+        let hit = view
+            .hit_test_extending(
+                &doc,
+                Position::new(p1, 0),
+                hard_break_rect.page_idx,
+                hard_break_rect.rect.right() + 12.0,
+                hard_break_rect.rect.y + hard_break_rect.rect.height / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(hit, hard_break);
+    }
+
+    #[test]
+    fn hit_test_extending_next_line_page_margin_after_hard_break_returns_next_line_start() {
+        let (doc, p1, _t1, t2) = doc! {
+            root {
+                p1: paragraph {
+                    t1: text("a")
+                    hard_break
+                    t2: text("b")
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let state = mk_state(doc.clone());
+        let next_line = view
+            .cursor_metrics(
+                &state,
+                &Position {
+                    node_id: p1,
+                    offset: 2,
+                    affinity: Affinity::Downstream,
+                },
+            )
+            .expect("line after hard_break has cursor metrics");
+
+        let hit = view
+            .hit_test_extending(
+                &state.doc,
+                Position::new(p1, 0),
+                next_line.page_idx,
+                next_line.line.x - 12.0,
+                next_line.line.y + next_line.line.height / 2.0,
+            )
+            .unwrap();
+
+        assert_eq!(hit, Selection::collapsed(Position::new(t2, 0)));
     }
 
     #[test]

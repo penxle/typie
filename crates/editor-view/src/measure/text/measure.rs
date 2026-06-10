@@ -542,7 +542,7 @@ mod tests {
         let MeasuredContent::Line(c) = &b.children[1].content else {
             panic!()
         };
-        assert_eq!(a.child_range, Some(0..2));
+        assert_eq!(a.child_range, Some(0..1));
         assert_eq!(c.child_range, Some(2..3));
     }
 
@@ -562,7 +562,7 @@ mod tests {
         let MeasuredContent::Line(b2) = &b.children[1].content else {
             panic!()
         };
-        assert_eq!(a.child_range, Some(0..1));
+        assert_eq!(a.child_range, Some(0..0));
         assert_eq!(b2.child_range, Some(1..1));
     }
 
@@ -586,7 +586,7 @@ mod tests {
                 _ => panic!(),
             })
             .collect();
-        assert_eq!(ranges, vec![Some(0..2), Some(2..3), Some(3..4)]);
+        assert_eq!(ranges, vec![Some(0..1), Some(2..2), Some(3..4)]);
     }
 
     #[test]

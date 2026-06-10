@@ -615,6 +615,42 @@ mod tests {
     }
 
     #[test]
+    fn shift_right_from_range_ending_after_trailing_hard_break_extends_to_paragraph_break() {
+        let (state, p1, p2) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        hard_break
+                        hard_break
+                    }
+                    p2: paragraph {}
+                }
+            }
+            selection: (p1, 0, >) -> (p1, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        shift_right(&mut editor);
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::new(
+                Position {
+                    node_id: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: p2,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
     fn shift_word_right_from_range_ending_at_empty_paragraph_start_stops_at_empty_paragraph_break()
     {
         let (state, r, t1, _p1) = state! {

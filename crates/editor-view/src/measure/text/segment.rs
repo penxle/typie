@@ -8,10 +8,9 @@ use editor_model::{Node, NodeRef};
 ///
 /// `child_range` is the paragraph-offset interval this segment owns. Matching
 /// against a cursor's `Position::offset` is inclusive of both endpoints
-/// (`start <= offset && offset <= end`, not `Range::contains`). When the
-/// segment is terminated by a `hard_break`, `end` is the index *after* that
-/// `hard_break` so the offset right after the break still resolves to this
-/// segment under `Upstream` affinity.
+/// (`start <= offset && offset <= end`, not `Range::contains`). A `hard_break`
+/// is the selectable gap between adjacent segments, not part of either
+/// segment's range.
 pub(crate) enum Segment<'a> {
     Text {
         children: Vec<NodeRef<'a>>,
@@ -34,7 +33,6 @@ impl<'a> Segment<'a> {
 ///
 /// Invariants (debug-asserted):
 /// - The returned vec is non-empty.
-/// - Adjacent segments share a boundary: `a.child_range().end == b.child_range().start`.
 /// - Number of segments equals (number of `hard_break` children) + 1, except
 ///   when the paragraph ends with `hard_break` an additional trailing `Empty`
 ///   segment is appended (so the user-visible "cursor after trailing
@@ -50,18 +48,17 @@ pub(crate) fn split_into_segments<'a>(paragraph: &NodeRef<'a>) -> Vec<Segment<'a
         child_count = idx + 1;
         match child.node() {
             Node::HardBreak(_) => {
-                let end = idx + 1;
                 if buf.is_empty() {
                     segments.push(Segment::Empty {
-                        child_range: seg_start..end,
+                        child_range: seg_start..seg_start,
                     });
                 } else {
                     segments.push(Segment::Text {
                         children: std::mem::take(&mut buf),
-                        child_range: seg_start..end,
+                        child_range: seg_start..idx,
                     });
                 }
-                seg_start = end;
+                seg_start = idx + 1;
                 last_was_hard_break = true;
             }
             Node::Text(_) | Node::Tab(_) => {
@@ -91,9 +88,6 @@ pub(crate) fn split_into_segments<'a>(paragraph: &NodeRef<'a>) -> Vec<Segment<'a
     }
 
     debug_assert!(!segments.is_empty());
-    for pair in segments.windows(2) {
-        debug_assert_eq!(pair[0].child_range().end, pair[1].child_range().start);
-    }
     for seg in &segments {
         debug_assert!(seg.child_range().start <= seg.child_range().end);
     }
@@ -137,7 +131,7 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph { hard_break } } };
         let p = doc.node(p1).unwrap();
         let segs = split_into_segments(&p);
-        assert_eq!(variants(&segs), vec![("empty", 0..1), ("empty", 1..1)]);
+        assert_eq!(variants(&segs), vec![("empty", 0..0), ("empty", 1..1)]);
     }
 
     #[test]
@@ -145,7 +139,7 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
         let p = doc.node(p1).unwrap();
         let segs = split_into_segments(&p);
-        assert_eq!(variants(&segs), vec![("text", 0..2), ("empty", 2..2)]);
+        assert_eq!(variants(&segs), vec![("text", 0..1), ("empty", 2..2)]);
     }
 
     #[test]
@@ -153,7 +147,7 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph { hard_break text("a") } } };
         let p = doc.node(p1).unwrap();
         let segs = split_into_segments(&p);
-        assert_eq!(variants(&segs), vec![("empty", 0..1), ("text", 1..2)]);
+        assert_eq!(variants(&segs), vec![("empty", 0..0), ("text", 1..2)]);
     }
 
     #[test]
@@ -161,7 +155,7 @@ mod tests {
         let (doc, p1) = doc! { root { p1: paragraph { text("hel") hard_break text("lo") } } };
         let p = doc.node(p1).unwrap();
         let segs = split_into_segments(&p);
-        assert_eq!(variants(&segs), vec![("text", 0..2), ("text", 2..3)]);
+        assert_eq!(variants(&segs), vec![("text", 0..1), ("text", 2..3)]);
     }
 
     #[test]
@@ -173,7 +167,7 @@ mod tests {
         let segs = split_into_segments(&p);
         assert_eq!(
             variants(&segs),
-            vec![("text", 0..2), ("empty", 2..3), ("text", 3..4)]
+            vec![("text", 0..1), ("empty", 2..2), ("text", 3..4)]
         );
     }
 

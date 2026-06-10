@@ -88,10 +88,42 @@ fn x_at_offset_raw(line: &LayoutLine, pos: &Position) -> f32 {
         return x;
     }
 
-    line.glyph_runs
-        .last()
-        .map(|r| r.x + r.width)
-        .unwrap_or(line.empty_caret_x)
+    if pos.node_id == line.node_id
+        && let Some(range) = &line.child_range
+    {
+        if pos.offset == range.start {
+            return line_content_start_x(line);
+        }
+        if pos.offset == range.end {
+            return line_content_end_x(line);
+        }
+    }
+
+    line_content_end_x(line)
+}
+
+fn line_content_start_x(line: &LayoutLine) -> f32 {
+    let mut x: Option<f32> = None;
+    for run in &line.glyph_runs {
+        x = Some(x.map_or(run.x, |current| current.min(run.x)));
+    }
+    for gap in &line.tab_gaps {
+        x = Some(x.map_or(gap.x, |current| current.min(gap.x)));
+    }
+    x.unwrap_or(line.empty_caret_x)
+}
+
+fn line_content_end_x(line: &LayoutLine) -> f32 {
+    let mut x: Option<f32> = None;
+    for run in &line.glyph_runs {
+        let end = run.x + run.width;
+        x = Some(x.map_or(end, |current| current.max(end)));
+    }
+    for gap in &line.tab_gaps {
+        let end = gap.x + gap.width;
+        x = Some(x.map_or(end, |current| current.max(end)));
+    }
+    x.unwrap_or(line.empty_caret_x)
 }
 
 pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {

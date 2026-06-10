@@ -100,6 +100,7 @@ fn selection_rect_sets(
     }
 
     let pages = layout_index.pages();
+    let hard_breaks = super::hard_break::included_in_selection(layout_index, selection);
     let paragraph_breaks = super::paragraph_break::included_in_selection(layout_index, selection);
 
     let from = Position::from(selection.from());
@@ -135,6 +136,10 @@ fn selection_rect_sets(
         selection.doc(),
     );
 
+    for hard_break in hard_breaks {
+        let rect = hard_break_rect(hard_break.geometry);
+        rects.push_same(rect);
+    }
     for paragraph_break in paragraph_breaks {
         let rect = paragraph_break_rect(paragraph_break.geometry);
         rects.push_same(rect);
@@ -142,6 +147,11 @@ fn selection_rect_sets(
     rects.sort_by_position();
 
     rects
+}
+
+fn hard_break_rect(geometry: super::hard_break::HardBreakGeometry) -> SelectionRect {
+    let rect = geometry.rect;
+    PageRect::with_meta(rect.page_idx, rect.rect, SelectionRectKind::Text)
 }
 
 fn paragraph_break_rect(geometry: super::paragraph_break::ParagraphBreakGeometry) -> SelectionRect {
@@ -308,27 +318,6 @@ fn attached(layout_index: &LayoutIndex, entry: &LayoutEntry, pos: &Position) -> 
     }
 }
 
-/// True when `child_range` owns more slots than the number of distinct text
-/// children — the surplus is non-text content (in practice, a trailing
-/// `hard_break`).
-fn line_has_trailing_non_text(line: &LayoutLine) -> bool {
-    let Some(range) = &line.child_range else {
-        return false;
-    };
-    if line.glyph_runs.is_empty() {
-        return false;
-    }
-    let mut text_child_count = 1usize;
-    let mut prev = line.glyph_runs[0].node_id;
-    for run in line.glyph_runs.iter().skip(1) {
-        if run.node_id != prev {
-            text_child_count += 1;
-            prev = run.node_id;
-        }
-    }
-    range.end.saturating_sub(range.start) > text_child_count
-}
-
 fn strut_line_has_selectable_child_range(line: &LayoutLine) -> bool {
     line.glyph_runs.is_empty()
         && line.tab_gaps.is_empty()
@@ -411,65 +400,39 @@ fn visit_line(
     let contains_from = from_owner.is_some_and(|entry| entry.is_node(layout_index, node));
     let contains_to = to_owner.is_some_and(|entry| entry.is_node(layout_index, node));
 
-    let hb_placeholder = node.rect.height * 0.15;
-    // Without an explicit extension, a trailing hard_break enveloped by the
-    // selection reads as zero width because `x_at_offset` pins to the last
-    // run's right edge.
-    let trailing_hb = line_has_trailing_non_text(line);
-    let at_line_trailing = |pos: &Position| -> bool {
-        line.child_range
-            .as_ref()
-            .is_some_and(|r| pos.node_id == line.node_id && pos.offset == r.end && r.end > r.start)
-    };
+    let placeholder_width = node.rect.height * 0.15;
 
     let (x_start, x_end) = match (*phase, contains_from, contains_to) {
         (Phase::Before, true, true) => {
             let x0 = super::grapheme::x_at_offset(line, from);
-            let mut x1 = super::grapheme::x_at_offset(line, to);
-            if trailing_hb && at_line_trailing(to) {
-                x1 += hb_placeholder;
-            }
+            let x1 = super::grapheme::x_at_offset(line, to);
             *phase = Phase::After;
             (x0, x1)
         }
         (Phase::Before, true, false) => {
             let x0 = super::grapheme::x_at_offset(line, from);
-            let mut x1 = line_end_x(line);
-            if trailing_hb {
-                x1 += hb_placeholder;
-            }
+            let x1 = line_end_x(line);
             *phase = Phase::Inside;
             (x0, x1)
         }
         (Phase::Inside, false, false) => {
             let x0 = line_start_x(line);
-            let mut x1 = line_end_x(line);
-            if trailing_hb {
-                x1 += hb_placeholder;
-            }
+            let x1 = line_end_x(line);
             (x0, x1)
         }
         (Phase::Inside, false, true) => {
             let x0 = line_start_x(line);
-            let mut x1 = super::grapheme::x_at_offset(line, to);
-            if trailing_hb && at_line_trailing(to) {
-                x1 += hb_placeholder;
-            }
+            let x1 = super::grapheme::x_at_offset(line, to);
             *phase = Phase::After;
             (x0, x1)
         }
         _ => return,
     };
 
-    // Both endpoints at paragraph-level offsets in the same line collapse
-    // onto the same x via `x_at_offset` — show a placeholder so the
-    // hard_break still reads as selected.
-    let spans_hard_break =
-        from.node_id == line.node_id && to.node_id == line.node_id && from.offset != to.offset;
     let width = if x_end > x_start {
         x_end - x_start
-    } else if spans_hard_break || strut_line_has_selectable_child_range(line) {
-        hb_placeholder
+    } else if strut_line_has_selectable_child_range(line) {
+        placeholder_width
     } else {
         return;
     };
@@ -957,6 +920,35 @@ mod tests {
                 SelectionRectKind::ParagraphBreak,
             ],
             "two hard_break rects and the paragraph break must be visible, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn trailing_hard_break_after_soft_wrap_line_is_visible() {
+        let (state, p1, _t1, ..) = state! {
+            doc {
+                root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
+                    p1: paragraph {
+                        t1: text("abcdefgh")
+                        hard_break
+                        text("z")
+                    }
+                }
+            }
+            selection: (t1, 8, >) -> (p1, 2, <)
+        };
+        let view = layout(&state.doc);
+        let trailing_line_y = line_y_for_child_range(&view, p1, 1..1)
+            .expect("soft-wrapped trailing hard_break line exists");
+        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert_eq!(rects.len(), 1, "hard_break must be visible, got {rects:?}");
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
+        assert!(rects[0].rect.width > 0.0, "got {rects:?}");
+        assert!(
+            (rects[0].rect.y - trailing_line_y).abs() < 0.01,
+            "hard_break rect must be on trailing wrapped line y={trailing_line_y}, got {rects:?}",
         );
     }
 

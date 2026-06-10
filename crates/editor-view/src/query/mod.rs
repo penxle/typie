@@ -3,6 +3,7 @@ pub(crate) mod composition;
 pub(crate) mod cursor;
 pub(crate) mod dnd;
 pub(crate) mod grapheme;
+pub(crate) mod hard_break;
 pub(crate) mod interactive;
 pub(crate) mod layout_index;
 pub(crate) mod link;
