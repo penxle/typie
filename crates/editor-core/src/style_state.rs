@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn applied_style_mixed_when_some_runs_unstyled() {
-        let (initial, t1, t2) = state! {
+        let (initial, t1, _t2) = state! {
             doc { root { paragraph { t1: text("Hello") t2: text("World") } } }
             selection: (t1, 0) -> (t2, 5)
         };
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn applied_style_absent_over_unstyled_runs() {
-        let (state, t1) = state! {
+        let (state, _t1) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 5)
         };
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn applied_style_reflects_pending_set_at_collapsed_caret() {
-        let (state, t1) = state! {
+        let (state, _t1) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };
@@ -413,7 +413,7 @@ mod tests {
 
     #[test]
     fn divergence_false_when_no_uniform_style() {
-        let (state, t1) = state! {
+        let (state, _t1) = state! {
             doc { root { paragraph { t1: text("Hello") [bold] } } }
             selection: (t1, 0) -> (t1, 5)
         };

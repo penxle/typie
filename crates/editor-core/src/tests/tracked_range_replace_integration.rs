@@ -82,7 +82,7 @@ fn unknown_id_emits_unknown_id_and_no_op() {
 
 #[test]
 fn explicitly_invalid_range_emits_invalid_and_no_op() {
-    let (initial, t1) = state! {
+    let (initial, _t1) = state! {
         doc { root { paragraph { t1: text("hello world") } } }
         selection: (t1, 6) -> (t1, 11)
     };
@@ -137,7 +137,7 @@ fn collapsed_on_thaw_emits_invalid() {
 
 #[test]
 fn text_mismatch_emits_text_mismatch_and_no_op() {
-    let (initial, t1) = state! {
+    let (initial, _t1) = state! {
         doc { root { paragraph { t1: text("hello world") } } }
         selection: (t1, 6) -> (t1, 11)
     };

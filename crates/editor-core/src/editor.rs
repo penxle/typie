@@ -1541,7 +1541,7 @@ mod tests {
     }
 
     fn state_with_inline_block_style(pending: PendingModifiers) -> State {
-        let (state, p1) = state! {
+        let (state, _p1) = state! {
             doc { root { p1: paragraph } }
             selection: (p1, 0)
         };
@@ -3760,7 +3760,7 @@ mod tests {
     fn fold_dnd_debug_drop_internal_selection_steps() {
         use editor_clipboard::Slice;
         use editor_commands::{self as commands};
-        let (initial, root, _fold_node, _para_text) = state! {
+        let (initial, _root, _fold_node, _para_text) = state! {
             doc {
                 root: root {
                     _fold_node: fold {
@@ -3854,7 +3854,7 @@ mod tests {
     // can_apply_drop이 fold → after-paragraph 이동에 대해 TRUE 반환하는지 검증
     #[test]
     fn fold_dnd_can_apply_drop_at_root_2_returns_true() {
-        let (initial, root, _fold_node, _para_text) = state! {
+        let (initial, _root, _fold_node, _para_text) = state! {
             doc {
                 root: root {
                     _fold_node: fold {
@@ -3905,7 +3905,7 @@ mod tests {
     // fold 선택 드래그 중 fold 아래 paragraph 하단에 hover → indicator가 나타나야 한다
     #[test]
     fn fold_dnd_over_below_paragraph_shows_drop_indicator() {
-        let (initial, root, _fold_node, para_text) = state! {
+        let (initial, _root, _fold_node, para_text) = state! {
             doc {
                 root: root {
                     _fold_node: fold {
@@ -3949,7 +3949,7 @@ mod tests {
     // fold 드롭 → fold가 paragraph 다음으로 이동해야 한다
     #[test]
     fn fold_dnd_drop_moves_fold_after_paragraph() {
-        let (initial, root, fold_node, para_text) = state! {
+        let (initial, _root, _fold_node, para_text) = state! {
             doc {
                 root: root {
                     fold_node: fold {
@@ -4014,7 +4014,7 @@ mod tests {
     // fold 위에 hover → fold 내부이므로 indicator가 나타나면 안 된다
     #[test]
     fn fold_dnd_over_inside_fold_shows_no_indicator() {
-        let (initial, root, _fold_node, _para_text) = state! {
+        let (initial, _root, _fold_node, _para_text) = state! {
             doc {
                 root: root {
                     _fold_node: fold {

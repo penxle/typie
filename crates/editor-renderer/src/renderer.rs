@@ -1650,15 +1650,15 @@ mod tests {
                                     edges: all_edges(),
                                     decorations: vec![],
                                     children: vec![],
-                                    nav: None,
+                                    attachment: None,
                                 }),
                             })
                             .collect(),
-                        nav: None,
+                        attachment: None,
                     }),
                 })
                 .collect(),
-            nav: None,
+            attachment: None,
         }
     }
 
@@ -1722,7 +1722,7 @@ mod tests {
                 edges,
                 decorations: vec![],
                 children: vec![],
-                nav: None,
+                attachment: None,
             }),
         }
     }

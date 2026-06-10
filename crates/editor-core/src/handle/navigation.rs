@@ -2734,7 +2734,7 @@ mod tests {
     // 같은 단락의 둘째 줄로 가야 한다.
     #[test]
     fn arrow_down_within_multiline_paragraph_in_callout_does_not_exit() {
-        let (state, t_a, t_b) = state! {
+        let (state, _t_a, t_b) = state! {
             doc {
                 root {
                     callout { paragraph { t_a: text("a") hard_break t_b: text("b") } }

@@ -358,7 +358,7 @@ fn range_unaffected_by_deletion_elsewhere_stays_locatable() {
 fn collapsed_range_on_live_text_is_handled_consistently() {
     // Guard: a collapsed range (caret-position comment) on still-live text is
     // still unlocatable by the is_collapsed() rule.
-    let (initial, t1) = state! {
+    let (initial, _t1) = state! {
         doc { root { paragraph { t1: text("hello") } } }
         selection: (t1, 2)
     };

@@ -197,7 +197,7 @@ fn hit_test_ignores_decoration_enabled_flag() {
 #[test]
 fn hit_test_breaks_char_count_ties_by_id_alphabetically() {
     // 같은 문자 길이의 두 range가 같은 좌표에 있을 때 id 사전순으로 정렬되는지 검증.
-    let (state, t1) = state! {
+    let (state, _t1) = state! {
         doc { root { paragraph { t1: text("hello world") } } }
         selection: (t1, 0) -> (t1, 5)
     };
