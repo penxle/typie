@@ -227,6 +227,7 @@
       in:fly={{ y: -5, duration: 150 }}
     >
       <DropdownMenu
+        style={css.raw({ scrollbar: 'hidden' })}
         autoFocus={false}
         onclose={() => {
           close();
