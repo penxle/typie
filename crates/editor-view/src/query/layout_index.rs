@@ -229,7 +229,7 @@ impl LayoutIndex {
         let envelope = AABB::from_corners([-f32::MAX, page.y_start], [f32::MAX, page.y_end]);
         let mut entry_ids: Vec<_> = self
             .spatial
-            .locate_in_envelope_intersecting(&envelope)
+            .locate_in_envelope_intersecting(envelope)
             .filter(|spatial| spatial.page_idx == page_idx)
             .map(|spatial| spatial.entry_id)
             .collect();
@@ -271,7 +271,7 @@ impl LayoutIndex {
     ) -> Option<(LayoutEntryId, T)> {
         let envelope = AABB::from_point([point.x, point.y]);
         self.spatial
-            .locate_in_envelope_intersecting(&envelope)
+            .locate_in_envelope_intersecting(envelope)
             .filter(|spatial| spatial.page_idx == point.page_idx)
             .map(|spatial| spatial.entry_id)
             .filter(|&entry_id| self.entry_exactly_contains(entry_id, point.x, point.y))

@@ -20,9 +20,9 @@ enum-map = "2"
 env_filter = "0.1"
 env_logger = "0.11"
 fancy-regex = "0.18"
-fontique = { version = "0.9", default-features = false }
+fontique = { version = "0.10", default-features = false }
 getrandom = { version = "0.4", features = ["wasm_js"] }
-csscolorparser = "0.7"
+csscolorparser = "0.8"
 cssparser = "0.37"
 ego-tree = "0.11"
 hashbrown = "0.17"
@@ -53,7 +53,7 @@ objc2-metal = { version = "0.3", features = [
   "MTLTypes",
 ] }
 object = { version = "0.39", default-features = false, features = ["read"] }
-parley = { version = "0.9", default-features = false, features = ["std"] }
+parley = { version = "0.10", default-features = false, features = ["std"] }
 peniko = "0.6"
 phf = "0.13"
 phf_codegen = "0.13"
@@ -63,12 +63,12 @@ quote = "1"
 raw-window-handle = "0.6"
 resize = { version = "0.8", default-features = false }
 ruzstd = "0.8"
-rstar = "0.12"
+rstar = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde-wasm-bindgen = "0.6"
 serde_bytes = "0.11"
-skrifa = "0.42"
+skrifa = "0.43"
 smallvec = { version = "1", features = ["serde"] }
 strum = { version = "0.28", features = ["derive"] }
 syn = { version = "2", features = ["full", "extra-traits"] }
@@ -78,14 +78,14 @@ tsify = { version = "0.5", features = ["js"] }
 unicode-segmentation = "1"
 uniffi = "0.31"
 vello = "0.9"
-vello_cpu = "0.0.8"
+vello_cpu = "0.0.9"
 wasm-bindgen = "0.2"
 wasm-bindgen-cli = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3"
 web-time = "1"
 wgpu = "29"
-write-fonts = "0.48"
+write-fonts = "0.49"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 zeno = "0.3"
 zune-png = "0.5"
