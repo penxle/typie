@@ -190,6 +190,33 @@ struct FlatImeTextChange {
     insert: Vec<char>,
 }
 
+fn remap_op(op: &FlatImeOp, before: &FlatImeState, after: &FlatImeState) -> FlatImeOp {
+    match op {
+        FlatImeOp::SetSelection { start, end } => remap_range(before, after, *start, *end)
+            .map_or_else(
+                || op.clone(),
+                |(start, end)| FlatImeOp::SetSelection { start, end },
+            ),
+        FlatImeOp::SetComposition { start, end } => remap_range(before, after, *start, *end)
+            .map_or_else(
+                || op.clone(),
+                |(start, end)| FlatImeOp::SetComposition { start, end },
+            ),
+        _ => op.clone(),
+    }
+}
+
+fn remap_range(
+    before: &FlatImeState,
+    after: &FlatImeState,
+    start: usize,
+    end: usize,
+) -> Option<(usize, usize)> {
+    let before_cursor = (before.sel_start, before.sel_end);
+    let after_cursor = (after.sel_start, after.sel_end);
+    ((start, end) == before_cursor).then_some(after_cursor)
+}
+
 impl FlatImeTextChange {
     fn collapsed_at(pos: usize) -> Self {
         Self {
@@ -601,15 +628,15 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
             return Ok(());
         }
 
-        let (initial, reduced) = if initial.text != reduced.state.text
-            && editor
-                .state
-                .selection
-                .as_ref()
-                .and_then(|s| s.resolve(&editor.state.doc))
-                .and_then(|rs| rs.as_gap_cursor())
-                .is_some()
-        {
+        let started_at_gap = editor
+            .state
+            .selection
+            .as_ref()
+            .and_then(|s| s.resolve(&editor.state.doc))
+            .and_then(|rs| rs.as_gap_cursor())
+            .is_some();
+        let (initial, reduced) = if initial.text != reduced.state.text && started_at_gap {
+            let before_materialize = initial.clone();
             editor.transact(|tr| {
                 tr.set_composition(None)?;
                 commands::materialize_gap_paragraph(tr)?;
@@ -619,7 +646,11 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                 Some(s) => s,
                 None => return Ok(()),
             };
-            let reduced = initial.clone().reduce_flat_ime_ops(&ops);
+            let replay_ops: Vec<_> = ops
+                .iter()
+                .map(|op| remap_op(op, &before_materialize, &initial))
+                .collect();
+            let reduced = initial.clone().reduce_flat_ime_ops(&replay_ops);
             (initial, reduced)
         } else {
             (initial, reduced)
@@ -801,6 +832,26 @@ mod tests {
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
+
+    fn leading_gap_state() -> editor_state::State {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        state
+    }
+
+    fn between_monolithic_gap_state() -> editor_state::State {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        state
+    }
 
     #[test]
     fn probe_composition_commit_empty() {
@@ -2836,11 +2887,7 @@ mod tests {
 
     #[test]
     fn update_at_leading_gap_materializes_and_inserts() {
-        let (state, ..) = state! {
-            doc { r: root { image paragraph { text("b") } } }
-            selection: (r, 0, <)
-        };
-        let mut editor = editor_with_resource(state);
+        let mut editor = editor_with_resource(leading_gap_state());
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
         });
@@ -2857,15 +2904,7 @@ mod tests {
 
     #[test]
     fn update_at_between_monolithic_gap_materializes_and_inserts() {
-        let (state, ..) = state! {
-            doc { r: root {
-                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
-                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
-                paragraph {}
-            } }
-            selection: (r, 1)
-        };
-        let mut editor = editor_with_resource(state);
+        let mut editor = editor_with_resource(between_monolithic_gap_state());
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
         });
@@ -2879,6 +2918,105 @@ mod tests {
             selection: (t1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn replace_selection_at_leading_gap_materializes_and_inserts() {
+        let mut editor = editor_with_resource(leading_gap_state());
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 0, end: 0 },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("a") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn replace_selection_at_between_monolithic_gap_materializes_and_inserts() {
+        let mut editor = editor_with_resource(between_monolithic_gap_state());
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 10, end: 10 },
+                FlatImeOp::ReplaceSelection { text: "X".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                paragraph { t1: text("X") }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn compose_batch_at_leading_gap_materializes_and_composes() {
+        let mut editor = editor_with_resource(leading_gap_state());
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition { start: 0, end: 0 },
+                FlatImeOp::Compose { text: "ㅎ".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("ㅎ") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn compose_batch_at_between_monolithic_gap_materializes_and_composes() {
+        let mut editor = editor_with_resource(between_monolithic_gap_state());
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition { start: 10, end: 10 },
+                FlatImeOp::Compose { text: "ㅎ".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                paragraph { t1: text("ㅎ") }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert!(editor.state().composition.is_some());
+    }
+
+    #[test]
+    fn compose_commit_batch_at_leading_gap_materializes_and_commits() {
+        let mut editor = editor_with_resource(leading_gap_state());
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition { start: 0, end: 0 },
+                FlatImeOp::Compose { text: "안".into() },
+                FlatImeOp::CommitAsIs,
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("안") } image paragraph { text("b") } } }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]
