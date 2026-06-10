@@ -547,13 +547,14 @@ DocumentView.implement({
 
         const stateLoader = ctx.loader({
           name: 'DocumentView.excerpt.v2',
+          nullable: true,
           load: async (ids: string[]) => {
             return await db
               .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
               .from(DocumentStates)
               .where(inArray(DocumentStates.documentId, ids));
           },
-          key: ({ documentId }: { documentId: string }) => documentId,
+          key: (row) => row?.documentId,
         });
 
         const state = await stateLoader.load(self.id);
@@ -709,13 +710,14 @@ DocumentView.implement({
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
           name: 'DocumentView.state',
+          nullable: true,
           load: async (ids: string[]) => {
             return await db
               .select({ documentId: DocumentStates.documentId, updatedAt: DocumentStates.updatedAt })
               .from(DocumentStates)
               .where(inArray(DocumentStates.documentId, ids));
           },
-          key: ({ documentId }: { documentId: string }) => documentId,
+          key: (row) => row?.documentId,
         });
 
         const row = await loader.load(self.id);
