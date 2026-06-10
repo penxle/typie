@@ -16,14 +16,26 @@ use crate::message::*;
 fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
     let doc = tr.doc();
     let replacement_modifiers = uniform_text_modifiers_in_range(&doc, start, end);
-    let start_pos = ResolvedPosition::from_flat(&doc, start)
-        .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
-    let end_pos = ResolvedPosition::from_flat(&doc, end)
-        .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?;
+    let resolve_selection_from_flat = || -> Result<Selection, CommandError> {
+        let start_pos = ResolvedPosition::from_flat(&doc, start)
+            .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
+        let end_pos = ResolvedPosition::from_flat(&doc, end)
+            .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?;
+        Ok(Selection::new((&start_pos).into(), (&end_pos).into()))
+    };
+    let current_selection_flat_range = |selection: Selection| -> Option<(usize, usize)> {
+        let anchor = selection.anchor.resolve(&doc)?.to_flat();
+        let head = selection.head.resolve(&doc)?.to_flat();
+        Some((anchor.min(head), anchor.max(head)))
+    };
+    let selection = tr
+        .selection()
+        .filter(|selection| current_selection_flat_range(*selection) == Some((start, end)))
+        .map_or_else(|| resolve_selection_from_flat(), Ok)?;
 
     commands::chain!(
         tr,
-        commands::set_selection(Selection::new((&start_pos).into(), (&end_pos).into())),
+        commands::set_selection(selection),
         commands::optional!(commands::ensure_paragraph()),
         commands::optional!(commands::delete_selection()),
         |tr| apply_replacement_modifiers(tr, text, replacement_modifiers.as_deref()),
@@ -784,6 +796,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::Modifier;
     use editor_state::assert_state_eq;
 
     use super::*;
@@ -1639,6 +1652,26 @@ mod tests {
         editor
     }
 
+    fn paragraph_run_texts_and_styles(editor: &Editor) -> Vec<(String, Option<String>)> {
+        let paragraph = editor
+            .state()
+            .doc
+            .root()
+            .expect("root exists")
+            .children()
+            .next()
+            .expect("paragraph exists");
+        paragraph
+            .children()
+            .filter_map(|child| match child.node() {
+                editor_model::Node::Text(text) => {
+                    Some((text.text.to_string(), child.entry().style.get().clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn flat_ime_text_replacement() {
         let (s, ..) = state! {
@@ -1665,6 +1698,65 @@ mod tests {
             selection: (t1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_repeated_insert_preserves_style_run_affinity() {
+        let (s, ..) = state! {
+            doc { root { paragraph { t1: text("ac") } } }
+            selection: (t1, 1)
+        };
+        let mut editor = editor_with_resource(s);
+        editor.apply(Message::Style {
+            op: StyleOp::Define {
+                style_id: "green".into(),
+                name: "Green".into(),
+                modifiers: vec![Modifier::TextColor {
+                    value: "#00ff00".into(),
+                }],
+            },
+        });
+        editor.apply(Message::Style {
+            op: StyleOp::ApplyToSelection {
+                style_id: "green".into(),
+            },
+        });
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "f".into() }],
+        });
+        assert_eq!(
+            paragraph_run_texts_and_styles(&editor),
+            vec![
+                ("a".into(), None),
+                ("f".into(), Some("green".into())),
+                ("c".into(), None),
+            ]
+        );
+        let current_flat = editor
+            .state()
+            .selection
+            .and_then(|selection| selection.head.resolve(&editor.state().doc))
+            .map(|pos| pos.to_flat())
+            .expect("selection head resolves to flat");
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection {
+                    start: current_flat,
+                    end: current_flat,
+                },
+                FlatImeOp::ReplaceSelection { text: "f".into() },
+            ],
+        });
+
+        assert_eq!(
+            paragraph_run_texts_and_styles(&editor),
+            vec![
+                ("a".into(), None),
+                ("ff".into(), Some("green".into())),
+                ("c".into(), None),
+            ]
+        );
     }
 
     #[test]
