@@ -1220,25 +1220,13 @@ export class Editor {
     const restoreToNormalGroup = (errorId: string) => {
       const range = this.trackedRanges.find((r) => r.id === errorId);
       if (!range || range.invalid) return;
-      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
-      if (!stable) return;
-      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: errorId } });
-      this.enqueue({
-        type: 'tracked_range',
-        op: { type: 'add_frozen', id: errorId, group: 'spellcheck', selection: stable, metadata: '' },
-      });
+      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck' } });
     };
 
     const promoteToActiveGroup = (errorId: string): boolean => {
       const range = this.trackedRanges.find((r) => r.id === errorId);
       if (!range || range.invalid) return false;
-      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
-      if (!stable) return false;
-      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: errorId } });
-      this.enqueue({
-        type: 'tracked_range',
-        op: { type: 'add_frozen', id: errorId, group: 'spellcheck-active', selection: stable, metadata: '' },
-      });
+      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck-active' } });
       return true;
     };
 
@@ -1430,10 +1418,7 @@ export class Editor {
     const move = (cid: string, group: 'comment' | 'comment-active'): boolean => {
       const range = this.trackedRanges.find((r) => r.id === cid);
       if (!range || range.invalid) return false;
-      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
-      if (!stable) return false;
-      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: cid } });
-      this.enqueue({ type: 'tracked_range', op: { type: 'add_frozen', id: cid, group, selection: stable, metadata: '' } });
+      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: cid, group } });
       return true;
     };
 
@@ -1455,25 +1440,13 @@ export class Editor {
     const restoreToNormalGroup = (feedbackId: string) => {
       const range = this.trackedRanges.find((r) => r.id === feedbackId);
       if (!range || range.invalid) return;
-      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
-      if (!stable) return;
-      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: feedbackId } });
-      this.enqueue({
-        type: 'tracked_range',
-        op: { type: 'add_frozen', id: feedbackId, group: 'ai-feedback', selection: stable, metadata: '' },
-      });
+      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback' } });
     };
 
     const promoteToActiveGroup = (feedbackId: string): boolean => {
       const range = this.trackedRanges.find((r) => r.id === feedbackId);
       if (!range || range.invalid) return false;
-      const stable = this.freezeSelection({ anchor: range.anchor, head: range.head });
-      if (!stable) return false;
-      this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: feedbackId } });
-      this.enqueue({
-        type: 'tracked_range',
-        op: { type: 'add_frozen', id: feedbackId, group: 'ai-feedback-active', selection: stable, metadata: '' },
-      });
+      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback-active' } });
       return true;
     };
 

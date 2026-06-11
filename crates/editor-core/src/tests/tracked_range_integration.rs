@@ -29,6 +29,14 @@ fn is_unlocatable(editor: &Editor, id: &str) -> bool {
     range.locate(&editor.state().doc).is_none()
 }
 
+fn located_text(editor: &Editor, id: &str) -> Option<String> {
+    let range = editor.tracked_ranges().get(id).expect("range present");
+    range
+        .locate(&editor.state().doc)
+        .and_then(|sel| sel.resolve(&editor.state().doc))
+        .map(|resolved| resolved.collect_text())
+}
+
 #[test]
 fn range_position_shifts_when_text_inserted_before_it() {
     let (initial, t1) = state! {
@@ -624,5 +632,57 @@ fn range_recovers_from_invalid_after_undo() {
     assert!(
         !is_unlocatable(&editor, "r"),
         "undo must restore range to valid"
+    );
+}
+
+#[test]
+fn set_group_preserves_deleted_trailing_boundary_before_later_insert() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("abcdef") } } }
+        selection: (t1, 1) -> (t1, 4)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message("r", "comment", sel));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(t1, 3),
+                editor_state::Position::new(t1, 5),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bc"));
+
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::SetGroup {
+            id: "r".into(),
+            group: "comment-active".into(),
+        },
+    });
+    assert_eq!(
+        editor.tracked_ranges().get("r").unwrap().group,
+        "comment-active"
+    );
+    assert_eq!(editor.tracked_ranges().group_size("comment"), 0);
+    assert_eq!(editor.tracked_ranges().group_size("comment-active"), 1);
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(t1, 3)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bc"),
+        "moving a range between decoration groups must not refreeze its deleted trailing boundary"
     );
 }

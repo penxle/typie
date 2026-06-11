@@ -383,6 +383,10 @@ pub enum TrackedRangeOp {
     Remove {
         id: String,
     },
+    SetGroup {
+        id: String,
+        group: String,
+    },
     ClearGroup {
         group: String,
     },

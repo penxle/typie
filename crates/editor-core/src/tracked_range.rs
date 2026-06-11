@@ -74,6 +74,28 @@ impl TrackedRangeRegistry {
         Some(prev)
     }
 
+    pub fn set_group(&mut self, id: &str, group: String) -> bool {
+        let Some(range) = self.by_id.get_mut(id) else {
+            return false;
+        };
+        if range.group == group {
+            return false;
+        }
+
+        let old_group = std::mem::replace(&mut range.group, group.clone());
+        if let Some(set) = self.by_group.get_mut(&old_group) {
+            set.remove(id);
+            if set.is_empty() {
+                self.by_group.remove(&old_group);
+            }
+        }
+        self.by_group
+            .entry(group)
+            .or_default()
+            .insert(id.to_string());
+        true
+    }
+
     pub fn clear_group(&mut self, group: &str) -> Vec<TrackedRange> {
         let Some(ids) = self.by_group.remove(group) else {
             return Vec::new();

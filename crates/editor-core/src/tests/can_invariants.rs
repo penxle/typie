@@ -108,6 +108,12 @@ fn build_corpus() -> Vec<Message> {
             },
         },
         Message::TrackedRange {
+            op: TrackedRangeOp::SetGroup {
+                id: "missing".into(),
+                group: "g".into(),
+            },
+        },
+        Message::TrackedRange {
             op: TrackedRangeOp::ClearGroup {
                 group: "missing".into(),
             },

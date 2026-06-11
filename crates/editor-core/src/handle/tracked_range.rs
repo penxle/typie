@@ -62,6 +62,15 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 reg.remove(&id);
             });
         }
+        TrackedRangeOp::SetGroup { id, group } => {
+            let would_change = editor
+                .tracked_ranges()
+                .get(&id)
+                .is_some_and(|range| range.group != group);
+            commit_or_probe(editor, would_change, |reg| {
+                reg.set_group(&id, group);
+            });
+        }
         TrackedRangeOp::ClearGroup { group } => {
             let would_change = editor.tracked_ranges().group_size(&group) > 0;
             commit_or_probe(editor, would_change, |reg| {
