@@ -1,5 +1,5 @@
-use editor_model::{Node, NodeId, NodeRef};
-use editor_state::{Position, ResolvedSelection, Selection};
+use editor_model::{Node, NodeId};
+use editor_state::{Position, Selection};
 use editor_transaction::{Transaction, compact};
 
 use crate::CommandError;
@@ -79,47 +79,23 @@ pub(crate) fn collect_text_nodes_in_range(
     let resolved = Selection::new(from_pos, to_pos)
         .resolve(&doc)
         .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-    let root = doc.root().expect("root must exist");
     let mut result = Vec::new();
-    walk_text_nodes_in_range(&root, &resolved, &mut result);
-    Ok(result)
-}
-
-fn walk_text_nodes_in_range(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out: &mut Vec<NodeId>) {
-    if !rs.intersects_subtree(node) {
-        return;
-    }
-    match node.node() {
-        Node::Text(text) => {
-            let from = rs.from();
-            let to = rs.to();
-            let len = text.text.len();
-            let start = if from.node_id() == node.id() {
-                from.offset().min(len)
-            } else {
-                0
-            };
-            let end = if to.node_id() == node.id() {
-                to.offset().min(len)
-            } else {
-                len
-            };
-            if end > start {
-                out.push(node.id());
+    resolved.visit_intersecting_nodes(|node| match node.node() {
+        Node::Text(_) => {
+            if resolved.text_span_for_node(&node).is_some() {
+                result.push(node.id());
             }
-            return;
+            false
         }
         Node::Tab(_) => {
-            if rs.contains_subtree(node) {
-                out.push(node.id());
+            if resolved.contains_subtree(&node) {
+                result.push(node.id());
             }
-            return;
+            false
         }
-        _ => {}
-    }
-    for child in node.children() {
-        walk_text_nodes_in_range(&child, rs, out);
-    }
+        _ => true,
+    });
+    Ok(result)
 }
 
 pub(crate) fn compact_textblock_at_position(

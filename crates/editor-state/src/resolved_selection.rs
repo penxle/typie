@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use editor_model::{Doc, Node, NodeRef};
 
 use crate::position::Position;
@@ -166,27 +168,18 @@ impl<'a> ResolvedSelection<'a> {
             )
     }
 
-    /// Concatenates text node content within the selection.
-    ///
-    /// Multi-byte safe: slices by unicode codepoints, not bytes.
-    pub fn collect_text(&self) -> String {
-        let mut out = String::new();
-        if let Some(root) = self.doc.root() {
-            collect_text_walk(&root, self, &mut out);
+    /// Text span of `node` covered by this selection, if the covered span is non-empty.
+    pub fn text_span_for_node(&self, node: &NodeRef<'_>) -> Option<Range<usize>> {
+        let Node::Text(text_node) = node.node() else {
+            return None;
+        };
+        if !self.intersects_subtree(node) {
+            return None;
         }
-        out
-    }
-}
 
-fn collect_text_walk(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out: &mut String) {
-    if !rs.intersects_subtree(node) {
-        return;
-    }
-    if let Node::Text(text_node) = node.node() {
-        let from = rs.from();
-        let to = rs.to();
-        let full = text_node.text.to_string();
-        let total = full.chars().count();
+        let from = self.from();
+        let to = self.to();
+        let total = text_node.text.len();
         let start = if from.node_id() == node.id() {
             from.offset().min(total)
         } else {
@@ -197,14 +190,82 @@ fn collect_text_walk(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out: &mut S
         } else {
             total
         };
-        if end > start {
-            let slice: String = full.chars().skip(start).take(end - start).collect();
-            out.push_str(&slice);
-        }
-        return;
+
+        (end > start).then_some(start..end)
     }
-    for child in node.children() {
-        collect_text_walk(&child, rs, out);
+
+    /// Visits text nodes whose covered text span is non-empty.
+    pub fn for_each_text_node<F>(&self, mut visit: F)
+    where
+        F: FnMut(NodeRef<'a>, Range<usize>),
+    {
+        if let Some(root) = self.doc.root() {
+            self.walk_text_nodes(root, &mut visit);
+        }
+    }
+
+    /// Visits nodes whose subtree intersects this selection.
+    ///
+    /// The callback returns whether the visitor should continue into children.
+    pub fn visit_intersecting_nodes<F>(&self, mut visit: F)
+    where
+        F: FnMut(NodeRef<'a>) -> bool,
+    {
+        if let Some(root) = self.doc.root() {
+            self.walk_intersecting_nodes(root, &mut visit);
+        }
+    }
+
+    /// Concatenates text node content within the selection.
+    ///
+    /// Multi-byte safe: slices by unicode codepoints, not bytes.
+    pub fn collect_text(&self) -> String {
+        let mut out = String::new();
+        self.for_each_text_node(|node, span| {
+            let Node::Text(text_node) = node.node() else {
+                return;
+            };
+            out.extend(
+                text_node
+                    .text
+                    .iter_visible_entries()
+                    .skip(span.start)
+                    .take(span.len())
+                    .map(|(_, ch)| ch),
+            );
+        });
+        out
+    }
+
+    fn walk_text_nodes<F>(&self, node: NodeRef<'a>, visit: &mut F)
+    where
+        F: FnMut(NodeRef<'a>, Range<usize>),
+    {
+        if !self.intersects_subtree(&node) {
+            return;
+        }
+        if let Some(span) = self.text_span_for_node(&node) {
+            visit(node, span);
+            return;
+        }
+        for child in node.children() {
+            self.walk_text_nodes(child, visit);
+        }
+    }
+
+    fn walk_intersecting_nodes<F>(&self, node: NodeRef<'a>, visit: &mut F)
+    where
+        F: FnMut(NodeRef<'a>) -> bool,
+    {
+        if !self.intersects_subtree(&node) {
+            return;
+        }
+        if !visit(node) {
+            return;
+        }
+        for child in node.children() {
+            self.walk_intersecting_nodes(child, visit);
+        }
     }
 }
 
@@ -512,6 +573,56 @@ mod tests {
             .unwrap();
         let p2_ref = state.doc.node(p2).unwrap();
         assert!(!rs.intersects_subtree(&p2_ref));
+    }
+
+    #[test]
+    fn text_span_for_node_clips_text_boundaries() {
+        let (state, t1, t2, t3) = state! {
+            doc { root {
+                paragraph {
+                    t1: text("Hello")
+                    t2: text("World")
+                }
+                paragraph { t3: text("!") }
+            } }
+            selection: (t1, 2) -> (t2, 3)
+        };
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
+
+        assert_eq!(
+            rs.text_span_for_node(&state.doc.node(t1).unwrap()),
+            Some(2..5)
+        );
+        assert_eq!(
+            rs.text_span_for_node(&state.doc.node(t2).unwrap()),
+            Some(0..3)
+        );
+        assert_eq!(rs.text_span_for_node(&state.doc.node(t3).unwrap()), None);
+    }
+
+    #[test]
+    fn text_span_for_node_excludes_zero_width_boundary_nodes() {
+        let (state, t1, t2) = state! {
+            doc { root { paragraph {
+                t1: text("A")
+                t2: text("B")
+            } } }
+            selection: (t1, 1) -> (t2, 0)
+        };
+        let rs = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .resolve(&state.doc)
+            .unwrap();
+
+        assert_eq!(rs.text_span_for_node(&state.doc.node(t1).unwrap()), None);
+        assert_eq!(rs.text_span_for_node(&state.doc.node(t2).unwrap()), None);
     }
 
     #[test]

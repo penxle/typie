@@ -1,7 +1,5 @@
-#![allow(dead_code)]
-
-use editor_model::{Doc, Modifier, ModifierType, Node, NodeId, NodeRef, PlainStyleEntry};
-use editor_state::{Position, ResolvedSelection, State};
+use editor_model::{Doc, Modifier, ModifierType, Node, NodeId, PlainStyleEntry};
+use editor_state::{Position, State};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
@@ -29,54 +27,15 @@ pub(crate) fn collect_textblocks_in_selection(state: &State) -> Vec<NodeId> {
     let Some(rs) = sel.resolve(&state.doc) else {
         return Vec::new();
     };
-    let Some(root) = state.doc.root() else {
-        return Vec::new();
-    };
-
     let mut out = Vec::new();
-    walk_textblocks(&root, &rs, &mut out);
-    out
-}
-
-fn walk_textblocks<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection<'a>, out: &mut Vec<NodeId>) {
-    if !rs.intersects_subtree(node) {
-        return;
-    }
-    if node.spec().is_textblock() {
-        out.push(node.id());
-        return;
-    }
-    for child in node.children() {
-        walk_textblocks(&child, rs, out);
-    }
-}
-
-fn walk_text_nodes<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection<'a>, out: &mut Vec<NodeRef<'a>>) {
-    if !rs.intersects_subtree(node) {
-        return;
-    }
-    if let Node::Text(text) = node.node() {
-        let from = rs.from();
-        let to = rs.to();
-        let len = text.text.len();
-        let start = if from.node_id() == node.id() {
-            from.offset().min(len)
-        } else {
-            0
-        };
-        let end = if to.node_id() == node.id() {
-            to.offset().min(len)
-        } else {
-            len
-        };
-        if end > start {
-            out.push(*node);
+    rs.visit_intersecting_nodes(|node| {
+        if node.spec().is_textblock() {
+            out.push(node.id());
+            return false;
         }
-        return;
-    }
-    for child in node.children() {
-        walk_text_nodes(&child, rs, out);
-    }
+        true
+    });
+    out
 }
 
 /// Collects inline modifiers from text nodes intersecting the selection,
@@ -105,12 +64,8 @@ pub(crate) fn collect_uniform_text_modifiers_in_selection(state: &State) -> Vec<
     let Some(rs) = sel.resolve(&state.doc) else {
         return Vec::new();
     };
-    let Some(root) = state.doc.root() else {
-        return Vec::new();
-    };
-
-    let mut text_nodes: Vec<NodeRef> = Vec::new();
-    walk_text_nodes(&root, &rs, &mut text_nodes);
+    let mut text_nodes = Vec::new();
+    rs.for_each_text_node(|node, _span| text_nodes.push(node));
     if text_nodes.is_empty() {
         return Vec::new();
     }
@@ -232,14 +187,6 @@ pub(crate) fn collect_run_nodes_in_selection(
     collect_text_nodes_in_range(tr, &from, &to)
 }
 
-/// Returns the style ids defined on the document, in lexicographic order.
-/// A style is defined iff `Doc.styles` contains it (presence).
-pub(crate) fn defined_style_ids(doc: &Doc) -> Vec<String> {
-    let mut ids: Vec<String> = doc.styles_iter().map(|(k, _)| k.clone()).collect();
-    ids.sort_unstable();
-    ids
-}
-
 /// Snapshot of a style entry's current values, or `None` if the style is not
 /// present (no entry in `Doc.styles`). Useful as the `old` capture for
 /// `Step::SetStyle` and as the read path for command-level edits.
@@ -252,137 +199,4 @@ pub(crate) fn capture_style_entry(doc: &Doc, style_id: &str) -> Option<PlainStyl
         name: entry.name.get().clone(),
         modifiers: entry.modifiers.iter().cloned().collect(),
     })
-}
-
-/// Effective modifiers contributed by the style applied to `node`, or empty
-/// when no style is applied or the referenced style id is dangling (not in
-/// `Doc.styles` or `style_entries`).
-pub(crate) fn style_modifiers_for(node: &NodeRef<'_>) -> Vec<Modifier> {
-    let doc = node.doc();
-    let Some(id) = node.entry().style.get().as_ref() else {
-        return Vec::new();
-    };
-    if !doc.style_present(id) {
-        return Vec::new();
-    }
-    let Some(style) = doc.style_entry(id) else {
-        return Vec::new();
-    };
-    style.modifiers.iter().cloned().collect()
-}
-
-/// Effective modifiers for a node combining its own (direct) modifiers with the
-/// modifiers contributed by its applied style. Direct modifiers override
-/// style-derived modifiers of the same `ModifierType`.
-pub(crate) fn effective_modifiers_with_styles(node: &NodeRef<'_>) -> Vec<Modifier> {
-    let mut by_type: Vec<(ModifierType, Modifier)> = style_modifiers_for(node)
-        .into_iter()
-        .map(|m| (m.as_type(), m))
-        .collect();
-    for m in node.explicit_modifiers() {
-        let ty = m.as_type();
-        if let Some(pos) = by_type.iter().position(|(t, _)| *t == ty) {
-            by_type[pos].1 = m.clone();
-        } else {
-            by_type.push((ty, m.clone()));
-        }
-    }
-    by_type.into_iter().map(|(_, m)| m).collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use editor_macros::state;
-    use editor_model::Modifier;
-
-    use crate::commands::define_style;
-    use crate::test_utils::*;
-
-    #[test]
-    fn style_modifiers_resolve_when_applied() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph { text("Hello") } } }
-            selection: (p1, 0)
-        };
-        let (with_style, ..) = transact!(state, |tr| define_style(
-            &mut tr,
-            "heading-1".into(),
-            "제목 1".into(),
-            vec![Modifier::Bold, Modifier::FontSize { value: 2400 }],
-        ));
-        let (applied, ..) = transact!(with_style, |tr| tr
-            .set_node_style(p1, Some("heading-1".into()))
-            .map(|_| true)
-            .map_err(crate::CommandError::Step));
-
-        let node = applied.doc.node(p1).unwrap();
-        let mods = style_modifiers_for(&node);
-        assert!(mods.contains(&Modifier::Bold));
-        assert!(mods.contains(&Modifier::FontSize { value: 2400 }));
-    }
-
-    #[test]
-    fn direct_modifier_overrides_style_modifier() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph { text("Hello") } } }
-            selection: (p1, 0)
-        };
-        let (with_style, ..) = transact!(state, |tr| define_style(
-            &mut tr,
-            "heading-1".into(),
-            "제목 1".into(),
-            vec![Modifier::FontSize { value: 2400 }],
-        ));
-        let (applied, ..) = transact!(with_style, |tr| tr
-            .set_node_style(p1, Some("heading-1".into()))
-            .map(|_| true)
-            .map_err(crate::CommandError::Step));
-        let (after, ..) = transact!(applied, |tr| crate::commands::set_node_modifier(
-            &mut tr,
-            p1,
-            Modifier::FontSize { value: 1600 }
-        ));
-
-        let node = after.doc.node(p1).unwrap();
-        let mods = effective_modifiers_with_styles(&node);
-        assert!(mods.contains(&Modifier::FontSize { value: 1600 }));
-        assert!(!mods.contains(&Modifier::FontSize { value: 2400 }));
-    }
-
-    #[test]
-    fn dangling_style_ref_is_ignored() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph { text("Hello") } } }
-            selection: (p1, 0)
-        };
-        let (applied, ..) = transact!(state, |tr| tr
-            .set_node_style(p1, Some("missing".into()))
-            .map(|_| true)
-            .map_err(crate::CommandError::Step));
-        let node = applied.doc.node(p1).unwrap();
-        assert!(style_modifiers_for(&node).is_empty());
-    }
-
-    #[test]
-    fn defined_style_ids_returns_sorted() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
-        };
-        let (defined1, ..) = transact!(state, |tr| define_style(
-            &mut tr,
-            "heading-2".into(),
-            "h2".into(),
-            vec![],
-        ));
-        let (defined2, ..) = transact!(defined1, |tr| define_style(
-            &mut tr,
-            "heading-1".into(),
-            "h1".into(),
-            vec![],
-        ));
-        let ids = defined_style_ids(&defined2.doc);
-        assert_eq!(ids, vec!["heading-1".to_string(), "heading-2".to_string()]);
-    }
 }

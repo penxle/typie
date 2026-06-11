@@ -179,46 +179,17 @@ impl TrackedTextAnchor {
 
 fn collect_covered_text_anchors(resolved: &ResolvedSelection<'_>) -> Vec<TrackedTextAnchor> {
     let mut out = Vec::new();
-    if let Some(root) = resolved.doc().root() {
-        collect_text_anchors_walk(&root, resolved, &mut out);
-    }
-    out
-}
-
-fn collect_text_anchors_walk(
-    node: &editor_model::NodeRef<'_>,
-    resolved: &ResolvedSelection<'_>,
-    out: &mut Vec<TrackedTextAnchor>,
-) {
-    if !resolved.intersects_subtree(node) {
-        return;
-    }
-    if let Node::Text(text_node) = node.node() {
-        let from = resolved.from();
-        let to = resolved.to();
-        let total = text_node.text.len();
-        let start = if from.node_id() == node.id() {
-            from.offset().min(total)
-        } else {
-            0
+    resolved.for_each_text_node(|node, span| {
+        let Node::Text(text_node) = node.node() else {
+            return;
         };
-        let end = if to.node_id() == node.id() {
-            to.offset().min(total)
-        } else {
-            total
-        };
-        if end > start {
-            for idx in start..end {
-                if let Ok(entry_dot) = text_node.text.entry_dot_at(idx) {
-                    out.push(TrackedTextAnchor { entry_dot });
-                }
+        for idx in span {
+            if let Ok(entry_dot) = text_node.text.entry_dot_at(idx) {
+                out.push(TrackedTextAnchor { entry_dot });
             }
         }
-        return;
-    }
-    for child in node.children() {
-        collect_text_anchors_walk(&child, resolved, out);
-    }
+    });
+    out
 }
 
 #[cfg(test)]
@@ -319,7 +290,7 @@ mod tests {
 
     #[test]
     fn tracked_text_anchor_alive_follows_moved_entry_dot() {
-        let (state, t1, t2) = state! {
+        let (state, _t1, t2) = state! {
             doc {
                 root {
                     paragraph { t1: text("a") }
