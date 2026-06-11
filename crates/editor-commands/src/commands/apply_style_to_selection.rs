@@ -5,7 +5,7 @@ use editor_transaction::Transaction;
 use crate::CommandResult;
 use crate::helpers::{
     clear_inline_modifier_types_in_selection, collect_run_nodes_in_selection,
-    compact_and_restore_selection,
+    compact_textblocks_for_nodes,
 };
 
 pub fn apply_style_to_selection(tr: &mut Transaction, style_id: String) -> CommandResult {
@@ -45,7 +45,7 @@ pub fn apply_style_to_selection(tr: &mut Transaction, style_id: String) -> Comma
     }
 
     if style_modifier_types.is_empty() {
-        compact_and_restore_selection(tr, &run_ids)?;
+        compact_textblocks_for_nodes(tr, &run_ids)?;
     } else if clear_inline_modifier_types_in_selection(tr, &style_modifier_types)? {
         changed = true;
     }

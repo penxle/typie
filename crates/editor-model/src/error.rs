@@ -68,6 +68,12 @@ pub enum ModelError {
     #[error("parent/child desync: parent {parent:?}, child {child:?}")]
     ParentChildDesync { parent: NodeId, child: NodeId },
 
+    #[error("text projection desync at node {node_id:?}")]
+    TextProjectionDesync { node_id: NodeId },
+
+    #[error("text current-location index desync")]
+    TextIndexDesync,
+
     #[error("root uniqueness violation: count = {count}")]
     RootUniquenessViolation { count: usize },
 

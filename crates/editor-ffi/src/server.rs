@@ -655,7 +655,7 @@ mod tests {
             DocOp::Text {
                 node_id: txt,
                 op: editor_crdt::TextOp::InsertChar {
-                    after: Some(a_dot),
+                    after: Some(editor_crdt::PlacementId(a_dot)),
                     ch: 'b',
                 },
             },
@@ -871,7 +871,9 @@ mod tests {
             &mut g,
             DocOp::Text {
                 node_id: t2,
-                op: editor_crdt::TextOp::RemoveChar { observed: t2_a },
+                op: editor_crdt::TextOp::RemoveChar {
+                    observed: editor_crdt::EntryDot(t2_a),
+                },
             },
         );
         add(
@@ -919,7 +921,7 @@ mod tests {
             payload: DocOp::Text {
                 node_id: t2,
                 op: editor_crdt::TextOp::InsertChar {
-                    after: Some(t2_a),
+                    after: Some(editor_crdt::PlacementId(t2_a)),
                     ch: 'Z',
                 },
             },

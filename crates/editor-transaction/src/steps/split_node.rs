@@ -1,4 +1,4 @@
-use editor_crdt::{Dot, LwwRegOp, OrMapOp, RgaOp, TextOp};
+use editor_crdt::{Dot, EntryDot, LwwRegOp, OrMapOp, PlacementId, RgaOp};
 use editor_model::{DocOp, Modifier, Node, NodeAttr, NodeId};
 use editor_state::BatchedState;
 
@@ -42,8 +42,12 @@ pub(crate) fn apply_to(
             .ok_or(StepError::NodeNotFound(node_id))?;
 
         let content_split = match &entry.node {
-            Node::Text(text_node) => {
-                let len = text_node.text.len();
+            Node::Text(_) => {
+                let text = batched
+                    .doc
+                    .text_view(node_id)
+                    .ok_or(StepError::ExpectedTextNode(node_id))?;
+                let len = text.len();
                 if offset > len {
                     return Err(StepError::OffsetOutOfBounds {
                         node_id,
@@ -51,9 +55,12 @@ pub(crate) fn apply_to(
                         len,
                     });
                 }
-                let tail_chars: Vec<(Dot, char)> =
-                    text_node.text.iter_with_dot().skip(offset).collect();
-                ContentSplit::Text { tail_chars }
+                let tail_entries: Vec<EntryDot> = text
+                    .visible_entries()
+                    .skip(offset)
+                    .map(|(entry, _)| entry)
+                    .collect();
+                ContentSplit::Text { tail_entries }
             }
             _ => {
                 let children_count = entry.children.iter_with_dot().count();
@@ -129,22 +136,17 @@ pub(crate) fn apply_to(
         },
     })?;
     match content_split {
-        ContentSplit::Text { tail_chars } => {
-            for (target, _) in &tail_chars {
-                batched.apply(DocOp::Text {
-                    node_id,
-                    op: TextOp::RemoveChar { observed: *target },
-                })?;
-            }
-            let mut after: Option<Dot> = None;
-            for (_, ch) in tail_chars {
+        ContentSplit::Text { tail_entries } => {
+            let mut after: Option<PlacementId> = None;
+            for entry in tail_entries {
                 let op_id = batched
-                    .apply(DocOp::Text {
-                        node_id: new_node_id,
-                        op: TextOp::InsertChar { ch, after },
+                    .apply(DocOp::MoveText {
+                        entry,
+                        to_node_id: new_node_id,
+                        after,
                     })?
                     .id;
-                after = Some(op_id);
+                after = Some(PlacementId(op_id));
             }
         }
         ContentSplit::Children { tail_children } => {
@@ -183,7 +185,7 @@ pub(crate) fn apply_to(
 }
 
 enum ContentSplit {
-    Text { tail_chars: Vec<(Dot, char)> },
+    Text { tail_entries: Vec<EntryDot> },
     Children { tail_children: Vec<(Dot, NodeId)> },
 }
 
@@ -209,15 +211,29 @@ mod tests {
         };
 
         let t2 = NodeId::new();
+        let tail_entries: Vec<_> = state
+            .text(t1)
+            .text
+            .iter_visible_entries()
+            .skip(5)
+            .map(|(entry, _)| entry)
+            .collect();
         let step = Step::SplitNode {
             node_id: t1,
             offset: 5,
             new_node_id: t2,
         };
         let new_state = step.apply(&state).unwrap().state;
+        let moved_entries: Vec<_> = new_state
+            .text(t2)
+            .text
+            .iter_visible_entries()
+            .map(|(entry, _)| entry)
+            .collect();
 
-        assert_eq!(new_state.text(t1).text.to_string(), "Hello");
-        assert_eq!(new_state.text(t2).text.to_string(), " World");
+        assert_eq!(new_state.doc.text_view(t1).unwrap().text(), "Hello");
+        assert_eq!(new_state.doc.text_view(t2).unwrap().text(), " World");
+        assert_eq!(moved_entries, tail_entries);
         assert!(new_state.node(t2).modifiers().any(|m| *m == Modifier::Bold));
         assert_eq!(new_state.node(p1).children().count(), 2);
         let p1_children: Vec<NodeId> = new_state
@@ -380,7 +396,7 @@ mod tests {
         let state2 = step.apply(&state).unwrap().state;
         let state3 = step.inverse().apply(&state2).unwrap().state;
 
-        assert_eq!(state3.text(t1).text.to_string(), "Hello World");
+        assert_eq!(state3.doc.text_view(t1).unwrap().text(), "Hello World");
         assert!(!state3.has_node(t2));
     }
 }

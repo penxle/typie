@@ -2199,7 +2199,7 @@ mod tests {
             panic!("t1 must be Text")
         };
         assert!(
-            t.text.iter_with_dot().any(|(_, c)| c == 'x'),
+            t.text.iter_visible_entries().any(|(_, c)| c == 'x'),
             "remote insert applied"
         );
     }

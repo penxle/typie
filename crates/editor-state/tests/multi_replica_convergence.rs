@@ -117,10 +117,10 @@ fn try_text_insert(state: &State, text_id: NodeId, ch: char, offset_hint: u8) ->
     let after = if offset == 0 {
         None
     } else {
-        // dot_at(0) is None (before-first-char); dot_at(k) is the dot at the
-        // boundary just after the k-th char — the natural anchor for an
-        // insert at offset k.
-        t.text.dot_at(offset).ok().flatten()
+        // placement_at_visible_offset(0) is None (before-first-char);
+        // placement_at_visible_offset(k) is the placement just before the
+        // insertion boundary at offset k.
+        t.text.placement_at_visible_offset(offset).ok().flatten()
     };
     Some(DocOp::Text {
         node_id: text_id,
@@ -138,7 +138,7 @@ fn try_text_remove(state: &State, text_id: NodeId, offset_hint: u8) -> Option<Do
         return None;
     }
     let pick = (offset_hint as usize) % len;
-    let dot = t.text.dot_at(pick + 1).ok().flatten()?;
+    let dot = t.text.entry_dot_at(pick).ok()?;
     Some(DocOp::Text {
         node_id: text_id,
         op: TextOp::RemoveChar { observed: dot },

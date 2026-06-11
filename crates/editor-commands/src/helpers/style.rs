@@ -5,7 +5,7 @@ use editor_state::{Position, ResolvedSelection, State};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
-use crate::helpers::{collect_text_nodes_in_range, compact_and_restore_selection};
+use crate::helpers::{collect_text_nodes_in_range, compact_textblocks_for_nodes};
 
 /// Collects textblock node ids whose subtree intersects the selection.
 /// Includes textblocks that are only partially covered. For a collapsed
@@ -55,8 +55,23 @@ fn walk_text_nodes<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection<'a>, out: &mut
     if !rs.intersects_subtree(node) {
         return;
     }
-    if matches!(node.node(), Node::Text(_)) {
-        out.push(*node);
+    if let Node::Text(text) = node.node() {
+        let from = rs.from();
+        let to = rs.to();
+        let len = text.text.len();
+        let start = if from.node_id() == node.id() {
+            from.offset().min(len)
+        } else {
+            0
+        };
+        let end = if to.node_id() == node.id() {
+            to.offset().min(len)
+        } else {
+            len
+        };
+        if end > start {
+            out.push(*node);
+        }
         return;
     }
     for child in node.children() {
@@ -189,7 +204,7 @@ pub(crate) fn clear_inline_modifier_types_in_selection(
         }
     }
 
-    compact_and_restore_selection(tr, &node_ids)?;
+    compact_textblocks_for_nodes(tr, &node_ids)?;
     Ok(changed)
 }
 

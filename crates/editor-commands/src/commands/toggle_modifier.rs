@@ -3,7 +3,7 @@ use editor_state::{PendingModifier, PendingModifiers, Position, resolve_effectiv
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    check_range_all_has_modifier, collect_text_nodes_in_range, compact_and_restore_selection,
+    check_range_all_has_modifier, collect_text_nodes_in_range, compact_textblocks_for_nodes,
     filter_applicable_node_ids,
 };
 use crate::{CommandError, CommandResult};
@@ -66,7 +66,7 @@ pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> Com
         }
     }
 
-    compact_and_restore_selection(tr, &node_ids)?;
+    compact_textblocks_for_nodes(tr, &node_ids)?;
 
     Ok(true)
 }
@@ -443,9 +443,9 @@ mod tests {
             doc { root { paragraph {
                 text("He")
                 t1: text("lloWo") [italic]
-                text("rld")
+                t2: text("rld")
             } } }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (t1, 0) -> (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

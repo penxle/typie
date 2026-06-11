@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use editor_crdt::{Changeset, Dot, OpGraph, OrMapOp, RgaOp, TextOp};
+use editor_crdt::{Changeset, OpGraph, OrMapOp, PlacementId, RgaOp, TextOp};
 use editor_model::{DocOp, NodeId, NodeType};
 
 fn main() {
@@ -19,14 +19,14 @@ fn main() {
 
 fn build_typing(actor: u64, paragraph: NodeId, text: &str) -> OpGraph<DocOp> {
     let mut g = OpGraph::with_actor(actor);
-    let mut prev: Option<Dot> = None;
+    let mut prev: Option<PlacementId> = None;
     for ch in text.chars() {
         let payload = DocOp::Text {
             node_id: paragraph,
             op: TextOp::InsertChar { after: prev, ch },
         };
         let (ng, op) = g.add(payload).unwrap();
-        prev = Some(op.id);
+        prev = Some(PlacementId(op.id));
         g = ng;
     }
     g.commit()
@@ -96,7 +96,7 @@ fn mixed_edit() {
         })
         .unwrap()
         .0;
-    let mut prev = None;
+    let mut prev: Option<PlacementId> = None;
     for ch in "Hello, world!".chars() {
         let (ng, op) = g
             .add(DocOp::Text {
@@ -104,7 +104,7 @@ fn mixed_edit() {
                 op: TextOp::InsertChar { after: prev, ch },
             })
             .unwrap();
-        prev = Some(op.id);
+        prev = Some(PlacementId(op.id));
         g = ng;
     }
     measure("mixed-edit", g.commit().changesets_as_vec());

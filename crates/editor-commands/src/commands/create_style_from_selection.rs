@@ -72,6 +72,31 @@ mod tests {
     }
 
     #[test]
+    fn ignores_zero_width_boundary_text_when_capturing_uniform_modifiers() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("a") [bold]
+                        t2: text("b") [italic]
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
+            &mut tr,
+            "s1".into(),
+            "x".into()
+        ));
+
+        let style = actual.doc.style_entry("s1").unwrap();
+        let mods: Vec<Modifier> = style.modifiers.iter().cloned().collect();
+        assert!(mods.contains(&Modifier::Bold));
+        assert!(!mods.contains(&Modifier::Italic));
+    }
+
+    #[test]
     fn sets_style_ref_on_selected_runs() {
         let (initial, ..) = state! {
             doc { root { paragraph { t1: text("Hello") [font_size(800)] } } }

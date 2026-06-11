@@ -7,7 +7,7 @@ use editor_state::{
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    collect_text_nodes_in_range, compact_and_restore_selection, filter_applicable_node_ids,
+    collect_text_nodes_in_range, compact_textblocks_for_nodes, filter_applicable_node_ids,
     resolve_inherited_modifiers,
 };
 use crate::{CommandError, CommandResult};
@@ -48,7 +48,7 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
         toggle_bold_on_range(tr, resource, &applicable_node_ids)?;
     }
 
-    compact_and_restore_selection(tr, &node_ids)?;
+    compact_textblocks_for_nodes(tr, &node_ids)?;
 
     Ok(true)
 }
@@ -831,6 +831,203 @@ mod tests {
     }
 
     #[test]
+    fn range_toggle_on_backward_boundary_excludes_left_text() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t2, 2, <) -> (t1, 2, >)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb") [font_weight(700)]
+                    }
+                }
+            }
+            selection: (t2, 2, <) -> (t1, 2, >)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_on_forward_boundary_excludes_right_text_start() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        t1: text("a")
+                        t2: text("a") [font_weight(700)]
+                    }
+                    paragraph {
+                        t3: text("bb")
+                    }
+                }
+            }
+            selection: (t2, 0, >) -> (t3, 0, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_double_toggle_forward_boundary_restores_original_selection() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| {
+            toggle_bold(&mut tr, &resource).unwrap();
+            toggle_bold(&mut tr, &resource)
+        });
+        let (expected, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 0, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_off_preserves_start_of_text_merged_by_compact() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        text("a")
+                        t1: text("a") [font_weight(700)]
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t1, 0, >) -> (t2, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                    paragraph {
+                        t2: text("bb")
+                    }
+                }
+            }
+            selection: (t1, 1, >) -> (t2, 0, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_on_preserves_paragraph_end_after_split_before_hard_break() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    p1: paragraph {
+                        t1: text("aa")
+                        hard_break
+                    }
+                }
+            }
+            selection: (t1, 1, >) -> (p1, 2, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
+                }
+                root @base {
+                    p1: paragraph {
+                        t1: text("a")
+                        t2: text("a") [font_weight(700)]
+                        hard_break
+                    }
+                }
+            }
+            selection: (t2, 0, >) -> (p1, 3, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn backward_selection_works() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
@@ -968,7 +1165,7 @@ mod tests {
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (t1, 0) -> (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

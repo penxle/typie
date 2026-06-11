@@ -1,4 +1,4 @@
-use editor_crdt::{CrdtError, Dot, LwwRegOp, OrMapOp, RgaOp, TextOp};
+use editor_crdt::{CrdtError, Dot, LwwRegOp, OrMapOp, PlacementId, RgaOp, TextOp};
 use editor_model::{DocOp, NodeId, PlainNode, Subtree};
 use editor_state::BatchedState;
 
@@ -92,7 +92,7 @@ fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepE
         })?;
     }
     if let PlainNode::Text(text_node) = &subtree.node {
-        let mut after: Option<Dot> = None;
+        let mut after: Option<PlacementId> = None;
         for ch in text_node.text.chars() {
             let op_id = batched
                 .apply(DocOp::Text {
@@ -100,7 +100,7 @@ fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepE
                     op: TextOp::InsertChar { ch, after },
                 })?
                 .id;
-            after = Some(op_id);
+            after = Some(PlacementId(op_id));
         }
     }
     for child in &subtree.children {

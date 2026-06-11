@@ -9,16 +9,18 @@ use std::str::FromStr;
 /// across future primitives (sequence-CRDT, OR-Set add tokens, LWW register timestamps,
 /// op identity).
 ///
-/// **`clock` is per-actor monotonic — *not a strict Lamport timestamp*.**
-/// We don't bump our clock when observing remote ops, so cross-actor comparison
-/// does not reflect causal precedence. Sufficient for RGA tie-break (deterministic
-/// ordering) but reusing this for LWW winner determination requires the op-generation
-/// layer to provide Lamport semantics (`L = max(L_self, observed_max) + 1`) separately.
+/// **`clock` is per-actor monotonic, with Lamport-style advancement owned by
+/// the op-generation layer.** Raw `Dot` construction does not inspect causal
+/// context; it is just a pair. `OpGraph` advances its local next clock past
+/// received remote ops before authoring later local ops, so dots created through
+/// `OpGraph::add` after `receive_changeset` are causally later than the received
+/// clock. Cross-actor comparison is still only a deterministic total order unless
+/// the op was generated through that clock-management layer.
 ///
 /// `Ord` / `PartialOrd` are implemented manually — `derive` depends on field
-/// declaration order, which is fragile. Clock-primary is just a setup that *can*
-/// evolve into a Lamport-compatible form later; it is not itself a Lamport guarantee
-/// (see caveat above).
+/// declaration order, which is fragile. Clock-primary matches the ordering used
+/// by the clock-management layer, but the Lamport guarantee comes from `OpGraph`,
+/// not from constructing a `Dot` by hand.
 ///
 /// Serializes as the string `"{base62(actor)}_{base62(clock)}"`. The actor field is
 /// a randomly-generated u64 and routinely overflows JS Number's 53-bit safe range,

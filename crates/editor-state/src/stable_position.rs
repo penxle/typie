@@ -1,4 +1,4 @@
-use editor_crdt::Dot;
+use editor_crdt::{Dot, EntryDot};
 use editor_macros::ffi;
 use editor_model::{Doc, Node, NodeId};
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,7 @@ impl StablePosition {
     }
 
     /// Returns `Bind::Right` for `ContainerStart` (irrelevant; resolution is
-    /// unconditional offset 0).
+    /// unconditional offset 0 while the leaf is alive).
     pub fn bind(&self) -> Bind {
         match self {
             Self::Char { bind, .. } | Self::Child { bind, .. } => *bind,
@@ -82,22 +82,29 @@ pub(crate) fn freeze_position(pos: Position, doc: &Doc) -> StablePosition {
 
     match &entry.node {
         Node::Text(text) => {
-            if text.text.is_empty() || pos.offset == 0 {
+            if text.text.is_empty() {
                 StablePosition::ContainerStart {
                     chain,
                     affinity: pos.affinity,
                 }
             } else {
+                let (char_index, bind) = if pos.offset == 0 {
+                    (0, Bind::Left)
+                } else if pos.affinity == Affinity::Downstream && pos.offset < text.text.len() {
+                    (pos.offset, Bind::Left)
+                } else {
+                    (pos.offset - 1, Bind::Right)
+                };
                 let char_dot = text
                     .text
-                    .dot_at(pos.offset)
+                    .entry_dot_at(char_index)
                     .expect("freeze_position: offset within text bounds")
-                    .expect("freeze_position: dot_at within bounds yields Some");
+                    .0;
                 StablePosition::Char {
                     chain,
                     char_dot,
                     offset: pos.offset,
-                    bind: Bind::Right,
+                    bind,
                     affinity: pos.affinity,
                 }
             }
@@ -127,6 +134,13 @@ pub(crate) fn freeze_position(pos: Position, doc: &Doc) -> StablePosition {
 }
 
 pub(crate) fn thaw_position(sp: &StablePosition, doc: &Doc) -> Position {
+    if let Some(pos) = resolve_current_char_position(sp, doc) {
+        return pos;
+    }
+    if let Some(pos) = resolve_deleted_char_position(sp, doc) {
+        return pos;
+    }
+
     let chain = sp.chain();
     let mut live_idx: usize = 0;
     for (i, link) in chain.iter().enumerate() {
@@ -152,6 +166,30 @@ pub(crate) fn thaw_position(sp: &StablePosition, doc: &Doc) -> Position {
     }
 }
 
+fn resolve_current_char_position(sp: &StablePosition, doc: &Doc) -> Option<Position> {
+    let StablePosition::Char {
+        char_dot,
+        bind,
+        affinity,
+        ..
+    } = sp
+    else {
+        return None;
+    };
+    let text_identity = doc.text_identity();
+    let location = text_identity.current_location(EntryDot(*char_dot))?;
+    let rank = text_identity.visible_rank_of_placement(location.node_id, location.placement_id)?;
+    let offset = match bind {
+        Bind::Left => rank,
+        Bind::Right => rank + 1,
+    };
+    Some(Position {
+        node_id: location.node_id,
+        offset,
+        affinity: *affinity,
+    })
+}
+
 fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
     let leaf_id = sp.chain().last().expect("non-empty chain").node_id;
     let entry = doc.get_entry(leaf_id).expect("leaf alive");
@@ -164,7 +202,21 @@ fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
             ..
         } => match &entry.node {
             Node::Text(text) => {
-                resolve_dot_in_text(&text.text, *char_dot, *offset, *bind, leaf_id, *affinity)
+                if doc.text_identity().is_deleted(EntryDot(*char_dot)) {
+                    return Position {
+                        node_id: leaf_id,
+                        offset: (*offset).min(text.text.len()),
+                        affinity: *affinity,
+                    };
+                }
+                resolve_dot_in_text(
+                    &text.text,
+                    EntryDot(*char_dot),
+                    *offset,
+                    *bind,
+                    leaf_id,
+                    *affinity,
+                )
             }
             _ => Position {
                 node_id: leaf_id,
@@ -201,23 +253,38 @@ fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
     }
 }
 
+fn resolve_deleted_char_position(sp: &StablePosition, doc: &Doc) -> Option<Position> {
+    let StablePosition::Char {
+        char_dot,
+        bind,
+        affinity,
+        ..
+    } = sp
+    else {
+        return None;
+    };
+    let entry_dot = EntryDot(*char_dot);
+    if !doc.text_identity().is_deleted(entry_dot) {
+        return None;
+    }
+    let (node_id, offset) = deleted_text_entry_offset(doc, entry_dot, *bind)?;
+    Some(Position {
+        node_id,
+        offset,
+        affinity: *affinity,
+    })
+}
+
 fn resolve_dot_in_text(
     text: &editor_crdt::Text,
-    dot: editor_crdt::Dot,
+    entry_dot: EntryDot,
     fallback_offset: usize,
     bind: Bind,
     node_id: NodeId,
     aff: Affinity,
 ) -> Position {
     let fallback = fallback_offset.min(text.len());
-    if !text.contains_dot(dot) {
-        return Position {
-            node_id,
-            offset: fallback,
-            affinity: aff,
-        };
-    }
-    match text.live_offset_of(dot) {
+    match text.visible_offset_of_entry(entry_dot) {
         Some(off) => {
             let offset = match bind {
                 Bind::Left => off,
@@ -229,20 +296,26 @@ fn resolve_dot_in_text(
                 affinity: aff,
             }
         }
-        None => {
-            let offset = match bind {
-                Bind::Right => text.next_live_offset_after(dot).unwrap_or(fallback),
-                Bind::Left => text
-                    .prev_live_offset_before(dot)
-                    .map(|o| o + 1)
-                    .unwrap_or(fallback),
-            };
-            Position {
-                node_id,
-                offset,
-                affinity: aff,
-            }
-        }
+        None => Position {
+            node_id,
+            offset: fallback,
+            affinity: aff,
+        },
+    }
+}
+
+fn deleted_text_entry_offset(
+    doc: &Doc,
+    entry_dot: EntryDot,
+    bind: Bind,
+) -> Option<(NodeId, usize)> {
+    match bind {
+        Bind::Left => doc
+            .text_identity()
+            .visible_offset_before_deleted_entry(entry_dot),
+        Bind::Right => doc
+            .text_identity()
+            .visible_offset_after_deleted_entry(entry_dot),
     }
 }
 
@@ -387,17 +460,26 @@ mod tests {
     }
 
     #[test]
-    fn freeze_offset_zero_text_yields_container_start() {
+    fn freeze_offset_zero_text_yields_char_left_on_first_char() {
         use editor_macros::doc;
         let (doc, t1) = doc! { root { paragraph { t1: text("hi") } } };
         let pos = crate::Position::new(t1, 0);
         let sp = super::freeze_position(pos, &doc);
-        assert!(matches!(sp, StablePosition::ContainerStart { .. }));
+        let StablePosition::Char { char_dot, bind, .. } = &sp else {
+            panic!("expected Char");
+        };
+        assert_eq!(*bind, Bind::Left);
+        let entry = doc.get_entry(t1).unwrap();
+        let text = match &entry.node {
+            editor_model::Node::Text(t) => t,
+            _ => panic!("t1 must be a Text node"),
+        };
+        assert_eq!(*char_dot, text.text.entry_dot_at(0).unwrap().0);
         assert_eq!(sp.chain().last().unwrap().node_id, t1);
     }
 
     #[test]
-    fn freeze_offset_one_text_yields_char_right_on_first_char() {
+    fn freeze_text_interior_downstream_yields_char_left_on_following_char() {
         use editor_macros::doc;
         let (doc, t1) = doc! { root { paragraph { t1: text("hi") } } };
         let pos = crate::Position::new(t1, 1);
@@ -410,13 +492,13 @@ mod tests {
                 ..
             } => {
                 assert_eq!(chain.last().unwrap().node_id, t1);
-                assert_eq!(bind, Bind::Right);
+                assert_eq!(bind, Bind::Left);
                 let entry = doc.get_entry(t1).unwrap();
                 let text = match &entry.node {
                     editor_model::Node::Text(t) => t,
                     _ => panic!("t1 must be a Text node"),
                 };
-                assert_eq!(char_dot, text.text.dot_at(1).unwrap().unwrap());
+                assert_eq!(char_dot, text.text.entry_dot_at(1).unwrap().0);
             }
             other => panic!("expected Char, got {:?}", other),
         }
@@ -484,7 +566,7 @@ mod tests {
     }
 
     #[test]
-    fn thaw_char_dot_tombstoned_walks_to_nearest_live_in_bind_direction() {
+    fn thaw_position_bound_to_surviving_char_tracks_it_after_previous_char_delete() {
         use editor_macros::state;
         let (state, t1) = state! {
             doc { root { paragraph { t1: text("abc") } } }
@@ -493,25 +575,396 @@ mod tests {
         let pos = crate::Position::new(t1, 2);
         let sp = super::freeze_position(pos, &state.doc);
 
-        // Rga::dot_at(N) yields the entry at iter position N-1; offset 0 is the
-        // "before first" sentinel returning None. dot_at(2) targets 'b'.
+        // offset 2 with downstream affinity binds to the left side of 'c'.
         let b_dot = {
             let entry = state.doc.get_entry(t1).unwrap();
             let text = match &entry.node {
                 editor_model::Node::Text(t) => t,
                 _ => unreachable!(),
             };
-            text.text.dot_at(2).unwrap().unwrap()
+            let StablePosition::Char { char_dot, bind, .. } = &sp else {
+                panic!("expected Char");
+            };
+            assert_eq!(*char_dot, text.text.entry_dot_at(2).unwrap().0);
+            assert_eq!(*bind, crate::Bind::Left);
+            text.text.entry_dot_at(1).unwrap().0
         };
         let (state, _op) = state
             .apply(editor_model::DocOp::Text {
                 node_id: t1,
-                op: editor_crdt::TextOp::RemoveChar { observed: b_dot },
+                op: editor_crdt::TextOp::RemoveChar {
+                    observed: EntryDot(b_dot),
+                },
             })
             .unwrap();
 
         let back = super::thaw_position(&sp, &state.doc);
         assert_eq!(back.node_id, t1);
+        assert_eq!(back.offset, 1);
+    }
+
+    #[test]
+    fn thaw_deleted_left_bound_char_uses_previous_visible_boundary() {
+        use editor_macros::state;
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("abc") } } }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 1,
+            affinity: crate::Affinity::Downstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+
+        let b_dot = {
+            let entry = state.doc.get_entry(t1).unwrap();
+            let text = match &entry.node {
+                editor_model::Node::Text(t) => t,
+                _ => unreachable!(),
+            };
+            let StablePosition::Char { char_dot, bind, .. } = &sp else {
+                panic!("expected Char");
+            };
+            assert_eq!(*char_dot, text.text.entry_dot_at(1).unwrap().0);
+            assert_eq!(*bind, crate::Bind::Left);
+            *char_dot
+        };
+        let (state, _op) = state
+            .apply(editor_model::DocOp::Text {
+                node_id: t1,
+                op: editor_crdt::TextOp::RemoveChar {
+                    observed: EntryDot(b_dot),
+                },
+            })
+            .unwrap();
+
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t1);
+        assert_eq!(back.offset, 1);
+    }
+
+    #[test]
+    fn thaw_deleted_right_bound_char_uses_next_visible_boundary() {
+        use editor_macros::state;
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("abc") } } }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 2,
+            affinity: crate::Affinity::Upstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+
+        let b_dot = {
+            let entry = state.doc.get_entry(t1).unwrap();
+            let text = match &entry.node {
+                editor_model::Node::Text(t) => t,
+                _ => unreachable!(),
+            };
+            let StablePosition::Char { char_dot, bind, .. } = &sp else {
+                panic!("expected Char");
+            };
+            assert_eq!(*char_dot, text.text.entry_dot_at(1).unwrap().0);
+            assert_eq!(*bind, crate::Bind::Right);
+            *char_dot
+        };
+        let (state, _op) = state
+            .apply(editor_model::DocOp::Text {
+                node_id: t1,
+                op: editor_crdt::TextOp::RemoveChar {
+                    observed: EntryDot(b_dot),
+                },
+            })
+            .unwrap();
+
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t1);
+        assert_eq!(back.offset, 1);
+    }
+
+    #[test]
+    fn thaw_deleted_left_bound_char_ignores_post_delete_move() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("abc") }
+                    paragraph { t2: text("x") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 1,
+            affinity: crate::Affinity::Downstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+        let b_dot = match &sp {
+            StablePosition::Char { char_dot, bind, .. } => {
+                assert_eq!(*bind, crate::Bind::Left);
+                *char_dot
+            }
+            other => panic!("expected char stable position, got {other:?}"),
+        };
+        let t2_tail = state
+            .doc
+            .text_view(t2)
+            .unwrap()
+            .last_visible_placement()
+            .unwrap()
+            .placement_id;
+
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(b_dot),
+                },
+            })
+            .unwrap();
+        let (state, _) = state
+            .apply(DocOp::MoveText {
+                entry: EntryDot(b_dot),
+                to_node_id: t2,
+                after: Some(t2_tail),
+            })
+            .unwrap();
+
+        assert_eq!(state.doc.text_view(t2).unwrap().text(), "x");
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t1);
+        assert_eq!(back.offset, 1);
+    }
+
+    #[test]
+    fn thaw_deleted_right_bound_char_ignores_post_delete_move() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("abc") }
+                    paragraph { t2: text("x") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 2,
+            affinity: crate::Affinity::Upstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+        let b_dot = match &sp {
+            StablePosition::Char { char_dot, bind, .. } => {
+                assert_eq!(*bind, crate::Bind::Right);
+                *char_dot
+            }
+            other => panic!("expected char stable position, got {other:?}"),
+        };
+        let t2_tail = state
+            .doc
+            .text_view(t2)
+            .unwrap()
+            .last_visible_placement()
+            .unwrap()
+            .placement_id;
+
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(b_dot),
+                },
+            })
+            .unwrap();
+        let (state, _) = state
+            .apply(DocOp::MoveText {
+                entry: EntryDot(b_dot),
+                to_node_id: t2,
+                after: Some(t2_tail),
+            })
+            .unwrap();
+
+        assert_eq!(state.doc.text_view(t2).unwrap().text(), "x");
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t1);
+        assert_eq!(back.offset, 1);
+    }
+
+    #[test]
+    fn thaw_deleted_moved_char_uses_deleted_text_fallback_when_original_leaf_dead() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, p1, t1, t2) = state! {
+            doc {
+                root {
+                    p1: paragraph { t1: text("ab") }
+                    paragraph { t2: text("x") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 1,
+            affinity: crate::Affinity::Downstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+        let b_dot = match &sp {
+            StablePosition::Char { char_dot, bind, .. } => {
+                assert_eq!(*bind, crate::Bind::Left);
+                *char_dot
+            }
+            other => panic!("expected char stable position, got {other:?}"),
+        };
+        let t2_tail = state
+            .doc
+            .text_view(t2)
+            .unwrap()
+            .last_visible_placement()
+            .unwrap()
+            .placement_id;
+
+        let (state, _) = state
+            .apply(DocOp::MoveText {
+                entry: EntryDot(b_dot),
+                to_node_id: t2,
+                after: Some(t2_tail),
+            })
+            .unwrap();
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t2,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(b_dot),
+                },
+            })
+            .unwrap();
+        let state = remove_node(&state, p1);
+
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t2);
+        assert_eq!(back.offset, 1);
+    }
+
+    #[test]
+    fn thaw_deleted_moved_left_bound_at_target_start_stays_in_target() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, p1, t1, t2) = state! {
+            doc {
+                root {
+                    p1: paragraph { t1: text("a") }
+                    paragraph { t2: text("") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 0,
+            affinity: crate::Affinity::Downstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+        let a_dot = match &sp {
+            StablePosition::Char { char_dot, bind, .. } => {
+                assert_eq!(*bind, crate::Bind::Left);
+                *char_dot
+            }
+            other => panic!("expected char stable position, got {other:?}"),
+        };
+
+        let (state, _) = state
+            .apply(DocOp::MoveText {
+                entry: EntryDot(a_dot),
+                to_node_id: t2,
+                after: None,
+            })
+            .unwrap();
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t2,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(a_dot),
+                },
+            })
+            .unwrap();
+        let state = remove_node(&state, p1);
+
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t2);
+        assert_eq!(back.offset, 0);
+    }
+
+    #[test]
+    fn thaw_deleted_moved_right_bound_at_target_end_stays_in_target() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, p1, t1, t2) = state! {
+            doc {
+                root {
+                    p1: paragraph { t1: text("a") }
+                    paragraph { t2: text("x") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 1,
+            affinity: crate::Affinity::Upstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+        let a_dot = match &sp {
+            StablePosition::Char { char_dot, bind, .. } => {
+                assert_eq!(*bind, crate::Bind::Right);
+                *char_dot
+            }
+            other => panic!("expected char stable position, got {other:?}"),
+        };
+        let t2_tail = state
+            .doc
+            .text_view(t2)
+            .unwrap()
+            .last_visible_placement()
+            .unwrap()
+            .placement_id;
+
+        let (state, _) = state
+            .apply(DocOp::MoveText {
+                entry: EntryDot(a_dot),
+                to_node_id: t2,
+                after: Some(t2_tail),
+            })
+            .unwrap();
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t2,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(a_dot),
+                },
+            })
+            .unwrap();
+        let state = remove_node(&state, p1);
+
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t2);
         assert_eq!(back.offset, 1);
     }
 
@@ -538,11 +991,63 @@ mod tests {
             StablePosition::Char { char_dot, .. } => *char_dot,
             other => panic!("expected Char, got {:?}", other),
         };
-        assert!(!doc2_text.text.contains_dot(sp_char_dot));
+        assert!(!doc2_text.text.contains_visible_entry(EntryDot(sp_char_dot)));
 
         let back = super::thaw_position(&sp, &doc2);
         assert_eq!(back.node_id, t1);
         assert_eq!(back.offset, 1);
+    }
+
+    #[test]
+    fn thaw_deleted_entry_with_fresh_replacement_falls_back_to_frozen_offset() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("abc") } } }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 2,
+            affinity: crate::Affinity::Downstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+        let char_dot = match &sp {
+            StablePosition::Char { char_dot, .. } => *char_dot,
+            other => panic!("expected char stable position, got {other:?}"),
+        };
+        let b_placement = {
+            let entry = state.doc.get_entry(t1).unwrap();
+            let text = match &entry.node {
+                editor_model::Node::Text(t) => t,
+                _ => unreachable!(),
+            };
+            text.text.placement_at_visible_offset(2).unwrap().unwrap()
+        };
+
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(char_dot),
+                },
+            })
+            .unwrap();
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: Some(b_placement),
+                    ch: 'c',
+                },
+            })
+            .unwrap();
+
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t1);
+        assert_eq!(back.offset, 2);
     }
 
     #[test]

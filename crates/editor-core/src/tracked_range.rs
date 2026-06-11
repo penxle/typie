@@ -1,4 +1,4 @@
-use editor_crdt::Dot;
+use editor_crdt::EntryDot;
 use editor_model::{Doc, Node};
 use editor_state::{ResolvedSelection, Selection, StableSelection};
 use editor_view::PageRect;
@@ -18,8 +18,7 @@ pub struct TrackedRange {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct TrackedTextAnchor {
-    node_id: editor_model::NodeId,
-    dot: Dot,
+    entry_dot: EntryDot,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,13 +173,7 @@ impl TrackedRange {
 
 impl TrackedTextAnchor {
     fn is_alive(&self, doc: &Doc) -> bool {
-        let Some(entry) = doc.get_entry(self.node_id) else {
-            return false;
-        };
-        match &entry.node {
-            Node::Text(text) => text.text.live_offset_of(self.dot).is_some(),
-            _ => false,
-        }
+        doc.text_identity().is_alive(self.entry_dot)
     }
 }
 
@@ -215,12 +208,9 @@ fn collect_text_anchors_walk(
             total
         };
         if end > start {
-            for idx in start + 1..=end {
-                if let Ok(Some(dot)) = text_node.text.dot_at(idx) {
-                    out.push(TrackedTextAnchor {
-                        node_id: node.id(),
-                        dot,
-                    });
+            for idx in start..end {
+                if let Ok(entry_dot) = text_node.text.entry_dot_at(idx) {
+                    out.push(TrackedTextAnchor { entry_dot });
                 }
             }
         }
@@ -325,6 +315,44 @@ mod tests {
     fn invalidate_unknown_id_returns_false() {
         let mut reg = TrackedRangeRegistry::new();
         assert!(!reg.invalidate("x"));
+    }
+
+    #[test]
+    fn tracked_text_anchor_alive_follows_moved_entry_dot() {
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("a") }
+                    paragraph { t2: text("") }
+                }
+            }
+            selection: (t1, 0) -> (t1, 1)
+        };
+        let range = TrackedRange::new(
+            "a".into(),
+            "g1".into(),
+            StableSelection::freeze(state.selection.as_ref().unwrap(), &state.doc),
+            String::new(),
+            &state.doc,
+        );
+        let anchor = range
+            .covered_text
+            .as_ref()
+            .unwrap()
+            .anchors
+            .first()
+            .unwrap()
+            .clone();
+        let (state, _) = state
+            .apply(editor_model::DocOp::MoveText {
+                entry: anchor.entry_dot,
+                to_node_id: t2,
+                after: None,
+            })
+            .unwrap();
+
+        assert!(anchor.is_alive(&state.doc));
+        assert_eq!(state.doc.text_view(t2).unwrap().text(), "a");
     }
 
     #[test]

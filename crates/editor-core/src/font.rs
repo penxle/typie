@@ -112,6 +112,9 @@ pub(crate) fn derive_font_updates_from_ops(
             } => {
                 affected_text_nodes.insert(*node_id);
             }
+            DocOp::MoveText { to_node_id, .. } => {
+                affected_text_nodes.insert(*to_node_id);
+            }
             DocOp::Modifier {
                 node_id,
                 op: OrMapOp::Set { key, .. },
@@ -416,5 +419,55 @@ mod tests {
             result.keys().collect::<Vec<_>>()
         );
         assert!(result[&key].contains_key(&t1));
+    }
+
+    #[test]
+    fn derive_font_updates_includes_move_text_target_scope() {
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, t1, t2) = state! {
+            doc {
+                root [font_family("Source".to_string()), font_weight(400)] {
+                    paragraph {
+                        t1: text("가")
+                    }
+                    paragraph {
+                        t2: text("") [font_family("Target".to_string()), font_weight(700)]
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let entry = state
+            .doc
+            .text_view(t1)
+            .unwrap()
+            .visible_entries()
+            .next()
+            .unwrap()
+            .0;
+        let (state, move_op) = state
+            .apply(DocOp::MoveText {
+                entry,
+                to_node_id: t2,
+                after: None,
+            })
+            .unwrap();
+
+        let result = derive_font_updates_from_ops(
+            &state.doc,
+            &editor_resource::FontRegistry::new(),
+            &[move_op],
+        );
+
+        let key = ("Target".to_string(), 700u16);
+        assert!(
+            result.contains_key(&key),
+            "MoveText target scope should request target font; keys = {:?}",
+            result.keys().collect::<Vec<_>>()
+        );
+        assert!(result[&key].contains_key(&t2));
+        assert!(result[&key][&t2].contains(&('가' as u32)));
     }
 }

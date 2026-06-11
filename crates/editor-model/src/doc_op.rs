@@ -1,6 +1,7 @@
-use editor_crdt::{LwwRegOp, Op, OrMapOp, OrSetOp, RgaOp, TextOp};
+use editor_crdt::{EntryDot, LwwRegOp, Op, OrMapOp, OrSetOp, PlacementId, RgaOp, TextOp};
 use serde::{Deserialize, Serialize};
 
+use crate::text_index::CurrentTextLocation;
 use crate::{
     AnchorKind, Doc, ModelError, Modifier, ModifierType, Node, NodeAttr, NodeEntry, NodeId,
     NodeType, StyleEntry,
@@ -72,6 +73,15 @@ pub enum DocOp {
         #[wire(n(1))]
         op: LwwRegOp<Option<crate::marker::Marker>>,
     },
+    #[wire(n(9))]
+    MoveText {
+        #[wire(n(0))]
+        entry: EntryDot,
+        #[wire(n(1))]
+        to_node_id: NodeId,
+        #[wire(n(2))]
+        after: Option<PlacementId>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
@@ -127,6 +137,13 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
             {
                 doc.entries.insert(*key, NodeEntry::new(value.into_node()));
             }
+            if let OrMapOp::Set {
+                key,
+                value: NodeType::Text,
+            } = presence_op
+            {
+                doc.refresh_text_projection(*key);
+            }
         }
         DocOp::Parent {
             node_id,
@@ -169,32 +186,56 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
         DocOp::Text {
             node_id,
             op: text_op,
-        } => {
-            let entry = doc
-                .entries
-                .get_mut(node_id)
-                .ok_or(ModelError::NodeNotFound(*node_id))?;
-            if let TextOp::InsertChar {
-                after: Some(anchor),
-                ..
-            } = text_op
-            {
-                let Node::Text(t) = &entry.node else {
+        } => match text_op {
+            TextOp::InsertChar { after, ch } => {
+                let entry = doc
+                    .entries
+                    .get(node_id)
+                    .ok_or(ModelError::NodeNotFound(*node_id))?;
+                let Node::Text(_) = &entry.node else {
                     return Err(ModelError::AttrNodeKindMismatch);
                 };
-                if !t.text.contains_dot(*anchor) {
+                if let Some(anchor) = after
+                    && !doc.text.contains_placement(*node_id, *anchor)
+                {
                     return Err(ModelError::OrphanAnchor {
                         node_id: *node_id,
-                        anchor: *anchor,
+                        anchor: anchor.0,
                         kind: AnchorKind::Text,
                     });
                 }
+                doc.text.register_insert(
+                    EntryDot(op.id),
+                    *node_id,
+                    PlacementId(op.id),
+                    *after,
+                    *ch,
+                )?;
+                doc.refresh_text_projection(*node_id);
             }
-            let Node::Text(t) = &mut entry.node else {
-                return Err(ModelError::AttrNodeKindMismatch);
-            };
-            t.text = t.text.apply(op.id, text_op.clone()).expect("local apply");
-        }
+            TextOp::RemoveChar { observed } => {
+                let entry = doc
+                    .entries
+                    .get(node_id)
+                    .ok_or(ModelError::NodeNotFound(*node_id))?;
+                let Node::Text(_) = &entry.node else {
+                    return Err(ModelError::AttrNodeKindMismatch);
+                };
+                if doc.text_identity().char_for(*observed).is_none() {
+                    return Err(ModelError::Crdt(editor_crdt::CrdtError::EntryNotFound {
+                        dot: observed.0,
+                    }));
+                }
+                let old_owner = doc
+                    .text_identity()
+                    .current_location(*observed)
+                    .map(|loc| loc.node_id);
+                doc.text.mark_deleted(*observed, op.id);
+                if let Some(owner) = old_owner {
+                    doc.refresh_text_projection(owner);
+                }
+            }
+        },
         DocOp::Modifier {
             node_id,
             op: ormap_op,
@@ -254,6 +295,48 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 .apply(op.id, lww_op.clone())
                 .expect("local apply");
         }
+        DocOp::MoveText {
+            entry,
+            to_node_id,
+            after,
+        } => {
+            let ch = doc
+                .text_identity()
+                .char_for(*entry)
+                .ok_or(ModelError::Crdt(editor_crdt::CrdtError::EntryNotFound {
+                    dot: entry.0,
+                }))?;
+            let current_before = doc.text_identity().current_location(*entry);
+            let target_entry = doc
+                .entries
+                .get(to_node_id)
+                .ok_or(ModelError::NodeNotFound(*to_node_id))?;
+            let Node::Text(_) = &target_entry.node else {
+                return Err(ModelError::AttrNodeKindMismatch);
+            };
+            if let Some(anchor) = after
+                && !doc.text.contains_placement(*to_node_id, *anchor)
+            {
+                return Err(ModelError::OrphanAnchor {
+                    node_id: *to_node_id,
+                    anchor: anchor.0,
+                    kind: AnchorKind::Text,
+                });
+            }
+            doc.text
+                .insert_placement(*to_node_id, PlacementId(op.id), *entry, *after, ch)?;
+            let candidate = CurrentTextLocation {
+                owner_text_node: *to_node_id,
+                placement: PlacementId(op.id),
+            };
+            if current_before.is_none_or(|loc| candidate.placement.0 > loc.placement_id.0) {
+                doc.text.record_current_location(*entry, candidate);
+                if let Some(old_location) = current_before {
+                    doc.refresh_text_projection(old_location.node_id);
+                }
+            }
+            doc.refresh_text_projection(*to_node_id);
+        }
         DocOp::Style {
             style_id,
             op: style_op,
@@ -303,7 +386,8 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_crdt::{OpGraph, TextOp};
+    use crate::PlainNode;
+    use editor_crdt::{EntryDot, OpGraph, PlacementId, TextOp};
 
     fn first_op<P: Clone>(graph: &OpGraph<P>, payload: P) -> (OpGraph<P>, Op<P>) {
         graph.clone().add(payload).unwrap()
@@ -616,7 +700,7 @@ mod tests {
         graph = g;
         let doc = apply_doc_op(Doc::empty(), &presence).unwrap();
 
-        let bad_anchor = editor_crdt::Dot::new(999, 999);
+        let bad_anchor = editor_crdt::PlacementId(editor_crdt::Dot::new(999, 999));
         let (_, bad_text_op) = first_op(
             &graph,
             DocOp::Text {
@@ -666,7 +750,7 @@ mod tests {
         );
         graph = g;
         let doc = apply_doc_op(doc, &op1).unwrap();
-        let dot1 = op1.id;
+        let dot1 = PlacementId(op1.id);
 
         let (_, op2) = first_op(
             &graph,
@@ -688,6 +772,804 @@ mod tests {
     }
 
     #[test]
+    fn move_text_rehomes_entry_without_deleting_source_placement() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (_, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+
+        assert_eq!(doc.text_view(t1).unwrap().text(), "");
+        assert_eq!(doc.text_view(t2).unwrap().text(), "a");
+
+        let Node::Text(source) = &doc.get_entry(t1).unwrap().node else {
+            panic!("source must be text");
+        };
+        assert_eq!(source.text.to_string(), "");
+        assert_eq!(source.text.len(), 0);
+        let source_placements = doc.text.all_placements_for_node(t1);
+        assert_eq!(source_placements.len(), 1);
+        assert_eq!(source_placements[0].placement_id, PlacementId(insert.id));
+        assert_eq!(source_placements[0].entry_dot, EntryDot(insert.id));
+
+        let Node::Text(target) = &doc.get_entry(t2).unwrap().node else {
+            panic!("target must be text");
+        };
+        assert_eq!(target.text.to_string(), "a");
+        assert_eq!(target.text.len(), 1);
+        let target_placements = doc.text.all_placements_for_node(t2);
+        assert_eq!(target_placements.len(), 1);
+        assert_eq!(target_placements[0].placement_id, PlacementId(move_op.id));
+        assert_eq!(target_placements[0].entry_dot, EntryDot(insert.id));
+        assert_eq!(target_placements[0].ch, 'a');
+    }
+
+    #[test]
+    fn materialized_text_accessors_read_content_after_move() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (_, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+
+        assert_eq!(doc.text_view(t1).unwrap().text(), "");
+        assert_eq!(doc.text_view(t2).unwrap().text(), "a");
+        assert_eq!(
+            doc.text_view(t2)
+                .unwrap()
+                .visible_entries()
+                .collect::<Vec<_>>(),
+            vec![(EntryDot(insert.id), 'a')]
+        );
+        assert!(doc.text_view(NodeId::ROOT).is_none());
+
+        let target = doc.node(t2).unwrap();
+        assert_eq!(target.as_text().unwrap().text(), "a");
+
+        let plain = doc.to_plain();
+        let PlainNode::Text(source_plain) = &plain.nodes.get(&t1).unwrap().node else {
+            panic!("source must be text");
+        };
+        let PlainNode::Text(target_plain) = &plain.nodes.get(&t2).unwrap().node else {
+            panic!("target must be text");
+        };
+        assert_eq!(source_plain.text, "");
+        assert_eq!(target_plain.text, "a");
+    }
+
+    #[test]
+    fn move_text_after_must_exist_in_target_all_placements() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (_, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: Some(PlacementId(Dot::new(99, 0))),
+            },
+        );
+
+        let result = apply_doc_op(doc, &move_op);
+        assert!(matches!(
+            result,
+            Err(ModelError::OrphanAnchor {
+                kind: AnchorKind::Text,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn remove_char_deletes_moved_entry_globally() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (g, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+
+        let (_, remove) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(insert.id),
+                },
+            },
+        );
+        let doc = apply_doc_op(doc, &remove).unwrap();
+
+        assert_eq!(doc.text_view(t1).unwrap().text(), "");
+        assert_eq!(doc.text_view(t2).unwrap().text(), "");
+
+        let Node::Text(_) = &doc.get_entry(t1).unwrap().node else {
+            panic!("source must be text");
+        };
+        assert_eq!(doc.text.all_placements_for_node(t1).len(), 1);
+
+        let Node::Text(_) = &doc.get_entry(t2).unwrap().node else {
+            panic!("target must be text");
+        };
+        assert_eq!(doc.text.all_placements_for_node(t2).len(), 1);
+    }
+
+    #[test]
+    fn remove_char_rejects_non_text_node_id() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let p1 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, p1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: p1,
+                op: OrMapOp::Set {
+                    key: p1,
+                    value: NodeType::Paragraph,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &p1_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (_, remove) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: p1,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(insert.id),
+                },
+            },
+        );
+
+        assert_eq!(
+            apply_doc_op(doc, &remove),
+            Err(ModelError::AttrNodeKindMismatch)
+        );
+    }
+
+    #[test]
+    fn move_text_after_delete_does_not_resurrect_entry() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (g, remove) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(insert.id),
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &remove).unwrap();
+
+        let (_, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+
+        assert_eq!(doc.text_view(t1).unwrap().text(), "");
+        assert_eq!(doc.text_view(t2).unwrap().text(), "");
+        let Node::Text(_) = &doc.get_entry(t2).unwrap().node else {
+            panic!("target must be text");
+        };
+        assert_eq!(doc.text.all_placements_for_node(t2).len(), 1);
+    }
+
+    #[test]
+    fn move_text_later_placement_wins() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+        let t3 = NodeId::new();
+
+        let mut doc = Doc::empty();
+        for node_id in [t1, t2, t3] {
+            let (g, presence) = first_op(
+                &graph,
+                DocOp::Presence {
+                    node_id,
+                    op: OrMapOp::Set {
+                        key: node_id,
+                        value: NodeType::Text,
+                    },
+                },
+            );
+            graph = g;
+            doc = apply_doc_op(doc, &presence).unwrap();
+        }
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (g, move_to_t2) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &move_to_t2).unwrap();
+
+        let (_, move_to_t3) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t3,
+                after: None,
+            },
+        );
+        let doc = apply_doc_op(doc, &move_to_t3).unwrap();
+
+        assert_eq!(doc.text_view(t1).unwrap().text(), "");
+        assert_eq!(doc.text_view(t2).unwrap().text(), "");
+        assert_eq!(doc.text_view(t3).unwrap().text(), "a");
+    }
+
+    #[test]
+    fn move_text_older_placement_does_not_win_when_applied_later() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+        let t3 = NodeId::new();
+
+        let mut doc = Doc::empty();
+        for node_id in [t1, t2, t3] {
+            let (g, presence) = first_op(
+                &graph,
+                DocOp::Presence {
+                    node_id,
+                    op: OrMapOp::Set {
+                        key: node_id,
+                        value: NodeType::Text,
+                    },
+                },
+            );
+            graph = g;
+            doc = apply_doc_op(doc, &presence).unwrap();
+        }
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (g, move_to_t2) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        graph = g;
+        let (_, move_to_t3) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t3,
+                after: None,
+            },
+        );
+
+        let doc = apply_doc_op(doc, &move_to_t3).unwrap();
+        let doc = apply_doc_op(doc, &move_to_t2).unwrap();
+
+        assert_eq!(doc.text_view(t1).unwrap().text(), "");
+        assert_eq!(doc.text_view(t2).unwrap().text(), "");
+        assert_eq!(doc.text_view(t3).unwrap().text(), "a");
+        assert!(doc.text.index_matches_rebuild(&doc));
+    }
+
+    #[test]
+    fn move_text_apply_is_idempotent_for_same_op() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let (_, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+
+        assert_eq!(doc.text_view(t2).unwrap().text(), "a");
+        let Node::Text(_) = &doc.get_entry(t2).unwrap().node else {
+            panic!("target must be text");
+        };
+        assert_eq!(doc.text.all_placements_for_node(t2).len(), 1);
+    }
+
+    #[test]
+    fn move_text_can_read_entry_from_tombstoned_source_shell() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let observed: Vec<_> = doc.nodes_tags_for(&t1).copied().collect();
+        let (g, delete_shell) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Unset { observed },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &delete_shell).unwrap();
+        assert!(doc.get_entry(t1).is_none());
+
+        let (_, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+
+        assert_eq!(doc.text_view(t2).unwrap().text(), "a");
+        let Node::Text(_) = &doc.entries.get(&t1).unwrap().node else {
+            panic!("source must remain historical text");
+        };
+        let source_placements = doc.text.all_placements_for_node(t1);
+        assert_eq!(source_placements.len(), 1);
+        assert_eq!(source_placements[0].entry_dot, EntryDot(insert.id));
+    }
+
+    #[test]
+    fn move_text_to_tombstoned_target_records_hidden_placement() {
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let (g, t1_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t1,
+                op: OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(Doc::empty(), &t1_presence).unwrap();
+
+        let (g, t2_presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &t2_presence).unwrap();
+
+        let (g, insert) = first_op(
+            &graph,
+            DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &insert).unwrap();
+
+        let observed: Vec<_> = doc.nodes_tags_for(&t2).copied().collect();
+        let (g, delete_shell) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Unset { observed },
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &delete_shell).unwrap();
+        assert!(doc.get_entry(t2).is_none());
+
+        let (g, move_op) = first_op(
+            &graph,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+        graph = g;
+        let doc = apply_doc_op(doc, &move_op).unwrap();
+
+        assert_eq!(doc.text_view(t1).unwrap().text(), "");
+        let Node::Text(_) = &doc.entries.get(&t2).unwrap().node else {
+            panic!("target must remain historical text");
+        };
+        let target_placements = doc.text.all_placements_for_node(t2);
+        assert_eq!(target_placements.len(), 1);
+        assert_eq!(target_placements[0].placement_id, PlacementId(move_op.id));
+        assert_eq!(target_placements[0].entry_dot, EntryDot(insert.id));
+
+        let (_, revive_target) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id: t2,
+                op: OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        let doc = apply_doc_op(doc, &revive_target).unwrap();
+
+        assert_eq!(doc.text_view(t2).unwrap().text(), "a");
+        assert!(doc.text.index_matches_rebuild(&doc));
+    }
+
+    #[test]
     fn wire_round_trip_text_op() {
         use editor_crdt::Dot;
         use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, Wire};
@@ -695,7 +1577,7 @@ mod tests {
         let op = DocOp::Text {
             node_id: NodeId::new(),
             op: editor_crdt::TextOp::InsertChar {
-                after: Some(dot),
+                after: Some(PlacementId(dot)),
                 ch: '가',
             },
         };
@@ -724,7 +1606,7 @@ mod tests {
                 op: TextOp::InsertChar { after: prev, ch },
             };
             let (ng, op) = g.add(payload).unwrap();
-            prev = Some(op.id);
+            prev = Some(PlacementId(op.id));
             g = ng;
         }
         g.commit().changesets_as_vec()
@@ -737,6 +1619,33 @@ mod tests {
         let decoded: Vec<editor_crdt::Changeset<DocOp>> =
             editor_crdt::wire::decode(&bytes).unwrap();
         assert_eq!(decoded, css);
+    }
+
+    #[test]
+    fn run_grouping_expands_after_links_as_placement_ids() {
+        let css = build_typing("abc");
+        let bytes = editor_crdt::wire::encode(&css).unwrap();
+        let decoded: Vec<editor_crdt::Changeset<DocOp>> =
+            editor_crdt::wire::decode(&bytes).unwrap();
+
+        let ops = &decoded[0].ops;
+        assert_eq!(ops.len(), 3);
+
+        let assert_insert = |index: usize, expected_after: Option<PlacementId>, expected_ch| {
+            let DocOp::Text {
+                op: TextOp::InsertChar { after, ch },
+                ..
+            } = &ops[index].payload
+            else {
+                panic!("expected text insert at index {index}");
+            };
+            assert_eq!(*after, expected_after);
+            assert_eq!(*ch, expected_ch);
+        };
+
+        assert_insert(0, None, 'a');
+        assert_insert(1, Some(PlacementId(ops[0].id)), 'b');
+        assert_insert(2, Some(PlacementId(ops[1].id)), 'c');
     }
 
     #[test]
@@ -928,6 +1837,23 @@ mod tests {
     }
 
     #[test]
+    fn move_text_wire_round_trip() {
+        let target = NodeId::new();
+        let entry = EntryDot(Dot::new(1, 0));
+        let placement = PlacementId(Dot::new(2, 0));
+        assert_round_trip(vec![DocOp::MoveText {
+            entry,
+            to_node_id: target,
+            after: Some(placement),
+        }]);
+        assert_round_trip(vec![DocOp::MoveText {
+            entry,
+            to_node_id: target,
+            after: None,
+        }]);
+    }
+
+    #[test]
     fn empty_bundle_round_trip() {
         let bytes = editor_crdt::wire::encode::<DocOp>(&[]).unwrap();
         assert!(bytes.is_empty());
@@ -951,9 +1877,11 @@ const VARIANT_NODE_STYLE: u8 = 6;
 const VARIANT_ESCAPE: u8 = 7;
 const EXT_STYLE: u8 = 0;
 const EXT_MARKER: u8 = 1;
+const EXT_MOVE_TEXT: u8 = 2;
 
 const VARIANT_STYLE: u8 = 8 + EXT_STYLE;
 const VARIANT_NODE_MARKER: u8 = 8 + EXT_MARKER;
+const VARIANT_MOVE_TEXT: u8 = 8 + EXT_MOVE_TEXT;
 
 const ENTRY_TAG_RUN_BIT: u8 = 0b1000_0000;
 const ENTRY_TAG_NODE_ID_EXPLICIT: u8 = 0b0100_0000;
@@ -1074,6 +2002,7 @@ impl WireChangeset for DocOp {
                     match ext {
                         EXT_STYLE => VARIANT_STYLE,
                         EXT_MARKER => VARIANT_NODE_MARKER,
+                        EXT_MOVE_TEXT => VARIANT_MOVE_TEXT,
                         n => return Err(WireError::UnknownPayloadVariant { tag: n }),
                     }
                 } else {
@@ -1166,7 +2095,7 @@ fn try_match_text_run(ops: &[Op<DocOp>], start: usize) -> Option<usize> {
         if op.id.actor != actor || op.id.clock != expected_clock {
             break;
         }
-        if *after != Some(prev_id) {
+        if *after != Some(PlacementId(prev_id)) {
             break;
         }
         prev_id = op.id;
@@ -1185,6 +2114,7 @@ fn encode_single_op_entry(
     let (tag_variant, ext) = match variant {
         VARIANT_STYLE => (VARIANT_ESCAPE, Some(EXT_STYLE)),
         VARIANT_NODE_MARKER => (VARIANT_ESCAPE, Some(EXT_MARKER)),
+        VARIANT_MOVE_TEXT => (VARIANT_ESCAPE, Some(EXT_MOVE_TEXT)),
         v => (v, None),
     };
     let node_id_explicit = !matches!(prev_node_id, Some(prev) if *prev == node_id);
@@ -1247,7 +2177,7 @@ fn encode_text_run_entry(
         None => out.push(0),
         Some(d) => {
             out.push(1);
-            <Dot as editor_crdt::wire::Wire>::encode(&d, ctx, out)?;
+            <PlacementId as editor_crdt::wire::Wire>::encode(&d, ctx, out)?;
         }
     }
     out.extend_from_slice(chars.as_bytes());
@@ -1324,6 +2254,15 @@ fn describe_doc_op(p: &DocOp) -> (u8, u8, NodeId) {
             };
             (VARIANT_STYLE, sub, NodeId::ROOT)
         }
+        DocOp::MoveText {
+            to_node_id, after, ..
+        } => {
+            let mut sub = 0;
+            if after.is_some() {
+                sub |= 0b001;
+            }
+            (VARIANT_MOVE_TEXT, sub, *to_node_id)
+        }
     }
 }
 
@@ -1369,12 +2308,12 @@ fn encode_doc_op_payload(
         DocOp::Text { op, .. } => match op {
             editor_crdt::TextOp::InsertChar { after, ch } => {
                 if let Some(d) = after {
-                    <Dot as Wire>::encode(d, ctx, out)?;
+                    <PlacementId as Wire>::encode(d, ctx, out)?;
                 }
                 <char as Wire>::encode(ch, ctx, out)?;
             }
             editor_crdt::TextOp::RemoveChar { observed } => {
-                <Dot as Wire>::encode(observed, ctx, out)?;
+                <EntryDot as Wire>::encode(observed, ctx, out)?;
             }
         },
         DocOp::Modifier { op, .. } => match op {
@@ -1424,6 +2363,12 @@ fn encode_doc_op_payload(
                 StyleOp::Presence(editor_crdt::OrMapOp::Unset { observed }) => {
                     <Vec<Dot> as Wire>::encode(observed, ctx, out)?;
                 }
+            }
+        }
+        DocOp::MoveText { entry, after, .. } => {
+            <EntryDot as Wire>::encode(entry, ctx, out)?;
+            if let Some(after) = after {
+                <PlacementId as Wire>::encode(after, ctx, out)?;
             }
         }
     }
@@ -1508,7 +2453,7 @@ fn decode_doc_op_payload(
         VARIANT_TEXT => {
             if subflag & 1 == 0 {
                 let after = if subflag & 0b010 != 0 {
-                    Some(<Dot as Wire>::decode(ctx, input)?)
+                    Some(<PlacementId as Wire>::decode(ctx, input)?)
                 } else {
                     None
                 };
@@ -1518,7 +2463,7 @@ fn decode_doc_op_payload(
                     op: editor_crdt::TextOp::InsertChar { after, ch },
                 })
             } else {
-                let observed = <Dot as Wire>::decode(ctx, input)?;
+                let observed = <EntryDot as Wire>::decode(ctx, input)?;
                 Ok(DocOp::Text {
                     node_id,
                     op: editor_crdt::TextOp::RemoveChar { observed },
@@ -1589,6 +2534,19 @@ fn decode_doc_op_payload(
             };
             Ok(DocOp::Style { style_id, op })
         }
+        VARIANT_MOVE_TEXT => {
+            let entry = <EntryDot as Wire>::decode(ctx, input)?;
+            let after = if subflag & 0b001 != 0 {
+                Some(<PlacementId as Wire>::decode(ctx, input)?)
+            } else {
+                None
+            };
+            Ok(DocOp::MoveText {
+                entry,
+                to_node_id: node_id,
+                after,
+            })
+        }
         n => Err(WireError::UnknownPayloadVariant { tag: n }),
     }
 }
@@ -1606,9 +2564,11 @@ fn decode_text_run_entry(
         return Err(WireError::InvalidRunLength { got: run_len });
     }
     let after_tag = <u8 as editor_crdt::wire::Wire>::decode(ctx, input)?;
-    let first_after = match after_tag {
+    let first_after: Option<PlacementId> = match after_tag {
         0 => None,
-        1 => Some(<Dot as editor_crdt::wire::Wire>::decode(ctx, input)?),
+        1 => Some(<PlacementId as editor_crdt::wire::Wire>::decode(
+            ctx, input,
+        )?),
         n => {
             return Err(WireError::UnknownVariant {
                 ty: "RunAfter",
@@ -1637,7 +2597,7 @@ fn decode_text_run_entry(
         let after = if i == 0 {
             first_after
         } else {
-            Some(prev_id_inner.unwrap())
+            Some(PlacementId(prev_id_inner.unwrap()))
         };
         let parents = if i == 0 {
             match first_op_parents {

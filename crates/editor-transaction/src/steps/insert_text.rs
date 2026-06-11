@@ -1,4 +1,4 @@
-use editor_crdt::{CrdtError, Dot, TextOp};
+use editor_crdt::{CrdtError, PlacementId, TextOp};
 use editor_model::{DocOp, Node, NodeId};
 use editor_state::BatchedState;
 
@@ -20,7 +20,7 @@ pub(crate) fn apply_to(
     text: &str,
 ) -> Result<(), StepError> {
     // Read: anchor dot at offset
-    let mut after: Option<Dot> = {
+    let mut after: Option<PlacementId> = {
         let entry = batched
             .doc
             .get_entry(node_id)
@@ -28,14 +28,17 @@ pub(crate) fn apply_to(
         let Node::Text(text_node) = &entry.node else {
             return Err(StepError::ExpectedTextNode(node_id));
         };
-        text_node.text.dot_at(offset).map_err(|e| match e {
-            CrdtError::OffsetOutOfBounds { offset, len } => StepError::OffsetOutOfBounds {
-                node_id,
-                offset,
-                len,
-            },
-            other => panic!("dot_at unexpected error: {other:?}"),
-        })?
+        text_node
+            .text
+            .placement_before_offset(offset)
+            .map_err(|e| match e {
+                CrdtError::OffsetOutOfBounds { offset, len } => StepError::OffsetOutOfBounds {
+                    node_id,
+                    offset,
+                    len,
+                },
+                other => panic!("placement_before_offset unexpected error: {other:?}"),
+            })?
     };
 
     // Sequential apply, chaining each emitted dot as the next `after`
@@ -46,7 +49,7 @@ pub(crate) fn apply_to(
                 op: TextOp::InsertChar { ch, after },
             })?
             .id;
-        after = Some(op_id);
+        after = Some(PlacementId(op_id));
     }
 
     validations.push(Validation::Node(node_id));

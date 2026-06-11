@@ -4,7 +4,7 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{
     apply_modifier_to_node, collect_applicable_targets_in_range, collect_text_nodes_in_range,
-    compact_and_restore_selection, filter_applicable_node_ids, is_text_applicable, is_unit_variant,
+    compact_textblocks_for_nodes, filter_applicable_node_ids, is_text_applicable, is_unit_variant,
     resolve_applicable_target_collapsed,
 };
 use crate::{CommandError, CommandResult};
@@ -138,7 +138,7 @@ fn set_modifier_range_text(tr: &mut Transaction, modifier: &Modifier) -> Command
         apply_modifier_to_node(tr, &node, modifier)?;
     }
 
-    compact_and_restore_selection(tr, &node_ids)?;
+    compact_textblocks_for_nodes(tr, &node_ids)?;
 
     Ok(true)
 }
@@ -408,11 +408,11 @@ mod tests {
                     paragraph {
                         text("He")
                         t1: text("lloWo") [font_size(2400)]
-                        text("rld")
+                        t2: text("rld")
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (t1, 0) -> (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

@@ -1,4 +1,4 @@
-use editor_crdt::{CrdtError, Dot, TextOp};
+use editor_crdt::{CrdtError, EntryDot, TextOp};
 use editor_model::{DocOp, Node, NodeId};
 use editor_state::BatchedState;
 
@@ -21,8 +21,8 @@ pub(crate) fn apply_to(
 ) -> Result<(), StepError> {
     let len = text.chars().count();
 
-    // Read: collect target dots for offset..offset+len
-    let target_dots: Vec<Dot> = {
+    // Read: collect target entry dots for offset..offset+len
+    let target_dots: Vec<EntryDot> = {
         let entry = batched
             .doc
             .get_entry(node_id)
@@ -34,19 +34,14 @@ pub(crate) fn apply_to(
         for i in 0..len {
             let dot = text_node
                 .text
-                .dot_at(offset + i + 1)
+                .entry_dot_at(offset + i)
                 .map_err(|e| match e {
                     CrdtError::OffsetOutOfBounds { offset, len } => StepError::OffsetOutOfBounds {
                         node_id,
                         offset,
                         len,
                     },
-                    other => panic!("dot_at unexpected: {other:?}"),
-                })?
-                .ok_or_else(|| StepError::OffsetOutOfBounds {
-                    node_id,
-                    offset: offset + i + 1,
-                    len: text_node.text.len(),
+                    other => panic!("entry_dot_at unexpected: {other:?}"),
                 })?;
             dots.push(dot);
         }

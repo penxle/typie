@@ -7,7 +7,7 @@ use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
 use super::{
-    compact_textblock_preserving_caret, find_ancestor_textblock, insert_hard_break_at_caret,
+    compact_textblock_at_position, find_ancestor_textblock, insert_hard_break_at_caret,
     insert_tab_at_caret, insert_text_at_caret,
 };
 use crate::{CommandError, CommandResult};
@@ -447,7 +447,7 @@ fn insert_blocks_in_textblock(
     if merge_end_into_start {
         tr.merge_node(p2_id, textblock_id)?;
         let caret = last_caret.unwrap_or(head);
-        compact_textblock_preserving_caret(tr, caret)?;
+        compact_textblock_at_position(tr, caret)?;
         last_caret = tr.selection().map(|s| s.head);
     }
 

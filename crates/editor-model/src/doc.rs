@@ -1,20 +1,23 @@
-use editor_crdt::{Dot, OpGraph, OrMap};
+use editor_crdt::{Dot, OpGraph, OrMap, Text, TextPlacement};
 use hashbrown::HashSet;
 use std::collections::VecDeque;
 
 use crate::apply_doc_op;
 use crate::doc_op::DocOp;
+use crate::doc_text_store::DocTextStore;
 use crate::entry::NodeEntry;
 use crate::error::ModelError;
 use crate::id::NodeId;
 use crate::node_ref::NodeRef;
 use crate::nodes::{Node, NodeType};
 use crate::style::StyleEntry;
+use crate::text_view::{TextIdentityView, TextView};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Doc {
     pub(crate) nodes: OrMap<NodeId, NodeType>,
     pub(crate) entries: imbl::HashMap<NodeId, NodeEntry>,
+    pub(crate) text: DocTextStore,
     pub(crate) styles: OrMap<String, ()>,
     pub(crate) style_entries: imbl::HashMap<String, StyleEntry>,
 }
@@ -50,6 +53,14 @@ impl Doc {
 
     pub fn node(&self, id: NodeId) -> Option<NodeRef<'_>> {
         self.get_entry(id).map(|_| NodeRef::new(self, id))
+    }
+
+    pub fn text_view(&self, id: NodeId) -> Option<TextView<'_>> {
+        self.node(id)?.as_text()
+    }
+
+    pub fn text_identity(&self) -> TextIdentityView<'_> {
+        TextIdentityView::new(self)
     }
 
     pub fn root(&self) -> Option<NodeRef<'_>> {
@@ -105,12 +116,38 @@ impl Doc {
         out.trim_end_matches('\n').to_string()
     }
 
+    pub(crate) fn refresh_text_projection(&mut self, node_id: NodeId) {
+        let Some(visible) = self.text_projection_for(node_id) else {
+            return;
+        };
+        let Some(entry) = self.entries.get_mut(&node_id) else {
+            return;
+        };
+        let Node::Text(text_node) = &mut entry.node else {
+            return;
+        };
+        text_node.text = Text::from_visible_placements(visible);
+    }
+
+    fn text_projection_for(&self, node_id: NodeId) -> Option<Vec<TextPlacement>> {
+        let entry = self.get_entry(node_id)?;
+        let Node::Text(_) = &entry.node else {
+            return None;
+        };
+        Some(self.text.visible_placements_for_node(node_id))
+    }
+
     fn extract_text_recursive(&self, node_id: NodeId, out: &mut String) {
         let Some(entry) = self.get_entry(node_id) else {
             return;
         };
         match &entry.node {
-            Node::Text(t) => out.push_str(&t.text.to_string()),
+            Node::Text(_) => out.push_str(
+                &self
+                    .text_view(node_id)
+                    .map(|text| text.text())
+                    .unwrap_or_default(),
+            ),
             Node::HardBreak(_)
             | Node::PageBreak(_)
             | Node::Image(_)
@@ -129,6 +166,8 @@ impl Doc {
     pub fn verify(&self) -> Result<(), ModelError> {
         self.verify_root_uniqueness()?;
         self.verify_tree_reciprocity()?;
+        #[cfg(any(test, debug_assertions))]
+        self.verify_text_store()?;
         Ok(())
     }
 
@@ -200,10 +239,37 @@ impl Doc {
 
         Ok(())
     }
+
+    #[cfg(any(test, debug_assertions))]
+    fn verify_text_store(&self) -> Result<(), ModelError> {
+        if !self.text.index_matches_rebuild(self) {
+            return Err(ModelError::TextIndexDesync);
+        }
+
+        for (node_id, node_type) in self.nodes_iter() {
+            if *node_type != NodeType::Text {
+                continue;
+            }
+            let entry = self
+                .get_entry(*node_id)
+                .ok_or(ModelError::NodeNotFound(*node_id))?;
+            let Node::Text(text_node) = &entry.node else {
+                return Err(ModelError::TextProjectionDesync { node_id: *node_id });
+            };
+            let actual: Vec<TextPlacement> = text_node.text.iter_visible_placements().collect();
+            let expected = self.text.visible_placements_for_node(*node_id);
+            if actual != expected {
+                return Err(ModelError::TextProjectionDesync { node_id: *node_id });
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use editor_crdt::{EntryDot, PlacementId};
     use editor_macros::doc;
 
     use super::*;
@@ -236,6 +302,27 @@ mod tests {
     fn verify_accepts_rooted_doc() {
         let (doc, ..) = doc! { root {} };
         assert!(doc.verify().is_ok());
+    }
+
+    #[test]
+    fn verify_rejects_stale_text_projection() {
+        let (mut doc, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("a")
+                }
+            }
+        };
+        let entry = doc.entries.get_mut(&t1).unwrap();
+        let Node::Text(text_node) = &mut entry.node else {
+            panic!("expected text node");
+        };
+        text_node.text = Text::new();
+
+        assert_eq!(
+            doc.verify(),
+            Err(ModelError::TextProjectionDesync { node_id: t1 })
+        );
     }
 
     #[test]
@@ -434,7 +521,7 @@ mod tests {
             DocOp::Text {
                 node_id: txt,
                 op: editor_crdt::TextOp::InsertChar {
-                    after: Some(a_dot),
+                    after: Some(PlacementId(a_dot)),
                     ch: 'b',
                 },
             },
@@ -459,6 +546,124 @@ mod tests {
             Doc::from_op_graph_at(&g, &unknown),
             Err(ModelError::InvalidHead { .. })
         ));
+    }
+
+    #[test]
+    fn text_index_uses_birth_location_fallback_for_unmoved_entries() {
+        use crate::doc_op::DocOp;
+
+        let mut graph = OpGraph::<DocOp>::new();
+        let text_id = NodeId::new();
+
+        let apply = |graph: &mut OpGraph<DocOp>, doc: Doc, payload: DocOp| {
+            let (next_graph, op) = graph.clone().add(payload).unwrap();
+            *graph = next_graph;
+            let doc = apply_doc_op(doc, &op).unwrap();
+            (doc, op)
+        };
+
+        let (doc, _) = apply(
+            &mut graph,
+            Doc::empty(),
+            DocOp::Presence {
+                node_id: text_id,
+                op: editor_crdt::OrMapOp::Set {
+                    key: text_id,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        let (doc, insert) = apply(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id: text_id,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+
+        let entry = EntryDot(insert.id);
+        assert_eq!(
+            doc.text_identity()
+                .current_location(entry)
+                .map(|loc| (loc.node_id, loc.placement_id)),
+            Some((text_id, PlacementId(insert.id)))
+        );
+        assert!(doc.text.moved_location(entry).is_none());
+        assert!(doc.text.index_matches_rebuild(&doc));
+    }
+
+    #[test]
+    fn text_current_location_uses_materialized_index_after_move() {
+        use crate::doc_op::DocOp;
+
+        let mut graph = OpGraph::<DocOp>::new();
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+
+        let apply = |graph: &mut OpGraph<DocOp>, doc: Doc, payload: DocOp| {
+            let (next_graph, op) = graph.clone().add(payload).unwrap();
+            *graph = next_graph;
+            let doc = apply_doc_op(doc, &op).unwrap();
+            (doc, op)
+        };
+
+        let (doc, _) = apply(
+            &mut graph,
+            Doc::empty(),
+            DocOp::Presence {
+                node_id: t1,
+                op: editor_crdt::OrMapOp::Set {
+                    key: t1,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        let (doc, _) = apply(
+            &mut graph,
+            doc,
+            DocOp::Presence {
+                node_id: t2,
+                op: editor_crdt::OrMapOp::Set {
+                    key: t2,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        let (doc, insert) = apply(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id: t1,
+                op: editor_crdt::TextOp::InsertChar {
+                    after: None,
+                    ch: 'a',
+                },
+            },
+        );
+        let (doc, move_op) = apply(
+            &mut graph,
+            doc,
+            DocOp::MoveText {
+                entry: EntryDot(insert.id),
+                to_node_id: t2,
+                after: None,
+            },
+        );
+
+        let current = doc.text.moved_location(EntryDot(insert.id)).unwrap();
+        assert_eq!(current.owner_text_node, t2);
+        assert_eq!(current.placement, PlacementId(move_op.id));
+        assert_eq!(
+            doc.text_identity()
+                .current_location(EntryDot(insert.id))
+                .map(|loc| (loc.node_id, loc.placement_id)),
+            Some((t2, PlacementId(move_op.id)))
+        );
+        assert!(doc.text.index_matches_rebuild(&doc));
     }
 
     #[test]

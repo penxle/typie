@@ -146,14 +146,34 @@ impl Measurer {
 }
 
 fn affected_node_ids_for_doc_op(op: &DocOp, old_doc: &Doc) -> Vec<NodeId> {
-    use editor_crdt::{LwwRegOp, OrMapOp, RgaOp};
+    use editor_crdt::{LwwRegOp, OrMapOp, RgaOp, TextOp};
     match op {
-        DocOp::Text { node_id, .. }
+        DocOp::Text {
+            node_id,
+            op: TextOp::InsertChar { .. },
+        }
         | DocOp::Modifier { node_id, .. }
         | DocOp::Attr { node_id, .. }
         | DocOp::NodeStyle { node_id, .. }
         | DocOp::NodeMarker { node_id, .. } => {
             vec![*node_id]
+        }
+        DocOp::Text {
+            op: TextOp::RemoveChar { observed },
+            ..
+        } => old_doc
+            .text_identity()
+            .current_location(*observed)
+            .map(|location| vec![location.node_id])
+            .unwrap_or_default(),
+        DocOp::MoveText {
+            entry, to_node_id, ..
+        } => {
+            let mut ids = vec![*to_node_id];
+            if let Some(old_location) = old_doc.text_identity().current_location(*entry) {
+                ids.push(old_location.node_id);
+            }
+            ids
         }
         DocOp::Style { style_id, .. } => old_doc
             .nodes_iter()
@@ -389,6 +409,65 @@ mod tests {
         assert!(
             measurer.cache.get(NodeId::ROOT).is_none(),
             "root should be invalidated"
+        );
+    }
+
+    #[test]
+    fn doc_ops_remove_char_invalidates_current_text_owner() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, t1, p2, t2) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("a") }
+                    p2: paragraph { t2: text("") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let entry = state
+            .doc
+            .text_view(t1)
+            .unwrap()
+            .visible_entries()
+            .next()
+            .unwrap()
+            .0;
+        let (state, _) = state
+            .apply(DocOp::MoveText {
+                entry,
+                to_node_id: t2,
+                after: None,
+            })
+            .unwrap();
+        let old_doc = state.doc.clone();
+        let (state, remove_op) = state
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::RemoveChar { observed: entry },
+            })
+            .unwrap();
+
+        let mut measurer = Measurer::new_test();
+        measurer.cache.insert(NodeId::ROOT, dummy());
+        measurer.cache.insert(p2, dummy());
+        measurer.cache.insert(t2, dummy());
+
+        measurer.invalidate_with_doc_ops(&old_doc, &state.doc, &[remove_op]);
+
+        assert!(
+            measurer.cache.get(t2).is_none(),
+            "current text owner should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(p2).is_none(),
+            "current owner ancestor should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(NodeId::ROOT).is_none(),
+            "root should be invalidated through current owner ancestors"
         );
     }
 

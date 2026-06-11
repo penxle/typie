@@ -1,7 +1,7 @@
 //! Generated changesets exercise wire syntactic round-trip only; semantic validity
 //! (e.g. anchor NodeId existing in the doc) is not guaranteed by `arb_doc_op_sequence`.
 
-use editor_crdt::{Dot, OpGraph, OrMapOp, RgaOp, TextOp, wire};
+use editor_crdt::{Dot, OpGraph, OrMapOp, PlacementId, RgaOp, TextOp, wire};
 use editor_model::{DocOp, Modifier, ModifierType, NodeId, NodeType};
 use proptest::prelude::*;
 
@@ -25,7 +25,10 @@ fn arb_doc_op() -> impl Strategy<Value = DocOp> {
     prop_oneof![
         (any::<char>(), prop::option::of(arb_dot())).prop_map(|(ch, after)| DocOp::Text {
             node_id: NodeId::new(),
-            op: TextOp::InsertChar { after, ch },
+            op: TextOp::InsertChar {
+                after: after.map(PlacementId),
+                ch,
+            },
         }),
         Just(()).prop_map(|_| {
             let id = NodeId::new();

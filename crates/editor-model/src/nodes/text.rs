@@ -40,7 +40,7 @@ impl PlainTextNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_crdt::{Dot, TextOp};
+    use editor_crdt::{Dot, EntryDot, PlacementId, TextPlacement};
 
     #[test]
     fn empty_text_node() {
@@ -52,16 +52,12 @@ mod tests {
     #[test]
     fn apply_insert_char_via_wrapper() {
         let mut t = TextNode::default();
-        t.text = t
-            .text
-            .apply(
-                Dot::new(1, 0),
-                TextOp::InsertChar {
-                    after: None,
-                    ch: 'a',
-                },
-            )
-            .unwrap();
+        let dot = Dot::new(1, 0);
+        t.text = Text::from_visible_placements([TextPlacement {
+            placement_id: PlacementId(dot),
+            entry_dot: EntryDot(dot),
+            ch: 'a',
+        }]);
         assert_eq!(t.text.len(), 1);
         assert_eq!(t.text.to_string(), "a");
     }

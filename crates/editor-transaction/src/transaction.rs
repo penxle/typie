@@ -95,6 +95,8 @@ impl Transaction {
         self.ops.extend(ops);
         if let Step::SetSelection { new, .. } = &step {
             self.selection_stable = new.clone();
+        } else if step.is_doc_step() {
+            self.refresh_selection_from_stable();
         }
         self.steps.push(step);
         if validations.is_empty() {
@@ -106,6 +108,13 @@ impl Transaction {
             self.run_validations(&validations)?;
         }
         Ok(())
+    }
+
+    fn refresh_selection_from_stable(&mut self) {
+        self.state.selection = self
+            .selection_stable
+            .as_ref()
+            .map(|stable| stable.thaw(&self.state.doc));
     }
 
     pub fn savepoint(&self) -> Savepoint {
@@ -283,7 +292,12 @@ impl Transaction {
             .ok_or(StepError::NodeNotFound(target_id))?;
 
         let offset = match &target_entry.node {
-            Node::Text(t) => t.text.len(),
+            Node::Text(_) => self
+                .state
+                .doc
+                .text_view(target_id)
+                .map(|text| text.len())
+                .unwrap_or(0),
             _ => target_entry.children.len(),
         };
 
@@ -464,6 +478,7 @@ impl Transaction {
             }
         }
 
+        let has_doc_step = steps.iter().any(|step| step.is_doc_step());
         let mut validations: Vec<Validation> = Vec::new();
         let ops = self.state.batch_with_ops_mut::<_, StepError>(|batched| {
             for step in steps.iter() {
@@ -492,6 +507,9 @@ impl Transaction {
             if let Step::SetSelection { new, .. } = step {
                 self.selection_stable = new.clone();
             }
+        }
+        if has_doc_step && last_selection.is_none() {
+            self.refresh_selection_from_stable();
         }
         self.steps.extend(steps);
 
@@ -813,9 +831,41 @@ mod tests {
         let t2 = NodeId::new();
         tr.split_node(t1, 5, t2).unwrap();
 
-        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello");
-        assert_eq!(tr.doc().text(t2).text.to_string(), " World");
+        assert_eq!(tr.doc().text_view(t1).unwrap().text(), "Hello");
+        assert_eq!(tr.doc().text_view(t2).unwrap().text(), " World");
         assert_eq!(tr.doc().get_entry(p1).unwrap().children.len(), 2);
+    }
+
+    #[test]
+    fn split_node_remaps_live_selection_without_selection_step() {
+        let (state, p1, t1) = state! {
+            doc { root { p1: paragraph { t1: text("aa") hard_break } } }
+            selection: (t1, 1, >) -> (p1, 2, <)
+        };
+
+        let mut tr = Transaction::new(&state);
+        let t2 = NodeId::new();
+        tr.split_node(t1, 1, t2).unwrap();
+
+        assert_eq!(
+            tr.selection(),
+            Some(Selection::new(
+                Position {
+                    node_id: t2,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: p1,
+                    offset: 3,
+                    affinity: Affinity::Upstream,
+                }
+            ))
+        );
+
+        let (_, steps, _, _, _) = tr.commit();
+        assert_eq!(steps.len(), 1);
+        assert!(matches!(&steps[0], Step::SplitNode { .. }));
     }
 
     #[test]
@@ -830,7 +880,7 @@ mod tests {
         tr.split_node(t1, 5, t2).unwrap();
         tr.merge_node(t2, t1).unwrap();
 
-        assert_eq!(tr.doc().text(t1).text.to_string(), "Hello World");
+        assert_eq!(tr.doc().text_view(t1).unwrap().text(), "Hello World");
         assert!(tr.doc().get_entry(t2).is_none());
         assert_eq!(tr.doc().get_entry(p1).unwrap().children.len(), 1);
 
@@ -840,6 +890,29 @@ mod tests {
             Step::MergeNode { offset, .. } => assert_eq!(*offset, 5),
             _ => panic!("expected MergeNode"),
         }
+    }
+
+    #[test]
+    fn merge_node_remaps_source_text_start_to_moved_content_start() {
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("a")
+                        t2: text("b")
+                    }
+                }
+            }
+            selection: (t2, 0)
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.merge_node(t2, t1).unwrap();
+
+        assert_eq!(
+            tr.selection(),
+            Some(Selection::collapsed(Position::new(t1, 1)))
+        );
     }
 
     #[test]

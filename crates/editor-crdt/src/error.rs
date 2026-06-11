@@ -20,6 +20,9 @@ pub enum CrdtError {
     #[error("offset {offset} out of bounds (len {len})")]
     OffsetOutOfBounds { offset: usize, len: usize },
 
+    #[error("text entry {dot:?} not found")]
+    EntryNotFound { dot: Dot },
+
     #[error("changeset has no ops")]
     EmptyChangeset,
 

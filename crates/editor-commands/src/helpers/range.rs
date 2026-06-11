@@ -1,4 +1,4 @@
-use editor_model::{Doc, Node, NodeId, NodeRef};
+use editor_model::{Node, NodeId, NodeRef};
 use editor_state::{Position, ResolvedSelection, Selection};
 use editor_transaction::{Transaction, compact};
 
@@ -65,7 +65,14 @@ pub(crate) fn collect_text_nodes_in_range(
         .node(to_end_id)
         .ok_or(CommandError::NodeNotFound(to_end_id))?;
     let to_pos = match to_end_node.node() {
-        Node::Text(t) => Position::new(to_end_id, t.text.len()),
+        Node::Text(t) => {
+            let offset = if to_needs_split {
+                t.text.len()
+            } else {
+                to.offset.min(t.text.len())
+            };
+            Position::new(to_end_id, offset)
+        }
         _ => Position::new(to_end_id, to.offset),
     };
 
@@ -82,46 +89,61 @@ fn walk_text_nodes_in_range(node: &NodeRef<'_>, rs: &ResolvedSelection<'_>, out:
     if !rs.intersects_subtree(node) {
         return;
     }
-    if matches!(node.node(), Node::Text(_) | Node::Tab(_)) {
-        out.push(node.id());
-        return;
+    match node.node() {
+        Node::Text(text) => {
+            let from = rs.from();
+            let to = rs.to();
+            let len = text.text.len();
+            let start = if from.node_id() == node.id() {
+                from.offset().min(len)
+            } else {
+                0
+            };
+            let end = if to.node_id() == node.id() {
+                to.offset().min(len)
+            } else {
+                len
+            };
+            if end > start {
+                out.push(node.id());
+            }
+            return;
+        }
+        Node::Tab(_) => {
+            if rs.contains_subtree(node) {
+                out.push(node.id());
+            }
+            return;
+        }
+        _ => {}
     }
     for child in node.children() {
         walk_text_nodes_in_range(&child, rs, out);
     }
 }
 
-pub(crate) fn compact_textblock_preserving_caret(
+pub(crate) fn compact_textblock_at_position(
     tr: &mut Transaction,
-    caret: Position,
+    pos: Position,
 ) -> Result<(), CommandError> {
     let doc = tr.doc();
-    let Some(node) = doc.node(caret.node_id) else {
+    let Some(node) = doc.node(pos.node_id) else {
         return Ok(());
     };
-    let Node::Text(text_node) = node.node() else {
+    let Node::Text(_) = node.node() else {
         return Ok(());
     };
-    let at_end = caret.offset == text_node.text.len();
-    let Some(tb_id) = find_ancestor_textblock(&doc, caret.node_id) else {
-        return Ok(());
-    };
-    let Some(abs) = text_offset_in_textblock(&doc, tb_id, caret.node_id, caret.offset) else {
+    let Some(tb_id) = find_ancestor_textblock(&doc, pos.node_id) else {
         return Ok(());
     };
 
     let doc = tr.doc();
     let tb = doc.node(tb_id).ok_or(CommandError::NodeNotFound(tb_id))?;
     tr.apply_steps(compact(&tb))?;
-
-    let doc = tr.doc();
-    if let Some(new_pos) = position_from_text_offset(&doc, tb_id, abs, at_end) {
-        tr.set_selection(Some(Selection::new(new_pos, new_pos)))?;
-    }
     Ok(())
 }
 
-pub(crate) fn compact_and_restore_selection(
+pub(crate) fn compact_textblocks_for_nodes(
     tr: &mut Transaction,
     node_ids: &[NodeId],
 ) -> Result<(), CommandError> {
@@ -135,20 +157,6 @@ pub(crate) fn compact_and_restore_selection(
         }
     }
 
-    let original = tr.selection().expect("entry caller guaranteed selection");
-    let endpoints_are_text = doc
-        .node(original.anchor.node_id)
-        .is_some_and(|n| matches!(n.node(), Node::Text(_)))
-        && doc
-            .node(original.head.node_id)
-            .is_some_and(|n| matches!(n.node(), Node::Text(_)));
-
-    let sel_offsets = if endpoints_are_text {
-        selection_offsets_in_textblocks(&doc, node_ids)
-    } else {
-        None
-    };
-
     for tb_id in &textblock_ids {
         let doc = tr.doc();
         if let Some(tb) = doc.node(*tb_id) {
@@ -156,82 +164,5 @@ pub(crate) fn compact_and_restore_selection(
         }
     }
 
-    if let Some((from_tb, from_abs, to_tb, to_abs)) = sel_offsets {
-        let doc = tr.doc();
-        if let (Some(from_pos), Some(to_pos)) = (
-            position_from_text_offset(&doc, from_tb, from_abs, false),
-            position_from_text_offset(&doc, to_tb, to_abs, true),
-        ) {
-            tr.set_selection(Some(Selection::new(from_pos, to_pos)))?;
-        }
-    }
-
     Ok(())
-}
-
-fn selection_offsets_in_textblocks(
-    doc: &Doc,
-    node_ids: &[NodeId],
-) -> Option<(NodeId, usize, NodeId, usize)> {
-    let first_id = *node_ids.first()?;
-    let last_id = *node_ids.last()?;
-    let from_tb = find_ancestor_textblock(doc, first_id)?;
-    let to_tb = find_ancestor_textblock(doc, last_id)?;
-    let from_abs = text_offset_in_textblock(doc, from_tb, first_id, 0)?;
-    let node_len = match doc.node(last_id)?.node() {
-        Node::Text(t) => t.text.len(),
-        _ => 0,
-    };
-    let to_abs = text_offset_in_textblock(doc, to_tb, last_id, node_len)?;
-    Some((from_tb, from_abs, to_tb, to_abs))
-}
-
-fn text_offset_in_textblock(
-    doc: &Doc,
-    tb_id: NodeId,
-    node_id: NodeId,
-    local_offset: usize,
-) -> Option<usize> {
-    let tb = doc.node(tb_id)?;
-    let mut abs = 0;
-    for child in tb.children() {
-        if child.id() == node_id {
-            return Some(abs + local_offset);
-        }
-        if let Node::Text(t) = child.node() {
-            abs += t.text.len();
-        }
-    }
-    None
-}
-
-fn position_from_text_offset(
-    doc: &Doc,
-    tb_id: NodeId,
-    abs_offset: usize,
-    end_bias: bool,
-) -> Option<Position> {
-    let tb = doc.node(tb_id)?;
-    let mut remaining = abs_offset;
-    for child in tb.children() {
-        if let Node::Text(t) = child.node() {
-            let len = t.text.len();
-            let fits = if end_bias {
-                remaining <= len
-            } else {
-                remaining < len
-            };
-            if fits {
-                return Some(Position::new(child.id(), remaining));
-            }
-            remaining -= len;
-        }
-    }
-    tb.children().last().map(|child| {
-        let len = match child.node() {
-            Node::Text(t) => t.text.len(),
-            _ => 0,
-        };
-        Position::new(child.id(), len)
-    })
 }

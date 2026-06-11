@@ -3,7 +3,7 @@ use editor_state::{PendingModifier, PendingModifiers, Position};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    collect_text_nodes_in_range, compact_and_restore_selection, is_text_applicable,
+    collect_text_nodes_in_range, compact_textblocks_for_nodes, is_text_applicable,
     resolve_effective_modifiers,
 };
 use crate::{CommandError, CommandResult};
@@ -82,7 +82,7 @@ fn clear_all_modifiers_range(tr: &mut Transaction) -> CommandResult {
         }
     }
 
-    compact_and_restore_selection(tr, &node_ids)?;
+    compact_textblocks_for_nodes(tr, &node_ids)?;
     Ok(true)
 }
 
@@ -186,11 +186,11 @@ mod tests {
                     paragraph {
                         text("He") [italic]
                         t1: text("lloWo")
-                        text("rld") [italic]
+                        t2: text("rld") [italic]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (t1, 0) -> (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -219,8 +219,7 @@ mod tests {
         assert_state_eq!(&actual, &expected);
     }
 
-    // Backward selection: compact normalizes to a forward selection — pin that
-    // whole-state contract instead of only checking one modifier on one node.
+    // Backward selection keeps anchor/head direction after inline cleanup.
     #[test]
     fn range_backward_selection_clears() {
         let (initial, ..) = state! {
@@ -230,14 +229,14 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| clear_all_modifiers(&mut tr));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (t1, 5) -> (t1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     // Regression guard: a partial selection over modifier-free text triggers the
     // boundary splits inside `collect_text_nodes_in_range`. Because the range
-    // path always reaches `compact_and_restore_selection` (no early return),
+    // path always reaches `compact_textblocks_for_nodes` (no early return),
     // those splits are merged back and the document is left unchanged. If an
     // early-return ever skips compact, this fails with a fragmented text run.
     #[test]

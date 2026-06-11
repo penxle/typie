@@ -1,4 +1,4 @@
-use editor_crdt::{Dot, LwwRegOp, OrMapOp, RgaOp, TextOp};
+use editor_crdt::{Dot, EntryDot, LwwRegOp, OrMapOp, PlacementId, RgaOp};
 use editor_model::{DocOp, Node, NodeId};
 use editor_state::BatchedState;
 
@@ -71,14 +71,24 @@ pub(crate) fn apply_to(
         }
 
         let target_end_dot: Option<Dot> = match &target_entry.node {
-            Node::Text(t) => t.text.iter_with_dot().last().map(|(d, _)| d),
+            Node::Text(_) => batched
+                .doc
+                .text_view(target_id)
+                .and_then(|text| text.last_visible_placement())
+                .map(|placement| placement.placement_id.0),
             _ => target_entry.children.iter_with_dot().last().map(|(d, _)| d),
         };
 
         let content_to_move = match &source_entry.node {
-            Node::Text(t) => {
-                let chars: Vec<(Dot, char)> = t.text.iter_with_dot().collect();
-                ContentMove::Text { chars }
+            Node::Text(_) => {
+                let entries: Vec<EntryDot> = batched
+                    .doc
+                    .text_view(node_id)
+                    .ok_or(StepError::ExpectedTextNode(node_id))?
+                    .visible_entries()
+                    .map(|(entry, _)| entry)
+                    .collect();
+                ContentMove::Text { entries }
             }
             _ => {
                 let children: Vec<(Dot, NodeId)> = source_entry
@@ -100,22 +110,17 @@ pub(crate) fn apply_to(
     };
 
     match content_to_move {
-        ContentMove::Text { chars } => {
-            let mut after = target_end_dot;
-            for (_, ch) in &chars {
+        ContentMove::Text { entries } => {
+            let mut after = target_end_dot.map(PlacementId);
+            for entry in entries {
                 let op_id = batched
-                    .apply(DocOp::Text {
-                        node_id: target_id,
-                        op: TextOp::InsertChar { ch: *ch, after },
+                    .apply(DocOp::MoveText {
+                        entry,
+                        to_node_id: target_id,
+                        after,
                     })?
                     .id;
-                after = Some(op_id);
-            }
-            for (target, _) in chars {
-                batched.apply(DocOp::Text {
-                    node_id,
-                    op: TextOp::RemoveChar { observed: target },
-                })?;
+                after = Some(PlacementId(op_id));
             }
         }
         ContentMove::Children { children } => {
@@ -167,7 +172,7 @@ pub(crate) fn apply_to(
 }
 
 enum ContentMove {
-    Text { chars: Vec<(Dot, char)> },
+    Text { entries: Vec<EntryDot> },
     Children { children: Vec<(Dot, NodeId)> },
 }
 
@@ -197,9 +202,22 @@ mod tests {
             target_id: t1,
             offset: 5,
         };
+        let source_entries: Vec<_> = state
+            .text(t2)
+            .text
+            .iter_visible_entries()
+            .map(|(entry, _)| entry)
+            .collect();
         let new_state = step.apply(&state).unwrap().state;
+        let target_entries: Vec<_> = new_state
+            .text(t1)
+            .text
+            .iter_visible_entries()
+            .map(|(entry, _)| entry)
+            .collect();
 
-        assert_eq!(new_state.text(t1).text.to_string(), "Hello World");
+        assert_eq!(new_state.doc.text_view(t1).unwrap().text(), "Hello World");
+        assert_eq!(&target_entries[5..], source_entries.as_slice());
         assert!(!new_state.has_node(t2));
         assert_eq!(new_state.node(p1).children().count(), 1);
     }

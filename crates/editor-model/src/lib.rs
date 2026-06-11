@@ -4,6 +4,7 @@ mod alignment;
 mod canonical;
 mod doc;
 mod doc_op;
+mod doc_text_store;
 mod entry;
 mod error;
 mod fragment;
@@ -16,6 +17,9 @@ mod plain;
 mod schema;
 mod style;
 mod subtree;
+mod text_entry_store;
+mod text_index;
+mod text_view;
 mod validate;
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -38,6 +42,7 @@ pub use plain::*;
 pub use schema::*;
 pub use style::*;
 pub use subtree::*;
+pub use text_view::*;
 pub use validate::*;
 
 #[cfg(any(test, feature = "test-utils"))]

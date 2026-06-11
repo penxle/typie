@@ -66,11 +66,11 @@ pub(crate) fn apply_to(
         }
 
         if let Node::Text(text_node) = &entry.node {
-            for (target_dot, _) in text_node.text.iter_with_dot() {
+            for (target_entry, _) in text_node.text.iter_visible_entries() {
                 batched.apply(DocOp::Text {
                     node_id: *sub_id,
                     op: TextOp::RemoveChar {
-                        observed: target_dot,
+                        observed: target_entry,
                     },
                 })?;
             }

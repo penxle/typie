@@ -9,6 +9,7 @@ use crate::id::NodeId;
 use crate::marker::Marker;
 use crate::modifier::{Modifier, ModifierType};
 use crate::nodes::{Node, NodeType};
+use crate::text_view::TextView;
 
 #[derive(Clone, Copy)]
 pub struct NodeRef<'a> {
@@ -37,6 +38,13 @@ impl<'a> NodeRef<'a> {
 
     pub fn node(&self) -> &'a Node {
         &self.entry().node
+    }
+
+    pub fn as_text(&self) -> Option<TextView<'a>> {
+        let Node::Text(text_node) = self.node() else {
+            return None;
+        };
+        Some(TextView::new(self.id, text_node))
     }
 
     pub fn marker(&self) -> Option<&'a Marker> {

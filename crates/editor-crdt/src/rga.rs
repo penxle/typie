@@ -117,7 +117,7 @@ impl<T> Rga<T> {
     /// in the same DFS order `iter_with_dot` uses. The third tuple element is the
     /// `alive` flag. Orphan entries (anchor not yet arrived) are not yielded, matching
     /// `iter_with_dot`.
-    pub(crate) fn iter_all_in_order(&self) -> impl Iterator<Item = (Dot, &T, bool)> + '_ {
+    pub fn iter_all_in_order(&self) -> impl Iterator<Item = (Dot, &T, bool)> + '_ {
         AllIterWithDot::new(self)
     }
 

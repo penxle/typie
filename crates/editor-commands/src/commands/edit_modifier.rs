@@ -3,8 +3,8 @@ use editor_state::{Position, resolve_modifier_span_at};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    apply_modifier_to_node, collect_text_nodes_in_range, compact_and_restore_selection,
-    compact_textblock_preserving_caret, filter_applicable_node_ids, is_text_applicable,
+    apply_modifier_to_node, collect_text_nodes_in_range, compact_textblock_at_position,
+    compact_textblocks_for_nodes, filter_applicable_node_ids, is_text_applicable,
 };
 use crate::{CommandError, CommandResult};
 
@@ -74,7 +74,7 @@ fn edit_modifier_collapsed(
         }
     }
 
-    compact_textblock_preserving_caret(tr, pos)?;
+    compact_textblock_at_position(tr, pos)?;
     Ok(true)
 }
 
@@ -117,7 +117,7 @@ fn edit_modifier_range(
         }
     }
 
-    compact_and_restore_selection(tr, &node_ids)?;
+    compact_textblocks_for_nodes(tr, &node_ids)?;
     Ok(true)
 }
 

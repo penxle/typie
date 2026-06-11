@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use editor_crdt::{Dot, LwwRegOp, OpGraph, OrMapOp, OrSetOp, RgaOp, TextOp, ToPlain};
+use editor_crdt::{Dot, LwwRegOp, OpGraph, OrMapOp, OrSetOp, PlacementId, RgaOp, TextOp, ToPlain};
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
@@ -181,7 +181,7 @@ fn emit_node(
     }
 
     if let PlainNode::Text(PlainTextNode { text }) = &entry.node {
-        let mut prev: Option<Dot> = None;
+        let mut prev: Option<PlacementId> = None;
         for ch in text.chars() {
             let dot = apply_and_record(
                 graph,
@@ -191,7 +191,7 @@ fn emit_node(
                     op: TextOp::InsertChar { after: prev, ch },
                 },
             );
-            prev = Some(dot);
+            prev = Some(PlacementId(dot));
         }
     }
 

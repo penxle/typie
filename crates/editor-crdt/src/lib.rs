@@ -22,7 +22,7 @@ pub use ormap::{OrMap, OrMapOp};
 pub use orset::{OrSet, OrSetOp};
 pub use rga::{Rga, RgaOp};
 pub use sync::SyncMessage;
-pub use text::{Text, TextOp};
+pub use text::{EntryDot, PlacementId, Text, TextOp, TextPlacement};
 pub use to_plain::ToPlain;
 
 #[cfg(test)]
