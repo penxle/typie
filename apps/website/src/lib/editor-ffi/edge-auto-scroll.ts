@@ -1,4 +1,4 @@
-import { elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
+import { handleDragScroll } from '@typie/ui/utils';
 import {
   EDGE_AUTO_SCROLL_MAX_SPEED,
   EDGE_AUTO_SCROLL_MIN_SPEED,
@@ -17,8 +17,8 @@ export class EditorEdgeAutoScroll {
   #onScroll: ((clientX: number, clientY: number) => void) | null = null;
 
   update(editor: Editor, pointer: ClientPoint, onScroll: (clientX: number, clientY: number) => void): void {
-    const container = editor.scrollContainerEl;
-    if (!container) {
+    const viewport = editor.scrollViewport;
+    if (!viewport) {
       this.stop();
       return;
     }
@@ -26,7 +26,7 @@ export class EditorEdgeAutoScroll {
     this.stop();
     this.#onScroll = onScroll;
     this.#cleanup =
-      handleDragScroll(elementScrollViewport(container), true, {
+      handleDragScroll(viewport, true, {
         axis: 'both',
         initialPointer: pointer,
         scrollZoneSize: EDGE_AUTO_SCROLL_THRESHOLD_PX,

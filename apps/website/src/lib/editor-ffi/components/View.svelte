@@ -2,6 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
+  import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
   import { tick, untrack } from 'svelte';
   import { graphql } from '$mearie';
   import {
@@ -37,6 +38,8 @@
   type Props = {
     document$key: Editor_document$key;
     active?: boolean;
+    /** window 자체를 스크롤 컨테이너로 사용한다. 페이지당 에디터 1개를 전제한다 (window에 리스너를 부착). */
+    useWindowScroll?: boolean;
     style?: SystemStyleObject;
     onReady?: () => void;
     header?: Snippet;
@@ -44,7 +47,7 @@
     children?: Snippet;
   };
 
-  let { document$key, active = true, style, onReady, header, footer, children }: Props = $props();
+  let { document$key, active = true, useWindowScroll = false, style, onReady, header, footer, children }: Props = $props();
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
@@ -74,6 +77,23 @@
 
   let clientWidth = $state<number>();
   let clientHeight = $state<number>();
+  let windowViewportHeight = $state<number>();
+
+  $effect(() => {
+    if (!useWindowScroll) return;
+
+    const sync = () => {
+      windowViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    };
+
+    sync();
+    window.visualViewport?.addEventListener('resize', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', sync);
+      window.removeEventListener('resize', sync);
+    };
+  });
 
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
@@ -113,7 +133,7 @@
   $effect(() => {
     const editor = ctx.editor;
     const width = clientWidth;
-    const height = clientHeight;
+    const height = useWindowScroll ? windowViewportHeight : clientHeight;
     const isContinuous = !isPaginated;
     if (!editor || !width || !height) return;
     const effectiveWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
@@ -137,6 +157,8 @@
   });
 </script>
 
+<svelte:window onscroll={useWindowScroll ? () => ctx.editor?.refreshPointerStyle() : undefined} />
+
 <div
   class={css(
     {
@@ -144,7 +166,9 @@
       display: 'flex',
       flexDirection: 'column',
       minHeight: '0',
-      overflow: 'hidden',
+      ...(!useWindowScroll && {
+        overflow: 'hidden',
+      }),
       ...(isPaginated && {
         backgroundColor: 'surface.subtle',
       }),
@@ -158,11 +182,13 @@
       display: 'flex',
       flexDirection: 'column',
       flexGrow: '1',
-      minHeight: '0',
-      overflow: 'auto',
-      overflowAnchor: 'none',
       position: 'relative',
-      scrollbar: 'hidden',
+      ...(!useWindowScroll && {
+        minHeight: '0',
+        overflow: 'auto',
+        overflowAnchor: 'none',
+        scrollbar: 'hidden',
+      }),
     })}
     {@attach (el) => {
       const teardown = $effect.root(() => {
@@ -171,9 +197,11 @@
           if (!editor) return;
 
           editor.scrollContainerEl = el;
+          editor.scrollViewport = useWindowScroll ? windowScrollViewport() : elementScrollViewport(el);
           return () => {
             if (editor.scrollContainerEl === el) {
               editor.scrollContainerEl = undefined;
+              editor.scrollViewport = undefined;
             }
           };
         });
@@ -285,7 +313,7 @@
     {/if}
   </div>
 
-  {#if ctx.editor}
+  {#if ctx.editor && !useWindowScroll}
     <Scrollbar />
   {/if}
 </div>

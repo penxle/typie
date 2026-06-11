@@ -9,6 +9,7 @@ import {
   zoomDiffers,
   zoomEquals,
 } from '$lib/editor-ffi/zoom';
+import type { ScrollViewport } from '@typie/ui/utils';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
 type ZoomAnchor = {
@@ -24,7 +25,7 @@ type EditorZoomControllerOptions = {
   isPaginated: () => boolean;
   pageWidth: () => number;
   viewportWidth: () => number;
-  getScrollContainer: () => HTMLElement | null | undefined;
+  getScrollViewport: () => ScrollViewport | null | undefined;
 };
 
 export class EditorZoomController {
@@ -274,15 +275,15 @@ export class EditorZoomController {
   }
 
   #createZoomAnchorFromClient(clientX: number, clientY: number): ZoomAnchor | null {
-    const scrollContainer = this.#options.getScrollContainer();
-    if (!scrollContainer) {
+    const viewport = this.#options.getScrollViewport();
+    if (!viewport) {
       return null;
     }
     const resolved = this.#options.editor.clientToLocal(clientX, clientY);
     if (!resolved) {
       return null;
     }
-    const rect = scrollContainer.getBoundingClientRect();
+    const rect = viewport.getRect();
     return {
       ...resolved,
       focalX: clientX - rect.left,
@@ -291,13 +292,13 @@ export class EditorZoomController {
   }
 
   #createZoomAnchorFromViewportCenter(): ZoomAnchor | null {
-    const scrollContainer = this.#options.getScrollContainer();
-    if (!scrollContainer) {
+    const viewport = this.#options.getScrollViewport();
+    if (!viewport) {
       return null;
     }
-    const rect = scrollContainer.getBoundingClientRect();
-    const clientX = rect.left + rect.width / 2;
-    const clientY = rect.top + rect.height / 2;
+    const rect = viewport.getRect();
+    const clientX = rect.left + (rect.right - rect.left) / 2;
+    const clientY = rect.top + (rect.bottom - rect.top) / 2;
     return this.#createZoomAnchorFromClient(clientX, clientY);
   }
 
@@ -337,8 +338,8 @@ export class EditorZoomController {
   }
 
   async #syncZoomAnchor(anchor: ZoomAnchor, zoom: number): Promise<void> {
-    const scrollContainer = this.#options.getScrollContainer();
-    if (!scrollContainer) {
+    const viewport = this.#options.getScrollViewport();
+    if (!viewport) {
       return;
     }
 
@@ -356,7 +357,7 @@ export class EditorZoomController {
     await tick();
 
     const pageRect = pageEl.getBoundingClientRect();
-    const scrollRect = scrollContainer.getBoundingClientRect();
+    const scrollRect = viewport.getRect();
 
     const targetClientX = scrollRect.left + anchor.focalX;
     const targetClientY = scrollRect.top + anchor.focalY;
@@ -366,7 +367,7 @@ export class EditorZoomController {
     const deltaX = anchoredClientX - targetClientX;
     const deltaY = anchoredClientY - targetClientY;
     if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
-      scrollContainer.scrollBy({ left: deltaX, top: deltaY });
+      viewport.scrollBy(deltaX, deltaY);
     }
   }
 }

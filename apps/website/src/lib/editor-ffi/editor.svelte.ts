@@ -42,6 +42,7 @@ import type {
   Tri,
   Viewport,
 } from '@typie/editor-ffi/browser';
+import type { ScrollViewport } from '@typie/ui/utils';
 import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
 import type {
   ArchivedAsset,
@@ -154,6 +155,7 @@ export class Editor {
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
   surfaceEl = $state<HTMLDivElement>();
   scrollContainerEl = $state<HTMLDivElement>();
+  scrollViewport = $state<ScrollViewport>();
   displayZoom = $state(1);
   renderZoom = $state(1);
 

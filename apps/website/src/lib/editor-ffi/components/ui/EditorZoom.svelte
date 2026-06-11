@@ -38,7 +38,7 @@
     isPaginated: () => isPaginated,
     pageWidth: () => pageWidth,
     viewportWidth: () => viewportWidth,
-    getScrollContainer: () => scrollContainer,
+    getScrollViewport: () => editor.scrollViewport,
   });
 
   const displayZoom = $derived(isPaginated ? zoom.displayZoom : 1);
@@ -226,42 +226,42 @@
   }
 
   $effect(() => {
-    const el = scrollContainer;
-    if (!el) return;
+    const target = editor.scrollViewport?.target;
+    if (!target) return;
 
-    const handleWheelForZoom = (event: WheelEvent) => {
+    const handleWheelForZoom = (event: Event) => {
       if (!active) return;
-      void zoom.handleWheel(event);
+      void zoom.handleWheel(event as WheelEvent);
     };
-    const handleTouchStart = (event: TouchEvent) => {
+    const handleTouchStart = (event: Event) => {
       if (!active) return;
-      handleTouchStartForPinch(event);
+      handleTouchStartForPinch(event as TouchEvent);
     };
-    const handleTouchMove = (event: TouchEvent) => {
+    const handleTouchMove = (event: Event) => {
       if (!active) return;
-      handleTouchMoveForPinch(event);
+      handleTouchMoveForPinch(event as TouchEvent);
     };
-    const handleTouchEnd = (event: TouchEvent) => {
+    const handleTouchEnd = (event: Event) => {
       if (!active) return;
-      handleTouchEndForPinch(event);
+      handleTouchEndForPinch(event as TouchEvent);
     };
     const handleTouchCancel = () => {
       if (!active) return;
       handleTouchCancelForPinch();
     };
 
-    el.addEventListener('wheel', handleWheelForZoom, { capture: true, passive: false });
-    el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: false });
-    el.addEventListener('touchend', handleTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    target.addEventListener('wheel', handleWheelForZoom, { capture: true, passive: false });
+    target.addEventListener('touchstart', handleTouchStart, { passive: true });
+    target.addEventListener('touchmove', handleTouchMove, { passive: false });
+    target.addEventListener('touchend', handleTouchEnd, { passive: true });
+    target.addEventListener('touchcancel', handleTouchCancel, { passive: true });
 
     return () => {
-      el.removeEventListener('wheel', handleWheelForZoom, { capture: true });
-      el.removeEventListener('touchstart', handleTouchStart);
-      el.removeEventListener('touchmove', handleTouchMove);
-      el.removeEventListener('touchend', handleTouchEnd);
-      el.removeEventListener('touchcancel', handleTouchCancel);
+      target.removeEventListener('wheel', handleWheelForZoom, { capture: true });
+      target.removeEventListener('touchstart', handleTouchStart);
+      target.removeEventListener('touchmove', handleTouchMove);
+      target.removeEventListener('touchend', handleTouchEnd);
+      target.removeEventListener('touchcancel', handleTouchCancel);
     };
   });
 

@@ -561,10 +561,10 @@
       {/if}
 
       {#key document.id}
-        <div class={flex({ flexDirection: 'column', height: '[100dvh]' })}>
+        <div class={flex({ flexDirection: 'column' })}>
           {#if document.protectContent}
             <ContentProtect>
-              <EditorComponent active={false} document$key={document} onReady={() => (editorReady = true)}>
+              <EditorComponent active={false} document$key={document} onReady={() => (editorReady = true)} useWindowScroll>
                 {#snippet header()}
                   {@render documentHeader()}
                 {/snippet}
@@ -575,7 +575,7 @@
               </EditorComponent>
             </ContentProtect>
           {:else}
-            <EditorComponent active={false} document$key={document} onReady={() => (editorReady = true)}>
+            <EditorComponent active={false} document$key={document} onReady={() => (editorReady = true)} useWindowScroll>
               {#snippet header()}
                 {@render documentHeader()}
               {/snippet}

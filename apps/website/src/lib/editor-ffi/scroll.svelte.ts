@@ -199,16 +199,17 @@ export class EditorScrollScope {
   }
 
   #applyCommit({ rect, mode, behavior }: { rect: PageRect; mode: EditorScrollRevealMode; behavior: ScrollBehavior }): void {
-    const container = this.#editor.scrollContainerEl;
-    if (!container) return;
+    const viewport = this.#editor.scrollViewport;
+    if (!viewport) return;
 
     const span = this.#pageRectToScrollSpan(rect);
     if (!span) return;
 
+    const viewportRect = viewport.getRect();
     const metrics = {
-      scrollTop: container.scrollTop,
-      clientHeight: container.clientHeight,
-      scrollHeight: container.scrollHeight,
+      scrollTop: viewport.getScrollTop(),
+      clientHeight: viewportRect.bottom - viewportRect.top,
+      scrollHeight: viewport.getScrollHeight(),
       ...span,
       visibleArea: this.visibleArea,
     };
@@ -218,19 +219,19 @@ export class EditorScrollScope {
         : resolveNearestScrollTop(metrics);
 
     if (nextTop !== null) {
-      container.scrollTo({ top: nextTop, behavior });
+      viewport.scrollTo({ top: nextTop, behavior });
     }
   }
 
   #pageRectToScrollSpan({ page_idx, rect }: PageRect): RevealTargetSpan | null {
     const pageEl = this.#editor.pageEls[page_idx];
-    const container = this.#editor.scrollContainerEl;
-    if (!pageEl || !container) return null;
+    const viewport = this.#editor.scrollViewport;
+    if (!pageEl || !viewport) return null;
 
     const zoom = this.#editor.safeDisplayZoom();
     const pageRect = pageEl.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const targetTop = pageRect.top - containerRect.top + container.scrollTop + rect.y * zoom;
+    const viewportRect = viewport.getRect();
+    const targetTop = pageRect.top - viewportRect.top + viewport.getScrollTop() + rect.y * zoom;
     const targetBottom = targetTop + rect.height * zoom;
     return { targetTop, targetBottom };
   }
@@ -252,16 +253,17 @@ export class EditorScrollScope {
   }
 
   #typewriterBottomPaddingForRect(rect: PageRect): number {
-    const container = this.#editor.scrollContainerEl;
-    if (!container) {
+    const viewport = this.#editor.scrollViewport;
+    if (!viewport) {
       return 0;
     }
 
+    const viewportRect = viewport.getRect();
     const zoom = this.#editor.safeDisplayZoom();
     const layoutMode = this.#editor.rootAttrs?.layout_mode;
     const trailingBottomMargin = layoutMode?.type === 'paginated' ? layoutMode.page_margin_bottom * zoom : CONTINUOUS_VIEW_PADDING;
     return resolveTypewriterBottomPadding({
-      clientHeight: container.clientHeight,
+      clientHeight: viewportRect.bottom - viewportRect.top,
       targetHeight: rect.rect.height * zoom,
       visibleArea: this.visibleArea,
       position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
