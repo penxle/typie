@@ -1,6 +1,6 @@
 use editor_crdt::{Dot, EntryDot};
 use editor_macros::ffi;
-use editor_model::{Doc, Node, NodeId};
+use editor_model::{Doc, Node, NodeId, StableEntryResolution};
 use serde::{Deserialize, Serialize};
 
 use crate::Position;
@@ -177,7 +177,11 @@ fn resolve_current_char_position(sp: &StablePosition, doc: &Doc) -> Option<Posit
         return None;
     };
     let text_identity = doc.text_identity();
-    let location = text_identity.current_location(EntryDot(*char_dot))?;
+    let entry_dot = match text_identity.resolve_stable_entry(EntryDot(*char_dot)) {
+        StableEntryResolution::Live(entry_dot) => entry_dot,
+        StableEntryResolution::Deleted(_) | StableEntryResolution::Cycle(_) => return None,
+    };
+    let location = text_identity.current_location(entry_dot)?;
     let rank = text_identity.visible_rank_of_placement(location.node_id, location.placement_id)?;
     let offset = match bind {
         Bind::Left => rank,
@@ -190,6 +194,7 @@ fn resolve_current_char_position(sp: &StablePosition, doc: &Doc) -> Option<Posit
     })
 }
 
+// TODO: 위치 해석 결과를 타입으로 나눠 range fallback을 구분한다.
 fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
     let leaf_id = sp.chain().last().expect("non-empty chain").node_id;
     let entry = doc.get_entry(leaf_id).expect("leaf alive");
@@ -202,21 +207,19 @@ fn resolve_primary(sp: &StablePosition, doc: &Doc) -> Position {
             ..
         } => match &entry.node {
             Node::Text(text) => {
-                if doc.text_identity().is_deleted(EntryDot(*char_dot)) {
+                let entry_dot = EntryDot(*char_dot);
+                if doc.text_identity().is_deleted(entry_dot) {
+                    debug_assert!(
+                        doc.text_identity().char_for(entry_dot).is_none(),
+                        "known deleted char should resolve through deleted-entry fallback before primary fallback"
+                    );
                     return Position {
                         node_id: leaf_id,
                         offset: (*offset).min(text.text.len()),
                         affinity: *affinity,
                     };
                 }
-                resolve_dot_in_text(
-                    &text.text,
-                    EntryDot(*char_dot),
-                    *offset,
-                    *bind,
-                    leaf_id,
-                    *affinity,
-                )
+                resolve_dot_in_text(&text.text, entry_dot, *offset, *bind, leaf_id, *affinity)
             }
             _ => Position {
                 node_id: leaf_id,
@@ -264,10 +267,12 @@ fn resolve_deleted_char_position(sp: &StablePosition, doc: &Doc) -> Option<Posit
         return None;
     };
     let entry_dot = EntryDot(*char_dot);
-    if !doc.text_identity().is_deleted(entry_dot) {
-        return None;
-    }
-    let (node_id, offset) = deleted_text_entry_offset(doc, entry_dot, *bind)?;
+    let deleted_entry = match doc.text_identity().resolve_stable_entry(entry_dot) {
+        StableEntryResolution::Live(_) => return None,
+        StableEntryResolution::Deleted(entry_dot) => entry_dot,
+        StableEntryResolution::Cycle(_) => entry_dot,
+    };
+    let (node_id, offset) = deleted_text_entry_offset(doc, deleted_entry, *bind)?;
     Some(Position {
         node_id,
         offset,
@@ -999,7 +1004,7 @@ mod tests {
     }
 
     #[test]
-    fn thaw_deleted_entry_with_fresh_replacement_falls_back_to_frozen_offset() {
+    fn thaw_deleted_entry_without_remap_uses_deleted_boundary_not_fresh_replacement() {
         use editor_crdt::TextOp;
         use editor_macros::state;
         use editor_model::DocOp;
@@ -1045,6 +1050,74 @@ mod tests {
             })
             .unwrap();
 
+        assert!(state.doc.text_identity().is_deleted(EntryDot(char_dot)));
+        assert!(
+            state
+                .doc
+                .text_identity()
+                .char_for(EntryDot(char_dot))
+                .is_some()
+        );
+
+        let back = super::thaw_position(&sp, &state.doc);
+        assert_eq!(back.node_id, t1);
+        assert_eq!(back.offset, 2);
+    }
+
+    #[test]
+    fn thaw_deleted_entry_with_remap_uses_fresh_replacement_location() {
+        use editor_crdt::TextOp;
+        use editor_macros::state;
+        use editor_model::DocOp;
+
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("abc") } } }
+            selection: (t1, 0)
+        };
+        let pos = crate::Position {
+            node_id: t1,
+            offset: 1,
+            affinity: crate::Affinity::Downstream,
+        };
+        let sp = super::freeze_position(pos, &state.doc);
+        let char_dot = match &sp {
+            StablePosition::Char { char_dot, .. } => *char_dot,
+            other => panic!("expected char stable position, got {other:?}"),
+        };
+        let c_placement = {
+            let entry = state.doc.get_entry(t1).unwrap();
+            let text = match &entry.node {
+                editor_model::Node::Text(t) => t,
+                _ => unreachable!(),
+            };
+            text.text.placement_at_visible_offset(3).unwrap().unwrap()
+        };
+
+        let (state, _) = state
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::RemoveChar {
+                    observed: EntryDot(char_dot),
+                },
+            })
+            .unwrap();
+        let (state, replacement) = state
+            .apply(DocOp::Text {
+                node_id: t1,
+                op: TextOp::InsertChar {
+                    after: Some(c_placement),
+                    ch: 'b',
+                },
+            })
+            .unwrap();
+        let (state, _) = state
+            .apply(DocOp::StablePositionRemap {
+                from: EntryDot(char_dot),
+                to: EntryDot(replacement.id),
+            })
+            .unwrap();
+
+        assert_eq!(state.doc.text_view(t1).unwrap().text(), "acb");
         let back = super::thaw_position(&sp, &state.doc);
         assert_eq!(back.node_id, t1);
         assert_eq!(back.offset, 2);

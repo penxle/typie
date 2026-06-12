@@ -1,5 +1,4 @@
 use editor_commands::{self as commands};
-use editor_state::StableSelection;
 use editor_view::GroupDecoration;
 
 use crate::editor::Editor;
@@ -23,13 +22,8 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                     msg: "TrackedRange::Add: selection must resolve against current doc".into(),
                 });
             }
-            let new_range = TrackedRange::new(
-                id.clone(),
-                group,
-                StableSelection::freeze(&selection, doc),
-                metadata,
-                doc,
-            );
+            let new_range =
+                TrackedRange::from_selection(id.clone(), group, selection, metadata, doc);
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -46,7 +40,8 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             metadata,
         } => {
             let doc = &editor.state().doc;
-            let new_range = TrackedRange::new(id.clone(), group, selection, metadata, doc);
+            let new_range =
+                TrackedRange::from_stable_selection(id.clone(), group, selection, metadata, doc);
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -125,28 +120,30 @@ fn handle_replace_text(
     expected_text: Option<String>,
     replacement: String,
 ) -> Result<(), EditorError> {
-    let outcome = classify_replace_text(editor, &id, expected_text.as_deref(), &replacement);
+    let classification = classify_replace_text(editor, &id, expected_text.as_deref(), &replacement);
 
     if editor.is_probing() {
-        editor.mark_probed_change(matches!(outcome, TrackedRangeReplaceOutcome::Replaced));
+        editor.mark_probed_change(classification.selection.is_some());
         return Ok(());
     }
 
-    if let TrackedRangeReplaceOutcome::Replaced = outcome {
-        let range = editor
-            .tracked_ranges()
-            .get(&id)
-            .expect("range existed at classification time")
-            .clone();
-        let selection = range.selection.thaw(&editor.state.doc);
+    if let Some(selection) = classification.selection {
         editor.transact(|tr| {
             commands::replace_tracked_range(tr, selection, &replacement)?;
             Ok(())
         })?;
     }
 
-    editor.push_event(EditorEvent::TrackedRangeReplaceResult { id, outcome });
+    editor.push_event(EditorEvent::TrackedRangeReplaceResult {
+        id,
+        outcome: classification.outcome,
+    });
     Ok(())
+}
+
+struct ReplaceTextClassification {
+    outcome: TrackedRangeReplaceOutcome,
+    selection: Option<editor_state::Selection>,
 }
 
 fn classify_replace_text(
@@ -154,28 +151,49 @@ fn classify_replace_text(
     id: &str,
     expected_text: Option<&str>,
     replacement: &str,
-) -> TrackedRangeReplaceOutcome {
+) -> ReplaceTextClassification {
     let Some(range) = editor.tracked_ranges().get(id) else {
-        return TrackedRangeReplaceOutcome::UnknownId;
+        return ReplaceTextClassification {
+            outcome: TrackedRangeReplaceOutcome::UnknownId,
+            selection: None,
+        };
     };
     if range.explicitly_invalid {
-        return TrackedRangeReplaceOutcome::Invalid;
+        return ReplaceTextClassification {
+            outcome: TrackedRangeReplaceOutcome::Invalid,
+            selection: None,
+        };
     }
     let Some(selection) = range.locate(&editor.state.doc) else {
-        return TrackedRangeReplaceOutcome::Invalid;
+        return ReplaceTextClassification {
+            outcome: TrackedRangeReplaceOutcome::Invalid,
+            selection: None,
+        };
     };
     if replacement.contains(['\n', '\r']) {
-        return TrackedRangeReplaceOutcome::InvalidReplacement;
+        return ReplaceTextClassification {
+            outcome: TrackedRangeReplaceOutcome::InvalidReplacement,
+            selection: None,
+        };
     }
     if let Some(expected) = expected_text {
         let Some(resolved) = selection.resolve(&editor.state.doc) else {
-            return TrackedRangeReplaceOutcome::Invalid;
+            return ReplaceTextClassification {
+                outcome: TrackedRangeReplaceOutcome::Invalid,
+                selection: None,
+            };
         };
         if resolved.collect_text() != expected {
-            return TrackedRangeReplaceOutcome::TextMismatch;
+            return ReplaceTextClassification {
+                outcome: TrackedRangeReplaceOutcome::TextMismatch,
+                selection: None,
+            };
         }
     }
-    TrackedRangeReplaceOutcome::Replaced
+    ReplaceTextClassification {
+        outcome: TrackedRangeReplaceOutcome::Replaced,
+        selection: Some(selection),
+    }
 }
 
 fn commit_view_or_probe<F>(editor: &mut Editor, would_change: bool, apply: F)

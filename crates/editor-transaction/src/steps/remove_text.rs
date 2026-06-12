@@ -2,7 +2,7 @@ use editor_crdt::{CrdtError, EntryDot, TextOp};
 use editor_model::{DocOp, Node, NodeId};
 use editor_state::BatchedState;
 
-use crate::{Step, StepError, Validation};
+use crate::{Step, StepEffect, StepError, TextRemoveEffect, Validation};
 
 pub(crate) fn inverse(node_id: NodeId, offset: usize, text: String) -> Step {
     Step::InsertText {
@@ -15,6 +15,7 @@ pub(crate) fn inverse(node_id: NodeId, offset: usize, text: String) -> Step {
 pub(crate) fn apply_to(
     batched: &mut BatchedState,
     validations: &mut Vec<Validation>,
+    effect: &mut StepEffect,
     node_id: NodeId,
     offset: usize,
     text: &str,
@@ -49,11 +50,19 @@ pub(crate) fn apply_to(
     };
 
     // Sequential apply, one RemoveChar per collected dot
-    for target in target_dots {
+    for target in &target_dots {
         batched.apply(DocOp::Text {
             node_id,
-            op: TextOp::RemoveChar { observed: target },
+            op: TextOp::RemoveChar { observed: *target },
         })?;
+    }
+    if !target_dots.is_empty() {
+        effect.text_removes.push(TextRemoveEffect {
+            node_id,
+            offset,
+            entries: target_dots,
+            text: text.to_string(),
+        });
     }
 
     validations.push(Validation::Node(node_id));

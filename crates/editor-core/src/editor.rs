@@ -21,7 +21,7 @@ use crate::dnd::DndState;
 use crate::error::EditorError;
 use crate::event::{EditorEvent, FontData};
 use crate::handle;
-use crate::history::History;
+use crate::history::{History, HistoryPlayback};
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
@@ -729,12 +729,12 @@ impl Editor {
             return Ok(());
         }
 
-        let (state, steps, ops, effects, meta) = tr.commit();
+        let (state, step_records, ops, effects, meta) = tr.commit();
 
-        if !steps.is_empty() {
+        if !step_records.is_empty() {
             match meta.history {
-                HistoryMeta::Record => self.history.push(&steps),
-                HistoryMeta::Tagged { tag } => self.history.push_tagged(&steps, tag),
+                HistoryMeta::Record => self.history.push(&step_records),
+                HistoryMeta::Tagged { tag } => self.history.push_tagged(&step_records, tag),
                 HistoryMeta::Skip => self.history.clear_last_tag(),
             }
         }
@@ -983,7 +983,7 @@ impl Editor {
         self.history.last_inverse_steps()
     }
 
-    pub(crate) fn try_undo(&mut self) -> Option<Vec<Step>> {
+    pub(crate) fn try_undo(&mut self) -> Option<HistoryPlayback> {
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= self.history.can_undo();
             return None;
@@ -991,7 +991,7 @@ impl Editor {
         self.history.undo()
     }
 
-    pub(crate) fn try_redo(&mut self) -> Option<Vec<Step>> {
+    pub(crate) fn try_redo(&mut self) -> Option<HistoryPlayback> {
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= self.history.can_redo();
             return None;
@@ -999,7 +999,7 @@ impl Editor {
         self.history.redo()
     }
 
-    pub(crate) fn try_undo_auto_replacement(&mut self) -> Option<Vec<Step>> {
+    pub(crate) fn try_undo_auto_replacement(&mut self) -> Option<HistoryPlayback> {
         let is_auto = matches!(self.history.last_tag(), Some(HistoryTag::AutoReplacement));
         if !is_auto {
             return None;

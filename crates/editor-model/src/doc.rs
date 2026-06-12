@@ -10,6 +10,7 @@ use crate::error::ModelError;
 use crate::id::NodeId;
 use crate::node_ref::NodeRef;
 use crate::nodes::{Node, NodeType};
+use crate::stable_position_remap::StablePositionRemapStore;
 use crate::style::StyleEntry;
 use crate::text_view::{TextIdentityView, TextView};
 
@@ -18,6 +19,7 @@ pub struct Doc {
     pub(crate) nodes: OrMap<NodeId, NodeType>,
     pub(crate) entries: imbl::HashMap<NodeId, NodeEntry>,
     pub(crate) text: DocTextStore,
+    pub(crate) stable_position_remap: StablePositionRemapStore,
     pub(crate) styles: OrMap<String, ()>,
     pub(crate) style_entries: imbl::HashMap<String, StyleEntry>,
 }

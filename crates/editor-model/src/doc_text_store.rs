@@ -119,6 +119,14 @@ impl DocTextStore {
         self.visible_offset_near_entry(entry_dot, EntryBoundary::After)
     }
 
+    pub(crate) fn entry_candidates_before_entry(&self, entry_dot: EntryDot) -> Vec<EntryDot> {
+        self.entry_candidates_near_entry(entry_dot, EntryBoundary::Before)
+    }
+
+    pub(crate) fn entry_candidates_after_entry(&self, entry_dot: EntryDot) -> Vec<EntryDot> {
+        self.entry_candidates_near_entry(entry_dot, EntryBoundary::After)
+    }
+
     #[cfg(any(test, debug_assertions))]
     pub(crate) fn all_placements_for_node(&self, node_id: NodeId) -> Vec<TextPlacement> {
         self.stored_placements_for_node(node_id)
@@ -237,6 +245,48 @@ impl DocTextStore {
         }
 
         passed_target.then_some((owner, visible_offset))
+    }
+
+    fn entry_candidates_near_entry(
+        &self,
+        entry_dot: EntryDot,
+        boundary: EntryBoundary,
+    ) -> Vec<EntryDot> {
+        let horizon = self.entries.delete_horizon_for(entry_dot).map(PlacementId);
+        let Some((owner, target_placement)) = self.latest_placement_for_entry(entry_dot, horizon)
+        else {
+            return Vec::new();
+        };
+        let Some(placements) = self.placements_by_node.get(&owner) else {
+            return Vec::new();
+        };
+
+        let mut before = Vec::new();
+        let mut after = Vec::new();
+        let mut passed_target = false;
+        for (placement_id, record, alive) in placements.iter_all_in_order() {
+            let placement_id = PlacementId(placement_id);
+            if placement_id == target_placement {
+                passed_target = true;
+                continue;
+            }
+
+            if horizon.is_none_or(|horizon| placement_id.0 <= horizon.0) && alive {
+                if !passed_target {
+                    before.push(record.entry_dot);
+                } else {
+                    after.push(record.entry_dot);
+                }
+            }
+        }
+
+        match boundary {
+            EntryBoundary::Before => {
+                before.reverse();
+                before
+            }
+            EntryBoundary::After => after,
+        }
     }
 
     fn insert_placement_record(

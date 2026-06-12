@@ -1,8 +1,8 @@
-use editor_crdt::{CrdtError, PlacementId, TextOp};
+use editor_crdt::{CrdtError, EntryDot, PlacementId, TextOp};
 use editor_model::{DocOp, Node, NodeId};
 use editor_state::BatchedState;
 
-use crate::{Step, StepError, Validation};
+use crate::{Step, StepEffect, StepError, TextInsertEffect, Validation};
 
 pub(crate) fn inverse(node_id: NodeId, offset: usize, text: String) -> Step {
     Step::RemoveText {
@@ -15,6 +15,7 @@ pub(crate) fn inverse(node_id: NodeId, offset: usize, text: String) -> Step {
 pub(crate) fn apply_to(
     batched: &mut BatchedState,
     validations: &mut Vec<Validation>,
+    effect: &mut StepEffect,
     node_id: NodeId,
     offset: usize,
     text: &str,
@@ -42,6 +43,7 @@ pub(crate) fn apply_to(
     };
 
     // Sequential apply, chaining each emitted dot as the next `after`
+    let mut entries = Vec::with_capacity(text.chars().count());
     for ch in text.chars() {
         let op_id = batched
             .apply(DocOp::Text {
@@ -49,7 +51,16 @@ pub(crate) fn apply_to(
                 op: TextOp::InsertChar { ch, after },
             })?
             .id;
+        entries.push(EntryDot(op_id));
         after = Some(PlacementId(op_id));
+    }
+    if !entries.is_empty() {
+        effect.text_inserts.push(TextInsertEffect {
+            node_id,
+            offset,
+            entries,
+            text: text.to_string(),
+        });
     }
 
     validations.push(Validation::Node(node_id));
@@ -84,6 +95,44 @@ mod tests {
         let output = step.apply(&state).unwrap();
 
         assert_eq!(output.state.text(t1).text.to_string(), "Hello World");
+    }
+
+    #[test]
+    fn insert_text_apply_reports_inserted_entries() {
+        let (state, t1) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("Hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let step = Step::InsertText {
+            node_id: t1,
+            offset: 5,
+            text: "xy".to_string(),
+        };
+        let output = step.apply(&state).unwrap();
+        let insert = output.effect.text_inserts.first().expect("insert effect");
+
+        assert_eq!(insert.node_id, t1);
+        assert_eq!(insert.offset, 5);
+        assert_eq!(insert.text, "xy");
+        assert_eq!(
+            insert.entries,
+            output
+                .state
+                .doc
+                .text_view(t1)
+                .unwrap()
+                .visible_entries()
+                .skip(5)
+                .map(|(entry, _)| entry)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

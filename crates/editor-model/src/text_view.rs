@@ -1,8 +1,10 @@
 use editor_crdt::{EntryDot, PlacementId, TextPlacement};
+use hashbrown::HashSet;
 
 use crate::doc::Doc;
 use crate::id::NodeId;
 use crate::nodes::{Node, TextNode};
+use crate::stable_position_remap::StableEntryResolution;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextEntryLocation {
@@ -85,6 +87,32 @@ impl<'a> TextIdentityView<'a> {
         self.doc.text.is_deleted(entry_dot)
     }
 
+    pub fn replacement_for_stable_position(&self, entry_dot: EntryDot) -> Option<EntryDot> {
+        self.doc.stable_position_remap.replacement_for(entry_dot)
+    }
+
+    pub fn resolve_stable_entry(&self, entry_dot: EntryDot) -> StableEntryResolution {
+        if !self.doc.text.is_deleted(entry_dot) {
+            return StableEntryResolution::Live(entry_dot);
+        }
+
+        let mut current = entry_dot;
+        let mut visited = HashSet::new();
+        loop {
+            if !visited.insert(current) {
+                return StableEntryResolution::Cycle(current);
+            }
+
+            let Some(next) = self.replacement_for_stable_position(current) else {
+                return StableEntryResolution::Deleted(current);
+            };
+            if !self.doc.text.is_deleted(next) {
+                return StableEntryResolution::Live(next);
+            }
+            current = next;
+        }
+    }
+
     pub fn visible_rank_of_placement(
         &self,
         node_id: NodeId,
@@ -101,6 +129,11 @@ impl<'a> TextIdentityView<'a> {
         &self,
         entry_dot: EntryDot,
     ) -> Option<(NodeId, usize)> {
+        for next_entry in self.doc.text.entry_candidates_after_entry(entry_dot) {
+            if let Some((node_id, offset)) = self.live_entry_left_boundary(next_entry) {
+                return Some((node_id, offset));
+            }
+        }
         let (node_id, offset) = self.doc.text.visible_offset_before_entry(entry_dot)?;
         self.live_text_offset(node_id, offset)
     }
@@ -109,6 +142,11 @@ impl<'a> TextIdentityView<'a> {
         &self,
         entry_dot: EntryDot,
     ) -> Option<(NodeId, usize)> {
+        for prev_entry in self.doc.text.entry_candidates_before_entry(entry_dot) {
+            if let Some((node_id, offset)) = self.live_entry_right_boundary(prev_entry) {
+                return Some((node_id, offset));
+            }
+        }
         let (node_id, offset) = self.doc.text.visible_offset_after_entry(entry_dot)?;
         self.live_text_offset(node_id, offset)
     }
@@ -123,5 +161,20 @@ impl<'a> TextIdentityView<'a> {
             return None;
         };
         Some((node_id, offset.min(text_node.text.len())))
+    }
+
+    fn live_entry_left_boundary(&self, entry_dot: EntryDot) -> Option<(NodeId, usize)> {
+        let entry_dot = match self.resolve_stable_entry(entry_dot) {
+            StableEntryResolution::Live(entry_dot) => entry_dot,
+            StableEntryResolution::Deleted(_) | StableEntryResolution::Cycle(_) => return None,
+        };
+        let location = self.current_location(entry_dot)?;
+        let offset = self.visible_rank_of_placement(location.node_id, location.placement_id)?;
+        Some((location.node_id, offset))
+    }
+
+    fn live_entry_right_boundary(&self, entry_dot: EntryDot) -> Option<(NodeId, usize)> {
+        let (node_id, offset) = self.live_entry_left_boundary(entry_dot)?;
+        Some((node_id, offset + 1))
     }
 }

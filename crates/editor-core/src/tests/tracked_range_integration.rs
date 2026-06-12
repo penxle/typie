@@ -1,4 +1,5 @@
 use editor_macros::state;
+use editor_model::StableEntryResolution;
 use editor_state::Selection;
 
 use crate::editor::Editor;
@@ -37,6 +38,20 @@ fn located_text(editor: &Editor, id: &str) -> Option<String> {
         .map(|resolved| resolved.collect_text())
 }
 
+fn visible_entry_dots(
+    editor: &Editor,
+    node_id: editor_model::NodeId,
+) -> Vec<editor_crdt::EntryDot> {
+    editor
+        .state()
+        .doc
+        .text_view(node_id)
+        .expect("text node")
+        .visible_entries()
+        .map(|(entry, _)| entry)
+        .collect()
+}
+
 #[test]
 fn range_position_shifts_when_text_inserted_before_it() {
     let (initial, t1) = state! {
@@ -60,6 +75,260 @@ fn range_position_shifts_when_text_inserted_before_it() {
 
     let (a, h) = thawed_offsets(&editor, "r");
     assert_eq!((a, h), (2, 5), "range must shift by inserted length");
+}
+
+#[test]
+fn range_does_not_expand_when_text_inserted_at_right_boundary() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("hello") } } }
+        selection: (t1, 1) -> (t1, 4)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message("r", "comment", sel));
+
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("ell"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(t1, 4)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("ell"),
+        "typing at the right boundary must stay outside the comment range"
+    );
+}
+
+#[test]
+fn frozen_range_does_not_expand_when_text_inserted_at_right_boundary() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("hello") } } }
+        selection: (t1, 1) -> (t1, 4)
+    };
+    let sel = initial.selection.unwrap();
+    let frozen = editor_state::StableSelection::freeze(&sel, &initial.doc);
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(t1, 4)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("ell"),
+        "persisted frozen comment ranges must be re-lowered to exclude right-boundary typing"
+    );
+}
+
+#[test]
+fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
+        selection: (t1, 4) -> (t1, 6)
+    };
+    let frozen = editor_state::StableSelection::freeze(&initial.selection.unwrap(), &initial.doc);
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("ㅁㅁ"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(t1, 0),
+                editor_state::Position::new(t1, 7),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert!(
+        is_unlocatable(&editor, "r"),
+        "range should be unlocatable while its whole content is deleted"
+    );
+
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("ㅁㅁ"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(t1, 6)),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Move {
+            movement: Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("ㅁ"),
+        "after undo, deleting the comment's right edge must shrink from the right"
+    );
+}
+
+#[test]
+fn range_with_deleted_trailing_edge_expands_for_insert_inside_remaining_content() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("aabbccdd") } } }
+        selection: (t1, 2) -> (t1, 6)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message("r", "comment", sel));
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bbcc"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(t1, 5),
+                editor_state::Position::new(t1, 7),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bbc"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(t1, 3)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bXbc"),
+        "inserting inside the remaining comment content must expand the range"
+    );
+}
+
+#[test]
+fn range_with_deleted_trailing_edge_keeps_content_after_insert_before_range() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("aabbccdd") } } }
+        selection: (t1, 2) -> (t1, 6)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message("r", "comment", sel));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(t1, 5),
+                editor_state::Position::new(t1, 7),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bbc"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(t1, 1)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bbc"),
+        "inserting before the comment must not shrink the right edge"
+    );
+}
+
+#[test]
+fn range_restores_after_full_delete_undo_following_partial_boundary_delete() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("aabbcc") } } }
+        selection: (t1, 2) -> (t1, 4)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    editor.history = crate::History::new(editor_common::time::Duration::from_millis(0));
+    editor.apply(add_message("r", "comment", sel));
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bb"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(t1, 3),
+                editor_state::Position::new(t1, 5),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "aabc");
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(t1, 0),
+                editor_state::Position::new(t1, 4),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert!(
+        is_unlocatable(&editor, "r"),
+        "range should be unlocatable while all remaining text is deleted"
+    );
+
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+
+    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "aabc");
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("b"),
+        "undoing the full delete must restore the shrunken comment range"
+    );
 }
 
 #[test]
@@ -609,6 +878,7 @@ fn range_recovers_from_invalid_after_undo() {
     let mut editor = Editor::new_test(state);
     editor.apply(add_message("r", "g", sel));
     assert!(!is_unlocatable(&editor, "r"));
+    let old_entries = visible_entry_dots(&editor, t1)[1..4].to_vec();
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
@@ -632,6 +902,64 @@ fn range_recovers_from_invalid_after_undo() {
     assert!(
         !is_unlocatable(&editor, "r"),
         "undo must restore range to valid"
+    );
+    let current_entries = visible_entry_dots(&editor, t1);
+    assert_eq!(
+        old_entries
+            .iter()
+            .map(|entry| editor
+                .state()
+                .doc
+                .text_identity()
+                .resolve_stable_entry(*entry))
+            .collect::<Vec<_>>(),
+        current_entries[1..4]
+            .iter()
+            .map(|entry| StableEntryResolution::Live(*entry))
+            .collect::<Vec<_>>(),
+        "undo remove must remap deleted covered entries to the fresh inserted entries"
+    );
+}
+
+#[test]
+fn inserted_entry_remaps_to_fresh_entry_after_redo() {
+    let (state, t1) = state! {
+        doc { root { paragraph { t1: text("a") } } }
+        selection: (t1, 1)
+    };
+    let mut editor = Editor::new_test(state);
+
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "x".into() },
+    });
+    let original_x = visible_entry_dots(&editor, t1)[1];
+
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "a");
+
+    editor.apply(Message::History {
+        op: HistoryOp::Redo,
+    });
+    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "ax");
+    let fresh_x = visible_entry_dots(&editor, t1)[1];
+    assert_ne!(original_x, fresh_x);
+    assert_eq!(
+        editor
+            .state()
+            .doc
+            .text_identity()
+            .replacement_for_stable_position(original_x),
+        Some(fresh_x)
+    );
+    assert_eq!(
+        editor
+            .state()
+            .doc
+            .text_identity()
+            .resolve_stable_entry(original_x),
+        StableEntryResolution::Live(fresh_x)
     );
 }
 

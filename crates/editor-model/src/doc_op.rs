@@ -82,6 +82,13 @@ pub enum DocOp {
         #[wire(n(2))]
         after: Option<PlacementId>,
     },
+    #[wire(n(10))]
+    StablePositionRemap {
+        #[wire(n(0))]
+        from: EntryDot,
+        #[wire(n(1))]
+        to: EntryDot,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
@@ -379,6 +386,19 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 }
             }
         }
+        DocOp::StablePositionRemap { from, to } => {
+            if doc.text_identity().char_for(*from).is_none() {
+                return Err(ModelError::Crdt(editor_crdt::CrdtError::EntryNotFound {
+                    dot: from.0,
+                }));
+            }
+            if doc.text_identity().char_for(*to).is_none() {
+                return Err(ModelError::Crdt(editor_crdt::CrdtError::EntryNotFound {
+                    dot: to.0,
+                }));
+            }
+            doc.stable_position_remap.record(*from, *to, op.id);
+        }
     }
     Ok(doc)
 }
@@ -386,11 +406,57 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PlainNode;
+    use crate::{PlainNode, StableEntryResolution};
     use editor_crdt::{EntryDot, OpGraph, PlacementId, TextOp};
 
     fn first_op<P: Clone>(graph: &OpGraph<P>, payload: P) -> (OpGraph<P>, Op<P>) {
         graph.clone().add(payload).unwrap()
+    }
+
+    fn text_doc(text: &str) -> (OpGraph<DocOp>, Doc, NodeId, Vec<EntryDot>, Vec<PlacementId>) {
+        let mut graph = OpGraph::<DocOp>::new();
+        let node_id = NodeId::new();
+        let (g, presence) = first_op(
+            &graph,
+            DocOp::Presence {
+                node_id,
+                op: OrMapOp::Set {
+                    key: node_id,
+                    value: NodeType::Text,
+                },
+            },
+        );
+        graph = g;
+        let mut doc = apply_doc_op(Doc::empty(), &presence).unwrap();
+
+        let mut after = None;
+        let mut entries = Vec::new();
+        let mut placements = Vec::new();
+        for ch in text.chars() {
+            let (g, insert) = first_op(
+                &graph,
+                DocOp::Text {
+                    node_id,
+                    op: TextOp::InsertChar { after, ch },
+                },
+            );
+            graph = g;
+            doc = apply_doc_op(doc, &insert).unwrap();
+            let entry = EntryDot(insert.id);
+            let placement = PlacementId(insert.id);
+            entries.push(entry);
+            placements.push(placement);
+            after = Some(placement);
+        }
+
+        (graph, doc, node_id, entries, placements)
+    }
+
+    fn apply_next(graph: &mut OpGraph<DocOp>, doc: Doc, payload: DocOp) -> (Doc, Op<DocOp>) {
+        let (next_graph, op) = first_op(graph, payload);
+        *graph = next_graph;
+        let doc = apply_doc_op(doc, &op).unwrap();
+        (doc, op)
     }
 
     #[test]
@@ -769,6 +835,243 @@ mod tests {
         } else {
             panic!("expected Text node");
         }
+    }
+
+    #[test]
+    fn stable_position_remap_resolves_deleted_entry_to_live_replacement() {
+        let (mut graph, doc, node_id, entries, placements) = text_doc("ab");
+        let old_b = entries[1];
+        let after_a = placements[0];
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::RemoveChar { observed: old_b },
+            },
+        );
+        let (doc, insert_replacement) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::InsertChar {
+                    after: Some(after_a),
+                    ch: 'b',
+                },
+            },
+        );
+        let new_b = EntryDot(insert_replacement.id);
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::StablePositionRemap {
+                from: old_b,
+                to: new_b,
+            },
+        );
+
+        assert_eq!(doc.text_identity().current_location(old_b), None);
+        assert_eq!(
+            doc.text_identity().resolve_stable_entry(old_b),
+            StableEntryResolution::Live(new_b)
+        );
+    }
+
+    #[test]
+    fn stable_position_remap_resolves_multi_hop_to_latest_live_entry() {
+        let (mut graph, doc, node_id, entries, placements) = text_doc("ab");
+        let old_b = entries[1];
+        let after_a = placements[0];
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::RemoveChar { observed: old_b },
+            },
+        );
+        let (doc, first_replacement) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::InsertChar {
+                    after: Some(after_a),
+                    ch: 'b',
+                },
+            },
+        );
+        let first_b = EntryDot(first_replacement.id);
+        let first_placement = PlacementId(first_replacement.id);
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::RemoveChar { observed: first_b },
+            },
+        );
+        let (doc, second_replacement) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::InsertChar {
+                    after: Some(first_placement),
+                    ch: 'b',
+                },
+            },
+        );
+        let second_b = EntryDot(second_replacement.id);
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::StablePositionRemap {
+                from: old_b,
+                to: first_b,
+            },
+        );
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::StablePositionRemap {
+                from: first_b,
+                to: second_b,
+            },
+        );
+
+        assert_eq!(
+            doc.text_identity().resolve_stable_entry(old_b),
+            StableEntryResolution::Live(second_b)
+        );
+    }
+
+    #[test]
+    fn stable_position_remap_cycle_does_not_loop_forever() {
+        let (mut graph, doc, node_id, entries, _) = text_doc("ab");
+        let old_a = entries[0];
+        let old_b = entries[1];
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::RemoveChar { observed: old_a },
+            },
+        );
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::RemoveChar { observed: old_b },
+            },
+        );
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::StablePositionRemap {
+                from: old_a,
+                to: old_b,
+            },
+        );
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::StablePositionRemap {
+                from: old_b,
+                to: old_a,
+            },
+        );
+
+        assert!(matches!(
+            doc.text_identity().resolve_stable_entry(old_a),
+            StableEntryResolution::Cycle(_)
+        ));
+        assert_eq!(doc.text_view(node_id).unwrap().text(), "");
+    }
+
+    #[test]
+    fn stable_position_remap_conflict_uses_highest_op_id_winner() {
+        let (_graph, doc, node_id, entries, placements) = text_doc("abc");
+        let from = entries[0];
+        let low_target = entries[1];
+        let high_target = entries[2];
+        let low = Op {
+            id: Dot::new(1, 10),
+            parents: Vec::new(),
+            payload: DocOp::StablePositionRemap {
+                from,
+                to: low_target,
+            },
+        };
+        let high = Op {
+            id: Dot::new(2, 10),
+            parents: Vec::new(),
+            payload: DocOp::StablePositionRemap {
+                from,
+                to: high_target,
+            },
+        };
+
+        let doc = apply_doc_op(doc, &high).unwrap();
+        let doc = apply_doc_op(doc, &low).unwrap();
+
+        assert_eq!(
+            doc.text_identity().replacement_for_stable_position(from),
+            Some(high_target)
+        );
+        assert_eq!(doc.text_view(node_id).unwrap().len(), placements.len());
+    }
+
+    #[test]
+    fn remove_char_observed_old_entry_is_not_retargeted_by_stable_remap() {
+        let (mut graph, doc, node_id, entries, placements) = text_doc("ab");
+        let old_b = entries[1];
+        let after_a = placements[0];
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::RemoveChar { observed: old_b },
+            },
+        );
+        let (doc, insert_replacement) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::InsertChar {
+                    after: Some(after_a),
+                    ch: 'b',
+                },
+            },
+        );
+        let new_b = EntryDot(insert_replacement.id);
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::StablePositionRemap {
+                from: old_b,
+                to: new_b,
+            },
+        );
+        let (doc, _) = apply_next(
+            &mut graph,
+            doc,
+            DocOp::Text {
+                node_id,
+                op: TextOp::RemoveChar { observed: old_b },
+            },
+        );
+
+        assert_eq!(doc.text_view(node_id).unwrap().text(), "ab");
+        assert_eq!(
+            doc.text_identity().resolve_stable_entry(old_b),
+            StableEntryResolution::Live(new_b)
+        );
     }
 
     #[test]
@@ -1854,6 +2157,14 @@ mod tests {
     }
 
     #[test]
+    fn stable_position_remap_wire_round_trip() {
+        assert_round_trip(vec![DocOp::StablePositionRemap {
+            from: EntryDot(Dot::new(1, 0)),
+            to: EntryDot(Dot::new(1, 1)),
+        }]);
+    }
+
+    #[test]
     fn empty_bundle_round_trip() {
         let bytes = editor_crdt::wire::encode::<DocOp>(&[]).unwrap();
         assert!(bytes.is_empty());
@@ -1878,10 +2189,12 @@ const VARIANT_ESCAPE: u8 = 7;
 const EXT_STYLE: u8 = 0;
 const EXT_MARKER: u8 = 1;
 const EXT_MOVE_TEXT: u8 = 2;
+const EXT_STABLE_POSITION_REMAP: u8 = 3;
 
 const VARIANT_STYLE: u8 = 8 + EXT_STYLE;
 const VARIANT_NODE_MARKER: u8 = 8 + EXT_MARKER;
 const VARIANT_MOVE_TEXT: u8 = 8 + EXT_MOVE_TEXT;
+const VARIANT_STABLE_POSITION_REMAP: u8 = 8 + EXT_STABLE_POSITION_REMAP;
 
 const ENTRY_TAG_RUN_BIT: u8 = 0b1000_0000;
 const ENTRY_TAG_NODE_ID_EXPLICIT: u8 = 0b0100_0000;
@@ -2003,6 +2316,7 @@ impl WireChangeset for DocOp {
                         EXT_STYLE => VARIANT_STYLE,
                         EXT_MARKER => VARIANT_NODE_MARKER,
                         EXT_MOVE_TEXT => VARIANT_MOVE_TEXT,
+                        EXT_STABLE_POSITION_REMAP => VARIANT_STABLE_POSITION_REMAP,
                         n => return Err(WireError::UnknownPayloadVariant { tag: n }),
                     }
                 } else {
@@ -2115,6 +2429,7 @@ fn encode_single_op_entry(
         VARIANT_STYLE => (VARIANT_ESCAPE, Some(EXT_STYLE)),
         VARIANT_NODE_MARKER => (VARIANT_ESCAPE, Some(EXT_MARKER)),
         VARIANT_MOVE_TEXT => (VARIANT_ESCAPE, Some(EXT_MOVE_TEXT)),
+        VARIANT_STABLE_POSITION_REMAP => (VARIANT_ESCAPE, Some(EXT_STABLE_POSITION_REMAP)),
         v => (v, None),
     };
     let node_id_explicit = !matches!(prev_node_id, Some(prev) if *prev == node_id);
@@ -2263,6 +2578,7 @@ fn describe_doc_op(p: &DocOp) -> (u8, u8, NodeId) {
             }
             (VARIANT_MOVE_TEXT, sub, *to_node_id)
         }
+        DocOp::StablePositionRemap { .. } => (VARIANT_STABLE_POSITION_REMAP, 0, NodeId::ROOT),
     }
 }
 
@@ -2370,6 +2686,10 @@ fn encode_doc_op_payload(
             if let Some(after) = after {
                 <PlacementId as Wire>::encode(after, ctx, out)?;
             }
+        }
+        DocOp::StablePositionRemap { from, to } => {
+            <EntryDot as Wire>::encode(from, ctx, out)?;
+            <EntryDot as Wire>::encode(to, ctx, out)?;
         }
     }
     Ok(())
@@ -2546,6 +2866,11 @@ fn decode_doc_op_payload(
                 to_node_id: node_id,
                 after,
             })
+        }
+        VARIANT_STABLE_POSITION_REMAP => {
+            let from = <EntryDot as Wire>::decode(ctx, input)?;
+            let to = <EntryDot as Wire>::decode(ctx, input)?;
+            Ok(DocOp::StablePositionRemap { from, to })
         }
         n => Err(WireError::UnknownPayloadVariant { tag: n }),
     }

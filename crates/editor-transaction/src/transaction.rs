@@ -1,10 +1,12 @@
-use editor_crdt::Op;
+use editor_crdt::{EntryDot, Op};
 use editor_model::{
     Doc, DocOp, Marker, Modifier, ModifierType, Node, NodeId, PlainNode, PlainStyleEntry, Subtree,
 };
 use editor_state::{Composition, PendingModifiers, Selection, StableSelection, State};
 
-use crate::{Effect, Step, StepError, TransactionMeta, Validation, validate};
+use crate::{
+    Effect, Step, StepEffect, StepError, StepRecord, TransactionMeta, Validation, validate,
+};
 
 struct Batch {
     validations: Vec<Validation>,
@@ -18,6 +20,7 @@ pub struct Transaction {
     // the post-edit doc where its node may already be dead.
     selection_stable: Option<StableSelection>,
     steps: Vec<Step>,
+    step_records: Vec<StepRecord>,
     ops: Vec<Op<DocOp>>,
     effects: Vec<Effect>,
     meta: TransactionMeta,
@@ -29,6 +32,7 @@ pub struct Savepoint {
     state: State,
     selection_stable: Option<StableSelection>,
     steps_len: usize,
+    step_records_len: usize,
     ops_len: usize,
     effects_len: usize,
     batch_validations_len: Option<usize>,
@@ -44,6 +48,7 @@ impl Transaction {
             state: state.clone(),
             selection_stable,
             steps: Vec::new(),
+            step_records: Vec::new(),
             ops: Vec::new(),
             effects: Vec::new(),
             meta: TransactionMeta::default(),
@@ -89,8 +94,9 @@ impl Transaction {
 
     fn apply_step(&mut self, step: Step) -> Result<(), StepError> {
         let mut validations: Vec<Validation> = Vec::new();
+        let mut effect = StepEffect::default();
         let ops = self.state.batch_with_ops_mut::<_, StepError>(|batched| {
-            step.apply_to(batched, &mut validations)
+            step.apply_to_with_effect(batched, &mut validations, &mut effect)
         })?;
         self.ops.extend(ops);
         if let Step::SetSelection { new, .. } = &step {
@@ -98,6 +104,10 @@ impl Transaction {
         } else if step.is_doc_step() {
             self.refresh_selection_from_stable();
         }
+        self.step_records.push(StepRecord {
+            step: step.clone(),
+            effect,
+        });
         self.steps.push(step);
         if validations.is_empty() {
             // No-op fast path. Lets non-doc steps (SetSelection, etc.) skip
@@ -122,6 +132,7 @@ impl Transaction {
             state: self.state.clone(),
             selection_stable: self.selection_stable.clone(),
             steps_len: self.steps.len(),
+            step_records_len: self.step_records.len(),
             ops_len: self.ops.len(),
             effects_len: self.effects.len(),
             batch_validations_len: self.batch.as_ref().map(|b| b.validations.len()),
@@ -132,6 +143,7 @@ impl Transaction {
         self.state = sp.state;
         self.selection_stable = sp.selection_stable;
         self.steps.truncate(sp.steps_len);
+        self.step_records.truncate(sp.step_records_len);
         self.ops.truncate(sp.ops_len);
         self.effects.truncate(sp.effects_len);
         if let (Some(batch), Some(len)) = (&mut self.batch, sp.batch_validations_len) {
@@ -456,7 +468,7 @@ impl Transaction {
         }
     }
 
-    pub fn apply_steps(&mut self, steps: Vec<Step>) -> Result<(), StepError> {
+    pub fn apply_steps(&mut self, steps: Vec<Step>) -> Result<Vec<StepRecord>, StepError> {
         // State-only steps (SetSelection/SetComposition/SetPendingModifiers)
         // write a single field nothing else reads during step replay, so only
         // the last of each kind affects the final state. Defer them until after
@@ -480,12 +492,15 @@ impl Transaction {
 
         let has_doc_step = steps.iter().any(|step| step.is_doc_step());
         let mut validations: Vec<Validation> = Vec::new();
+        let mut step_effects = vec![StepEffect::default(); steps.len()];
         let ops = self.state.batch_with_ops_mut::<_, StepError>(|batched| {
-            for step in steps.iter() {
+            for (i, step) in steps.iter().enumerate() {
                 if !step.is_doc_step() {
                     continue;
                 }
-                step.apply_to(batched, &mut validations)?;
+                let mut effect = StepEffect::default();
+                step.apply_to_with_effect(batched, &mut validations, &mut effect)?;
+                step_effects[i] = effect;
             }
             for i in [
                 last_selection,
@@ -496,7 +511,10 @@ impl Transaction {
             .into_iter()
             .flatten()
             {
-                steps[i].apply_to(batched, &mut validations)?;
+                let step = &steps[i];
+                let mut effect = StepEffect::default();
+                step.apply_to_with_effect(batched, &mut validations, &mut effect)?;
+                step_effects[i] = effect;
             }
             Ok(())
         })?;
@@ -511,6 +529,13 @@ impl Transaction {
         if has_doc_step && last_selection.is_none() {
             self.refresh_selection_from_stable();
         }
+        let step_records: Vec<StepRecord> = steps
+            .iter()
+            .cloned()
+            .zip(step_effects)
+            .map(|(step, effect)| StepRecord { step, effect })
+            .collect();
+        self.step_records.extend(step_records.clone());
         self.steps.extend(steps);
 
         if !validations.is_empty() {
@@ -521,6 +546,16 @@ impl Transaction {
             }
         }
 
+        Ok(step_records)
+    }
+
+    pub fn stable_position_remap(&mut self, from: EntryDot, to: EntryDot) -> Result<(), StepError> {
+        let ops = self.state.batch_with_ops_mut::<_, StepError>(|batched| {
+            batched.apply(DocOp::StablePositionRemap { from, to })?;
+            Ok(())
+        })?;
+        self.ops.extend(ops);
+        self.refresh_selection_from_stable();
         Ok(())
     }
 
@@ -571,13 +606,19 @@ impl Transaction {
         mut self,
     ) -> (
         State,
-        Vec<Step>,
+        Vec<StepRecord>,
         Vec<Op<DocOp>>,
         Vec<Effect>,
         TransactionMeta,
     ) {
         self.state.graph.commit_mut();
-        (self.state, self.steps, self.ops, self.effects, self.meta)
+        (
+            self.state,
+            self.step_records,
+            self.ops,
+            self.effects,
+            self.meta,
+        )
     }
 
     #[cfg(test)]
@@ -692,7 +733,69 @@ mod tests {
         let (_, steps, _, _, _) = tr.commit();
 
         assert_eq!(steps.len(), 1);
-        assert!(matches!(&steps[0], Step::InsertText { .. }));
+        assert!(matches!(&steps[0].step, Step::InsertText { .. }));
+    }
+
+    #[test]
+    fn insert_text_records_inserted_entry_effect() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.insert_text(t1, 5, "xy").unwrap();
+
+        let (next, step_records, _, _, _) = tr.commit();
+
+        assert_eq!(step_records.len(), 1);
+        assert!(matches!(&step_records[0].step, Step::InsertText { text, .. } if text == "xy"));
+        assert_eq!(step_records[0].effect.text_inserts.len(), 1);
+        let insert = &step_records[0].effect.text_inserts[0];
+        assert_eq!(insert.node_id, t1);
+        assert_eq!(insert.offset, 5);
+        assert_eq!(insert.text, "xy");
+        assert_eq!(
+            insert.entries,
+            next.doc
+                .text_view(t1)
+                .unwrap()
+                .visible_entries()
+                .skip(5)
+                .map(|(entry, _)| entry)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn remove_text_records_removed_entry_effect() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+        let removed_entries = state
+            .doc
+            .text_view(t1)
+            .unwrap()
+            .visible_entries()
+            .skip(1)
+            .take(3)
+            .map(|(entry, _)| entry)
+            .collect::<Vec<_>>();
+
+        let mut tr = Transaction::new(&state);
+        tr.remove_text(t1, 1, 3).unwrap();
+
+        let (_, step_records, _, _, _) = tr.commit();
+
+        assert_eq!(step_records.len(), 1);
+        assert!(matches!(&step_records[0].step, Step::RemoveText { text, .. } if text == "ell"));
+        assert_eq!(step_records[0].effect.text_removes.len(), 1);
+        let remove = &step_records[0].effect.text_removes[0];
+        assert_eq!(remove.node_id, t1);
+        assert_eq!(remove.offset, 1);
+        assert_eq!(remove.text, "ell");
+        assert_eq!(remove.entries, removed_entries);
     }
 
     #[test]
@@ -710,7 +813,7 @@ mod tests {
         let (_, steps, _, _, _) = tr.commit();
 
         assert_eq!(steps.len(), 1);
-        match &steps[0] {
+        match &steps[0].step {
             Step::RemoveText { text, .. } => assert_eq!(text, " World"),
             _ => panic!("expected RemoveText"),
         }
@@ -768,7 +871,7 @@ mod tests {
         assert_eq!(root.children.iter().next().copied().unwrap(), p2);
 
         let (_, steps, _, _, _) = tr.commit();
-        match &steps[0] {
+        match &steps[0].step {
             Step::RemoveSubtree { subtree, .. } => {
                 assert!(matches!(subtree.node, PlainNode::Paragraph(_)));
             }
@@ -807,7 +910,7 @@ mod tests {
         );
 
         let (_, steps, _, _, _) = tr.commit();
-        match &steps[0] {
+        match &steps[0].step {
             Step::MoveNode {
                 old_parent,
                 old_index,
@@ -865,7 +968,7 @@ mod tests {
 
         let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
-        assert!(matches!(&steps[0], Step::SplitNode { .. }));
+        assert!(matches!(&steps[0].step, Step::SplitNode { .. }));
     }
 
     #[test]
@@ -886,7 +989,7 @@ mod tests {
 
         let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 2);
-        match &steps[1] {
+        match &steps[1].step {
             Step::MergeNode { offset, .. } => assert_eq!(*offset, 5),
             _ => panic!("expected MergeNode"),
         }
@@ -967,7 +1070,7 @@ mod tests {
         assert_eq!(tr.selection(), Some(new_sel));
 
         let (_, steps, _, _, _) = tr.commit();
-        match &steps[0] {
+        match &steps[0].step {
             Step::SetSelection { old, new } => {
                 let old_sel = old.as_ref().expect("old must be Some");
                 let new_sel_stable = new.as_ref().expect("new must be Some");
@@ -1001,7 +1104,7 @@ mod tests {
         }
 
         let (_, steps, _, _, _) = tr.commit();
-        match &steps[0] {
+        match &steps[0].step {
             Step::SetNode { old_node, .. } => {
                 if let PlainNode::Callout(n) = old_node {
                     assert_eq!(n.variant, CalloutVariant::Info);
@@ -1088,13 +1191,13 @@ mod tests {
         tr.set_selection(Some(Selection::collapsed(Position::new(t1, 15))))
             .unwrap();
 
-        let (_, steps, _, _, _) = tr.commit();
+        let (_, step_records, _, _, _) = tr.commit();
 
-        let mut current = steps
-            .iter()
-            .fold(state.clone(), |s, step| step.apply(&s).unwrap().state);
-        for step in steps.iter().rev() {
-            current = step.inverse().apply(&current).unwrap().state;
+        let mut current = step_records.iter().fold(state.clone(), |s, record| {
+            record.step.apply(&s).unwrap().state
+        });
+        for record in step_records.iter().rev() {
+            current = record.step.inverse().apply(&current).unwrap().state;
         }
 
         assert_eq!(current.text(t1).text.to_string(), "Hello World");
@@ -1211,6 +1314,45 @@ mod tests {
         tr.apply_steps(steps).unwrap();
 
         assert!(tr.doc().get_entry(p_id).is_some());
+    }
+
+    #[test]
+    fn apply_steps_records_preserve_input_order() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+        let steps = vec![
+            Step::SetPendingStyle {
+                old: None,
+                new: Some(PendingStyle::Unset),
+            },
+            Step::InsertText {
+                node_id: t1,
+                offset: 5,
+                text: "!".into(),
+            },
+            Step::SetPendingStyle {
+                old: Some(PendingStyle::Unset),
+                new: None,
+            },
+        ];
+
+        let mut tr = Transaction::new(&state);
+        let records = tr.apply_steps(steps.clone()).unwrap();
+
+        assert_eq!(records.len(), steps.len());
+        for (record, step) in records.iter().zip(&steps) {
+            assert_eq!(&record.step, step);
+        }
+        assert!(records[0].effect.text_inserts.is_empty());
+        assert_eq!(records[1].effect.text_inserts.len(), 1);
+        assert!(records[2].effect.text_inserts.is_empty());
+
+        let (_, committed, _, _, _) = tr.commit();
+        for (record, step) in committed.iter().zip(&steps) {
+            assert_eq!(&record.step, step);
+        }
     }
 
     #[test]
@@ -1394,7 +1536,10 @@ mod tests {
         let (state_after, steps, _, _, _) = tr.commit();
         assert!(state_after.selection.is_none());
         assert_eq!(steps.len(), 1);
-        assert!(matches!(&steps[0], Step::SetSelection { new: None, .. }));
+        assert!(matches!(
+            &steps[0].step,
+            Step::SetSelection { new: None, .. }
+        ));
     }
 
     #[test]
@@ -1406,12 +1551,12 @@ mod tests {
         let mut tr = Transaction::new(&s);
         let new_sel = Selection::collapsed(Position::new(t1, 0));
         tr.set_selection(Some(new_sel)).unwrap();
-        let (state_after, steps, _, _, _) = tr.commit();
+        let (state_after, step_records, _, _, _) = tr.commit();
         assert_eq!(state_after.selection, Some(new_sel));
 
         let mut current = state_after;
-        for step in steps.iter().rev() {
-            current = step.inverse().apply(&current).unwrap().state;
+        for record in step_records.iter().rev() {
+            current = record.step.inverse().apply(&current).unwrap().state;
         }
         assert!(current.selection.is_none());
     }

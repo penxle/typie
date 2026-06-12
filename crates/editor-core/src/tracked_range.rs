@@ -1,6 +1,5 @@
-use editor_crdt::EntryDot;
-use editor_model::{Doc, Node};
-use editor_state::{ResolvedSelection, Selection, StableSelection};
+use editor_model::Doc;
+use editor_state::{Selection, StableSelection};
 use editor_view::PageRect;
 use hashbrown::{HashMap, HashSet};
 
@@ -13,18 +12,6 @@ pub struct TrackedRange {
     pub selection: StableSelection,
     pub metadata: String,
     pub explicitly_invalid: bool,
-    covered_text: Option<CoveredTextSnapshot>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct TrackedTextAnchor {
-    entry_dot: EntryDot,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct CoveredTextSnapshot {
-    anchors: Vec<TrackedTextAnchor>,
-    text: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -154,64 +141,50 @@ impl TrackedRangeRegistry {
 }
 
 impl TrackedRange {
-    pub fn new(
+    pub fn from_selection(
         id: TrackedRangeId,
         group: String,
-        selection: StableSelection,
+        selection: Selection,
         metadata: String,
         doc: &Doc,
     ) -> Self {
-        let covered_text = selection
-            .locate(doc)
-            .and_then(|sel| sel.resolve(doc))
-            .map(|resolved| CoveredTextSnapshot {
-                anchors: collect_covered_text_anchors(&resolved),
-                text: resolved.collect_text(),
-            });
+        let selection = StableSelection::freeze_covered_range(&selection, doc)
+            .unwrap_or_else(|| StableSelection::freeze(&selection, doc));
         Self {
             id,
             group,
             selection,
             metadata,
             explicitly_invalid: false,
-            covered_text,
+        }
+    }
+
+    pub fn from_stable_selection(
+        id: TrackedRangeId,
+        group: String,
+        selection: StableSelection,
+        metadata: String,
+        doc: &Doc,
+    ) -> Self {
+        // FFI/persisted callers can pass a StableSelection frozen with user
+        // selection semantics. If it still locates, lower it again with tracked
+        // range boundary policy so typing at the boundary stays outside.
+        let selection = selection
+            .locate(doc)
+            .and_then(|sel| StableSelection::freeze_covered_range(&sel, doc))
+            .unwrap_or(selection);
+        Self {
+            id,
+            group,
+            selection,
+            metadata,
+            explicitly_invalid: false,
         }
     }
 
     pub fn locate(&self, doc: &Doc) -> Option<Selection> {
-        let located = self.selection.locate(doc)?;
-        let Some(snapshot) = &self.covered_text else {
-            return Some(located);
-        };
-        if snapshot.anchors.iter().any(|anchor| anchor.is_alive(doc)) {
-            return Some(located);
-        }
-        let restored_text = located
-            .resolve(doc)
-            .is_some_and(|resolved| resolved.collect_text() == snapshot.text);
-        restored_text.then_some(located)
+        self.selection.locate(doc)
     }
-}
-
-impl TrackedTextAnchor {
-    fn is_alive(&self, doc: &Doc) -> bool {
-        doc.text_identity().is_alive(self.entry_dot)
-    }
-}
-
-fn collect_covered_text_anchors(resolved: &ResolvedSelection<'_>) -> Vec<TrackedTextAnchor> {
-    let mut out = Vec::new();
-    resolved.for_each_text_node(|node, span| {
-        let Node::Text(text_node) = node.node() else {
-            return;
-        };
-        for idx in span {
-            if let Ok(entry_dot) = text_node.text.entry_dot_at(idx) {
-                out.push(TrackedTextAnchor { entry_dot });
-            }
-        }
-    });
-    out
 }
 
 #[cfg(test)]
@@ -225,13 +198,7 @@ mod tests {
             selection: (t1, 0) -> (t1, 5)
         };
         let sel = s.selection.unwrap();
-        TrackedRange::new(
-            id.into(),
-            group.into(),
-            StableSelection::freeze(&sel, &s.doc),
-            String::new(),
-            &s.doc,
-        )
+        TrackedRange::from_selection(id.into(), group.into(), sel, String::new(), &s.doc)
     }
 
     #[test]
@@ -311,8 +278,8 @@ mod tests {
     }
 
     #[test]
-    fn tracked_text_anchor_alive_follows_moved_entry_dot() {
-        let (state, _t1, t2) = state! {
+    fn locate_follows_moved_entry_dot() {
+        let (state, t1, t2) = state! {
             doc {
                 root {
                     paragraph { t1: text("a") }
@@ -321,30 +288,32 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 1)
         };
-        let range = TrackedRange::new(
+        let range = TrackedRange::from_selection(
             "a".into(),
             "g1".into(),
-            StableSelection::freeze(state.selection.as_ref().unwrap(), &state.doc),
+            *state.selection.as_ref().unwrap(),
             String::new(),
             &state.doc,
         );
-        let anchor = range
-            .covered_text
-            .as_ref()
+        let selected_entry = state
+            .doc
+            .text_view(t1)
             .unwrap()
-            .anchors
-            .first()
+            .visible_entries()
+            .next()
             .unwrap()
-            .clone();
+            .0;
         let (state, _) = state
             .apply(editor_model::DocOp::MoveText {
-                entry: anchor.entry_dot,
+                entry: selected_entry,
                 to_node_id: t2,
                 after: None,
             })
             .unwrap();
 
-        assert!(anchor.is_alive(&state.doc));
+        let located = range.locate(&state.doc).expect("range locates after move");
+        assert_eq!(located.anchor.node_id, t2);
+        assert_eq!(located.head.node_id, t2);
         assert_eq!(state.doc.text_view(t2).unwrap().text(), "a");
     }
 

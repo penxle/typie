@@ -430,14 +430,14 @@ impl Editor {
             let view = inner.editor.view();
             let result: Vec<TrackedRange> = ranges
                 .map(|r| {
-                    let sel = r.selection.thaw(doc);
                     let located = if r.explicitly_invalid {
                         None
                     } else {
                         r.locate(doc)
                     };
                     let invalid = located.is_none();
-                    let resolved = located.as_ref().and_then(|s| s.resolve(doc));
+                    let sel = located.unwrap_or_else(|| r.selection.thaw(doc));
+                    let resolved = if invalid { None } else { sel.resolve(doc) };
                     let rects = match &resolved {
                         Some(resolved) => view
                             .selection_rects(resolved)
@@ -1060,6 +1060,105 @@ mod tests {
         let r = ranges.iter().find(|x| x.id == "r").expect("range present");
         assert_eq!(r.anchor.offset, 1);
         assert_eq!(r.head.offset, 8);
+        assert!(!r.invalid);
+    }
+
+    #[test]
+    fn ffi_tracked_ranges_exports_located_endpoints_after_history_remap() {
+        let (initial, t1) = state! {
+            doc { root { paragraph { t1: text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
+            selection: (t1, 4) -> (t1, 6)
+        };
+        let editor = make_ffi_editor(initial.clone());
+        let stable = editor
+            .freeze_selection(initial.selection.unwrap())
+            .expect("freeze");
+
+        editor
+            .enqueue(
+                editor_core::Message::TrackedRange {
+                    op: editor_core::TrackedRangeOp::AddFrozen {
+                        id: "r".into(),
+                        group: "comment".into(),
+                        selection: stable,
+                        metadata: String::new(),
+                    },
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .expect("enqueue add");
+        let _ = editor.tick().expect("tick add");
+
+        editor
+            .enqueue(
+                editor_core::Message::Selection {
+                    op: editor_core::SelectionOp::Set {
+                        selection: editor_state::Selection::new(
+                            editor_state::Position::new(t1, 0),
+                            editor_state::Position::new(t1, 7),
+                        ),
+                    },
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .expect("enqueue selection");
+        editor
+            .enqueue(
+                editor_core::Message::Deletion {
+                    op: editor_core::DeletionOp::Selection,
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .expect("enqueue delete");
+        let _ = editor.tick().expect("tick delete");
+
+        editor
+            .enqueue(
+                editor_core::Message::History {
+                    op: editor_core::HistoryOp::Undo,
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .expect("enqueue undo");
+        let _ = editor.tick().expect("tick undo");
+
+        editor
+            .enqueue(
+                editor_core::Message::Selection {
+                    op: editor_core::SelectionOp::Set {
+                        selection: editor_state::Selection::collapsed(editor_state::Position::new(
+                            t1, 6,
+                        )),
+                    },
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .expect("enqueue cursor");
+        editor
+            .enqueue(
+                editor_core::Message::Deletion {
+                    op: editor_core::DeletionOp::Move {
+                        movement: editor_core::Movement::Grapheme {
+                            direction: editor_core::Direction::Backward,
+                        },
+                    },
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .expect("enqueue backspace");
+        let _ = editor.tick().expect("tick backspace");
+
+        let ranges = editor.tracked_ranges(None).expect("ffi ok");
+        let r = ranges.iter().find(|x| x.id == "r").expect("range present");
+        assert_eq!(r.text, "ㅁ");
+        assert_eq!(r.anchor.offset, 4);
+        assert_eq!(r.head.offset, 5);
         assert!(!r.invalid);
     }
 

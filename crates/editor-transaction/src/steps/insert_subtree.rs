@@ -1,8 +1,8 @@
-use editor_crdt::{CrdtError, Dot, LwwRegOp, OrMapOp, PlacementId, RgaOp, TextOp};
+use editor_crdt::{CrdtError, Dot, EntryDot, LwwRegOp, OrMapOp, PlacementId, RgaOp, TextOp};
 use editor_model::{DocOp, NodeId, PlainNode, Subtree};
 use editor_state::BatchedState;
 
-use crate::{Step, StepError, Validation};
+use crate::{Step, StepEffect, StepError, TextInsertEffect, Validation};
 
 pub(crate) fn inverse(parent_id: NodeId, index: usize, subtree: Subtree) -> Step {
     Step::RemoveSubtree {
@@ -15,6 +15,7 @@ pub(crate) fn inverse(parent_id: NodeId, index: usize, subtree: Subtree) -> Step
 pub(crate) fn apply_to(
     batched: &mut BatchedState,
     validations: &mut Vec<Validation>,
+    effect: &mut StepEffect,
     parent_id: NodeId,
     index: usize,
     subtree: &Subtree,
@@ -34,7 +35,7 @@ pub(crate) fn apply_to(
         })?
     };
 
-    emit_pass1(batched, subtree)?;
+    emit_pass1(batched, subtree, effect)?;
     emit_pass2(batched, subtree, parent_id, anchor_dot)?;
 
     validations.push(Validation::Subtree(subtree.id));
@@ -52,7 +53,11 @@ fn push_modifier_validations(subtree: &Subtree, validations: &mut Vec<Validation
     }
 }
 
-fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepError> {
+fn emit_pass1(
+    batched: &mut BatchedState,
+    subtree: &Subtree,
+    effect: &mut StepEffect,
+) -> Result<(), StepError> {
     batched.apply(DocOp::Presence {
         node_id: subtree.id,
         op: OrMapOp::Set {
@@ -93,6 +98,7 @@ fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepE
     }
     if let PlainNode::Text(text_node) = &subtree.node {
         let mut after: Option<PlacementId> = None;
+        let mut entries = Vec::with_capacity(text_node.text.chars().count());
         for ch in text_node.text.chars() {
             let op_id = batched
                 .apply(DocOp::Text {
@@ -100,11 +106,20 @@ fn emit_pass1(batched: &mut BatchedState, subtree: &Subtree) -> Result<(), StepE
                     op: TextOp::InsertChar { ch, after },
                 })?
                 .id;
+            entries.push(EntryDot(op_id));
             after = Some(PlacementId(op_id));
+        }
+        if !entries.is_empty() {
+            effect.text_inserts.push(TextInsertEffect {
+                node_id: subtree.id,
+                offset: 0,
+                entries,
+                text: text_node.text.clone(),
+            });
         }
     }
     for child in &subtree.children {
-        emit_pass1(batched, child)?;
+        emit_pass1(batched, child, effect)?;
     }
     Ok(())
 }
@@ -143,7 +158,7 @@ mod tests {
     use editor_macros::state;
     use editor_model::{
         NodeId, PlainBulletListNode, PlainListItemNode, PlainNode, PlainParagraphNode,
-        PlainTableNode, Subtree,
+        PlainTableNode, PlainTextNode, Subtree,
     };
 
     use crate::test_utils::DocTestExt;
@@ -176,6 +191,51 @@ mod tests {
         assert_eq!(
             *new_state.node(new_id).entry().parent.get(),
             Some(NodeId::ROOT)
+        );
+    }
+
+    #[test]
+    fn insert_subtree_apply_reports_inserted_text_entries() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("Hello") } } }
+            selection: (t1, 0)
+        };
+        let paragraph_id = NodeId::new();
+        let text_id = NodeId::new();
+        let subtree = Subtree::leaf(
+            paragraph_id,
+            PlainNode::Paragraph(PlainParagraphNode::default()),
+        )
+        .with_children(vec![Subtree::leaf(
+            text_id,
+            PlainNode::Text(PlainTextNode { text: "xy".into() }),
+        )]);
+
+        let step = Step::InsertSubtree {
+            parent_id: NodeId::ROOT,
+            index: 1,
+            subtree,
+        };
+        let output = step.apply(&state).unwrap();
+        let insert = output
+            .effect
+            .text_inserts
+            .iter()
+            .find(|effect| effect.node_id == text_id)
+            .expect("inserted text effect");
+
+        assert_eq!(insert.offset, 0);
+        assert_eq!(insert.text, "xy");
+        assert_eq!(
+            insert.entries,
+            output
+                .state
+                .doc
+                .text_view(text_id)
+                .unwrap()
+                .visible_entries()
+                .map(|(entry, _)| entry)
+                .collect::<Vec<_>>()
         );
     }
 

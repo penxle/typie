@@ -1,10 +1,12 @@
 use editor_macros::ffi;
-use editor_model::Doc;
+use editor_model::{Doc, Node, NodeId};
 use serde::{Deserialize, Serialize};
 
 use crate::normalize::enclosing_unit_at_subtree_overlap;
+use crate::position::Position;
 use crate::selection::Selection;
-use crate::stable_position::{StablePosition, freeze_position, thaw_position};
+use crate::stable_position::{StablePosition, build_chain, freeze_position, thaw_position};
+use crate::{Affinity, Bind};
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -25,9 +27,45 @@ impl StableSelection {
         StableSelection { anchor, head }
     }
 
-    /// Thaws and normalizes, returning `Some` only when the range still locates
-    /// to a real (non-empty) span. Returns `None` when the covered text was
-    /// deleted.
+    pub fn freeze_covered_range(sel: &Selection, doc: &Doc) -> Option<Self> {
+        let resolved = sel.resolve(doc)?;
+        if resolved.is_collapsed() {
+            return None;
+        }
+
+        let start = Position::from(resolved.from());
+        let end = Position::from(resolved.to());
+        let covered_entries = covered_entry_endpoints(&resolved);
+
+        let anchor = match covered_entries.first {
+            Some(endpoint) => freeze_text_endpoint(
+                endpoint.node_id,
+                endpoint.entry_dot,
+                endpoint.boundary_offset,
+                Bind::Left,
+                start.affinity,
+                doc,
+            ),
+            None => freeze_position(start, doc),
+        };
+        let head = match covered_entries.last {
+            Some(endpoint) => freeze_text_endpoint(
+                endpoint.node_id,
+                endpoint.entry_dot,
+                endpoint.boundary_offset,
+                Bind::Right,
+                end.affinity,
+                doc,
+            ),
+            None => freeze_position(end, doc),
+        };
+
+        Some(StableSelection { anchor, head })
+    }
+
+    /// Thaws and normalizes, returning `Some` only when the selection locates
+    /// to a non-empty span.
+    // TODO: cursor thaw와 range locate를 분리한다.
     pub fn locate(&self, doc: &Doc) -> Option<Selection> {
         let sel = self.thaw(doc);
         let sel = sel.normalize(doc).unwrap_or(sel);
@@ -67,6 +105,67 @@ fn invariants_ok(sel: &Selection, doc: &Doc) -> bool {
         }
     }
     true
+}
+
+#[derive(Clone, Copy)]
+struct CoveredEntryEndpoint {
+    node_id: NodeId,
+    boundary_offset: usize,
+    entry_dot: editor_crdt::EntryDot,
+}
+
+#[derive(Default)]
+struct CoveredEntryEndpoints {
+    first: Option<CoveredEntryEndpoint>,
+    last: Option<CoveredEntryEndpoint>,
+}
+
+fn covered_entry_endpoints(resolved: &crate::ResolvedSelection<'_>) -> CoveredEntryEndpoints {
+    let mut endpoints = CoveredEntryEndpoints::default();
+    resolved.for_each_text_node(|node, span| {
+        let Node::Text(text_node) = node.node() else {
+            return;
+        };
+        let first_index = span.start;
+        let last_index = span.end - 1;
+        let first_entry_dot = text_node
+            .text
+            .entry_dot_at(first_index)
+            .expect("covered span start must be in text bounds");
+        let last_entry_dot = text_node
+            .text
+            .entry_dot_at(last_index)
+            .expect("covered span end must be in text bounds");
+
+        endpoints.first.get_or_insert(CoveredEntryEndpoint {
+            node_id: node.id(),
+            boundary_offset: span.start,
+            entry_dot: first_entry_dot,
+        });
+        endpoints.last = Some(CoveredEntryEndpoint {
+            node_id: node.id(),
+            boundary_offset: span.end,
+            entry_dot: last_entry_dot,
+        });
+    });
+    endpoints
+}
+
+fn freeze_text_endpoint(
+    node_id: NodeId,
+    entry_dot: editor_crdt::EntryDot,
+    boundary_offset: usize,
+    bind: Bind,
+    affinity: Affinity,
+    doc: &Doc,
+) -> StablePosition {
+    StablePosition::Char {
+        chain: build_chain(node_id, doc),
+        char_dot: entry_dot.0,
+        offset: boundary_offset,
+        bind,
+        affinity,
+    }
 }
 
 #[cfg(test)]

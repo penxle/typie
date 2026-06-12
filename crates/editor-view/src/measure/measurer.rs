@@ -234,6 +234,7 @@ fn affected_node_ids_for_doc_op(op: &DocOp, old_doc: &Doc) -> Vec<NodeId> {
             }
             ids
         }
+        DocOp::StablePositionRemap { .. } => Vec::new(),
     }
 }
 

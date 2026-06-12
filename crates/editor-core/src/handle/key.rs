@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use editor_commands::{self as commands};
 use editor_state::Selection;
-use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -13,11 +12,14 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
     let resource = resource.lock().unwrap();
 
     if matches!(event.key, Key::Backspace)
-        && let Some(steps) = editor.try_undo_auto_replacement()
+        && let Some(playback) = editor.try_undo_auto_replacement()
     {
         editor.transact(|tr| {
-            tr.update_meta(|m| m.history = HistoryMeta::Skip);
-            tr.apply_steps(steps)?;
+            super::history::apply_history_playback(
+                tr,
+                &playback.steps_to_apply,
+                &playback.source_steps,
+            )?;
             Ok(())
         })?;
         return Ok(());

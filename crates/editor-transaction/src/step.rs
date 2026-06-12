@@ -1,4 +1,4 @@
-use editor_crdt::Op;
+use editor_crdt::{EntryDot, Op};
 use editor_model::{
     DocOp, Marker, Modifier, ModifierType, NodeId, PlainNode, PlainStyleEntry, Subtree,
 };
@@ -25,6 +25,35 @@ pub struct StepOutput {
     pub state: State,
     pub ops: Vec<Op<DocOp>>,
     pub validations: Vec<Validation>,
+    pub effect: StepEffect,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StepEffect {
+    pub text_inserts: Vec<TextInsertEffect>,
+    pub text_removes: Vec<TextRemoveEffect>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextInsertEffect {
+    pub node_id: NodeId,
+    pub offset: usize,
+    pub entries: Vec<EntryDot>,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextRemoveEffect {
+    pub node_id: NodeId,
+    pub offset: usize,
+    pub entries: Vec<EntryDot>,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct StepRecord {
+    pub step: Step,
+    pub effect: StepEffect,
 }
 
 #[derive(Clone, Debug, PartialEq, EnumDiscriminants)]
@@ -192,40 +221,62 @@ impl Step {
 
     pub fn apply(&self, state: &State) -> Result<StepOutput, StepError> {
         let mut validations = Vec::new();
-        let (new_state, ops) = state.batch_with_ops(|s| self.apply_to(s, &mut validations))?;
+        let mut effect = StepEffect::default();
+        let (new_state, ops) = state
+            .batch_with_ops(|s| self.apply_to_with_effect(s, &mut validations, &mut effect))?;
         Ok(StepOutput {
             state: new_state,
             ops,
             validations,
+            effect,
         })
     }
 
-    pub(crate) fn apply_to(
+    pub(crate) fn apply_to_with_effect(
         &self,
         batched: &mut BatchedState,
         validations: &mut Vec<Validation>,
+        effect: &mut StepEffect,
     ) -> Result<(), StepError> {
         match self {
             Step::InsertText {
                 node_id,
                 offset,
                 text,
-            } => steps::insert_text::apply_to(batched, validations, *node_id, *offset, text),
+            } => {
+                steps::insert_text::apply_to(batched, validations, effect, *node_id, *offset, text)
+            }
             Step::RemoveText {
                 node_id,
                 offset,
                 text,
-            } => steps::remove_text::apply_to(batched, validations, *node_id, *offset, text),
+            } => {
+                steps::remove_text::apply_to(batched, validations, effect, *node_id, *offset, text)
+            }
             Step::InsertSubtree {
                 parent_id,
                 index,
                 subtree,
-            } => steps::insert_subtree::apply_to(batched, validations, *parent_id, *index, subtree),
+            } => steps::insert_subtree::apply_to(
+                batched,
+                validations,
+                effect,
+                *parent_id,
+                *index,
+                subtree,
+            ),
             Step::RemoveSubtree {
                 parent_id,
                 index,
                 subtree,
-            } => steps::remove_subtree::apply_to(batched, validations, *parent_id, *index, subtree),
+            } => steps::remove_subtree::apply_to(
+                batched,
+                validations,
+                effect,
+                *parent_id,
+                *index,
+                subtree,
+            ),
             Step::MoveNode {
                 node_id,
                 old_parent,

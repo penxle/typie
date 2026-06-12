@@ -1,4 +1,5 @@
 use editor_macros::state;
+use editor_model::StableEntryResolution;
 use editor_state::Selection;
 
 use crate::editor::Editor;
@@ -39,6 +40,20 @@ fn paragraph_text(editor: &Editor) -> String {
     editor.state().doc.extract_text()
 }
 
+fn visible_entry_dots(
+    editor: &Editor,
+    node_id: editor_model::NodeId,
+) -> Vec<editor_crdt::EntryDot> {
+    editor
+        .state()
+        .doc
+        .text_view(node_id)
+        .expect("text node")
+        .visible_entries()
+        .map(|(entry, _)| entry)
+        .collect()
+}
+
 #[test]
 fn happy_path_replaces_text_and_emits_replaced() {
     let (initial, t1) = state! {
@@ -59,6 +74,62 @@ fn happy_path_replaces_text_and_emits_replaced() {
     assert!(paragraph_text(&editor).contains("hello earth"));
     assert_eq!(editor.history_undos_len(), before_undos + 1);
     let _ = t1;
+}
+
+#[test]
+fn replace_undo_redo_remaps_original_and_replacement_entries() {
+    let (initial, t1) = state! {
+        doc { root { paragraph { t1: text("abcd") } } }
+        selection: (t1, 1) -> (t1, 3)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    add_range(&mut editor, "r", sel);
+    let original_bc = visible_entry_dots(&editor, t1)[1..3].to_vec();
+
+    editor.apply(replace_msg("r", Some("bc"), "xy"));
+    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "axyd");
+    let first_xy = visible_entry_dots(&editor, t1)[1..3].to_vec();
+
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "abcd");
+    let fresh_bc = visible_entry_dots(&editor, t1)[1..3].to_vec();
+    assert_eq!(
+        original_bc
+            .iter()
+            .map(|entry| editor
+                .state()
+                .doc
+                .text_identity()
+                .resolve_stable_entry(*entry))
+            .collect::<Vec<_>>(),
+        fresh_bc
+            .iter()
+            .map(|entry| StableEntryResolution::Live(*entry))
+            .collect::<Vec<_>>()
+    );
+
+    editor.apply(Message::History {
+        op: HistoryOp::Redo,
+    });
+    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "axyd");
+    let fresh_xy = visible_entry_dots(&editor, t1)[1..3].to_vec();
+    assert_eq!(
+        first_xy
+            .iter()
+            .map(|entry| editor
+                .state()
+                .doc
+                .text_identity()
+                .resolve_stable_entry(*entry))
+            .collect::<Vec<_>>(),
+        fresh_xy
+            .iter()
+            .map(|entry| StableEntryResolution::Live(*entry))
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]
