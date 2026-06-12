@@ -42,7 +42,6 @@ pub struct TrackedRange {
     pub anchor: editor_state::Position,
     pub head: editor_state::Position,
     pub metadata: String,
-    pub invalid: bool,
     pub rects: Vec<editor_view::PageRect>,
     pub text: String,
 }
@@ -398,7 +397,7 @@ impl Editor {
                     msg: "freeze_selection: anchor or head not addressable in current doc".into(),
                 });
             }
-            Ok(editor_state::StableSelection::freeze(&sel, doc).into_ffi()?)
+            Ok(editor_state::StableSelection::capture(&sel, doc).into_ffi()?)
         })
     }
 
@@ -429,37 +428,24 @@ impl Editor {
             };
             let view = inner.editor.view();
             let result: Vec<TrackedRange> = ranges
-                .map(|r| {
-                    let located = if r.explicitly_invalid {
-                        None
-                    } else {
-                        r.locate(doc)
-                    };
-                    let invalid = located.is_none();
-                    let sel = located.unwrap_or_else(|| r.selection.thaw(doc));
-                    let resolved = if invalid { None } else { sel.resolve(doc) };
-                    let rects = match &resolved {
-                        Some(resolved) => view
-                            .selection_rects(resolved)
-                            .into_iter()
-                            .map(|sr| sr.without_meta())
-                            .collect(),
-                        None => Vec::new(),
-                    };
-                    let text = match &resolved {
-                        Some(resolved) => resolved.collect_text(),
-                        None => String::new(),
-                    };
-                    TrackedRange {
+                .filter_map(|r| {
+                    let sel = r.locate(doc)?;
+                    let resolved = sel.resolve(doc)?;
+                    let rects = view
+                        .selection_rects(&resolved)
+                        .into_iter()
+                        .map(|sr| sr.without_meta())
+                        .collect();
+                    let text = resolved.collect_text();
+                    Some(TrackedRange {
                         id: r.id.clone(),
                         group: r.group.clone(),
                         anchor: sel.anchor,
                         head: sel.head,
                         metadata: r.metadata.clone(),
-                        invalid,
                         rects,
                         text,
-                    }
+                    })
                 })
                 .collect();
             Ok(result.into_ffi()?)
@@ -1060,11 +1046,10 @@ mod tests {
         let r = ranges.iter().find(|x| x.id == "r").expect("range present");
         assert_eq!(r.anchor.offset, 1);
         assert_eq!(r.head.offset, 8);
-        assert!(!r.invalid);
     }
 
     #[test]
-    fn ffi_tracked_ranges_exports_located_endpoints_after_history_remap() {
+    fn ffi_tracked_ranges_exports_resolved_endpoints_after_history_remap() {
         let (initial, t1) = state! {
             doc { root { paragraph { t1: text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
             selection: (t1, 4) -> (t1, 6)
@@ -1159,7 +1144,42 @@ mod tests {
         assert_eq!(r.text, "ㅁ");
         assert_eq!(r.anchor.offset, 4);
         assert_eq!(r.head.offset, 5);
-        assert!(!r.invalid);
+    }
+
+    #[test]
+    fn ffi_tracked_ranges_omits_unresolved_ranges() {
+        let (state_a, _t1) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 1) -> (t1, 4)
+        };
+        let editor_a = make_ffi_editor(state_a.clone());
+        let stable = editor_a
+            .freeze_selection(state_a.selection.unwrap())
+            .expect("freeze");
+
+        let (state_b, ..) = state! {
+            doc { root { paragraph { t2: text("world") } } }
+            selection: (t2, 0)
+        };
+        let editor_b = make_ffi_editor(state_b);
+        editor_b
+            .enqueue(
+                editor_core::Message::TrackedRange {
+                    op: editor_core::TrackedRangeOp::AddFrozen {
+                        id: "r".into(),
+                        group: "comment".into(),
+                        selection: stable,
+                        metadata: String::new(),
+                    },
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .expect("enqueue add");
+        let _ = editor_b.tick().expect("tick add");
+
+        let ranges = editor_b.tracked_ranges(None).expect("ffi ok");
+        assert!(ranges.is_empty());
     }
 
     #[test]

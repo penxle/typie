@@ -284,11 +284,11 @@ mod tests {
         editor.receive_remote_changeset(cs);
         let _ = editor.tick().unwrap();
 
-        // handle_remote must normalize after thaw, expanding to the image (child[0]) node selection.
+        // handle_remote must normalize after restore, expanding to the image (child[0]) node selection.
         let sel = editor.state().selection.expect("selection exists in test");
         assert!(
             !sel.is_collapsed(),
-            "remote thaw must normalize collapsed-on-atom, got {:?}",
+            "remote restore must normalize collapsed-on-atom, got {:?}",
             sel
         );
         assert_eq!(

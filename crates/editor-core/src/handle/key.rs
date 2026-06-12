@@ -15,11 +15,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
         && let Some(playback) = editor.try_undo_auto_replacement()
     {
         editor.transact(|tr| {
-            super::history::apply_history_playback(
-                tr,
-                &playback.steps_to_apply,
-                &playback.source_steps,
-            )?;
+            super::history::apply_history_playback(tr, &playback)?;
             Ok(())
         })?;
         return Ok(());

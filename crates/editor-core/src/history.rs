@@ -6,9 +6,10 @@ pub struct HistoryEntry {
     pub tag: Option<HistoryTag>,
 }
 
-pub struct HistoryPlayback {
-    pub steps_to_apply: Vec<Step>,
-    pub source_steps: Vec<StepRecord>,
+#[derive(Clone)]
+pub struct HistoryPlaybackStep {
+    pub source: StepRecord,
+    pub step_to_apply: Step,
 }
 
 pub struct History {
@@ -79,44 +80,51 @@ impl History {
         self.bump_last_tag_revision();
     }
 
-    pub fn undo(&mut self) -> Option<HistoryPlayback> {
+    pub fn undo(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
         let entry = self.undos.pop()?;
-        let source_steps: Vec<StepRecord> = entry.steps.iter().rev().cloned().collect();
-        let steps: Vec<Step> = source_steps
+        let steps: Vec<HistoryPlaybackStep> = entry
+            .steps
             .iter()
-            .map(|record| record.step.inverse())
+            .rev()
+            .cloned()
+            .map(|source| HistoryPlaybackStep {
+                step_to_apply: source.step.inverse(),
+                source,
+            })
             .collect();
         self.redos.push(entry);
-        Some(HistoryPlayback {
-            steps_to_apply: steps,
-            source_steps,
-        })
+        Some(steps)
     }
 
-    pub fn last_inverse_steps(&self) -> Option<Vec<Step>> {
+    pub fn last_inverse_playback_steps(&self) -> Option<Vec<HistoryPlaybackStep>> {
         let entry = self.undos.last()?;
         Some(
             entry
                 .steps
                 .iter()
                 .rev()
-                .map(|record| record.step.inverse())
+                .cloned()
+                .map(|source| HistoryPlaybackStep {
+                    step_to_apply: source.step.inverse(),
+                    source,
+                })
                 .collect(),
         )
     }
 
-    pub fn redo(&mut self) -> Option<HistoryPlayback> {
+    pub fn redo(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
         let entry = self.redos.pop()?;
-        let source_steps = entry.steps.clone();
-        let steps = source_steps
+        let steps = entry
+            .steps
             .iter()
-            .map(|record| record.step.clone())
+            .cloned()
+            .map(|source| HistoryPlaybackStep {
+                step_to_apply: source.step.clone(),
+                source,
+            })
             .collect();
         self.undos.push(entry);
-        Some(HistoryPlayback {
-            steps_to_apply: steps,
-            source_steps,
-        })
+        Some(steps)
     }
 
     /// Called after redo so that backspace shortcuts still fire correctly.
@@ -185,8 +193,8 @@ mod tests {
         let from_sel = Selection::collapsed(Position::new(NodeId::ROOT, from));
         let to_sel = Selection::collapsed(Position::new(NodeId::ROOT, to));
         Step::SetSelection {
-            old: Some(StableSelection::freeze(&from_sel, &s.doc)),
-            new: Some(StableSelection::freeze(&to_sel, &s.doc)),
+            old: Some(StableSelection::capture(&from_sel, &s.doc)),
+            new: Some(StableSelection::capture(&to_sel, &s.doc)),
         }
     }
 
@@ -205,6 +213,13 @@ mod tests {
         }
     }
 
+    fn playback_steps(playback: Vec<HistoryPlaybackStep>) -> Vec<Step> {
+        playback
+            .into_iter()
+            .map(|step| step.step_to_apply)
+            .collect()
+    }
+
     #[test]
     fn undo_returns_inverse_steps_in_reverse() {
         let s = fixture_state();
@@ -214,11 +229,11 @@ mod tests {
             Instant::now(),
         );
 
-        let undone = h.undo().unwrap().steps_to_apply;
+        let undone = playback_steps(h.undo().unwrap());
         assert_eq!(undone.len(), 2);
         assert!(matches!(&undone[0], Step::SetSelection { old, new }
-            if old.as_ref().map(|ss| ss.thaw(&s.doc).head.offset) == Some(1)
-                && new.as_ref().map(|ss| ss.thaw(&s.doc).head.offset) == Some(0)));
+            if old.as_ref().map(|ss| ss.restore(&s.doc).head.offset) == Some(1)
+                && new.as_ref().map(|ss| ss.restore(&s.doc).head.offset) == Some(0)));
         assert!(matches!(&undone[1], Step::RemoveText { .. }));
     }
 
@@ -228,7 +243,7 @@ mod tests {
         h.push_at(&[record(text_step())], Instant::now());
         h.undo();
 
-        let redone = h.redo().unwrap().steps_to_apply;
+        let redone = playback_steps(h.redo().unwrap());
         assert_eq!(redone.len(), 1);
         assert!(matches!(&redone[0], Step::InsertText { text, .. } if text == "x"));
     }
@@ -251,8 +266,10 @@ mod tests {
 
         h.push_at(&[step_record.clone()], Instant::now());
 
-        assert_eq!(h.undos[0].steps, vec![step_record]);
-        let undone = h.undo().unwrap().steps_to_apply;
+        assert_eq!(h.undos[0].steps, vec![step_record.clone()]);
+        let playback = h.undo().unwrap();
+        assert_eq!(playback[0].source, step_record);
+        let undone = playback_steps(playback);
         assert_eq!(undone.len(), 1);
         assert!(matches!(&undone[0], Step::RemoveText { .. }));
     }
@@ -286,7 +303,7 @@ mod tests {
         h.push_at(&[record(text_step())], t);
         h.push_at(&[record(text_step())], t + Duration::from_millis(100));
 
-        let undone = h.undo().unwrap().steps_to_apply;
+        let undone = playback_steps(h.undo().unwrap());
         assert_eq!(undone.len(), 2);
         assert!(h.undo().is_none());
     }
@@ -382,7 +399,7 @@ mod tests {
         h.push_at(&[record(text_step())], t + Duration::from_millis(150));
 
         assert!(h.can_undo(), "steps must not be dropped");
-        let undone = h.undo().unwrap().steps_to_apply;
+        let undone = playback_steps(h.undo().unwrap());
         assert_eq!(undone.len(), 1);
     }
 
@@ -395,11 +412,11 @@ mod tests {
             Instant::now(),
         );
 
-        let undone = h.undo().unwrap().steps_to_apply;
+        let undone = playback_steps(h.undo().unwrap());
         assert_eq!(undone.len(), 1);
         assert!(matches!(&undone[0], Step::RemoveText { .. }));
 
-        let redone = h.redo().unwrap().steps_to_apply;
+        let redone = playback_steps(h.redo().unwrap());
         assert_eq!(redone.len(), 1);
         assert!(matches!(&redone[0], Step::InsertText { .. }));
     }
@@ -438,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn last_inverse_steps_returns_inverse_of_top_entry_without_mutation() {
+    fn last_inverse_playback_steps_return_source_and_inverse_without_mutation() {
         let mut h = History::new(Duration::from_millis(300));
         h.push_tagged_at(
             &[record(text_step())],
@@ -451,9 +468,10 @@ mod tests {
         let redos_before = h.redos_len();
         let tag_before = h.last_tag().cloned();
 
-        let inverse = h.last_inverse_steps().expect("Some");
+        let inverse = h.last_inverse_playback_steps().expect("Some");
         assert_eq!(inverse.len(), 1);
-        assert!(matches!(&inverse[0], Step::RemoveText { .. }));
+        assert!(matches!(&inverse[0].source.step, Step::InsertText { .. }));
+        assert!(matches!(&inverse[0].step_to_apply, Step::RemoveText { .. }));
 
         assert_eq!(h.undos_len(), undos_before);
         assert_eq!(h.redos_len(), redos_before);
@@ -461,9 +479,9 @@ mod tests {
     }
 
     #[test]
-    fn last_inverse_steps_returns_none_on_empty() {
+    fn last_inverse_playback_steps_returns_none_on_empty() {
         let h = History::new(Duration::from_millis(300));
-        assert!(h.last_inverse_steps().is_none());
+        assert!(h.last_inverse_playback_steps().is_none());
     }
 
     #[test]

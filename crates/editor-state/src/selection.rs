@@ -92,7 +92,7 @@ impl Selection {
         ResolvedSelection::resolve(doc, *self)
     }
 
-    pub fn freeze(&self, doc: &Doc) -> crate::StableSelection {
-        crate::StableSelection::freeze(self, doc)
+    pub fn capture(&self, doc: &Doc) -> crate::StableSelection {
+        crate::StableSelection::capture(self, doc)
     }
 }

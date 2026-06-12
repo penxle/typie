@@ -28,7 +28,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                 .map(|selection| snap_to_block_unit(&editor.state.doc, selection))
                 .filter(|selection| !selection.is_collapsed())
                 .map_or(DndState::Idle, |source| DndState::InternalDnd {
-                    source: StableSelection::freeze(&source, &editor.state.doc),
+                    source: StableSelection::capture(&source, &editor.state.doc),
                     drop_target: None,
                 });
             Ok(())
@@ -50,7 +50,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             modifiers,
         } => {
             let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
-                let selection = source.thaw(&editor.state.doc);
+                let selection = source.restore(&editor.state.doc);
                 (!selection.is_collapsed()).then_some(selection)
             } else {
                 None
@@ -96,7 +96,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             payload, modifiers, ..
         } => {
             let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
-                let selection = source.thaw(&editor.state.doc);
+                let selection = source.restore(&editor.state.doc);
                 (!selection.is_collapsed()).then_some(selection)
             } else {
                 None
@@ -358,12 +358,13 @@ fn drop_internal_selection_at(
         );
     }
 
-    let stable_target = StableSelection::freeze(&Selection::collapsed(position), &editor.state.doc);
+    let stable_target =
+        StableSelection::capture(&Selection::collapsed(position), &editor.state.doc);
     editor.transact(|tr| {
         commands::set_selection(tr, source)?;
         commands::delete_selection(tr)?;
 
-        let target = stable_target.thaw(&tr.doc()).head;
+        let target = stable_target.restore(&tr.doc()).head;
         if let Some(inserted_selection) = commands::insert_slice_at(tr, target, slice.clone())?
             && !inserted_selection.is_collapsed()
         {

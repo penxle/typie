@@ -43,7 +43,7 @@ impl Transaction {
         let selection_stable = state
             .selection
             .as_ref()
-            .map(|s| StableSelection::freeze(s, &state.doc));
+            .map(|s| StableSelection::capture(s, &state.doc));
         Self {
             state: state.clone(),
             selection_stable,
@@ -88,6 +88,14 @@ impl Transaction {
         self.steps.iter().any(|s| s.is_selection_step())
     }
 
+    pub fn step_records_len(&self) -> usize {
+        self.step_records.len()
+    }
+
+    pub fn step_records_since(&self, start: usize) -> &[StepRecord] {
+        &self.step_records[start.min(self.step_records.len())..]
+    }
+
     pub fn push_effect(&mut self, effect: Effect) {
         self.effects.push(effect);
     }
@@ -124,7 +132,7 @@ impl Transaction {
         self.state.selection = self
             .selection_stable
             .as_ref()
-            .map(|stable| stable.thaw(&self.state.doc));
+            .map(|stable| stable.restore(&self.state.doc));
     }
 
     pub fn savepoint(&self) -> Savepoint {
@@ -401,7 +409,7 @@ impl Transaction {
         let old = self.selection_stable.clone();
         let new = new_effective
             .as_ref()
-            .map(|s| StableSelection::freeze(s, &self.state.doc));
+            .map(|s| StableSelection::capture(s, &self.state.doc));
         if new_effective == self.state.selection && new == old {
             return Ok(());
         }
@@ -472,7 +480,7 @@ impl Transaction {
         // State-only steps (SetSelection/SetComposition/SetPendingModifiers)
         // write a single field nothing else reads during step replay, so only
         // the last of each kind affects the final state. Defer them until after
-        // all doc steps have replayed: SetSelection.apply_to thaws against the
+        // all doc steps have replayed: SetSelection.apply_to restores against the
         // current doc, and during undo the relevant selection sits between doc
         // edits whose inverses are applied later in the same batch — running it
         // in place would resolve against a half-restored doc.
@@ -1075,10 +1083,10 @@ mod tests {
                 let old_sel = old.as_ref().expect("old must be Some");
                 let new_sel_stable = new.as_ref().expect("new must be Some");
                 assert_eq!(
-                    old_sel.thaw(&state.doc),
+                    old_sel.restore(&state.doc),
                     Selection::collapsed(Position::new(t1, 0))
                 );
-                assert_eq!(new_sel_stable.thaw(&state.doc), new_sel);
+                assert_eq!(new_sel_stable.restore(&state.doc), new_sel);
             }
             _ => panic!("expected SetSelection"),
         }

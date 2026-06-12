@@ -2,7 +2,7 @@ use editor_clipboard::Slice;
 use editor_commands::{self as commands};
 use editor_model::{Fragment, PlainNode};
 use editor_state::enclosing_table_cell;
-use editor_transaction::{HistoryMeta, HistoryTag};
+use editor_transaction::{HistoryMeta, HistoryTag, StepError, StepRecord, Transaction};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -53,12 +53,22 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                 return Ok(());
             };
             let plain_text = plain_text.clone();
-            let Some(inverse_steps) = editor.history_last_inverse_steps() else {
+            let Some(inverse_playback_steps) = editor.history_last_inverse_playback_steps() else {
                 return Ok(());
             };
+            let source_records: Vec<StepRecord> = inverse_playback_steps
+                .iter()
+                .rev()
+                .map(|step| step.source.clone())
+                .collect();
+            let inverse_steps = inverse_playback_steps
+                .into_iter()
+                .map(|step| step.step_to_apply)
+                .collect();
             let plain_slice = Slice::from_text(&plain_text);
             editor.transact(|tr| {
                 tr.apply_steps(inverse_steps)?;
+                let replacement_start = tr.step_records_len();
                 commands::chain!(
                     tr,
                     commands::optional!(commands::materialize_gap_paragraph()),
@@ -66,10 +76,33 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     commands::optional!(commands::delete_selection()),
                     |tr| commands::insert_slice(tr, plain_slice.clone()),
                 )?;
+                let replacement_records = tr.step_records_since(replacement_start).to_vec();
+                apply_repaste_as_text_remaps(tr, &source_records, &replacement_records)?;
                 Ok(())
             })
         }
     }
+}
+
+fn apply_repaste_as_text_remaps(
+    tr: &mut Transaction,
+    source_records: &[StepRecord],
+    replacement_records: &[StepRecord],
+) -> Result<(), StepError> {
+    let source_inserts: Vec<_> = source_records
+        .iter()
+        .flat_map(|record| record.effect.text_inserts.iter())
+        .collect();
+    let replacement_inserts: Vec<_> = replacement_records
+        .iter()
+        .flat_map(|record| record.effect.text_inserts.iter())
+        .collect();
+
+    super::history::apply_insert_effect_remaps(
+        tr,
+        source_inserts.iter().copied(),
+        replacement_inserts.iter().copied(),
+    )
 }
 
 fn is_cell_rect_selection(tr: &editor_transaction::Transaction) -> bool {
@@ -107,7 +140,7 @@ mod tests {
     use crate::state_field::StateField;
     use editor_macros::state;
     use editor_model::ModifierType;
-    use editor_state::{DocFlatExt, ResolvedPositionFlatExt, assert_state_eq};
+    use editor_state::{DocFlatExt, ResolvedPositionFlatExt, Selection, assert_state_eq};
     use editor_transaction::HistoryTag;
 
     use super::*;
@@ -958,6 +991,52 @@ mod tests {
             selection: (t3, 6)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn repaste_as_text_remaps_tracked_range_on_pasted_text() {
+        let (s_source, ..) = state! {
+            doc { root { paragraph { t1: text("hello") [bold] } } }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        let payload = Slice::extract(&s_source).unwrap().to_payload();
+
+        let (s_target, ..) = state! {
+            doc { root { paragraph { t2: text("Hi") } } }
+            selection: (t2, 1)
+        };
+        let mut editor = Editor::new_test(s_target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+        let selection = editor.state().selection.unwrap();
+        let pasted = Selection::new(
+            editor_state::Position::new(selection.head.node_id, selection.head.offset - 5),
+            selection.head,
+        );
+        editor.apply(Message::TrackedRange {
+            op: TrackedRangeOp::Add {
+                id: "r".into(),
+                group: "comment".into(),
+                selection: pasted,
+                metadata: String::new(),
+            },
+        });
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+
+        let range = editor.tracked_ranges().get("r").expect("range present");
+        let resolved = range
+            .locate(&editor.state().doc)
+            .and_then(|sel| sel.resolve(&editor.state().doc))
+            .map(|resolved| resolved.collect_text());
+        assert_eq!(resolved.as_deref(), Some("hello"));
     }
 
     #[test]

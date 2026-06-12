@@ -10,7 +10,7 @@ use editor_state::{
     DocFlatExt, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
     StableSelection, State, closest_empty_paragraph_break_end_between, farther_endpoint,
 };
-use editor_transaction::{Effect, HistoryMeta, HistoryTag, Step, StepError, Transaction};
+use editor_transaction::{Effect, HistoryMeta, HistoryTag, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -21,7 +21,7 @@ use crate::dnd::DndState;
 use crate::error::EditorError;
 use crate::event::{EditorEvent, FontData};
 use crate::handle;
-use crate::history::{History, HistoryPlayback};
+use crate::history::{History, HistoryPlaybackStep};
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
@@ -322,9 +322,6 @@ impl Editor {
 
         let mut scored: Vec<(usize, String, TrackedRangeHit)> = Vec::new();
         for range in iter {
-            if range.explicitly_invalid {
-                continue;
-            }
             let Some(sel) = range.locate(&self.state.doc) else {
                 continue;
             };
@@ -579,9 +576,6 @@ impl Editor {
                 continue;
             };
             if !group.enabled {
-                continue;
-            }
-            if range.explicitly_invalid {
                 continue;
             }
             let Some(sel) = range.locate(&self.state.doc) else {
@@ -979,11 +973,13 @@ impl Editor {
         self.history.last_tag()
     }
 
-    pub(crate) fn history_last_inverse_steps(&self) -> Option<Vec<Step>> {
-        self.history.last_inverse_steps()
+    pub(crate) fn history_last_inverse_playback_steps(
+        &self,
+    ) -> Option<Vec<crate::history::HistoryPlaybackStep>> {
+        self.history.last_inverse_playback_steps()
     }
 
-    pub(crate) fn try_undo(&mut self) -> Option<HistoryPlayback> {
+    pub(crate) fn try_undo(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= self.history.can_undo();
             return None;
@@ -991,7 +987,7 @@ impl Editor {
         self.history.undo()
     }
 
-    pub(crate) fn try_redo(&mut self) -> Option<HistoryPlayback> {
+    pub(crate) fn try_redo(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= self.history.can_redo();
             return None;
@@ -999,7 +995,7 @@ impl Editor {
         self.history.redo()
     }
 
-    pub(crate) fn try_undo_auto_replacement(&mut self) -> Option<HistoryPlayback> {
+    pub(crate) fn try_undo_auto_replacement(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
         let is_auto = matches!(self.history.last_tag(), Some(HistoryTag::AutoReplacement));
         if !is_auto {
             return None;
@@ -1035,14 +1031,14 @@ impl Editor {
             .state
             .selection
             .as_ref()
-            .map(|s| StableSelection::freeze(s, &self.state.doc));
+            .map(|s| StableSelection::capture(s, &self.state.doc));
         let (mut next, applied_ops) = self
             .state
             .receive_remote_changeset(changeset)
             .map_err(|e| EditorError::Step(StepError::State(e)))?;
         next.selection = frozen.map(|f| {
-            let thawed = f.thaw(&next.doc);
-            thawed.normalize(&next.doc).unwrap_or(thawed)
+            let restored = f.restore(&next.doc);
+            restored.normalize(&next.doc).unwrap_or(restored)
         });
         self.state = next;
         if !applied_ops.is_empty() {
@@ -3783,7 +3779,7 @@ mod tests {
         let DndState::InternalDnd { ref source, .. } = editor.dnd else {
             panic!("expected InternalDnd");
         };
-        let sel = source.thaw(&editor.state.doc);
+        let sel = source.restore(&editor.state.doc);
 
         // Extract slice
         let mut state = editor.state().clone();
@@ -3819,7 +3815,7 @@ mod tests {
         }
 
         // Step 1: set_selection + delete_selection in separate transact
-        let stable_target = StableSelection::freeze(
+        let stable_target = StableSelection::capture(
             &Selection::collapsed(Position::new(NodeId::ROOT, 2)),
             &editor.state.doc,
         );
@@ -3835,7 +3831,7 @@ mod tests {
         }
 
         // Step 2: insert_slice_at in separate transact
-        let target = stable_target.thaw(&editor.state.doc).head;
+        let target = stable_target.restore(&editor.state.doc).head;
         eprintln!(
             "target position after deletion: node={:?} offset={}",
             target.node_id, target.offset
@@ -3880,7 +3876,7 @@ mod tests {
             let DndState::InternalDnd { ref source, .. } = editor.dnd.clone() else {
                 panic!("expected InternalDnd state");
             };
-            let sel = source.thaw(&editor.state.doc);
+            let sel = source.restore(&editor.state.doc);
             assert!(
                 !sel.is_collapsed(),
                 "source selection must not be collapsed"

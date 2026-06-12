@@ -72,7 +72,7 @@ export type AiFeedback = {
   category: string | null;
 };
 
-export type TrackedRangePosition = Pick<TrackedRange, 'anchor' | 'head' | 'invalid'>;
+export type TrackedRangePosition = Pick<TrackedRange, 'anchor' | 'head'>;
 
 let wasmInitPromise: Promise<void> | null = null;
 const VIEWPORT_RESIZE_DEBOUNCE_MS = 50;
@@ -85,7 +85,7 @@ const VIEWPORT_RESIZE_DEBOUNCE_MS = 50;
  * 넘기지 않도록 `live`를 가려서 전달한다. (TR-252)
  */
 export function pickMatchSelection(match: Selection, live?: TrackedRangePosition): Selection {
-  return live && !live.invalid ? { anchor: live.anchor, head: live.head } : match;
+  return live ? { anchor: live.anchor, head: live.head } : match;
 }
 
 function ensureWasmInitialized(): Promise<void> {
@@ -716,7 +716,7 @@ export class Editor {
 
   trackedItemRects(id: string): PageRect[] | null {
     const range = this.trackedRanges.find((r) => r.id === id);
-    if (!range || range.invalid) return null;
+    if (!range) return null;
     return range.rects.length > 0 ? range.rects : null;
   }
 
@@ -1220,14 +1220,12 @@ export class Editor {
     if (this.activeSpellcheckErrorId === id) return;
 
     const restoreToNormalGroup = (errorId: string) => {
-      const range = this.trackedRanges.find((r) => r.id === errorId);
-      if (!range || range.invalid) return;
+      if (!this.trackedRanges.some((r) => r.id === errorId)) return;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck' } });
     };
 
     const promoteToActiveGroup = (errorId: string): boolean => {
-      const range = this.trackedRanges.find((r) => r.id === errorId);
-      if (!range || range.invalid) return false;
+      if (!this.trackedRanges.some((r) => r.id === errorId)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck-active' } });
       return true;
     };
@@ -1403,8 +1401,7 @@ export class Editor {
   }
 
   isCommentLocatable(id: string): boolean {
-    const r = this.trackedRanges.find((x) => x.id === id);
-    return !!r && !r.invalid;
+    return this.trackedRanges.some((x) => x.id === id);
   }
 
   commentIdsAt(page: number, x: number, y: number): string[] {
@@ -1418,8 +1415,7 @@ export class Editor {
     if (this.activeCommentId === id) return;
 
     const move = (cid: string, group: 'comment' | 'comment-active'): boolean => {
-      const range = this.trackedRanges.find((r) => r.id === cid);
-      if (!range || range.invalid) return false;
+      if (!this.trackedRanges.some((r) => r.id === cid)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: cid, group } });
       return true;
     };
@@ -1440,14 +1436,12 @@ export class Editor {
     if (this.activeAiFeedbackId === id) return;
 
     const restoreToNormalGroup = (feedbackId: string) => {
-      const range = this.trackedRanges.find((r) => r.id === feedbackId);
-      if (!range || range.invalid) return;
+      if (!this.trackedRanges.some((r) => r.id === feedbackId)) return;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback' } });
     };
 
     const promoteToActiveGroup = (feedbackId: string): boolean => {
-      const range = this.trackedRanges.find((r) => r.id === feedbackId);
-      if (!range || range.invalid) return false;
+      if (!this.trackedRanges.some((r) => r.id === feedbackId)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback-active' } });
       return true;
     };
@@ -1593,14 +1587,13 @@ export class Editor {
       const isStale = (e: SpellcheckError): boolean => {
         const r = rangeById.get(e.id);
         if (!r) return true;
-        if (r.invalid) return true;
         if (r.text !== e.context) return true;
         return false;
       };
 
       for (const e of this.spellcheckErrors) {
         const r = rangeById.get(e.id);
-        if (r && !r.invalid && r.text !== e.context) {
+        if (r && r.text !== e.context) {
           this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: e.id } });
         }
       }
@@ -1613,7 +1606,7 @@ export class Editor {
 
       this.aiFeedbacks = this.aiFeedbacks.filter((f) => {
         const r = rangeById.get(f.id);
-        return r !== undefined && !r.invalid;
+        return r !== undefined;
       });
 
       if (this.activeAiFeedbackId !== null && !this.aiFeedbacks.some((f) => f.id === this.activeAiFeedbackId)) {

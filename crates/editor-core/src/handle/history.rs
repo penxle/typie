@@ -5,6 +5,7 @@ use editor_transaction::{
 
 use crate::editor::Editor;
 use crate::error::EditorError;
+use crate::history::HistoryPlaybackStep;
 use crate::message::*;
 
 pub fn handle_history_op(editor: &mut Editor, op: HistoryOp) -> Result<(), EditorError> {
@@ -15,7 +16,7 @@ pub fn handle_history_op(editor: &mut Editor, op: HistoryOp) -> Result<(), Edito
 
     if let Some(playback) = playback {
         editor.transact(|tr| {
-            apply_history_playback(tr, &playback.steps_to_apply, &playback.source_steps)?;
+            apply_history_playback(tr, &playback)?;
             Ok(())
         })?;
         // Redo re-applies the original tagged entry. Restore last_tag so that
@@ -29,58 +30,60 @@ pub fn handle_history_op(editor: &mut Editor, op: HistoryOp) -> Result<(), Edito
 
 pub(super) fn apply_history_playback(
     tr: &mut Transaction,
-    steps_to_apply: &[Step],
-    source_steps: &[StepRecord],
+    steps: &[HistoryPlaybackStep],
 ) -> Result<bool, StepError> {
     tr.update_meta(|m| m.history = HistoryMeta::Skip);
 
-    let doc_steps = history_playback_doc_steps(steps_to_apply);
-    let state_steps = history_playback_state_steps(steps_to_apply);
+    let doc_playback_steps = history_playback_doc_steps(steps);
+    let doc_steps = doc_playback_steps
+        .iter()
+        .map(|step| step.step_to_apply.clone())
+        .collect();
+    let state_steps = history_playback_state_steps(steps);
     let playback_steps = tr.apply_steps(doc_steps)?;
-    apply_stable_position_remaps_for_playback(tr, source_steps, &playback_steps)?;
-    // Stable selections in local state steps must thaw after remaps from the
+    apply_stable_position_remaps_for_playback(tr, &doc_playback_steps, &playback_steps)?;
+    // Stable selections in local state steps must restore after remaps from the
     // freshly replayed doc entries have been installed.
     tr.apply_steps(state_steps)?;
 
-    Ok(!steps_to_apply.is_empty())
+    Ok(!steps.is_empty())
 }
 
-fn history_playback_doc_steps(steps: &[Step]) -> Vec<Step> {
+fn history_playback_doc_steps(steps: &[HistoryPlaybackStep]) -> Vec<&HistoryPlaybackStep> {
     steps
         .iter()
-        .filter(|step| step.is_doc_step())
-        .cloned()
+        .filter(|step| step.step_to_apply.is_doc_step())
         .collect()
 }
 
-fn history_playback_state_steps(steps: &[Step]) -> Vec<Step> {
+fn history_playback_state_steps(steps: &[HistoryPlaybackStep]) -> Vec<Step> {
     steps
         .iter()
-        .filter(|step| !step.is_doc_step())
-        .cloned()
+        .filter(|step| !step.step_to_apply.is_doc_step())
+        .map(|step| step.step_to_apply.clone())
         .collect()
 }
 
 fn apply_stable_position_remaps_for_playback(
     tr: &mut Transaction,
-    source: &[StepRecord],
+    source: &[&HistoryPlaybackStep],
     playback_steps: &[StepRecord],
 ) -> Result<(), StepError> {
-    let source_text_steps = source.iter().filter(|record| has_text_effect(record));
-    let playback_text_steps = playback_steps
-        .iter()
-        .filter(|record| has_text_effect(record));
-    // TODO: history playback step을 pair로 들고 zip을 없앤다.
-    for (source_step, playback_step) in source_text_steps.zip(playback_text_steps) {
+    for idx in 0..source.len() {
+        let source_step = source[idx];
+        let playback_step = &playback_steps[idx];
+        if !has_text_effect(&source_step.source) || !has_text_effect(playback_step) {
+            continue;
+        }
         apply_remove_to_insert_remaps(
             tr,
-            &source_step.effect.text_removes,
-            &playback_step.effect.text_inserts,
+            source_step.source.effect.text_removes.iter(),
+            playback_step.effect.text_inserts.iter(),
         )?;
-        apply_insert_to_insert_remaps(
+        apply_insert_effect_remaps(
             tr,
-            &source_step.effect.text_inserts,
-            &playback_step.effect.text_inserts,
+            source_step.source.effect.text_inserts.iter(),
+            playback_step.effect.text_inserts.iter(),
         )?;
     }
     Ok(())
@@ -90,29 +93,40 @@ fn has_text_effect(record: &StepRecord) -> bool {
     !record.effect.text_inserts.is_empty() || !record.effect.text_removes.is_empty()
 }
 
-fn apply_remove_to_insert_remaps(
+fn apply_remove_to_insert_remaps<'a>(
     tr: &mut Transaction,
-    from_effects: &[TextRemoveEffect],
-    to_effects: &[TextInsertEffect],
+    from_effects: impl ExactSizeIterator<Item = &'a TextRemoveEffect>,
+    to_effects: impl ExactSizeIterator<Item = &'a TextInsertEffect>,
 ) -> Result<(), StepError> {
-    for (from, to) in from_effects.iter().zip(to_effects.iter()) {
+    if from_effects.len() != to_effects.len() {
+        return Ok(());
+    }
+
+    for (from, to) in from_effects.zip(to_effects) {
         apply_entry_remaps(tr, &from.entries, &from.text, &to.entries, &to.text)?;
     }
     Ok(())
 }
 
-fn apply_insert_to_insert_remaps(
+pub(super) fn apply_insert_effect_remaps<'a>(
     tr: &mut Transaction,
-    from_effects: &[TextInsertEffect],
-    to_effects: &[TextInsertEffect],
+    from_effects: impl ExactSizeIterator<Item = &'a TextInsertEffect>,
+    to_effects: impl ExactSizeIterator<Item = &'a TextInsertEffect>,
 ) -> Result<(), StepError> {
-    for (from, to) in from_effects.iter().zip(to_effects.iter()) {
+    // HistoryPlaybackStep pairs the semantic source step with the step applied
+    // during undo/redo. Text effects are still emitted independently by those
+    // applications; if their shape differs, entry mapping is ambiguous.
+    if from_effects.len() != to_effects.len() {
+        return Ok(());
+    }
+
+    for (from, to) in from_effects.zip(to_effects) {
         apply_entry_remaps(tr, &from.entries, &from.text, &to.entries, &to.text)?;
     }
     Ok(())
 }
 
-fn apply_entry_remaps(
+pub(super) fn apply_entry_remaps(
     tr: &mut Transaction,
     from_entries: &[EntryDot],
     from_text: &str,
@@ -136,9 +150,26 @@ mod tests_playback {
     use editor_crdt::EntryDot;
     use editor_macros::state;
     use editor_model::{NodeId, StableEntryResolution};
-    use editor_transaction::{HistoryMeta, Step, StepRecord, Transaction};
+    use editor_transaction::{
+        HistoryMeta, Step, StepEffect, StepRecord, TextInsertEffect, Transaction,
+    };
 
     use super::*;
+    use crate::history::HistoryPlaybackStep;
+
+    fn playback_step(source: StepRecord, step_to_apply: Step) -> HistoryPlaybackStep {
+        HistoryPlaybackStep {
+            source,
+            step_to_apply,
+        }
+    }
+
+    fn empty_record(step: Step) -> StepRecord {
+        StepRecord {
+            step,
+            effect: StepEffect::default(),
+        }
+    }
 
     #[test]
     fn applies_doc_steps_and_marks_history_skip() {
@@ -147,17 +178,15 @@ mod tests_playback {
             selection: (t, 1)
         };
         let mut tr = Transaction::new(&state);
+        let step = Step::InsertText {
+            node_id: t,
+            offset: 1,
+            text: "x".into(),
+        };
 
-        let changed = apply_history_playback(
-            &mut tr,
-            &[Step::InsertText {
-                node_id: t,
-                offset: 1,
-                text: "x".into(),
-            }],
-            &[],
-        )
-        .unwrap();
+        let changed =
+            apply_history_playback(&mut tr, &[playback_step(empty_record(step.clone()), step)])
+                .unwrap();
 
         assert!(changed);
         assert!(matches!(tr.meta().history, HistoryMeta::Skip));
@@ -171,8 +200,7 @@ mod tests_playback {
 
         apply_history_playback(
             &mut tr,
-            std::slice::from_ref(&source_step.step),
-            std::slice::from_ref(&source_step),
+            &[playback_step(source_step.clone(), source_step.step.clone())],
         )
         .unwrap();
 
@@ -195,20 +223,41 @@ mod tests_playback {
         let (state, t, source_step, old_x) = state_after_insert_then_remove();
         let mut tr = Transaction::new(&state);
 
-        apply_history_playback(
-            &mut tr,
-            &[Step::InsertText {
-                node_id: t,
-                offset: 1,
-                text: "y".into(),
-            }],
-            std::slice::from_ref(&source_step),
-        )
-        .unwrap();
+        let step = Step::InsertText {
+            node_id: t,
+            offset: 1,
+            text: "y".into(),
+        };
+        apply_history_playback(&mut tr, &[playback_step(source_step, step)]).unwrap();
 
         assert_eq!(
             tr.doc().text_identity().resolve_stable_entry(old_x),
             StableEntryResolution::Deleted(old_x)
+        );
+    }
+
+    #[test]
+    fn skips_insert_remaps_when_effect_counts_differ() {
+        let (state, t, old_a, old_b, source_effects) = state_after_two_inserts_then_remove();
+        let mut tr = Transaction::new(&state);
+
+        tr.insert_text(t, 0, "a").unwrap();
+        let replacement_effects: Vec<TextInsertEffect> = tr
+            .step_records_since(0)
+            .iter()
+            .flat_map(|record| record.effect.text_inserts.iter().cloned())
+            .collect();
+
+        apply_insert_effect_remaps(&mut tr, source_effects.iter(), replacement_effects.iter())
+            .unwrap();
+
+        assert_eq!(
+            tr.doc().text_identity().resolve_stable_entry(old_a),
+            StableEntryResolution::Deleted(old_a)
+        );
+        assert_eq!(
+            tr.doc().text_identity().resolve_stable_entry(old_b),
+            StableEntryResolution::Deleted(old_b)
         );
     }
 
@@ -229,6 +278,44 @@ mod tests_playback {
         assert_eq!(removed.doc.text_view(t).unwrap().text(), "a");
 
         (removed, t, insert_record, old_x)
+    }
+
+    fn state_after_two_inserts_then_remove() -> (
+        editor_state::State,
+        NodeId,
+        EntryDot,
+        EntryDot,
+        Vec<TextInsertEffect>,
+    ) {
+        let (initial, t) = state! {
+            doc { root { paragraph { t: text("") } } }
+            selection: (t, 0)
+        };
+
+        let mut insert_a_tr = Transaction::new(&initial);
+        insert_a_tr.insert_text(t, 0, "a").unwrap();
+        let (with_a, insert_a_records, ..) = insert_a_tr.commit();
+        let insert_a_effect = insert_a_records[0].effect.text_inserts[0].clone();
+        let old_a = insert_a_effect.entries[0];
+
+        let mut insert_b_tr = Transaction::new(&with_a);
+        insert_b_tr.insert_text(t, 1, "b").unwrap();
+        let (with_ab, insert_b_records, ..) = insert_b_tr.commit();
+        let insert_b_effect = insert_b_records[0].effect.text_inserts[0].clone();
+        let old_b = insert_b_effect.entries[0];
+
+        let mut remove_tr = Transaction::new(&with_ab);
+        remove_tr.remove_text(t, 0, 2).unwrap();
+        let (removed, ..) = remove_tr.commit();
+        assert_eq!(removed.doc.text_view(t).unwrap().text(), "");
+
+        (
+            removed,
+            t,
+            old_a,
+            old_b,
+            vec![insert_a_effect, insert_b_effect],
+        )
     }
 }
 

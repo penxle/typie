@@ -12,7 +12,7 @@ pub(crate) fn apply_to(
     _old: Option<StableSelection>,
     new: Option<StableSelection>,
 ) -> Result<(), StepError> {
-    let live = new.map(|s| s.thaw(&batched.doc));
+    let live = new.map(|s| s.restore(&batched.doc));
     batched.set_selection(live);
     Ok(())
 }
@@ -42,8 +42,8 @@ mod tests {
             old: s
                 .selection
                 .as_ref()
-                .map(|sel| StableSelection::freeze(sel, &s.doc)),
-            new: Some(StableSelection::freeze(&new_live, &s.doc)),
+                .map(|sel| StableSelection::capture(sel, &s.doc)),
+            new: Some(StableSelection::capture(&new_live, &s.doc)),
         };
         let output = step.apply(&s).unwrap();
 
@@ -66,8 +66,8 @@ mod tests {
         let original_live = s.selection.expect("fixture has selection");
         let new_live = Selection::collapsed(Position::new(t1, 3));
         let step = Step::SetSelection {
-            old: Some(StableSelection::freeze(&original_live, &s.doc)),
-            new: Some(StableSelection::freeze(&new_live, &s.doc)),
+            old: Some(StableSelection::capture(&original_live, &s.doc)),
+            new: Some(StableSelection::capture(&new_live, &s.doc)),
         };
         let s2 = step.apply(&s).unwrap().state;
         let s3 = step.inverse().apply(&s2).unwrap().state;

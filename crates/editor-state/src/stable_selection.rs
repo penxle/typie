@@ -1,12 +1,10 @@
 use editor_macros::ffi;
-use editor_model::{Doc, Node, NodeId};
+use editor_model::Doc;
 use serde::{Deserialize, Serialize};
 
 use crate::normalize::enclosing_unit_at_subtree_overlap;
-use crate::position::Position;
 use crate::selection::Selection;
-use crate::stable_position::{StablePosition, build_chain, freeze_position, thaw_position};
-use crate::{Affinity, Bind};
+use crate::stable_position::{StablePosition, restore_position};
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -17,68 +15,29 @@ pub struct StableSelection {
 }
 
 impl StableSelection {
-    pub fn freeze(sel: &Selection, doc: &Doc) -> Self {
-        let anchor = freeze_position(sel.anchor, doc);
+    pub fn capture(sel: &Selection, doc: &Doc) -> Self {
+        let anchor = StablePosition::capture(sel.anchor, doc);
         let head = if sel.is_collapsed() {
             anchor.clone()
         } else {
-            freeze_position(sel.head, doc)
+            StablePosition::capture(sel.head, doc)
         };
         StableSelection { anchor, head }
     }
 
-    pub fn freeze_covered_range(sel: &Selection, doc: &Doc) -> Option<Self> {
-        let resolved = sel.resolve(doc)?;
-        if resolved.is_collapsed() {
-            return None;
-        }
-
-        let start = Position::from(resolved.from());
-        let end = Position::from(resolved.to());
-        let covered_entries = covered_entry_endpoints(&resolved);
-
-        let anchor = match covered_entries.first {
-            Some(endpoint) => freeze_text_endpoint(
-                endpoint.node_id,
-                endpoint.entry_dot,
-                endpoint.boundary_offset,
-                Bind::Left,
-                start.affinity,
-                doc,
-            ),
-            None => freeze_position(start, doc),
-        };
-        let head = match covered_entries.last {
-            Some(endpoint) => freeze_text_endpoint(
-                endpoint.node_id,
-                endpoint.entry_dot,
-                endpoint.boundary_offset,
-                Bind::Right,
-                end.affinity,
-                doc,
-            ),
-            None => freeze_position(end, doc),
-        };
-
-        Some(StableSelection { anchor, head })
+    /// Returns whether both stored endpoints still preserve their stable
+    /// identity in `doc`. Fallback-only restoration is intentionally rejected.
+    pub fn is_preserved(&self, doc: &Doc) -> bool {
+        self.anchor.is_preserved(doc) && (self.anchor == self.head || self.head.is_preserved(doc))
     }
 
-    /// Thaws and normalizes, returning `Some` only when the selection locates
-    /// to a non-empty span.
-    // TODO: cursor thaw와 range locate를 분리한다.
-    pub fn locate(&self, doc: &Doc) -> Option<Selection> {
-        let sel = self.thaw(doc);
-        let sel = sel.normalize(doc).unwrap_or(sel);
-        (!sel.is_collapsed()).then_some(sel)
-    }
-
-    pub fn thaw(&self, doc: &Doc) -> Selection {
+    pub fn restore(&self, doc: &Doc) -> Selection {
         let was_collapsed = self.anchor == self.head;
-        let a = thaw_position(&self.anchor, doc);
+        let a = restore_position(&self.anchor, doc);
         if was_collapsed {
             return Selection { anchor: a, head: a };
         }
-        let h = thaw_position(&self.head, doc);
+        let h = restore_position(&self.head, doc);
         let candidate = Selection { anchor: a, head: h };
         if invariants_ok(&candidate, doc) {
             candidate
@@ -107,69 +66,9 @@ fn invariants_ok(sel: &Selection, doc: &Doc) -> bool {
     true
 }
 
-#[derive(Clone, Copy)]
-struct CoveredEntryEndpoint {
-    node_id: NodeId,
-    boundary_offset: usize,
-    entry_dot: editor_crdt::EntryDot,
-}
-
-#[derive(Default)]
-struct CoveredEntryEndpoints {
-    first: Option<CoveredEntryEndpoint>,
-    last: Option<CoveredEntryEndpoint>,
-}
-
-fn covered_entry_endpoints(resolved: &crate::ResolvedSelection<'_>) -> CoveredEntryEndpoints {
-    let mut endpoints = CoveredEntryEndpoints::default();
-    resolved.for_each_text_node(|node, span| {
-        let Node::Text(text_node) = node.node() else {
-            return;
-        };
-        let first_index = span.start;
-        let last_index = span.end - 1;
-        let first_entry_dot = text_node
-            .text
-            .entry_dot_at(first_index)
-            .expect("covered span start must be in text bounds");
-        let last_entry_dot = text_node
-            .text
-            .entry_dot_at(last_index)
-            .expect("covered span end must be in text bounds");
-
-        endpoints.first.get_or_insert(CoveredEntryEndpoint {
-            node_id: node.id(),
-            boundary_offset: span.start,
-            entry_dot: first_entry_dot,
-        });
-        endpoints.last = Some(CoveredEntryEndpoint {
-            node_id: node.id(),
-            boundary_offset: span.end,
-            entry_dot: last_entry_dot,
-        });
-    });
-    endpoints
-}
-
-fn freeze_text_endpoint(
-    node_id: NodeId,
-    entry_dot: editor_crdt::EntryDot,
-    boundary_offset: usize,
-    bind: Bind,
-    affinity: Affinity,
-    doc: &Doc,
-) -> StablePosition {
-    StablePosition::Char {
-        chain: build_chain(node_id, doc),
-        char_dot: entry_dot.0,
-        offset: boundary_offset,
-        bind,
-        affinity,
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::{Affinity, Bind};
     use editor_macros::state;
     use editor_model::NodeId;
 
@@ -182,11 +81,24 @@ mod tests {
             selection: (t1, 3)
         };
         let sel = state.selection.unwrap();
-        let stable = StableSelection::freeze(&sel, &state.doc);
-        let back = stable.thaw(&state.doc);
+        let stable = StableSelection::capture(&sel, &state.doc);
+        let back = stable.restore(&state.doc);
         assert_eq!(back, sel);
         assert!(back.is_collapsed());
         assert_eq!(back.anchor, back.head);
+    }
+
+    #[test]
+    fn is_preserved_returns_true_when_cursor_endpoint_is_live() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 3)
+        };
+        let sel = state.selection.unwrap();
+        let stable = StableSelection::capture(&sel, &state.doc);
+
+        assert!(stable.is_preserved(&state.doc));
+        assert_eq!(stable.restore(&state.doc), sel);
     }
 
     #[test]
@@ -196,8 +108,8 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = StableSelection::freeze(&sel, &state.doc);
-        let back = stable.thaw(&state.doc);
+        let stable = StableSelection::capture(&sel, &state.doc);
+        let back = stable.restore(&state.doc);
         assert_eq!(back, sel);
     }
 
@@ -212,12 +124,60 @@ mod tests {
             }
             selection: (t1, 2) -> (t2, 3)
         };
-        let stable = StableSelection::freeze(state.selection.as_ref().unwrap(), &state.doc);
+        let stable = StableSelection::capture(state.selection.as_ref().unwrap(), &state.doc);
 
         let dead_state = remove_paragraph(&state, p1);
-        let back = stable.thaw(&dead_state.doc);
+        let back = stable.restore(&dead_state.doc);
         assert!(back.is_collapsed());
         assert_eq!(back.head.node_id, t2);
+    }
+
+    #[test]
+    fn is_preserved_rejects_missing_child_fallback() {
+        use crate::stable_position::ChainLink;
+        use editor_crdt::Dot;
+
+        let (state, _p1, p2) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") }
+                    p2: paragraph { text("b") }
+                }
+            }
+            selection: none
+        };
+        let root_chain = vec![ChainLink {
+            node_id: NodeId::ROOT,
+            child_dot: Dot::new(0, 0),
+        }];
+        let missing_anchor = StablePosition::Child {
+            chain: root_chain.clone(),
+            child_dot: Dot::new(999, 999),
+            offset: 0,
+            bind: Bind::Right,
+            affinity: Affinity::Downstream,
+        };
+        let p2_dot = state
+            .doc
+            .get_entry(NodeId::ROOT)
+            .unwrap()
+            .children
+            .dot_for(&p2)
+            .unwrap();
+        let live_head = StablePosition::Child {
+            chain: root_chain,
+            child_dot: p2_dot,
+            offset: 1,
+            bind: Bind::Right,
+            affinity: Affinity::Downstream,
+        };
+        let stable = StableSelection {
+            anchor: missing_anchor,
+            head: live_head,
+        };
+
+        assert!(stable.restore(&state.doc).resolve(&state.doc).is_some());
+        assert!(!stable.is_preserved(&state.doc));
     }
 
     fn remove_paragraph(state: &crate::State, p_id: NodeId) -> crate::State {

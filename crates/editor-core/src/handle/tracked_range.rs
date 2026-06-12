@@ -22,8 +22,8 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                     msg: "TrackedRange::Add: selection must resolve against current doc".into(),
                 });
             }
-            let new_range =
-                TrackedRange::from_selection(id.clone(), group, selection, metadata, doc);
+            let selection = selection.capture(doc);
+            let new_range = TrackedRange::new(id.clone(), group, selection, metadata, doc);
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -40,8 +40,7 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             metadata,
         } => {
             let doc = &editor.state().doc;
-            let new_range =
-                TrackedRange::from_stable_selection(id.clone(), group, selection, metadata, doc);
+            let new_range = TrackedRange::new(id.clone(), group, selection, metadata, doc);
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -158,12 +157,6 @@ fn classify_replace_text(
             selection: None,
         };
     };
-    if range.explicitly_invalid {
-        return ReplaceTextClassification {
-            outcome: TrackedRangeReplaceOutcome::Invalid,
-            selection: None,
-        };
-    }
     let Some(selection) = range.locate(&editor.state.doc) else {
         return ReplaceTextClassification {
             outcome: TrackedRangeReplaceOutcome::Invalid,
@@ -424,7 +417,7 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
         let mut editor = Editor::new_test(state);
         let events = editor.apply(add_frozen_op("a", stable));
         assert!(editor.tracked_ranges().contains("a"));
@@ -447,7 +440,7 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
         let mut editor = Editor::new_test(state);
         editor.apply(add_frozen_op("a", stable.clone()));
         let events = editor.apply(add_frozen_op("a", stable));
@@ -464,7 +457,7 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
 
         let mut a = Editor::new_test(state.clone());
         a.apply(add_op("r", sel));
@@ -482,7 +475,7 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
         assert_probe_predicts_apply(state, add_frozen_op("a", stable));
     }
 
@@ -493,7 +486,7 @@ mod tests {
             selection: (t1, 1) -> (t1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
 
         let mut editor = Editor::new_test(state);
         editor.apply(add_frozen_op("a", stable.clone()));

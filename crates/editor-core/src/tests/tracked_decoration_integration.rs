@@ -150,7 +150,7 @@ fn invalidated_range_produces_no_marks() {
 }
 
 #[test]
-fn collapsed_on_thaw_produces_no_marks() {
+fn collapsed_on_restore_produces_no_marks() {
     let (initial, t1) = state! {
         doc { root { paragraph { t1: text("hello") } } }
         selection: (t1, 1) -> (t1, 4)
@@ -175,7 +175,7 @@ fn collapsed_on_thaw_produces_no_marks() {
 
     assert!(
         editor.tracked_decoration_marks_for_test().is_empty(),
-        "collapsed-on-thaw range must not draw"
+        "collapsed-on-restore range must not draw"
     );
 }
 

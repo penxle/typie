@@ -35,8 +35,8 @@ fn hit_test_returns_single_range_when_only_one_covers_point() {
 
     let range = editor.tracked_ranges().get("a").unwrap();
     let resolved = range
-        .selection
-        .thaw(&editor.state().doc)
+        .locate(&editor.state().doc)
+        .expect("range resolves")
         .resolve(&editor.state().doc)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
@@ -71,20 +71,21 @@ fn hit_test_excludes_invalid_range() {
     let sel = state.selection.unwrap();
     let mut editor = make_test_editor(state);
     editor.apply(add_msg("a", "comment", sel));
-    editor.apply(Message::TrackedRange {
-        op: TrackedRangeOp::Invalidate { id: "a".into() },
-    });
 
     let range = editor.tracked_ranges().get("a").unwrap();
     let resolved = range
-        .selection
-        .thaw(&editor.state().doc)
+        .locate(&editor.state().doc)
+        .expect("range resolves")
         .resolve(&editor.state().doc)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
     let r = rects[0].rect;
     let cx = r.x + r.width * 0.5;
     let cy = r.y + r.height * 0.5;
+
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::Invalidate { id: "a".into() },
+    });
 
     let hits = editor.tracked_ranges_at(rects[0].page_idx, cx, cy, None);
     assert!(hits.is_empty(), "invalid range must not appear in hits");
@@ -103,8 +104,8 @@ fn hit_test_filters_by_group() {
 
     let range = editor.tracked_ranges().get("a").unwrap();
     let resolved = range
-        .selection
-        .thaw(&editor.state().doc)
+        .locate(&editor.state().doc)
+        .expect("range resolves")
         .resolve(&editor.state().doc)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
@@ -138,8 +139,8 @@ fn hit_test_sorts_overlapping_ranges_narrowest_first() {
 
     let range = editor.tracked_ranges().get("inner").unwrap();
     let resolved = range
-        .selection
-        .thaw(&editor.state().doc)
+        .locate(&editor.state().doc)
+        .expect("range resolves")
         .resolve(&editor.state().doc)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
@@ -177,8 +178,8 @@ fn hit_test_ignores_decoration_enabled_flag() {
 
     let range = editor.tracked_ranges().get("a").unwrap();
     let resolved = range
-        .selection
-        .thaw(&editor.state().doc)
+        .locate(&editor.state().doc)
+        .expect("range resolves")
         .resolve(&editor.state().doc)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
@@ -209,8 +210,8 @@ fn hit_test_breaks_char_count_ties_by_id_alphabetically() {
 
     let range = editor.tracked_ranges().get("aaa").unwrap();
     let resolved = range
-        .selection
-        .thaw(&editor.state().doc)
+        .locate(&editor.state().doc)
+        .expect("range resolves")
         .resolve(&editor.state().doc)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);

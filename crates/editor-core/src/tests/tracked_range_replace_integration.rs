@@ -175,7 +175,7 @@ fn explicitly_invalid_range_emits_invalid_and_no_op() {
 }
 
 #[test]
-fn collapsed_on_thaw_emits_invalid() {
+fn collapsed_on_restore_emits_invalid() {
     let (initial, t1) = state! {
         doc { root { paragraph { t1: text("hello world") } } }
         selection: (t1, 6) -> (t1, 11)

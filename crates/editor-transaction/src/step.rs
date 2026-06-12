@@ -429,7 +429,7 @@ mod tests {
         };
         s.selection
             .as_ref()
-            .map(|sel| StableSelection::freeze(sel, &s.doc))
+            .map(|sel| StableSelection::capture(sel, &s.doc))
     }
 
     #[test]

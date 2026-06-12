@@ -603,7 +603,6 @@ export interface TrackedRange {
     anchor: Position;
     head: Position;
     metadata: string;
-    invalid: boolean;
     rects: PageRect[];
     text: string;
 }

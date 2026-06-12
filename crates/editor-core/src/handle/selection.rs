@@ -33,7 +33,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
         }),
         SelectionOp::SetFrozen { selection } => editor.transact(|tr| {
             tr.update_meta(|m| m.history = HistoryMeta::Skip);
-            let live = selection.thaw(&tr.doc());
+            let live = selection.restore(&tr.doc());
             commands::set_selection(tr, live)?;
             Ok(())
         }),
@@ -375,7 +375,7 @@ mod tests {
             selection: (t1, 0)
         };
         let target = Selection::collapsed(Position::new(t1, 3));
-        let frozen = StableSelection::freeze(&target, &state.doc);
+        let frozen = StableSelection::capture(&target, &state.doc);
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Selection {
             op: SelectionOp::SetFrozen { selection: frozen },

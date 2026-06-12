@@ -16,16 +16,16 @@ fn add_message(id: &str, group: &str, selection: Selection) -> Message {
     }
 }
 
-fn thawed_offsets(editor: &Editor, id: &str) -> (usize, usize) {
+fn restored_offsets(editor: &Editor, id: &str) -> (usize, usize) {
     let range = editor.tracked_ranges().get(id).expect("range present");
-    let sel = range.selection.thaw(&editor.state().doc);
+    let sel = range.selection.restore(&editor.state().doc);
     (sel.anchor.offset, sel.head.offset)
 }
 
 /// True when the range no longer maps back to its original covered content.
 /// This is the actual signal hit-test/render/FFI use to treat a comment as
-/// "no location".
-fn is_unlocatable(editor: &Editor, id: &str) -> bool {
+/// unlocated for current range semantics.
+fn is_unlocated(editor: &Editor, id: &str) -> bool {
     let range = editor.tracked_ranges().get(id).expect("range present");
     range.locate(&editor.state().doc).is_none()
 }
@@ -62,7 +62,7 @@ fn range_position_shifts_when_text_inserted_before_it() {
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
 
-    assert_eq!(thawed_offsets(&editor, "r"), (1, 4));
+    assert_eq!(restored_offsets(&editor, "r"), (1, 4));
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
@@ -73,7 +73,7 @@ fn range_position_shifts_when_text_inserted_before_it() {
         op: InsertionOp::Text { text: "X".into() },
     });
 
-    let (a, h) = thawed_offsets(&editor, "r");
+    let (a, h) = restored_offsets(&editor, "r");
     assert_eq!((a, h), (2, 5), "range must shift by inserted length");
 }
 
@@ -112,7 +112,7 @@ fn frozen_range_does_not_expand_when_text_inserted_at_right_boundary() {
         selection: (t1, 1) -> (t1, 4)
     };
     let sel = initial.selection.unwrap();
-    let frozen = editor_state::StableSelection::freeze(&sel, &initial.doc);
+    let frozen = editor_state::StableSelection::capture(&sel, &initial.doc);
     let mut editor = Editor::new_test(initial);
     editor.apply(Message::TrackedRange {
         op: TrackedRangeOp::AddFrozen {
@@ -145,7 +145,7 @@ fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
         doc { root { paragraph { t1: text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
         selection: (t1, 4) -> (t1, 6)
     };
-    let frozen = editor_state::StableSelection::freeze(&initial.selection.unwrap(), &initial.doc);
+    let frozen = editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.doc);
     let mut editor = Editor::new_test(initial);
     editor.apply(Message::TrackedRange {
         op: TrackedRangeOp::AddFrozen {
@@ -169,7 +169,7 @@ fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
         op: DeletionOp::Selection,
     });
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "range should be unlocatable while its whole content is deleted"
     );
 
@@ -315,7 +315,7 @@ fn range_restores_after_full_delete_undo_following_partial_boundary_delete() {
         op: DeletionOp::Selection,
     });
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "range should be unlocatable while all remaining text is deleted"
     );
 
@@ -340,7 +340,7 @@ fn range_marked_invalid_when_all_covered_text_deleted() {
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
-    assert!(!is_unlocatable(&editor, "r"));
+    assert!(!is_unlocated(&editor, "r"));
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
@@ -355,7 +355,7 @@ fn range_marked_invalid_when_all_covered_text_deleted() {
     });
 
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "deleting the covered text must collapse the range"
     );
 }
@@ -371,7 +371,7 @@ fn range_collapses_when_text_deleted_beyond_its_bounds() {
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
-    assert!(!is_unlocatable(&editor, "r"));
+    assert!(!is_unlocated(&editor, "r"));
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
@@ -385,9 +385,9 @@ fn range_collapses_when_text_deleted_beyond_its_bounds() {
         op: DeletionOp::Selection,
     });
 
-    let (a, h) = thawed_offsets(&editor, "r");
+    let (a, h) = restored_offsets(&editor, "r");
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "deleting text beyond the range bounds must collapse it, got anchor={a} head={h}"
     );
 }
@@ -407,7 +407,7 @@ fn range_across_two_paragraphs_collapses_when_wider_selection_deleted() {
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
-    assert!(!is_unlocatable(&editor, "r"));
+    assert!(!is_unlocated(&editor, "r"));
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
@@ -421,9 +421,9 @@ fn range_across_two_paragraphs_collapses_when_wider_selection_deleted() {
         op: DeletionOp::Selection,
     });
 
-    let (a, h) = thawed_offsets(&editor, "r");
+    let (a, h) = restored_offsets(&editor, "r");
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "deleting both paragraphs must collapse the cross-node range, got anchor={a} head={h}"
     );
 }
@@ -443,7 +443,7 @@ fn range_across_two_paragraphs_collapses_when_tail_survives() {
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
-    assert!(!is_unlocatable(&editor, "r"));
+    assert!(!is_unlocated(&editor, "r"));
 
     // Delete p1 'llo' .. p2 'wor' (covers the comment), leaving p2 'ld' alive.
     editor.apply(Message::Selection {
@@ -458,9 +458,9 @@ fn range_across_two_paragraphs_collapses_when_tail_survives() {
         op: DeletionOp::Selection,
     });
 
-    let (a, h) = thawed_offsets(&editor, "r");
+    let (a, h) = restored_offsets(&editor, "r");
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "comment whose covered text was deleted (tail survives) must be unlocatable, got anchor={a} head={h}"
     );
 }
@@ -547,7 +547,7 @@ fn comment_in_second_paragraph_collapses_when_its_text_deleted_via_merge() {
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
-    assert!(!is_unlocatable(&editor, "r"));
+    assert!(!is_unlocated(&editor, "r"));
 
     // Delete all of p1 + 'wor' of p2, merging paragraphs, leaving p2 'ld'.
     let t1 = _t1;
@@ -563,9 +563,9 @@ fn comment_in_second_paragraph_collapses_when_its_text_deleted_via_merge() {
         op: DeletionOp::Selection,
     });
 
-    let (a, h) = thawed_offsets(&editor, "r");
+    let (a, h) = restored_offsets(&editor, "r");
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "comment inside p2 whose text was deleted must be unlocatable, got anchor={a} head={h}"
     );
 }
@@ -596,7 +596,7 @@ fn range_stays_locatable_when_one_covered_char_survives() {
     });
 
     assert!(
-        !is_unlocatable(&editor, "r"),
+        !is_unlocated(&editor, "r"),
         "range must survive while one covered char ('l') is still alive"
     );
 }
@@ -626,7 +626,7 @@ fn range_unaffected_by_deletion_elsewhere_stays_locatable() {
     });
 
     assert!(
-        !is_unlocatable(&editor, "r"),
+        !is_unlocated(&editor, "r"),
         "comment on 'world' must survive deletion of preceding 'hello '"
     );
 }
@@ -643,14 +643,14 @@ fn collapsed_range_on_live_text_is_handled_consistently() {
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
 
-    // No deletion: locate must agree with is_collapsed().
+    // No deletion: locate must reject collapsed tracked ranges.
     let range = editor.tracked_ranges().get("r").unwrap();
     let located = range.locate(&editor.state().doc);
-    let thawed_collapsed = range.selection.thaw(&editor.state().doc).is_collapsed();
+    let restored_collapsed = range.selection.restore(&editor.state().doc).is_collapsed();
     assert_eq!(
         located.is_none(),
-        thawed_collapsed,
-        "locate must agree with is_collapsed for a collapsed range on live text"
+        restored_collapsed,
+        "tracked range locate must reject collapsed selections"
     );
 }
 
@@ -658,7 +658,7 @@ fn collapsed_range_on_live_text_is_handled_consistently() {
 fn range_collapses_when_covered_text_deleted_but_following_char_survives() {
     // The real app repro that still leaks: comment covers 'wor' (0..3) of
     // "world". Delete exactly 'wor', leaving 'ld'. NO paragraph merge.
-    // head was frozen Bind::Right onto the char AT offset 3 ('l'), which is
+    // head was captured Bind::Right onto the char AT offset 3 ('l'), which is
     // OUTSIDE the comment and survives -> head's anchor dot is alive even though
     // every covered char ('w','o','r') is gone. Must still be unlocatable.
     let (initial, t1) = state! {
@@ -668,7 +668,7 @@ fn range_collapses_when_covered_text_deleted_but_following_char_survives() {
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
     editor.apply(add_message("r", "g", sel));
-    assert!(!is_unlocatable(&editor, "r"));
+    assert!(!is_unlocated(&editor, "r"));
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
@@ -682,9 +682,9 @@ fn range_collapses_when_covered_text_deleted_but_following_char_survives() {
         op: DeletionOp::Selection,
     });
 
-    let (a, h) = thawed_offsets(&editor, "r");
+    let (a, h) = restored_offsets(&editor, "r");
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "comment whose covered chars are all gone must be unlocatable even if the following char survives, got anchor={a} head={h}"
     );
 }
@@ -724,7 +724,7 @@ fn range_stays_locatable_when_endpoint_chars_die_but_middle_survives() {
     });
 
     assert!(
-        !is_unlocatable(&editor, "r"),
+        !is_unlocated(&editor, "r"),
         "range must survive while covered middle chars remain alive"
     );
 }
@@ -747,14 +747,14 @@ fn range_positions_revert_after_undo() {
     editor.apply(Message::Insertion {
         op: InsertionOp::Text { text: "X".into() },
     });
-    assert_eq!(thawed_offsets(&editor, "r"), (2, 5));
+    assert_eq!(restored_offsets(&editor, "r"), (2, 5));
 
     editor.apply(Message::History {
         op: HistoryOp::Undo,
     });
 
     assert_eq!(
-        thawed_offsets(&editor, "r"),
+        restored_offsets(&editor, "r"),
         (1, 4),
         "undo must restore the original positions"
     );
@@ -823,7 +823,7 @@ fn freeze_then_add_frozen_roundtrip_yields_same_registry_entry() {
     a.apply(add_message("r", "g", sel));
     let from_add = a.tracked_ranges().get("r").unwrap().clone();
 
-    let stable = editor_state::StableSelection::freeze(&sel, &state.doc);
+    let stable = editor_state::StableSelection::capture(&sel, &state.doc);
     let json = serde_json::to_string(&stable).unwrap();
     let restored: editor_state::StableSelection = serde_json::from_str(&json).unwrap();
 
@@ -842,13 +842,13 @@ fn freeze_then_add_frozen_roundtrip_yields_same_registry_entry() {
 }
 
 #[test]
-fn add_frozen_with_unresolvable_dots_marks_invalid_on_thaw() {
+fn add_frozen_with_unresolvable_dots_remains_unlocated() {
     let (state_a, _t1) = state! {
         doc { root { paragraph { t1: text("hello") } } }
         selection: (t1, 1) -> (t1, 4)
     };
     let sel = state_a.selection.unwrap();
-    let stable = editor_state::StableSelection::freeze(&sel, &state_a.doc);
+    let stable = editor_state::StableSelection::capture(&sel, &state_a.doc);
 
     let (state_b, _) = state! {
         doc { root { paragraph { t2: text("world") } } }
@@ -865,7 +865,7 @@ fn add_frozen_with_unresolvable_dots_marks_invalid_on_thaw() {
         },
     });
     assert!(b.tracked_ranges().contains("r"));
-    assert!(is_unlocatable(&b, "r"));
+    assert!(is_unlocated(&b, "r"));
 }
 
 #[test]
@@ -877,7 +877,7 @@ fn range_recovers_from_invalid_after_undo() {
     let sel = state.selection.unwrap();
     let mut editor = Editor::new_test(state);
     editor.apply(add_message("r", "g", sel));
-    assert!(!is_unlocatable(&editor, "r"));
+    assert!(!is_unlocated(&editor, "r"));
     let old_entries = visible_entry_dots(&editor, t1)[1..4].to_vec();
 
     editor.apply(Message::Selection {
@@ -892,7 +892,7 @@ fn range_recovers_from_invalid_after_undo() {
         op: DeletionOp::Selection,
     });
     assert!(
-        is_unlocatable(&editor, "r"),
+        is_unlocated(&editor, "r"),
         "deleting covered text must collapse the range"
     );
 
@@ -900,7 +900,7 @@ fn range_recovers_from_invalid_after_undo() {
         op: HistoryOp::Undo,
     });
     assert!(
-        !is_unlocatable(&editor, "r"),
+        !is_unlocated(&editor, "r"),
         "undo must restore range to valid"
     );
     let current_entries = visible_entry_dots(&editor, t1);
@@ -1011,6 +1011,6 @@ fn set_group_preserves_deleted_trailing_boundary_before_later_insert() {
     assert_eq!(
         located_text(&editor, "r").as_deref(),
         Some("bc"),
-        "moving a range between decoration groups must not refreeze its deleted trailing boundary"
+        "moving a range between decoration groups must not recapture its deleted trailing boundary"
     );
 }

@@ -135,8 +135,8 @@ fn set_node_and_selection_combined() {
         old: state2
             .selection
             .as_ref()
-            .map(|s| StableSelection::freeze(s, &state2.doc)),
-        new: Some(StableSelection::freeze(&new_sel, &state2.doc)),
+            .map(|s| StableSelection::capture(s, &state2.doc)),
+        new: Some(StableSelection::capture(&new_sel, &state2.doc)),
     };
     let state3 = set_sel.apply(&state2).unwrap().state;
 
