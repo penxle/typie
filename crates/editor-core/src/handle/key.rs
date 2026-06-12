@@ -322,6 +322,54 @@ mod tests {
     }
 
     #[test]
+    fn undo_after_redeleting_restored_text_restores_cursor_after_restored_text() {
+        let (state, ..) = state! {
+            doc {
+                root { paragraph { t: text("aabb") } }
+            }
+            selection: (t, 2) -> (t, 4)
+        };
+        let after_restore = state.clone();
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &after_restore);
+
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                extend: false,
+            },
+        });
+        let (collapsed_after_restore, ..) = state! {
+            doc {
+                root { paragraph { t: text("aabb") } }
+            }
+            selection: (t, 4)
+        };
+        assert_state_eq!(editor.state(), &collapsed_after_restore);
+
+        editor.apply(key(Key::Backspace));
+        editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root { paragraph { t: text("aabb") } }
+            }
+            selection: (t, 4)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn backspace_across_callout_boundary_round_trips_through_undo() {
         let (state, ..) = state! {
             doc {

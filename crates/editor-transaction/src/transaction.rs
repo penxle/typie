@@ -389,8 +389,8 @@ impl Transaction {
     pub fn set_selection(&mut self, selection: Option<Selection>) -> Result<(), StepError> {
         // Normalize through the current doc. If normalization fails (an endpoint
         // doesn't resolve against the live doc), drop the request rather than
-        // panicking inside freeze. If the effective result matches the live
-        // selection, the step is a noop.
+        // panicking inside freeze. If the effective result and its stable anchor
+        // both match, the step is a noop.
         let new_effective = match selection.as_ref() {
             Some(s) => match s.normalize(&self.state.doc) {
                 Some(n) => Some(n),
@@ -398,13 +398,13 @@ impl Transaction {
             },
             None => None,
         };
-        if new_effective == self.state.selection {
-            return Ok(());
-        }
         let old = self.selection_stable.clone();
         let new = new_effective
             .as_ref()
             .map(|s| StableSelection::freeze(s, &self.state.doc));
+        if new_effective == self.state.selection && new == old {
+            return Ok(());
+        }
         self.apply_step(Step::SetSelection { old, new })
     }
 
@@ -1082,6 +1082,23 @@ mod tests {
             }
             _ => panic!("expected SetSelection"),
         }
+    }
+
+    #[test]
+    fn set_selection_records_when_doc_step_already_remapped_live_selection() {
+        let (state, t1) = state! {
+            doc { root { paragraph { t1: text("aabb") } } }
+            selection: (t1, 4)
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.remove_text(t1, 3, 1).unwrap();
+        let remapped_live = tr.selection().expect("selection survives text removal");
+        tr.set_selection(Some(remapped_live)).unwrap();
+
+        let (_, steps, ..) = tr.commit();
+        assert_eq!(steps.len(), 2);
+        assert!(matches!(steps[1].step, Step::SetSelection { .. }));
     }
 
     #[test]
