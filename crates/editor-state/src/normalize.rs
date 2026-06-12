@@ -4,7 +4,8 @@ use std::collections::HashSet;
 use editor_model::{Doc, Node, NodeId, NodeRef, Schema};
 
 use crate::affinity::Affinity;
-use crate::gap_cursor::between_monolithic_at;
+use crate::cursor_position::NodeRefCursorExt;
+use crate::gap_cursor::gap_cursor_at;
 use crate::paragraph_break::selection_exactly_matches_trailing_paragraph_break;
 use crate::position::{Position, logical_boundary};
 use crate::resolved_selection::ResolvedSelection;
@@ -164,17 +165,17 @@ fn expand_unit_at(doc: &Doc, pos: Position) -> Option<Selection> {
 }
 
 /// Invariant: a normalized selection must never be collapsed at a unit
-/// boundary, except a gap cursor between two monolithic blocks, which is
-/// preserved collapsed so it can render a phantom paragraph and accept
-/// insertion there. The between-monolithic predicate is the single source
-/// of truth shared with gap-cursor classification, so the two stay
-/// consistent.
+/// boundary, except gap cursors, which are preserved collapsed so they can
+/// render a phantom paragraph and accept insertion there.
 fn collapsed_or_unit(doc: &Doc, pos: Position) -> Selection {
-    if between_monolithic_at(doc, pos.node_id, pos.offset) {
+    if gap_cursor_at(doc, pos).is_some() {
         return Selection::collapsed(pos);
     }
     if let Some(node_sel) = expand_unit_at(doc, pos) {
         return node_sel;
+    }
+    if let Some(cursor) = inline_cursor_near_block_boundary(doc, pos) {
+        return Selection::collapsed(cursor);
     }
     Selection::collapsed(pos)
 }
@@ -191,6 +192,39 @@ fn unit_or_collapsed(doc: &Doc, pos: Position) -> Selection {
         return node_sel;
     }
     Selection::collapsed(pos)
+}
+
+fn cursor_in_child(
+    doc: &Doc,
+    child: NodeRef<'_>,
+    at_end: bool,
+    affinity: Affinity,
+) -> Option<Position> {
+    let cursor = if at_end {
+        child.last_cursor_position()?
+    } else {
+        child.first_cursor_position()?
+    };
+    let cursor = Position { affinity, ..cursor };
+    cursor.resolve(doc)?.is_inline_position().then_some(cursor)
+}
+
+fn inline_cursor_near_block_boundary(doc: &Doc, pos: Position) -> Option<Position> {
+    let node = doc.node(pos.node_id)?;
+    if matches!(node.node(), Node::Text(_)) || node.spec().is_textblock() {
+        return None;
+    }
+
+    let previous = || {
+        let index = pos.offset.checked_sub(1)?;
+        cursor_in_child(doc, node.children().nth(index)?, true, pos.affinity)
+    };
+    let next = || cursor_in_child(doc, node.children().nth(pos.offset)?, false, pos.affinity);
+
+    match pos.affinity {
+        Affinity::Upstream => previous().or_else(next),
+        Affinity::Downstream => next().or_else(previous),
+    }
 }
 
 fn is_isolating_container(node: &NodeRef<'_>) -> bool {
@@ -947,6 +981,43 @@ mod tests {
     }
 
     #[test]
+    fn normalize_collapsed_block_boundary_descends_to_adjacent_inline_cursor() {
+        let (d, t1) = doc! {
+            root {
+                paragraph {
+                    t1: text("aa")
+                }
+            }
+        };
+        let root_id = NodeId::ROOT;
+
+        let leading = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        })
+        .normalize(&d)
+        .unwrap();
+        assert_eq!(leading, Selection::collapsed(Position::new(t1, 0)));
+
+        let trailing = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        })
+        .normalize(&d)
+        .unwrap();
+        assert_eq!(
+            trailing,
+            Selection::collapsed(Position {
+                node_id: t1,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            })
+        );
+    }
+
+    #[test]
     fn validate_position_valid_text_offsets() {
         let (d, t) = doc! { root { paragraph { t: text("hi") } } };
         for off in 0..=2 {
@@ -1519,25 +1590,38 @@ mod tests {
     }
 
     #[test]
-    fn normalize_collapsed_non_atom_container_position_unchanged() {
-        let (d, ..) = doc! {
-            root { paragraph { text("a") } paragraph { text("b") } }
+    fn normalize_collapsed_between_textblocks_descends_to_affinity_side() {
+        let (d, ta, tb) = doc! {
+            root {
+                paragraph { ta: text("a") }
+                paragraph { tb: text("b") }
+            }
         };
         let root_id = NodeId::ROOT;
-        // Both sides of (root,1) are paragraphs (non-atom), so the selection must stay collapsed.
-        for aff in [Affinity::Downstream, Affinity::Upstream] {
-            let sel = Selection::collapsed(Position {
-                node_id: root_id,
+        let downstream = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        })
+        .normalize(&d)
+        .unwrap();
+        assert_eq!(downstream, Selection::collapsed(Position::new(tb, 0)));
+
+        let upstream = Selection::collapsed(Position {
+            node_id: root_id,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        })
+        .normalize(&d)
+        .unwrap();
+        assert_eq!(
+            upstream,
+            Selection::collapsed(Position {
+                node_id: ta,
                 offset: 1,
-                affinity: aff,
-            });
-            let out = sel.normalize(&d).unwrap();
-            assert!(
-                out.is_collapsed(),
-                "non-atom container pos must stay collapsed, got {:?}",
-                out
-            );
-        }
+                affinity: Affinity::Upstream,
+            })
+        );
     }
 
     #[test]
@@ -1835,22 +1919,34 @@ mod tests {
 
     #[test]
     fn normalize_leading_unit_upstream_stays_collapsed() {
-        let (d, ..) = doc! { root { image paragraph { text("b") } } };
-        let root_id = NodeId::ROOT;
-        let sel = Selection::collapsed(Position {
-            node_id: root_id,
-            offset: 0,
-            affinity: Affinity::Upstream,
-        });
-        let out = sel.normalize(&d).unwrap();
-        assert!(
-            out.is_collapsed(),
-            "(root,0,Up) must stay collapsed, got {:?}",
-            out
-        );
-        assert_eq!(out.head.node_id, root_id);
-        assert_eq!(out.head.offset, 0);
-        assert_eq!(out.head.affinity, Affinity::Upstream);
+        fn assert_leading_unit_upstream_stays_collapsed(d: &Doc) {
+            let root_id = NodeId::ROOT;
+            let sel = Selection::collapsed(Position {
+                node_id: root_id,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            });
+            let out = sel.normalize(d).unwrap();
+            assert!(
+                out.is_collapsed(),
+                "(root,0,Up) must stay collapsed, got {:?}",
+                out
+            );
+            assert_eq!(out.head.node_id, root_id);
+            assert_eq!(out.head.offset, 0);
+            assert_eq!(out.head.affinity, Affinity::Upstream);
+        }
+
+        let (image_doc, ..) = doc! { root { image paragraph { text("b") } } };
+        assert_leading_unit_upstream_stays_collapsed(&image_doc);
+
+        let (fold_doc, ..) = doc! {
+            root {
+                fold { fold_title { text("a") } fold_content { paragraph { text("b") } } }
+                paragraph { text("c") }
+            }
+        };
+        assert_leading_unit_upstream_stays_collapsed(&fold_doc);
     }
 
     #[test]

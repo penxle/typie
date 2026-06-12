@@ -1518,6 +1518,50 @@ mod tests {
     }
 
     #[test]
+    fn arrow_left_right_from_paragraph_boundary_selection_lands_inside_paragraph() {
+        let (state, _r1, t1) = state! {
+            doc {
+                r1: root {
+                    paragraph {
+                        t1: text("aa")
+                    }
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+
+        let mut left_editor = Editor::new_test(state.clone());
+        left_editor.view.layout(&left_editor.state.doc);
+        arrow(
+            &mut left_editor,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        );
+        assert_eq!(
+            left_editor.state().selection,
+            Some(Selection::collapsed(Position::new(t1, 0)))
+        );
+
+        let mut right_editor = Editor::new_test(state);
+        right_editor.view.layout(&right_editor.state.doc);
+        arrow(
+            &mut right_editor,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        );
+        assert_eq!(
+            right_editor.state().selection,
+            Some(Selection::collapsed(Position {
+                node_id: t1,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            }))
+        );
+    }
+
+    #[test]
     fn arrow_right_from_fold_node_selection_moves_off_the_fold() {
         let (state, _, after) = state! {
             doc { r1: root {

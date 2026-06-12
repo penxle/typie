@@ -62,6 +62,25 @@ pub enum GapCursor<'a> {
     },
 }
 
+pub(crate) fn gap_cursor_at(doc: &Doc, p: Position) -> Option<GapCursor<'_>> {
+    if p.node_id == NodeId::ROOT && p.offset == 0 && p.affinity == Affinity::Upstream {
+        return leading_unit(doc).map(|unit| GapCursor::LeadingUnit { unit });
+    }
+
+    if !between_monolithic_at(doc, p.node_id, p.offset) {
+        return None;
+    }
+    let node = doc.node(p.node_id)?;
+    let before = node.children().nth(p.offset - 1)?;
+    let after = node.children().nth(p.offset)?;
+    Some(GapCursor::BetweenMonolithic {
+        parent: node,
+        before,
+        after,
+        index: p.offset,
+    })
+}
+
 impl<'a> ResolvedSelection<'a> {
     /// `Some` iff this collapsed selection encodes a gap cursor. A
     /// cell-rect / node-selection is by definition non-collapsed, so the
@@ -75,22 +94,7 @@ impl<'a> ResolvedSelection<'a> {
         let doc = self.doc();
         let p = Position::from(self.head());
 
-        if p.node_id == NodeId::ROOT && p.offset == 0 && p.affinity == Affinity::Upstream {
-            return leading_unit(doc).map(|unit| GapCursor::LeadingUnit { unit });
-        }
-
-        if !between_monolithic_at(doc, p.node_id, p.offset) {
-            return None;
-        }
-        let node = doc.node(p.node_id)?;
-        let before = node.children().nth(p.offset - 1)?;
-        let after = node.children().nth(p.offset)?;
-        Some(GapCursor::BetweenMonolithic {
-            parent: node,
-            before,
-            after,
-            index: p.offset,
-        })
+        gap_cursor_at(doc, p)
     }
 }
 
