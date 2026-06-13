@@ -157,7 +157,7 @@ export interface Changeset<P> {
  * One link in the structural chain from root to the cursor's leaf node.
  *
  * `child_dot` is this node's dot in its parent's `children` RGA. For the
- * root link, `child_dot` is unused (freeze writes `Dot::new(0, 0)`, thaw
+ * root link, `child_dot` is unused (capture writes `Dot::new(0, 0)`, restore
  * ignores).
  */
 export interface ChainLink {
