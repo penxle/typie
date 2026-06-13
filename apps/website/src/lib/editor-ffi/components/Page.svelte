@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { untrack } from 'svelte';
-  import { CROP_MARKER_SIZE } from '../constants';
+  import { CROP_MARKER_SIZE, PAGE_RENDER_OVERSCAN_MARGIN } from '../constants';
   import { getEditorContext } from '../editor.svelte';
   import ExternalElement from './ExternalElement.svelte';
   import LinkOverlay from './LinkOverlay.svelte';
@@ -63,18 +63,62 @@
       {@attach (canvas) => {
         if (!editor) return;
 
+        let isVisible = false;
+        let dirty = false;
+        let needsResize = false;
+
         untrack(() => {
           editor.attachSurface(page, canvas, width, height);
         });
 
-        const off = editor.on('render_invalidated', () => {
-          editor.renderSurface(page);
-        });
+        const paint = () => {
+          if (isVisible) {
+            editor.renderSurface(page);
+            dirty = false;
+          } else {
+            dirty = true;
+          }
+        };
+
+        const off = editor.on('render_invalidated', paint);
 
         $effect.pre(() => {
           void editor.surfaceScaleFactor;
-          editor.resizeSurface(page, width, height);
-          editor.renderSurface(page);
+          void width;
+          void height;
+          if (isVisible) {
+            editor.resizeSurface(page, width, height);
+            editor.renderSurface(page);
+            dirty = false;
+            needsResize = false;
+          } else {
+            needsResize = true;
+            dirty = true;
+          }
+        });
+
+        $effect(() => {
+          const root = editor.scrollRootEl;
+          if (root === undefined) return;
+
+          const observer = new IntersectionObserver(
+            (entries) => {
+              isVisible = entries.at(-1)?.isIntersecting ?? isVisible;
+              if (!isVisible) return;
+              if (needsResize) {
+                editor.resizeSurface(page, width, height);
+                needsResize = false;
+              }
+              if (dirty) {
+                editor.renderSurface(page);
+                dirty = false;
+              }
+            },
+            { root, rootMargin: PAGE_RENDER_OVERSCAN_MARGIN, threshold: 0 },
+          );
+          observer.observe(canvas);
+
+          return () => observer.disconnect();
         });
 
         return () => {

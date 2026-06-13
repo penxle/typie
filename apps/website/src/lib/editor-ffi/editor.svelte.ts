@@ -156,6 +156,7 @@ export class Editor {
   surfaceEl = $state<HTMLDivElement>();
   scrollContainerEl = $state<HTMLDivElement>();
   scrollViewport = $state<ScrollViewport>();
+  scrollRootEl = $state<HTMLElement | null>();
   displayZoom = $state(1);
   renderZoom = $state(1);
 
