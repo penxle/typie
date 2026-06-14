@@ -21,7 +21,7 @@
   import XIcon from '~icons/lucide/x';
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/editor-ffi/components';
   import { IS_MAC } from '$lib/editor-ffi/constants';
-  import { Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
@@ -261,7 +261,7 @@
       try {
         const liveEditor = await Editor.create(
           graph,
-          { width: 1, height: 1, scale_factor: window.devicePixelRatio },
+          { width: 1, height: 1, scale_factor: browserScaleFactor() },
           theme.currentThemeVariant,
         );
 

@@ -3,42 +3,65 @@
   import { getEditorContext } from '../editor.svelte';
 
   const { editor } = getEditorContext();
+
+  let element = $state<HTMLDivElement>();
+  let point = $state<{ x: number; y: number } | null>(null);
+
+  const cursor = $derived(editor?.cursor);
+  const visible = $derived(!!cursor && !!point && !!editor?.focused);
+
+  const resetAnimation = () => {
+    element?.getAnimations().forEach((a) => (a.currentTime = 0));
+  };
+
+  $effect(() => {
+    const el = element;
+    if (!editor || !cursor || !el) {
+      point = null;
+      return;
+    }
+
+    const pageEl = editor.pageEls[cursor.page_idx];
+    if (!pageEl) {
+      point = null;
+      return;
+    }
+
+    if (el.parentElement !== pageEl) {
+      pageEl.append(el);
+    }
+
+    point = { x: cursor.caret.x, y: cursor.caret.y };
+  });
+
+  $effect(() => {
+    if (!editor || !element) return;
+
+    const off = editor.on('state_changed', (_, { fields }) => {
+      if (fields.includes('cursor')) {
+        resetAnimation();
+      }
+    });
+
+    return () => {
+      off();
+    };
+  });
 </script>
 
 <div
+  bind:this={element}
+  style:left={`${point?.x ?? -9999}px`}
+  style:top={`${point?.y ?? -9999}px`}
+  style:width={`${cursor?.caret.width ?? 1}px`}
+  style:height={`${cursor?.caret.height ?? 0}px`}
+  style:visibility={visible ? 'visible' : 'hidden'}
   class={css({
     position: 'absolute',
-    top: '0',
-    left: '0',
     backgroundColor: 'text.default',
     animation: 'blink 1s step-end infinite',
     pointerEvents: 'none',
   })}
-  {@attach (el) => {
-    if (editor) {
-      $effect(() => {
-        if (editor.cursor && editor.focused) {
-          const { width, height } = editor.cursor.caret;
-          el.style.width = `${width}px`;
-          el.style.height = `${height}px`;
-          el.style.visibility = 'visible';
-          el.getAnimations().forEach((a) => (a.currentTime = 0));
-        } else {
-          el.style.visibility = 'hidden';
-        }
-      });
-
-      const off = editor.on('state_changed', (_, { fields }) => {
-        if (fields.includes('cursor')) {
-          el.getAnimations().forEach((a) => (a.currentTime = 0));
-        }
-      });
-
-      return () => {
-        off();
-      };
-    }
-  }}
 ></div>
 
 <style>

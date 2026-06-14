@@ -22,7 +22,7 @@
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { Editor as EditorComponent } from '$lib/editor-ffi/components';
-  import { Editor, setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { browserScaleFactor, Editor, setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
@@ -269,7 +269,7 @@
     untrack(async () => {
       const previous = ctx.editor;
       try {
-        const editor = await Editor.create(g, { width: 1, height: 1, scale_factor: window.devicePixelRatio }, theme.currentThemeVariant);
+        const editor = await Editor.create(g, { width: 1, height: 1, scale_factor: browserScaleFactor() }, theme.currentThemeVariant);
 
         if (destroyed || createdForDocumentId !== id) {
           editor.destroy();

@@ -1,15 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LONG_PRESS_MS } from './constants';
 import { computeSelectionHandleVisual, computeTouchContextMenuPosition, TouchGestureController } from './gesture.svelte';
-import type { PageRect, SelectionEndpoints } from '@typie/editor-ffi/browser';
+import type { SelectionEndpoints } from '@typie/editor-ffi/browser';
 
 const pageRect = (left: number, top: number, width: number, height: number): DOMRect =>
   ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
-
-const endpoint = (page_idx: number, x: number, y: number, width: number, height: number): PageRect => ({
-  page_idx,
-  rect: { x, y, width, height },
-});
 
 const viewport = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
 
@@ -227,13 +222,10 @@ describe('TouchGestureController', () => {
 });
 
 describe('computeSelectionHandleVisual', () => {
-  it('places the end (to) handle at the endpoint relative to the surface', () => {
+  it('places the end (to) handle at the anchor rect', () => {
     const result = computeSelectionHandleVisual({
       kind: 'to',
-      endpoint: endpoint(0, 200, 200, 30, 20),
-      pageRect: pageRect(0, 0, 800, 1000),
-      surfaceRect: pageRect(0, 0, 800, 1000),
-      zoom: 1,
+      anchorRect: pageRect(200, 200, 30, 20),
     });
     expect(result).toEqual({ left: 179, top: 196, touchHeight: 44, paintLeft: 14, paintTop: 4, stemHeight: 20 });
   });
@@ -241,21 +233,15 @@ describe('computeSelectionHandleVisual', () => {
   it('places the start (from) handle above the line with its stem pointing down', () => {
     const result = computeSelectionHandleVisual({
       kind: 'from',
-      endpoint: endpoint(0, 100, 200, 50, 20),
-      pageRect: pageRect(0, 0, 800, 1000),
-      surfaceRect: pageRect(0, 0, 800, 1000),
-      zoom: 1,
+      anchorRect: pageRect(100, 200, 50, 20),
     });
     expect(result).toEqual({ left: 77, top: 180, touchHeight: 44, paintLeft: 14, paintTop: 4, stemHeight: 20 });
   });
 
-  it('offsets by the surface origin and scales by zoom', () => {
+  it('uses the viewport anchor rect without surface conversion', () => {
     const result = computeSelectionHandleVisual({
       kind: 'to',
-      endpoint: endpoint(0, 200, 200, 30, 20),
-      pageRect: pageRect(50, 100, 800, 1000),
-      surfaceRect: pageRect(10, 5, 800, 1000),
-      zoom: 2,
+      anchorRect: pageRect(440, 495, 60, 40),
     });
     expect(result).toEqual({ left: 419, top: 495, touchHeight: 56, paintLeft: 14, paintTop: 0, stemHeight: 40 });
   });

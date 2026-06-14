@@ -2,16 +2,21 @@ import type { ReferenceElement } from '@floating-ui/dom';
 import type { PageRect } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
 
-function pageRectsToClientRects(editor: Editor, rects: PageRect[]): DOMRect[] {
+export function pageRectToClientRect(editor: Editor, { page_idx, rect }: PageRect): DOMRect | null {
   const zoom = editor.safeDisplayZoom();
+  const pageEl = editor.pageEls[page_idx];
+  if (!pageEl) return null;
+
+  const pageRect = pageEl.getBoundingClientRect();
+  return new DOMRect(pageRect.left + rect.x * zoom, pageRect.top + rect.y * zoom, rect.width * zoom, rect.height * zoom);
+}
+
+function pageRectsToClientRects(editor: Editor, rects: PageRect[]): DOMRect[] {
   const out: DOMRect[] = [];
 
-  for (const { page_idx, rect } of rects) {
-    const pageEl = editor.pageEls[page_idx];
-    if (!pageEl) continue;
-
-    const pageRect = pageEl.getBoundingClientRect();
-    out.push(new DOMRect(pageRect.left + rect.x * zoom, pageRect.top + rect.y * zoom, rect.width * zoom, rect.height * zoom));
+  for (const rect of rects) {
+    const clientRect = pageRectToClientRect(editor, rect);
+    if (clientRect) out.push(clientRect);
   }
 
   return out;

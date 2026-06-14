@@ -1,15 +1,18 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { pageRectToClientRect } from '../geometry';
   import { handle } from '../handlers';
   import { handleCopy, handleCut, handlePaste } from '../handlers/clipboard';
   import { handleKeyDown } from '../handlers/keyboard';
   import { IME_CONTEXT_AFTER_LIMIT, IME_CONTEXT_BEFORE_LIMIT, normalizeImeContext } from '../input/ime-context';
   import { ImeInputAdapter } from '../input/ime-input-adapter';
+  import { getViewportOverlayContext } from './ViewportOverlay.svelte';
   import type { Message } from '@typie/editor-ffi/browser';
   import type { ImeContext, ImeTextInput } from '../input/ime-context';
 
   const { editor } = getEditorContext();
+  const viewportOverlay = getViewportOverlayContext();
 
   const enqueueMessages = (messages: Message[]) => {
     if (!editor) return;
@@ -45,6 +48,24 @@
     inputAdapter.syncFromEditor(editor.inputEl);
   };
 
+  const inputRect = $derived.by(() => {
+    void viewportOverlay.change;
+    const cursor = editor?.cursor;
+    if (!editor || !cursor) {
+      return null;
+    }
+
+    const rect = pageRectToClientRect(editor, { page_idx: cursor.page_idx, rect: cursor.caret });
+    if (!rect) return null;
+
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height),
+    };
+  });
+
   $effect(() => {
     if (!editor?.focused || !editor.inputEl) return;
 
@@ -57,12 +78,12 @@
 {#if editor}
   <textarea
     bind:this={editor.inputEl}
+    style:left={`${inputRect?.left ?? -9999}px`}
+    style:top={`${inputRect?.top ?? -9999}px`}
+    style:width={`${inputRect?.width ?? 1}px`}
+    style:height={`${inputRect?.height ?? 1}px`}
     class={css({
-      position: 'absolute',
-      left: '0',
-      top: '0',
-      width: '1px',
-      height: '[1em]',
+      position: 'fixed',
       opacity: '0',
       pointerEvents: 'none',
       resize: 'none',

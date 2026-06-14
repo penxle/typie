@@ -12,7 +12,7 @@
     PAGINATED_HEADER_FOOTER_MIN_SCALE,
     PAGINATED_HEADER_FOOTER_MIN_WIDTH,
   } from '../constants';
-  import { getEditorContext } from '../editor.svelte';
+  import { browserScaleFactor, getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handleContextMenu } from '../handlers/contextmenu';
@@ -20,7 +20,6 @@
   import { handleClick, handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import { setupEditorScroll } from '../scroll.svelte';
   import Caret from './Caret.svelte';
-  import CaretPositioned from './CaretPositioned.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
@@ -31,6 +30,7 @@
   import Scrollbar from './Scrollbar.svelte';
   import SelectionHandles from './SelectionHandles.svelte';
   import EditorZoom from './ui/EditorZoom.svelte';
+  import ViewportOverlay from './ViewportOverlay.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
@@ -78,6 +78,21 @@
   let clientWidth = $state<number>();
   let clientHeight = $state<number>();
   let windowViewportHeight = $state<number>();
+  let scaleFactor = $state(browserScaleFactor());
+
+  $effect(() => {
+    const sync = () => {
+      scaleFactor = browserScaleFactor();
+    };
+
+    sync();
+    window.visualViewport?.addEventListener('resize', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', sync);
+      window.removeEventListener('resize', sync);
+    };
+  });
 
   $effect(() => {
     if (!useWindowScroll) return;
@@ -139,7 +154,7 @@
     const effectiveWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
 
     untrack(() => {
-      editor.resizeViewport(effectiveWidth, height, window.devicePixelRatio);
+      editor.resizeViewport(effectiveWidth, height, scaleFactor);
 
       if (!readyFired && editor.viewportResized) {
         readyFired = true;
@@ -276,20 +291,21 @@
             <Page {height} page={i} {width} />
           {/each}
 
-          <CaretPositioned>
-            <Caret />
-            <Input />
-          </CaretPositioned>
+          <Caret />
 
           <LineHighlight />
 
           <PlaceholderOverlay />
 
-          <RepasteAsText />
+          <ViewportOverlay>
+            <Input />
 
-          {#if ctx.editor.readOnly}
-            <SelectionHandles />
-          {/if}
+            <RepasteAsText />
+
+            {#if ctx.editor.readOnly}
+              <SelectionHandles />
+            {/if}
+          </ViewportOverlay>
 
           <ContextMenu />
 

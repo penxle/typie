@@ -7,30 +7,27 @@
     SELECTION_HANDLE_STEM_WIDTH as STEM_WIDTH,
     SELECTION_HANDLE_TOUCH_TARGET_SIZE as TOUCH_TARGET_SIZE,
   } from '$lib/editor-ffi/gesture.svelte';
+  import { pageRectToClientRect } from '../geometry';
+  import { getViewportOverlayContext } from './ViewportOverlay.svelte';
   import type { SelectionHandleKind, SelectionHandleVisual } from '$lib/editor-ffi/gesture.svelte';
 
-  const ctx = getEditorContext();
+  const { editor } = getEditorContext();
+  const viewportOverlay = getViewportOverlayContext();
 
   const fromHandle = $derived.by(() => getHandleVisual('from'));
   const toHandle = $derived.by(() => getHandleVisual('to'));
 
   function getHandleVisual(type: SelectionHandleKind): SelectionHandleVisual | null {
-    const editor = ctx.editor;
     if (!editor) {
       return null;
     }
 
-    // Read every reactive dependency BEFORE any early return. A $derived only
-    // tracks the state it reads during evaluation; if we bailed at the readOnly/
-    // touch/selection gate before touching these, the first (mount-time) run
-    // would capture no deps and the derived would never recompute when the
-    // selection later appears — leaving the handles frozen as null.
-    const selection = editor.selection;
+    void viewportOverlay.change;
     void editor.displayZoom;
-    const pageEls = editor.pageEls;
-    const surfaceEl = editor.surfaceEl;
+    void editor.pageSizes;
+    const selection = editor.selection;
 
-    if (!editor.readOnly || !isTouchCapable() || !selection || !surfaceEl) {
+    if (!editor.readOnly || !isTouchCapable() || !selection) {
       return null;
     }
 
@@ -40,17 +37,14 @@
     }
 
     const endpoint = type === 'from' ? endpoints.from : endpoints.to;
-    const pageEl = pageEls[endpoint.page_idx];
-    if (!pageEl) {
+    const anchorRect = pageRectToClientRect(editor, endpoint);
+    if (!anchorRect) {
       return null;
     }
 
     return computeSelectionHandleVisual({
       kind: type,
-      endpoint,
-      pageRect: pageEl.getBoundingClientRect(),
-      surfaceRect: surfaceEl.getBoundingClientRect(),
-      zoom: editor.safeDisplayZoom(),
+      anchorRect,
     });
   }
 
@@ -63,7 +57,7 @@
   }
 
   const handleStyle = css({
-    position: 'absolute',
+    position: 'fixed',
     zIndex: 'menu',
     pointerEvents: 'auto',
     touchAction: 'none',
@@ -108,7 +102,7 @@
       target.setPointerCapture(event.pointerId);
     }
 
-    ctx.editor?.gesture.handleSelectionHandlePointerDown(type, event);
+    editor?.gesture.handleSelectionHandlePointerDown(type, event);
   }
 
   function handlePointerMove(event: PointerEvent) {
@@ -118,7 +112,7 @@
 
     event.preventDefault();
     event.stopPropagation();
-    ctx.editor?.gesture.handleSelectionHandlePointerMove(event);
+    editor?.gesture.handleSelectionHandlePointerMove(event);
   }
 
   function handlePointerUp(event: PointerEvent) {
@@ -134,7 +128,7 @@
       target.releasePointerCapture(event.pointerId);
     }
 
-    ctx.editor?.gesture.handleSelectionHandlePointerUp(event);
+    editor?.gesture.handleSelectionHandlePointerUp(event);
   }
 </script>
 

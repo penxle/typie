@@ -12,18 +12,9 @@
 
   const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
 
-  const container = $derived(
-    editor?.cursor ? (isPaginated ? editor.pageEls[editor.cursor.page_idx] : editor.scrollContainerEl) : undefined,
-  );
+  const container = $derived(editor?.cursor ? editor.pageEls[editor.cursor.page_idx] : undefined);
 
-  const top = $derived.by(() => {
-    if (!editor?.cursor) return 0;
-    if (isPaginated) {
-      return editor.cursor.line.y;
-    }
-    const offset = editor.localToOffset(editor.cursor.page_idx, 0, editor.cursor.line.y);
-    return offset?.y ?? 0;
-  });
+  const top = $derived(editor?.cursor ? editor.cursor.line.y : 0);
 
   const height = $derived(editor?.cursor ? editor.cursor.line.height : 0);
 
@@ -42,8 +33,11 @@
     style:display={show ? 'block' : 'none'}
     style:top={`${top}px`}
     style:height={`${height}px`}
+    style:box-shadow={isPaginated ? undefined : '0 0 0 100vmax currentColor'}
+    style:clip-path={isPaginated ? undefined : 'inset(0 -100vmax)'}
     class={css({
       position: 'absolute',
+      color: 'surface.muted',
       backgroundColor: 'surface.muted',
       insetX: '0',
       zIndex: '[-1]',

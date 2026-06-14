@@ -3,29 +3,25 @@
   import { pushEscapeHandler } from '@typie/ui/utils';
   import ClipboardTypeIcon from '~icons/lucide/clipboard-type';
   import { getEditorContext } from '../editor.svelte';
+  import { pageRectToClientRect } from '../geometry';
+  import { getViewportOverlayContext } from './ViewportOverlay.svelte';
 
-  const ctx = getEditorContext();
+  const { editor } = getEditorContext();
+  const viewportOverlay = getViewportOverlayContext();
 
-  let show = $derived(ctx.editor !== undefined && !ctx.editor.readOnly && ctx.editor.lastHistoryTag?.type === 'paste_html');
-  let point = $state<{ x: number; y: number } | null>(null);
-  let element = $state<HTMLButtonElement>();
+  let show = $derived(editor !== undefined && !editor.readOnly && editor.lastHistoryTag?.type === 'paste_html');
 
-  $effect(() => {
-    const editor = ctx.editor;
-    if (!show || !editor?.cursor) {
-      point = null;
-      return;
+  const point = $derived.by(() => {
+    const cursor = editor?.cursor;
+    if (!show || !editor || !cursor) {
+      return null;
     }
 
-    const { page_idx, caret } = editor.cursor;
-    point = editor.localToOffset(page_idx, caret.x, caret.y + caret.height + 4);
-  });
+    void viewportOverlay.change;
+    const rect = pageRectToClientRect(editor, { page_idx: cursor.page_idx, rect: cursor.caret });
+    if (!rect) return null;
 
-  $effect(() => {
-    const container = ctx.editor?.scrollContainerEl;
-    if (container && element && element.parentElement !== container) {
-      container.append(element);
-    }
+    return { x: rect.left, y: rect.bottom + 4 };
   });
 
   $effect(() => {
@@ -38,7 +34,7 @@
   });
 
   const buttonStyle = css({
-    position: 'absolute',
+    position: 'fixed',
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -67,13 +63,12 @@
 
 {#if point}
   <button
-    bind:this={element}
     style:left={`${point.x}px`}
     style:top={`${point.y}px`}
     class={buttonStyle}
     onclick={(e) => {
       e.stopPropagation();
-      ctx.editor?.handleRepasteAsText();
+      editor?.handleRepasteAsText();
     }}
     onpointerdown={(e) => {
       e.stopPropagation();

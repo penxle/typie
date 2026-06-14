@@ -98,6 +98,15 @@ function sameViewport(a: Viewport, b: Viewport): boolean {
   return a.width === b.width && a.height === b.height && a.scale_factor === b.scale_factor;
 }
 
+export function browserScaleFactor(): number {
+  if (typeof window === 'undefined') {
+    return 1;
+  }
+
+  const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale ?? 1);
+  return Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
+}
+
 function samePosition(a: Position, b: Position): boolean {
   return a.node_id === b.node_id && a.offset === b.offset && a.affinity === b.affinity;
 }
@@ -669,29 +678,6 @@ export class Editor {
 
   clientDeltaToLocalDelta(delta: number): number {
     return delta / this.safeDisplayZoom();
-  }
-
-  localToOffset(page: number, x: number, y: number) {
-    const el = this.pageEls[page];
-    if (!el) {
-      return null;
-    }
-    const zoom = this.safeDisplayZoom();
-    const container = this.scrollContainerEl;
-
-    if (container) {
-      const pageRect = el.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      return {
-        x: pageRect.left - containerRect.left + container.scrollLeft + x * zoom,
-        y: pageRect.top - containerRect.top + container.scrollTop + y * zoom,
-      };
-    }
-
-    return {
-      x: el.offsetLeft + x * zoom,
-      y: el.offsetTop + y * zoom,
-    };
   }
 
   #currentCursorLineRect(): PageRect | null {

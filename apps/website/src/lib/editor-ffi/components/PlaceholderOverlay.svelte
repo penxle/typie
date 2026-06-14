@@ -11,19 +11,11 @@
   const PT_TO_PX = 96 / 72;
 
   const placeholder = $derived(editor?.placeholder);
-  const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
-
-  const container = $derived(
-    placeholder && editor ? (isPaginated ? editor.pageEls[placeholder.page_idx] : editor.scrollContainerEl) : undefined,
-  );
+  const container = $derived(placeholder && editor ? editor.pageEls[placeholder.page_idx] : undefined);
   const show = $derived(!!placeholder && !!container && !editor?.readOnly);
 
-  const offset = $derived.by(() => {
-    if (!editor || !placeholder || isPaginated) return null;
-    return editor.localToOffset(placeholder.page_idx, placeholder.rect.x, placeholder.rect.y);
-  });
-  const top = $derived(placeholder ? (isPaginated ? placeholder.rect.y : (offset?.y ?? 0)) : 0);
-  const left = $derived(placeholder ? (isPaginated ? placeholder.rect.x : (offset?.x ?? 0)) : 0);
+  const top = $derived(placeholder?.rect.y ?? 0);
+  const left = $derived(placeholder?.rect.x ?? 0);
   const width = $derived(placeholder?.rect.width ?? 0);
 
   const fontSize = $derived(placeholder?.font_size ?? defaultValues.fontSize);

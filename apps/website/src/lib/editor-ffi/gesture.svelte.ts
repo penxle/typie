@@ -7,7 +7,7 @@ import {
 } from './constants';
 import { EditorEdgeAutoScroll } from './edge-auto-scroll';
 import { tryHandleInteractiveHit } from './handlers/pointer';
-import type { InputModifiers, PageRect, Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
+import type { InputModifiers, Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
 
 export type SelectionHandleKind = 'from' | 'to';
@@ -86,27 +86,17 @@ export type SelectionHandleVisual = {
 
 export type SelectionHandleVisualInput = {
   kind: SelectionHandleKind;
-  endpoint: PageRect;
-  pageRect: DOMRect;
-  surfaceRect: DOMRect;
-  zoom: number;
+  anchorRect: DOMRect;
 };
 
-export const computeSelectionHandleVisual = ({
-  kind,
-  endpoint,
-  pageRect,
-  surfaceRect,
-  zoom,
-}: SelectionHandleVisualInput): SelectionHandleVisual => {
+export const computeSelectionHandleVisual = ({ kind, anchorRect }: SelectionHandleVisualInput): SelectionHandleVisual => {
   const radius = SELECTION_HANDLE_RADIUS;
   const stemWidth = SELECTION_HANDLE_STEM_WIDTH;
   const touchTargetSize = SELECTION_HANDLE_TOUCH_TARGET_SIZE;
 
-  const anchorLeft = pageRect.left - surfaceRect.left + endpoint.rect.x * zoom;
-  const anchorTop = pageRect.top - surfaceRect.top + endpoint.rect.y * zoom;
-
-  const stemHeight = endpoint.rect.height * zoom;
+  const anchorLeft = anchorRect.left;
+  const anchorTop = anchorRect.top;
+  const stemHeight = anchorRect.height;
   const totalHeight = radius * 2 + stemHeight;
   const touchHeight = Math.max(totalHeight, touchTargetSize);
 
