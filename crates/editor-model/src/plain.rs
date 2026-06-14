@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use editor_crdt::{Dot, LwwRegOp, OpGraph, OrMapOp, OrSetOp, PlacementId, RgaOp, TextOp, ToPlain};
 use editor_macros::ffi;
@@ -90,13 +90,20 @@ impl Doc {
 
         emit_node(&mut graph, &mut doc, &plain, root_id, None, None);
 
-        let mut queue = vec![root_id];
-        while let Some(id) = queue.first().copied() {
-            queue.remove(0);
-            let children: Vec<NodeId> = plain.nodes[&id].children.clone();
-            for (i, child_id) in children.into_iter().enumerate() {
-                emit_node(&mut graph, &mut doc, &plain, child_id, Some(id), Some(i));
-                queue.push(child_id);
+        let mut queue: VecDeque<NodeId> = VecDeque::new();
+        queue.push_back(root_id);
+        while let Some(id) = queue.pop_front() {
+            let mut prev_anchor: Option<Dot> = None;
+            for child_id in &plain.nodes[&id].children {
+                prev_anchor = emit_node(
+                    &mut graph,
+                    &mut doc,
+                    &plain,
+                    *child_id,
+                    Some(id),
+                    prev_anchor,
+                );
+                queue.push_back(*child_id);
             }
         }
 
@@ -108,8 +115,7 @@ impl Doc {
 }
 
 fn apply_and_record(graph: &mut OpGraph<DocOp>, doc: &mut Doc, payload: DocOp) -> Dot {
-    let (g, op) = graph.add(payload).expect("local create");
-    *graph = g;
+    let op = graph.add_mut(payload).expect("local create");
     let new_doc = apply_doc_op(std::mem::take(doc), &op).expect("local apply");
     *doc = new_doc;
     op.id
@@ -121,8 +127,8 @@ fn emit_node(
     plain: &PlainDoc,
     id: NodeId,
     parent: Option<NodeId>,
-    index: Option<usize>,
-) {
+    anchor: Option<Dot>,
+) -> Option<Dot> {
     let entry = &plain.nodes[&id];
 
     apply_and_record(
@@ -137,6 +143,7 @@ fn emit_node(
         },
     );
 
+    let mut placement = None;
     if let Some(parent_id) = parent {
         apply_and_record(
             graph,
@@ -149,14 +156,7 @@ fn emit_node(
             },
         );
 
-        let anchor = doc
-            .get_entry(parent_id)
-            .expect("parent entry must exist before child insert")
-            .children
-            .dot_at(index.expect("index required when parent is Some"))
-            .expect("dot_at error");
-
-        apply_and_record(
+        placement = Some(apply_and_record(
             graph,
             doc,
             DocOp::Children {
@@ -166,7 +166,7 @@ fn emit_node(
                     value: id,
                 },
             },
-        );
+        ));
     }
 
     for attr in entry.node.to_attrs() {
@@ -234,6 +234,8 @@ fn emit_node(
             },
         );
     }
+
+    placement
 }
 
 fn emit_style_entries(graph: &mut OpGraph<DocOp>, doc: &mut Doc, plain: &PlainDoc) {

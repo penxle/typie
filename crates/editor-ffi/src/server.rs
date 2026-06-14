@@ -11,6 +11,14 @@ pub struct ChunkCodepoints {
     pub chunks: Vec<Vec<u32>>,
 }
 
+#[ffi]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct Materialized {
+    pub plain: editor_model::PlainDoc,
+    pub text: String,
+}
+
 #[wasm_bindgen]
 pub struct EditorServer;
 
@@ -240,6 +248,28 @@ impl EditorServer {
         let plain: editor_model::PlainDoc = plain.from_ffi()?;
         let (doc, _) = editor_model::Doc::from_plain(plain);
         doc.verify().map_err(Into::into)
+    }
+
+    pub fn materialize(&self, changeset_payloads: Vec<u8>) -> EditorResult<Complex<Materialized>> {
+        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
+        let doc = editor_model::Doc::from_op_graph(&graph)?;
+        doc.verify()?;
+        let plain = doc.to_plain();
+        let text = doc.extract_text();
+        Ok(Materialized { plain, text }.into_ffi()?)
+    }
+
+    pub fn validate_and_extract_text(&self, changeset_payloads: Vec<u8>) -> EditorResult<String> {
+        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            editor_crdt::wire::decode(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
+        let doc = editor_model::Doc::from_op_graph(&graph)?;
+        doc.verify()?;
+        Ok(doc.extract_text())
     }
 }
 

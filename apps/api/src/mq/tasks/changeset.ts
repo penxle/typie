@@ -62,10 +62,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       for (const [i, bundle] of newBundles.entries()) {
         try {
           const candidate = host.apply(merged, bundle);
-          const candidatePlain = host.to_plain(candidate);
-          host.verify_plain(candidatePlain);
-
-          const candidateCharacterCount = countCharacters(host.extract_text(candidatePlain));
+          const candidateCharacterCount = countCharacters(host.validate_and_extract_text(candidate));
           const { userId } = parsedUpdates[i];
           perUserDelta.set(userId, (perUserDelta.get(userId) ?? 0) + (candidateCharacterCount - prevCharacterCount));
           prevCharacterCount = candidateCharacterCount;
@@ -82,8 +79,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
         return null;
       }
 
-      const plain = host.to_plain(merged);
-      const text = host.extract_text(plain);
+      const { plain, text } = host.materialize(merged);
       const characterCount = countCharacters(text);
       return { graph: merged, plain, text, characterCount, heads: host.heads(merged) };
     });

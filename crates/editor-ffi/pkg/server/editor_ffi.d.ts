@@ -381,6 +381,11 @@ export interface Marker {
     style: string | undefined;
 }
 
+export interface Materialized {
+    plain: PlainDoc;
+    text: string;
+}
+
 export interface ModifierState {
     bold: Tri<undefined>;
     italic: Tri<undefined>;
@@ -861,6 +866,7 @@ declare class EditorServer {
     get_font_codepoints(ttf_data: Uint8Array): Uint32Array;
     get_font_metadata(data: Uint8Array): FontMetadata;
     heads(changeset_payloads: Uint8Array): Uint8Array;
+    materialize(changeset_payloads: Uint8Array): Materialized;
     missing_for(all_changesets: Uint8Array, remote_heads_payload: Uint8Array): Uint8Array;
     outline_text_to_svg(font_data: Uint8Array, text: string): string;
     /**
@@ -871,6 +877,7 @@ declare class EditorServer {
     to_graph(plain: PlainDoc): Uint8Array;
     to_plain(changeset_payloads: Uint8Array): PlainDoc;
     to_plain_resolved(changeset_payloads: Uint8Array): PlainDoc;
+    validate_and_extract_text(changeset_payloads: Uint8Array): string;
     /**
      * Verifies a PlainDoc's structural invariants (root uniqueness, tree reciprocity).
      */
