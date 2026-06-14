@@ -632,7 +632,7 @@ export type DndOp = { type: "start_internal_selection" } | { type: "enter_extern
 
 export type Dot = string;
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated"; layers: SurfaceLayer[] } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -724,6 +724,8 @@ export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_s
 
 export type StyleOp = { type: "apply_to_selection"; style_id: string } | { type: "unset_in_selection" } | { type: "create_from_selection"; style_id: string; name: string } | { type: "update_from_selection" } | { type: "define"; style_id: string; name: string; modifiers: Modifier[] } | { type: "delete"; style_id: string } | { type: "rename"; style_id: string; name: string } | { type: "set_modifier"; style_id: string; modifier: Modifier } | { type: "unset_modifier"; style_id: string; modifier_type: ModifierType };
 
+export type SurfaceLayer = "background" | "below_marks" | "content" | "above_marks";
+
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
 export type TabNodeAttr = void;
@@ -758,7 +760,7 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     applied_style(): Tri;
-    attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
+    attach_surface(page: number, canvases: HTMLCanvasElement[], width: number, height: number, scale_factor: number): void;
     block_state(): BlockState | undefined;
     can(message: Message): boolean;
     character_counts(): CharacterCounts;
@@ -791,7 +793,7 @@ declare class Editor {
     prose_text(): string;
     prose_to_selection(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
-    render_surface(page: number): void;
+    render_surface(page: number, layers: number): void;
     resize_surface(page: number, width: number, height: number, scale_factor: number): void;
     root_attrs(): PlainRootNode;
     selection(): Selection | undefined;

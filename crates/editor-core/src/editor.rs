@@ -1,5 +1,5 @@
 use editor_clipboard::Slice;
-use editor_common::{Movement, time::Duration};
+use editor_common::{Movement, SurfaceLayer, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{DocOp, ModifierState, ModifierType, Node, NodeId, NodeType, Schema};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer};
@@ -489,7 +489,9 @@ impl Editor {
             fields.insert(StateField::TableOverlays);
             fields.insert(StateField::LinkRects);
             fields.insert(StateField::Placeholder);
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.push_event(EditorEvent::RenderInvalidated {
+                layers: SurfaceLayer::ALL.to_vec(),
+            });
         }
 
         if !ops.is_empty() {
@@ -530,7 +532,9 @@ impl Editor {
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
             fields.insert(StateField::Styles);
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.push_event(EditorEvent::RenderInvalidated {
+                layers: vec![SurfaceLayer::BelowMarks],
+            });
         }
 
         if old_pending_modifiers != self.state.pending_modifiers {
@@ -543,6 +547,9 @@ impl Editor {
 
         if old_composition != self.state.composition {
             fields.insert(StateField::Ime);
+            self.push_event(EditorEvent::RenderInvalidated {
+                layers: vec![SurfaceLayer::AboveMarks],
+            });
         }
 
         if old_last_history_tag_revision != self.history.last_tag_revision() {
@@ -630,7 +637,13 @@ impl Editor {
         self.selection_mark_rects().unwrap_or_default()
     }
 
-    pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
+    pub fn render_page(
+        &mut self,
+        page_idx: u32,
+        sink: &mut dyn RenderSink,
+        scale_factor: f32,
+        layers: u8,
+    ) {
         let mut marks: Vec<Mark> = Vec::new();
 
         // Push before selection so selection draws on top within BelowContent.
@@ -677,6 +690,7 @@ impl Editor {
             page_idx as usize,
             scale_factor,
             &marks,
+            layers,
         );
     }
 
@@ -751,6 +765,21 @@ impl Editor {
             }
             other => other,
         };
+        if let EditorEvent::RenderInvalidated { layers } = &event {
+            if let Some(EditorEvent::RenderInvalidated { layers: existing }) = self
+                .pending_events
+                .iter_mut()
+                .find(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+            {
+                let mask =
+                    editor_common::layers_to_mask(existing) | editor_common::layers_to_mask(layers);
+                *existing = SurfaceLayer::ALL
+                    .into_iter()
+                    .filter(|l| mask & l.bit() != 0)
+                    .collect();
+                return;
+            }
+        }
         if !self.pending_events.contains(&event) {
             self.pending_events.push(event);
         }
@@ -820,7 +849,9 @@ impl Editor {
         }
         if would_change {
             self.focused = focused;
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.push_event(EditorEvent::RenderInvalidated {
+                layers: SurfaceLayer::ALL.to_vec(),
+            });
         }
     }
 
@@ -842,7 +873,9 @@ impl Editor {
                     StateField::Placeholder,
                 ],
             });
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.push_event(EditorEvent::RenderInvalidated {
+                layers: SurfaceLayer::ALL.to_vec(),
+            });
         }
         did_change
     }
@@ -866,7 +899,9 @@ impl Editor {
                     StateField::ExternalElements,
                 ],
             });
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.push_event(EditorEvent::RenderInvalidated {
+                layers: SurfaceLayer::ALL.to_vec(),
+            });
         }
         did_change
     }
@@ -886,7 +921,9 @@ impl Editor {
                     StateField::ExternalElements,
                 ],
             });
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.push_event(EditorEvent::RenderInvalidated {
+                layers: SurfaceLayer::ALL.to_vec(),
+            });
         }
         did_change
     }
@@ -1056,7 +1093,9 @@ impl Editor {
         self.push_event(EditorEvent::StateChanged {
             fields: StateField::iter().collect(),
         });
-        self.push_event(EditorEvent::RenderInvalidated);
+        self.push_event(EditorEvent::RenderInvalidated {
+            layers: SurfaceLayer::ALL.to_vec(),
+        });
     }
 
     pub fn insert_template_fragment(
@@ -1938,17 +1977,50 @@ mod tests {
     #[test]
     fn tick_dedups_render_invalidated() {
         let (mut editor, _) = test_editor();
-        editor.push_event(EditorEvent::RenderInvalidated);
-        editor.push_event(EditorEvent::RenderInvalidated);
-        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.push_event(EditorEvent::RenderInvalidated {
+            layers: SurfaceLayer::ALL.to_vec(),
+        });
+        editor.push_event(EditorEvent::RenderInvalidated {
+            layers: SurfaceLayer::ALL.to_vec(),
+        });
+        editor.push_event(EditorEvent::RenderInvalidated {
+            layers: SurfaceLayer::ALL.to_vec(),
+        });
 
         let events = editor.tick().unwrap();
 
         let count = events
             .iter()
-            .filter(|e| matches!(e, EditorEvent::RenderInvalidated))
+            .filter(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
             .count();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn tick_unions_render_invalidated_layers() {
+        let (mut editor, _) = test_editor();
+        editor.push_event(EditorEvent::RenderInvalidated {
+            layers: vec![SurfaceLayer::BelowMarks],
+        });
+        editor.push_event(EditorEvent::RenderInvalidated {
+            layers: vec![SurfaceLayer::Content],
+        });
+
+        let events = editor.tick().unwrap();
+
+        let invalidations: Vec<&EditorEvent> = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+            .collect();
+        assert_eq!(invalidations.len(), 1);
+
+        let EditorEvent::RenderInvalidated { layers } = invalidations[0] else {
+            unreachable!();
+        };
+        assert_eq!(
+            editor_common::layers_to_mask(layers),
+            SurfaceLayer::BelowMarks.bit() | SurfaceLayer::Content.bit()
+        );
     }
 
     #[test]
@@ -2167,7 +2239,7 @@ mod tests {
 
         let has_render = events
             .iter()
-            .any(|e| matches!(e, EditorEvent::RenderInvalidated));
+            .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }));
         let state_changed_fields: Option<&Vec<StateField>> = events.iter().find_map(|e| match e {
             EditorEvent::StateChanged { fields } => Some(fields),
             _ => None,
@@ -2287,7 +2359,7 @@ mod tests {
 
         let render_count = events
             .iter()
-            .filter(|e| matches!(e, EditorEvent::RenderInvalidated))
+            .filter(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
             .count();
         let doc_state_count = events
             .iter()
@@ -2368,7 +2440,7 @@ mod tests {
         // along the actual remote-receive path, not just the push_event helper.
         let render_count = events
             .iter()
-            .filter(|e| matches!(e, EditorEvent::RenderInvalidated))
+            .filter(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
             .count();
         let state_changed_count = events
             .iter()
@@ -2667,7 +2739,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
         );
         assert!(editor.drop_indicator_for_test().is_some());
     }
@@ -2700,7 +2772,7 @@ mod tests {
         assert!(
             !events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
         );
         assert!(editor.drop_indicator_for_test().is_none());
     }
@@ -2739,7 +2811,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
         );
         assert!(editor.drop_indicator_for_test().is_none());
     }
@@ -2777,7 +2849,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
         );
         assert!(editor.drop_indicator_for_test().is_none());
         assert!(matches!(editor.dnd, DndState::InternalDnd { .. }));

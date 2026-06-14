@@ -124,7 +124,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
         );
         assert!(events.iter().any(|e| matches!(
             e,

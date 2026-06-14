@@ -5,6 +5,7 @@ use crate::event::EditorEvent;
 use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifiers};
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
+use editor_common::SurfaceLayer;
 use editor_model::{
     Doc, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode, PlainRootNode, Schema,
 };
@@ -158,7 +159,9 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
         }
     };
     if editor.dnd.drop_target() != previous_drop_target {
-        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.push_event(EditorEvent::RenderInvalidated {
+            layers: vec![SurfaceLayer::AboveMarks],
+        });
     }
     result
 }

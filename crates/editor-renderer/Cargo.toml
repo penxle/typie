@@ -29,13 +29,11 @@ editor-view = { path = "../editor-view" }
 hashbrown.workspace = true
 kurbo.workspace = true
 log.workspace = true
-peniko.workspace = true
 phf = { workspace = true, features = ["macros"] }
 resize = { workspace = true }
 skrifa.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-vello_cpu.workspace = true
 zeno.workspace = true
 zune-png.workspace = true
 tsify = { workspace = true, optional = true }

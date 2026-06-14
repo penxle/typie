@@ -29,4 +29,10 @@ impl RenderBackend {
             Self::Cpu(s) => s,
         }
     }
+
+    pub fn take_touched(&mut self) -> bool {
+        match self {
+            Self::Cpu(s) => s.take_touched(),
+        }
+    }
 }

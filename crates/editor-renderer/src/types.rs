@@ -3,10 +3,6 @@ use editor_view::Edges;
 
 pub use editor_common::Color;
 
-pub fn to_peniko(c: Color) -> peniko::color::AlphaColor<peniko::color::Srgb> {
-    peniko::color::AlphaColor::from_rgba8(c.r, c.g, c.b, c.a)
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Transform {
     pub m: [f32; 6],

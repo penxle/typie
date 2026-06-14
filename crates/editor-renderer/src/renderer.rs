@@ -21,23 +21,9 @@ use crate::vector::codec::encode_vector_page;
 use crate::vector::export::VectorSink;
 
 fn bake_mask_to_premul_rgba(mask: &[u8], width: u32, height: u32, color: Color) -> Image {
-    let color_r = color.r as u32;
-    let color_g = color.g as u32;
-    let color_b = color.b as u32;
-    let color_a = color.a as u32;
-
-    // Matches the legacy blit formula: a = (m * color_a) >> 8, rgb_premul = (a * c) >> 8,
-    // so output is byte-exact with the old direct-blit path on a zero canvas.
     let mut data = Vec::with_capacity((width * height * 4) as usize);
     for &m in mask {
-        let a = (m as u32 * color_a) >> 8;
-        let pr = (a * color_r) >> 8;
-        let pg = (a * color_g) >> 8;
-        let pb = (a * color_b) >> 8;
-        data.push(pr as u8);
-        data.push(pg as u8);
-        data.push(pb as u8);
-        data.push(a as u8);
+        data.extend_from_slice(&crate::backend::cpu::raster::premul_pixel(m, color));
     }
     Image {
         data,
@@ -600,46 +586,56 @@ impl Renderer {
         page_idx: usize,
         scale_factor: f32,
         marks: &[Mark],
+        layers: u8,
     ) {
+        use editor_common::SurfaceLayer;
         let theme = self.resource.lock().unwrap().theme;
 
-        view.visit_page(
-            page_idx,
-            &mut self.page_visitor(
+        if layers & SurfaceLayer::Background.bit() != 0 {
+            view.visit_page(
+                page_idx,
+                &mut self.page_visitor(
+                    sink,
+                    doc,
+                    scale_factor,
+                    LayerSet::of(&[RenderLayer::Background]),
+                ),
+            );
+        }
+
+        if layers & SurfaceLayer::BelowMarks.bit() != 0 {
+            self.draw_marks(
                 sink,
-                doc,
+                marks,
+                MarkLayer::BelowContent,
+                page_idx,
                 scale_factor,
-                LayerSet::of(&[RenderLayer::Background]),
-            ),
-        );
+                &theme,
+            );
+        }
 
-        self.draw_marks(
-            sink,
-            marks,
-            MarkLayer::BelowContent,
-            page_idx,
-            scale_factor,
-            &theme,
-        );
+        if layers & SurfaceLayer::Content.bit() != 0 {
+            view.visit_page(
+                page_idx,
+                &mut self.page_visitor(
+                    sink,
+                    doc,
+                    scale_factor,
+                    LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
+                ),
+            );
+        }
 
-        view.visit_page(
-            page_idx,
-            &mut self.page_visitor(
+        if layers & SurfaceLayer::AboveMarks.bit() != 0 {
+            self.draw_marks(
                 sink,
-                doc,
+                marks,
+                MarkLayer::AboveContent,
+                page_idx,
                 scale_factor,
-                LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
-            ),
-        );
-
-        self.draw_marks(
-            sink,
-            marks,
-            MarkLayer::AboveContent,
-            page_idx,
-            scale_factor,
-            &theme,
-        );
+                &theme,
+            );
+        }
     }
 
     pub fn export_page_vector(
