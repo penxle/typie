@@ -1,5 +1,6 @@
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::DrawSettings;
+use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use zeno::Transform as ZTransform;
 use zeno::{Point, Verb};
@@ -226,6 +227,16 @@ fn try_outline_svg_path(
 ) -> Option<SvgPathGlyph> {
     let font = FontRef::from_index(font_data, 0).ok()?;
     let gid = GlyphId::new(glyph_id);
+
+    let has_svg_glyph = font
+        .svg()
+        .ok()
+        .and_then(|svg| svg.glyph_data(gid).ok().flatten())
+        .is_some();
+    if !has_svg_glyph {
+        return None;
+    }
+
     let outlines = font.outline_glyphs();
     let og = outlines.get(gid)?;
 

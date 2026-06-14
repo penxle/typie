@@ -58,9 +58,7 @@ fn draw_positioned_raster_glyph(sink: &mut dyn RenderSink, pg: &PositionedGlyph,
         },
     };
 
-    let t = Transform::IDENTITY.translate(pg.blit_x as f32, pg.blit_y as f32);
-    let rect = Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
-    sink.draw_image(&image, rect, t);
+    sink.draw_glyph(&image, pg.blit_x, pg.blit_y);
 }
 
 fn draw_positioned_svg_path_glyph(
