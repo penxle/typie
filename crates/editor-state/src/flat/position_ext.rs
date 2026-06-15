@@ -10,6 +10,12 @@ pub trait ResolvedPositionFlatExt<'a>: Sized {
 
 impl<'a> ResolvedPositionFlatExt<'a> for ResolvedPosition<'a> {
     fn to_flat(&self) -> usize {
+        if let Some(entry) = self.doc().get_entry(self.node_id())
+            && matches!(entry.node, Node::Text(_))
+            && let Some(start) = self.doc().flat_layout().text_start(self.node_id())
+        {
+            return start + self.offset();
+        }
         let Some(root) = self.doc().root() else {
             return 0;
         };

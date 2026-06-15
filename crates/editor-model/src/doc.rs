@@ -49,6 +49,80 @@ impl std::fmt::Debug for ChildIndexCache {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FlatKind {
+    Open,
+    Close,
+    Text,
+    Break,
+    Atom,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FlatEntry {
+    pub start: usize,
+    pub node_id: NodeId,
+    pub kind: FlatKind,
+    pub size: usize,
+}
+
+#[derive(Default)]
+pub struct FlatLayout {
+    pub entries: Vec<FlatEntry>,
+    pub size: usize,
+    pub(crate) text_starts: HashMap<NodeId, usize>,
+}
+
+impl FlatLayout {
+    pub fn text_start(&self, node_id: NodeId) -> Option<usize> {
+        self.text_starts.get(&node_id).copied()
+    }
+}
+
+enum NodeFlatClass {
+    Text,
+    Break,
+    Atom,
+    Container,
+}
+
+fn classify_flat(node: &Node) -> NodeFlatClass {
+    match node {
+        Node::Text(_) => NodeFlatClass::Text,
+        other => {
+            let spec = other.spec();
+            if spec.inline {
+                NodeFlatClass::Break
+            } else if spec.is_leaf() {
+                NodeFlatClass::Atom
+            } else {
+                NodeFlatClass::Container
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct FlatLayoutCache(OnceLock<FlatLayout>);
+
+impl Clone for FlatLayoutCache {
+    fn clone(&self) -> Self {
+        Self(OnceLock::new())
+    }
+}
+
+impl PartialEq for FlatLayoutCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for FlatLayoutCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FlatLayoutCache(..)")
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Doc {
     pub(crate) nodes: OrMap<NodeId, NodeType>,
@@ -58,6 +132,7 @@ pub struct Doc {
     pub(crate) styles: OrMap<String, ()>,
     pub(crate) style_entries: imbl::HashMap<String, StyleEntry>,
     child_index: ChildIndexCache,
+    flat_layout: FlatLayoutCache,
 }
 
 impl Doc {
@@ -107,6 +182,96 @@ impl Doc {
 
     pub(crate) fn invalidate_child_index(&mut self) {
         self.child_index.0.take();
+    }
+
+    pub fn flat_layout(&self) -> &FlatLayout {
+        self.flat_layout.0.get_or_init(|| self.build_flat_layout())
+    }
+
+    fn build_flat_layout(&self) -> FlatLayout {
+        let mut entries = Vec::new();
+        let mut text_starts = HashMap::new();
+        let mut cursor = 0usize;
+        if let Some(root) = self.root() {
+            self.visit_flat_layout(root.id(), &mut cursor, &mut entries, &mut text_starts);
+        }
+        FlatLayout {
+            entries,
+            size: cursor,
+            text_starts,
+        }
+    }
+
+    fn visit_flat_layout(
+        &self,
+        node_id: NodeId,
+        cursor: &mut usize,
+        entries: &mut Vec<FlatEntry>,
+        text_starts: &mut HashMap<NodeId, usize>,
+    ) {
+        let Some(entry) = self.get_entry(node_id) else {
+            return;
+        };
+        for child_id in entry.children.iter().copied() {
+            let Some(child) = self.get_entry(child_id) else {
+                continue;
+            };
+            match classify_flat(&child.node) {
+                NodeFlatClass::Text => {
+                    let text_len = match &child.node {
+                        Node::Text(t) => t.text.len(),
+                        _ => unreachable!("classified as Text"),
+                    };
+                    text_starts.insert(child_id, *cursor);
+                    entries.push(FlatEntry {
+                        start: *cursor,
+                        node_id: child_id,
+                        kind: FlatKind::Text,
+                        size: text_len,
+                    });
+                    *cursor += text_len;
+                }
+                NodeFlatClass::Break => {
+                    entries.push(FlatEntry {
+                        start: *cursor,
+                        node_id: child_id,
+                        kind: FlatKind::Break,
+                        size: 1,
+                    });
+                    *cursor += 1;
+                }
+                NodeFlatClass::Atom => {
+                    entries.push(FlatEntry {
+                        start: *cursor,
+                        node_id: child_id,
+                        kind: FlatKind::Atom,
+                        size: 1,
+                    });
+                    *cursor += 1;
+                }
+                NodeFlatClass::Container => {
+                    entries.push(FlatEntry {
+                        start: *cursor,
+                        node_id: child_id,
+                        kind: FlatKind::Open,
+                        size: 1,
+                    });
+                    *cursor += 1;
+                    self.visit_flat_layout(child_id, cursor, entries, text_starts);
+                    entries.push(FlatEntry {
+                        start: *cursor,
+                        node_id: child_id,
+                        kind: FlatKind::Close,
+                        size: 1,
+                    });
+                    *cursor += 1;
+                }
+            }
+        }
+    }
+
+    pub(crate) fn invalidate_flat_layout(&mut self) {
+        self.flat_layout.0.take();
     }
 
     pub fn from_op_graph(graph: &OpGraph<DocOp>) -> Result<Self, ModelError> {
@@ -209,6 +374,7 @@ impl Doc {
             return;
         };
         text_node.text = Text::from_visible_placements(visible);
+        self.invalidate_flat_layout();
     }
 
     fn text_projection_for(&self, node_id: NodeId) -> Option<Vec<TextPlacement>> {

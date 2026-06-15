@@ -103,6 +103,7 @@ pub enum StyleOp {
 }
 
 pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
+    doc.invalidate_flat_layout();
     match &op.payload {
         DocOp::Presence {
             node_id,

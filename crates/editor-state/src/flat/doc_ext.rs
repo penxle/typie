@@ -1,7 +1,6 @@
-use editor_model::{Doc, Node, NodeId};
+use editor_model::{Doc, FlatKind, Node};
 use std::ops::Range;
 
-use super::class::{FlatClass, classify};
 use super::segment::FlatSegment;
 
 pub trait DocFlatExt {
@@ -23,24 +22,34 @@ impl Iterator for FlatSegments {
 
 impl DocFlatExt for Doc {
     fn flat_segments(&self) -> FlatSegments {
-        let Some(root) = self.root() else {
-            return FlatSegments {
-                inner: Vec::new().into_iter(),
-            };
-        };
-        let mut segments = Vec::new();
-        let mut cumulative = 0usize;
-        visit_flat(self, root.id(), &mut cumulative, &mut segments);
+        let layout = self.flat_layout();
+        let segments: Vec<(usize, FlatSegment)> = layout
+            .entries
+            .iter()
+            .map(|e| {
+                let seg = match e.kind {
+                    FlatKind::Text => FlatSegment::Text {
+                        node_id: e.node_id,
+                        text: match self.get_entry(e.node_id).map(|n| &n.node) {
+                            Some(Node::Text(t)) => t.text.to_string(),
+                            _ => String::new(),
+                        },
+                    },
+                    FlatKind::Break => FlatSegment::Break { node_id: e.node_id },
+                    FlatKind::Atom => FlatSegment::Atom { node_id: e.node_id },
+                    FlatKind::Open => FlatSegment::Open { node_id: e.node_id },
+                    FlatKind::Close => FlatSegment::Close { node_id: e.node_id },
+                };
+                (e.start, seg)
+            })
+            .collect();
         FlatSegments {
             inner: segments.into_iter(),
         }
     }
 
     fn flat_size(&self) -> usize {
-        self.flat_segments()
-            .last()
-            .map(|(start, seg)| start + seg.size())
-            .unwrap_or(0)
+        self.flat_layout().size
     }
 
     fn flat_text(&self, range: Range<usize>) -> String {
@@ -67,58 +76,6 @@ impl DocFlatExt for Doc {
             }
         }
         out
-    }
-}
-
-fn visit_flat(
-    doc: &Doc,
-    node_id: NodeId,
-    cumulative: &mut usize,
-    out: &mut Vec<(usize, FlatSegment)>,
-) {
-    let entry = match doc.get_entry(node_id) {
-        Some(e) => e,
-        None => return,
-    };
-
-    for child_id in entry.children.iter().copied() {
-        let child = match doc.get_entry(child_id) {
-            Some(c) => c,
-            None => continue,
-        };
-        let class = classify(&child.node);
-
-        match class {
-            FlatClass::Text => {
-                let (text_string, text_len) = match &child.node {
-                    Node::Text(t) => (t.text.to_string(), t.text.len()),
-                    _ => unreachable!("classified as Text"),
-                };
-                out.push((
-                    *cumulative,
-                    FlatSegment::Text {
-                        node_id: child_id,
-                        text: text_string,
-                    },
-                ));
-                *cumulative += text_len;
-            }
-            FlatClass::Break => {
-                out.push((*cumulative, FlatSegment::Break { node_id: child_id }));
-                *cumulative += 1;
-            }
-            FlatClass::Atom => {
-                out.push((*cumulative, FlatSegment::Atom { node_id: child_id }));
-                *cumulative += 1;
-            }
-            FlatClass::Container => {
-                out.push((*cumulative, FlatSegment::Open { node_id: child_id }));
-                *cumulative += 1;
-                visit_flat(doc, child_id, cumulative, out);
-                out.push((*cumulative, FlatSegment::Close { node_id: child_id }));
-                *cumulative += 1;
-            }
-        }
     }
 }
 

@@ -148,6 +148,7 @@ impl State {
         // no ops, so the Doc is bit-identical to the pre-batch state and the
         // verify walk would re-check the same tree it just passed.
         if !ops.is_empty() {
+            #[cfg(any(test, debug_assertions))]
             self.verify().map_err(E::from)?;
         }
         Ok(ops)
