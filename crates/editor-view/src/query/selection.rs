@@ -100,26 +100,26 @@ fn selection_rect_sets(
     }
 
     let pages = layout_index.pages();
-    let hard_breaks = super::hard_break::included_in_selection(layout_index, selection);
-    let paragraph_breaks = super::paragraph_break::included_in_selection(layout_index, selection);
 
     let from = Position::from(selection.from());
     let to = Position::from(selection.to());
-    // Resolve which Line/Atom each endpoint belongs to up front so soft-wrap
-    // boundary positions are disambiguated by affinity
-    // rather than by the permissive per-line `line_contains_position`.
-    //
-    // `LayoutIndex::entry_for_position` is permissive on purpose for navigation: an attached
-    // box owns its child-boundary positions, and an atom owns both of its edges.
-    // For rect attribution those box matches are structural container boundaries
-    // that the box-level phase machine must claim. Strip them, while keeping atom
-    // ownership only on the affinity-selected edge.
-    let from_owner = layout_index
-        .entry_for_position(&from)
-        .filter(|entry| attached(layout_index, entry, &from));
-    let to_owner = layout_index
-        .entry_for_position(&to)
-        .filter(|entry| attached(layout_index, entry, &to));
+
+    let from_entry = layout_index.entry_for_position(&from);
+    let to_entry = layout_index.entry_for_position(&to);
+
+    let break_y_bounds = match (from_entry, to_entry) {
+        (Some(f), Some(t)) => Some((f.rect.y.min(t.rect.y), f.rect.bottom().max(t.rect.bottom()))),
+        _ => None,
+    };
+
+    let hard_breaks =
+        super::hard_break::included_in_selection(layout_index, selection, break_y_bounds);
+    let paragraph_breaks =
+        super::paragraph_break::included_in_selection(layout_index, selection, break_y_bounds);
+
+    let from_owner = from_entry.filter(|entry| attached(layout_index, entry, &from));
+    let to_owner = to_entry.filter(|entry| attached(layout_index, entry, &to));
+
     let mut phase = Phase::Before;
     let mut rects = SelectionRectSets::empty();
 

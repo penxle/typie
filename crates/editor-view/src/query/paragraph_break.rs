@@ -24,9 +24,16 @@ pub(crate) struct SelectedParagraphBreak {
 pub(crate) fn included_in_selection(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
+    y_bounds: Option<(f32, f32)>,
 ) -> Vec<SelectedParagraphBreak> {
     let mut paragraph_breaks = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for entry in layout_index.entries() {
+        if let Some((y_start, y_end)) = y_bounds
+            && !entry.overlaps_y_range(y_start, y_end)
+        {
+            continue;
+        }
         let Some(paragraph_break) = paragraph_break_for_entry(layout_index, selection.doc(), entry)
         else {
             continue;
@@ -34,12 +41,7 @@ pub(crate) fn included_in_selection(
         if !selection.contains_range(paragraph_break.selection) {
             continue;
         }
-        if paragraph_breaks
-            .iter()
-            .any(|existing: &SelectedParagraphBreak| {
-                existing.selection == paragraph_break.selection
-            })
-        {
+        if !seen.insert(super::common::selection_key(&paragraph_break.selection)) {
             continue;
         }
         paragraph_breaks.push(paragraph_break);
@@ -149,7 +151,7 @@ fn paragraph_break_before_gap_boundary(doc: &Doc, position: Position) -> Option<
     let previous = position
         .offset
         .checked_sub(1)
-        .and_then(|index| parent.children().nth(index))?;
+        .and_then(|index| parent.child_at(index))?;
     if !matches!(previous.node(), Node::Paragraph(_)) {
         return None;
     }

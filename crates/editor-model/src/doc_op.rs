@@ -164,6 +164,7 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 .parent
                 .apply(op.id, lww_op.clone())
                 .expect("local apply");
+            doc.invalidate_child_index();
         }
         DocOp::Children {
             node_id,
@@ -189,6 +190,7 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                 .children
                 .apply(op.id, rga_op.clone())
                 .expect("local apply");
+            doc.invalidate_child_index();
         }
         DocOp::Text {
             node_id,

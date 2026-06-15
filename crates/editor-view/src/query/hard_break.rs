@@ -21,19 +21,23 @@ pub(crate) struct SelectedHardBreak {
 pub(crate) fn included_in_selection(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
+    y_bounds: Option<(f32, f32)>,
 ) -> Vec<SelectedHardBreak> {
     let mut hard_breaks = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for entry in layout_index.entries() {
+        if let Some((y_start, y_end)) = y_bounds
+            && !entry.overlaps_y_range(y_start, y_end)
+        {
+            continue;
+        }
         let Some(hard_break) = hard_break_for_entry(layout_index, selection.doc(), entry) else {
             continue;
         };
         if !selection.contains_range(hard_break.selection) {
             continue;
         }
-        if hard_breaks
-            .iter()
-            .any(|existing: &SelectedHardBreak| existing.selection == hard_break.selection)
-        {
+        if !seen.insert(super::common::selection_key(&hard_break.selection)) {
             continue;
         }
         hard_breaks.push(hard_break);

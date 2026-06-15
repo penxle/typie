@@ -158,24 +158,23 @@ impl<'a> NodeRef<'a> {
         Some(NodeRef::new(self.doc, id))
     }
 
+    pub fn child_at(&self, index: usize) -> Option<NodeRef<'a>> {
+        let id = self.doc.nth_child(self.id, index)?;
+        Some(NodeRef::new(self.doc, id))
+    }
+
     pub fn last_child(&self) -> Option<NodeRef<'a>> {
         let id = self.entry().children.iter().last().copied()?;
         Some(NodeRef::new(self.doc, id))
     }
 
     pub fn prev_sibling(&self) -> Option<NodeRef<'a>> {
-        let parent = self.parent()?;
-        let children: Vec<NodeId> = parent.entry().children.iter().copied().collect();
-        let idx = children.iter().position(|&id| id == self.id)?;
-        let prev_id = *children.get(idx.checked_sub(1)?)?;
+        let prev_id = self.doc.child_pos(self.id)?.prev?;
         Some(NodeRef::new(self.doc, prev_id))
     }
 
     pub fn next_sibling(&self) -> Option<NodeRef<'a>> {
-        let parent = self.parent()?;
-        let children: Vec<NodeId> = parent.entry().children.iter().copied().collect();
-        let idx = children.iter().position(|&id| id == self.id)?;
-        let next_id = *children.get(idx + 1)?;
+        let next_id = self.doc.child_pos(self.id)?.next?;
         Some(NodeRef::new(self.doc, next_id))
     }
 
@@ -196,13 +195,7 @@ impl<'a> NodeRef<'a> {
     }
 
     pub fn index(&self) -> Option<usize> {
-        let parent = self.parent()?;
-        parent
-            .entry()
-            .children
-            .iter()
-            .copied()
-            .position(|id| id == self.id)
+        Some(self.doc.child_pos(self.id)?.index)
     }
 
     pub fn path(&self) -> Vec<usize> {

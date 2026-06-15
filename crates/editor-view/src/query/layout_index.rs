@@ -15,6 +15,7 @@ pub(crate) struct LayoutIndex {
     pages: Vec<LayoutPage>,
     entries: Vec<LayoutEntry>,
     boxes_by_node_id: HashMap<NodeId, LayoutEntryId>,
+    entries_by_node: HashMap<NodeId, Vec<LayoutEntryId>>,
     spatial: RTree<SpatialEntry>,
 }
 
@@ -44,6 +45,7 @@ struct LayoutIndexBuilder<'a> {
     pages: &'a [LayoutPage],
     entries: Vec<LayoutEntry>,
     boxes_by_node_id: HashMap<NodeId, LayoutEntryId>,
+    entries_by_node: HashMap<NodeId, Vec<LayoutEntryId>>,
     ancestors: Vec<NodeId>,
     path: Vec<usize>,
     spatial: Vec<SpatialEntry>,
@@ -55,6 +57,7 @@ impl LayoutIndex {
             pages,
             entries: Vec::new(),
             boxes_by_node_id: HashMap::new(),
+            entries_by_node: HashMap::new(),
             ancestors: Vec::new(),
             path: Vec::new(),
             spatial: Vec::new(),
@@ -65,6 +68,7 @@ impl LayoutIndex {
             pages: pages.to_vec(),
             entries: builder.entries,
             boxes_by_node_id: builder.boxes_by_node_id,
+            entries_by_node: builder.entries_by_node,
             spatial: RTree::bulk_load(builder.spatial),
         }
     }
@@ -136,11 +140,15 @@ impl LayoutIndex {
     }
 
     pub(crate) fn entry_for_position(&self, pos: &Position) -> Option<&LayoutEntry> {
-        let mut candidates = self.entries.iter().filter(|entry| {
-            entry
-                .node(self)
-                .is_some_and(|node| position_matches_node(node, pos))
-        });
+        let candidate_ids = self.entries_by_node.get(&pos.node_id)?;
+        let mut candidates = candidate_ids
+            .iter()
+            .map(|&id| &self.entries[id])
+            .filter(|entry| {
+                entry
+                    .node(self)
+                    .is_some_and(|node| position_matches_node(node, pos))
+            });
         match pos.affinity {
             Affinity::Upstream => candidates.next(),
             Affinity::Downstream => candidates.next_back(),
@@ -319,15 +327,21 @@ impl LayoutEntry {
     pub(crate) fn ancestors(&self) -> &[NodeId] {
         &self.ancestors
     }
+
+    pub(crate) fn overlaps_y_range(&self, y_start: f32, y_end: f32) -> bool {
+        rect_overlaps_y_range(&self.rect, y_start, y_end)
+    }
 }
 
 impl LayoutIndexBuilder<'_> {
     fn build_node(&mut self, node: &LayoutNode) {
         match &node.content {
             LayoutContent::Box(b) => {
-                self.add_entry(node.rect);
-                self.boxes_by_node_id
-                    .insert(b.node_id, self.entries.len() - 1);
+                let id = self.add_entry(node.rect);
+                self.boxes_by_node_id.insert(b.node_id, id);
+                if let Some(attachment) = b.attachment {
+                    self.register_match_node(attachment.parent_id, id);
+                }
                 self.ancestors.push(b.node_id);
                 for (idx, child) in b.children.iter().enumerate() {
                     self.path.push(idx);
@@ -343,9 +357,24 @@ impl LayoutIndexBuilder<'_> {
             }
             LayoutContent::Line(line) if line.is_phantom => {}
             LayoutContent::Spacing(_) => {}
-            LayoutContent::Line(_) | LayoutContent::Atom(_) => {
-                self.add_entry(node.rect);
+            LayoutContent::Line(line) => {
+                let id = self.add_entry(node.rect);
+                self.register_match_node(line.node_id, id);
+                for run in &line.glyph_runs {
+                    self.register_match_node(run.node_id, id);
+                }
             }
+            LayoutContent::Atom(atom) => {
+                let id = self.add_entry(node.rect);
+                self.register_match_node(atom.attachment.parent_id, id);
+            }
+        }
+    }
+
+    fn register_match_node(&mut self, node_id: NodeId, entry_id: LayoutEntryId) {
+        let entries = self.entries_by_node.entry(node_id).or_default();
+        if entries.last() != Some(&entry_id) {
+            entries.push(entry_id);
         }
     }
 

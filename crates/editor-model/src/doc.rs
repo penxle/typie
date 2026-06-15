@@ -1,6 +1,7 @@
 use editor_crdt::{Dot, OpGraph, OrMap, Text, TextPlacement};
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 use std::collections::VecDeque;
+use std::sync::OnceLock;
 
 use crate::apply_doc_op;
 use crate::doc_op::DocOp;
@@ -14,6 +15,40 @@ use crate::stable_position_remap::StablePositionRemapStore;
 use crate::style::StyleEntry;
 use crate::text_view::{TextIdentityView, TextView};
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NodePos {
+    pub(crate) index: usize,
+    pub(crate) prev: Option<NodeId>,
+    pub(crate) next: Option<NodeId>,
+}
+
+#[derive(Default)]
+struct ChildIndex {
+    pos: HashMap<NodeId, NodePos>,
+    ordered: HashMap<NodeId, Vec<NodeId>>,
+}
+
+#[derive(Default)]
+struct ChildIndexCache(OnceLock<ChildIndex>);
+
+impl Clone for ChildIndexCache {
+    fn clone(&self) -> Self {
+        Self(OnceLock::new())
+    }
+}
+
+impl PartialEq for ChildIndexCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for ChildIndexCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ChildIndexCache(..)")
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Doc {
     pub(crate) nodes: OrMap<NodeId, NodeType>,
@@ -22,11 +57,56 @@ pub struct Doc {
     pub(crate) stable_position_remap: StablePositionRemapStore,
     pub(crate) styles: OrMap<String, ()>,
     pub(crate) style_entries: imbl::HashMap<String, StyleEntry>,
+    child_index: ChildIndexCache,
 }
 
 impl Doc {
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn child_pos(&self, id: NodeId) -> Option<NodePos> {
+        self.child_index().pos.get(&id).copied()
+    }
+
+    pub(crate) fn nth_child(&self, parent: NodeId, index: usize) -> Option<NodeId> {
+        self.child_index().ordered.get(&parent)?.get(index).copied()
+    }
+
+    fn child_index(&self) -> &ChildIndex {
+        self.child_index.0.get_or_init(|| self.build_child_index())
+    }
+
+    fn build_child_index(&self) -> ChildIndex {
+        let mut pos = HashMap::new();
+        let mut ordered = HashMap::new();
+        for (parent_id, entry) in self.entries.iter() {
+            let children: Vec<NodeId> = entry.children.iter().copied().collect();
+            for (i, &child) in children.iter().enumerate() {
+                let parent_matches = self
+                    .entries
+                    .get(&child)
+                    .map(|child_entry| child_entry.parent.get())
+                    .is_some_and(|parent| parent.as_ref() == Some(parent_id));
+                if !parent_matches {
+                    continue;
+                }
+                pos.insert(
+                    child,
+                    NodePos {
+                        index: i,
+                        prev: i.checked_sub(1).map(|p| children[p]),
+                        next: children.get(i + 1).copied(),
+                    },
+                );
+            }
+            ordered.insert(*parent_id, children);
+        }
+        ChildIndex { pos, ordered }
+    }
+
+    pub(crate) fn invalidate_child_index(&mut self) {
+        self.child_index.0.take();
     }
 
     pub fn from_op_graph(graph: &OpGraph<DocOp>) -> Result<Self, ModelError> {
