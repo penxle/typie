@@ -270,6 +270,15 @@ impl Doc {
         };
         let root_id = root.id();
 
+        let mut listed_edges: HashSet<(NodeId, NodeId)> = HashSet::new();
+        for (parent_id, _kind) in self.nodes_iter() {
+            if let Some(entry) = self.get_entry(*parent_id) {
+                for child_id in entry.children.iter().copied() {
+                    listed_edges.insert((*parent_id, child_id));
+                }
+            }
+        }
+
         let mut visited: HashSet<NodeId> = HashSet::new();
         let mut queue: VecDeque<NodeId> = VecDeque::new();
         queue.push_back(root_id);
@@ -298,13 +307,7 @@ impl Doc {
                 queue.push_back(child_id);
             }
             if let Some(parent_id) = *entry.parent.get() {
-                let parent_entry =
-                    self.get_entry(parent_id)
-                        .ok_or(ModelError::ParentChildDesync {
-                            parent: parent_id,
-                            child: id,
-                        })?;
-                if !parent_entry.children.iter().any(|c| c == &id) {
+                if !listed_edges.contains(&(parent_id, id)) {
                     return Err(ModelError::ParentChildDesync {
                         parent: parent_id,
                         child: id,
