@@ -114,6 +114,17 @@ mod tests {
     }
 
     #[test]
+    fn from_html_ignores_apple_interchange_newline_break() {
+        let html = r#"<p>Hello</p><br class="Apple-interchange-newline">"#;
+        let slice = Slice::from_html(html, &Resource::new_test());
+        assert_eq!(slice.fragment.children.len(), 1);
+        let p = &slice.fragment.children[0];
+        assert!(matches!(p.node, PlainNode::Paragraph(_)));
+        assert_eq!(p.children.len(), 1);
+        assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "Hello"));
+    }
+
+    #[test]
     fn from_html_bold_italic_modifiers() {
         let html = "<p><strong><em>hi</em></strong></p>";
         let slice = Slice::from_html(html, &Resource::new_test());

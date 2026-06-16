@@ -106,8 +106,16 @@ fn build_node_rules() -> Vec<NodeParseRule> {
         NodeParseRule::simple("hr", |_| {
             Some(PlainNode::HorizontalRule(PlainHorizontalRuleNode::default()))
         }),
-        NodeParseRule::simple("br", |_| {
-            Some(PlainNode::HardBreak(PlainHardBreakNode::default()))
+        NodeParseRule::simple("br", |elem| {
+            if elem.value().attr("class").is_some_and(|class| {
+                class
+                    .split_ascii_whitespace()
+                    .any(|v| v == "Apple-interchange-newline")
+            }) {
+                None
+            } else {
+                Some(PlainNode::HardBreak(PlainHardBreakNode::default()))
+            }
         }),
         NodeParseRule::simple("details", |_| {
             Some(PlainNode::Fold(PlainFoldNode::default()))
