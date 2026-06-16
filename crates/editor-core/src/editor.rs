@@ -1739,6 +1739,139 @@ mod tests {
         eprintln!("==== UNDO TICK TOTAL: {:?} ====", t.elapsed());
     }
 
+    // Benchmark: per-keystroke (TextInput) tick latency vs. document size.
+    // Run on demand:
+    //   cargo test --release -p editor-core perf_textinput_large_doc -- --ignored --nocapture
+    #[test]
+    #[ignore = "perf benchmark; run manually with --ignored --nocapture"]
+    fn perf_textinput_large_doc() {
+        struct StderrLogger;
+        impl log::Log for StderrLogger {
+            fn enabled(&self, _m: &log::Metadata) -> bool {
+                true
+            }
+            fn log(&self, record: &log::Record) {
+                eprintln!("{}", record.args());
+            }
+            fn flush(&self) {}
+        }
+        let _ = log::set_logger(Box::leak(Box::new(StderrLogger)));
+        log::set_max_level(log::LevelFilter::Debug);
+
+        fn build_editor(n: usize) -> Editor {
+            let root_id = NodeId::ROOT;
+            let mut nodes = BTreeMap::new();
+            let mut para_ids = Vec::with_capacity(n);
+            let mut text_ids = Vec::with_capacity(n);
+            for _ in 0..n {
+                para_ids.push(NodeId::new());
+                text_ids.push(NodeId::new());
+            }
+            nodes.insert(
+                root_id,
+                PlainNodeEntry {
+                    parent: None,
+                    children: para_ids.clone(),
+                    modifiers: BTreeMap::new(),
+                    style: None,
+                    marker: None,
+                    node: PlainNode::Root(PlainRootNode::default()),
+                },
+            );
+            for i in 0..n {
+                nodes.insert(
+                    para_ids[i],
+                    PlainNodeEntry {
+                        parent: Some(root_id),
+                        children: vec![text_ids[i]],
+                        modifiers: BTreeMap::new(),
+                        style: None,
+                        marker: None,
+                        node: PlainNode::Paragraph(PlainParagraphNode {}),
+                    },
+                );
+                nodes.insert(
+                    text_ids[i],
+                    PlainNodeEntry {
+                        parent: Some(para_ids[i]),
+                        children: vec![],
+                        modifiers: BTreeMap::new(),
+                        style: None,
+                        marker: None,
+                        node: PlainNode::Text(PlainTextNode {
+                            text: "The quick brown fox jumps".to_string(),
+                        }),
+                    },
+                );
+            }
+            let plain = PlainDoc {
+                nodes,
+                styles: BTreeMap::new(),
+            };
+            let (doc, graph) = Doc::from_plain(plain);
+            let last_text = *text_ids.last().unwrap();
+            let state = State::new(
+                doc,
+                graph,
+                Some(Selection::collapsed(Position::new(last_text, 5))),
+            );
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state.doc);
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "a".into() }],
+            });
+            editor
+        }
+
+        for n in [1000usize, 2000, 4000] {
+            let mut editor = build_editor(n);
+            eprintln!("==== TEXTINPUT STARTS (paragraphs={n}) ====");
+            let t = editor_common::time::Instant::now();
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "b".into() }],
+            });
+            eprintln!(
+                "==== paragraphs={n} TEXTINPUT TICK TOTAL: {:?} ====",
+                t.elapsed()
+            );
+
+            // Derived-query (host-side, post-tick) cost: whole-doc table_overlays
+            // builds every page's fragment; the per-visible-page call builds one.
+            // Re-layout before each to reset the lazy per-page fragment caches.
+            editor.view.layout(&editor.state.doc);
+            let page_count = editor.view.pages().len();
+            let t = editor_common::time::Instant::now();
+            let _ = editor.view.table_overlays(&editor.state.doc, None);
+            eprintln!(
+                "  table_overlays WHOLE ({page_count} pages): {:?}",
+                t.elapsed()
+            );
+            editor.view.layout(&editor.state.doc);
+            let t = editor_common::time::Instant::now();
+            let _ = editor.view.page_table_overlays(&editor.state.doc, 0, None);
+            eprintln!("  page_table_overlays(visible page 0): {:?}", t.elapsed());
+
+            let t = editor_common::time::Instant::now();
+            let _ = editor.view.external_elements(&editor.state.doc, None);
+            eprintln!("  external_elements WHOLE: {:?}", t.elapsed());
+            let t = editor_common::time::Instant::now();
+            let _ = editor
+                .view
+                .page_external_elements(&editor.state.doc, 0, None);
+            eprintln!(
+                "  page_external_elements(visible page 0): {:?}",
+                t.elapsed()
+            );
+
+            let t = editor_common::time::Instant::now();
+            let _ = editor.view.link_rects(&editor.state.doc);
+            eprintln!("  link_rects WHOLE: {:?}", t.elapsed());
+            let t = editor_common::time::Instant::now();
+            let _ = editor.view.page_link_rects(&editor.state.doc, 0);
+            eprintln!("  page_link_rects(visible page 0): {:?}", t.elapsed());
+        }
+    }
+
     #[test]
     fn system_resize_updates_viewport() {
         let (mut editor, _) = test_editor();

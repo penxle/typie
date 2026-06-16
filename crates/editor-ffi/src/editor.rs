@@ -299,6 +299,20 @@ impl Editor {
         })
     }
 
+    pub fn page_external_elements(
+        &self,
+        page: u32,
+    ) -> EditorResult<Vec<Complex<editor_view::ExternalElement>>> {
+        self.with_inner(|inner| {
+            let state = inner.editor.state();
+            Ok(inner
+                .editor
+                .view()
+                .page_external_elements(&state.doc, page as usize, state.selection.as_ref())
+                .into_ffi()?)
+        })
+    }
+
     pub fn table_overlays(&self) -> EditorResult<Vec<Complex<editor_view::TableOverlay>>> {
         self.with_inner(|inner| {
             Ok(inner
@@ -306,6 +320,23 @@ impl Editor {
                 .view()
                 .table_overlays(
                     &inner.editor.state().doc,
+                    inner.editor.state().selection.as_ref(),
+                )
+                .into_ffi()?)
+        })
+    }
+
+    pub fn page_table_overlays(
+        &self,
+        page: u32,
+    ) -> EditorResult<Vec<Complex<editor_view::TableOverlay>>> {
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .view()
+                .page_table_overlays(
+                    &inner.editor.state().doc,
+                    page as usize,
                     inner.editor.state().selection.as_ref(),
                 )
                 .into_ffi()?)

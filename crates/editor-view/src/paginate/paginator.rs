@@ -6,7 +6,6 @@ use editor_state::Position;
 
 use crate::measure::*;
 use crate::page::LayoutPage;
-use crate::page_fragment::build_page_fragment_trees;
 use crate::style::*;
 
 use super::types::*;
@@ -65,12 +64,7 @@ impl Paginator {
         let root = self.place_node(&tree.root, NodeId::ROOT, 0, 0.0);
         let pages = self.finish();
         let tree = LayoutTree { root };
-        let page_fragments = build_page_fragment_trees(&tree, &pages);
-        PaginatedLayout {
-            tree,
-            pages,
-            page_fragments,
-        }
+        PaginatedLayout { tree, pages }
     }
 
     fn place_node(
@@ -510,12 +504,18 @@ fn trailing_chrome_height(b: &MeasuredBox) -> f32 {
 }
 
 fn terminal_child_index(b: &MeasuredBox) -> Option<usize> {
-    b.children.iter().rposition(|child| {
-        !matches!(
+    // Last non-spacing/non-break child, via a forward pass (the children sum tree
+    // exposes a forward iterator).
+    let mut last = None;
+    for (i, child) in b.children.iter().enumerate() {
+        if !matches!(
             child.content,
             MeasuredContent::Spacing(_) | MeasuredContent::PageBreak
-        )
-    })
+        ) {
+            last = Some(i);
+        }
+    }
+    last
 }
 
 fn initial_child_index(b: &MeasuredBox) -> Option<usize> {
@@ -708,7 +708,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                children,
+                children: MeasuredChildren::from_blocks(children),
                 page_break_policy: PageBreakPolicy::Auto,
             }),
         }
@@ -754,7 +754,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                children,
+                children: MeasuredChildren::from_blocks(children),
                 page_break_policy,
             }),
         })
@@ -925,7 +925,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                children: vec![make_line(20.0)],
+                children: MeasuredChildren::from_blocks(vec![make_line(20.0)]),
                 page_break_policy: PageBreakPolicy::Auto,
             }),
         });
@@ -944,7 +944,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                children: vec![inner],
+                children: MeasuredChildren::from_blocks(vec![inner]),
                 page_break_policy: PageBreakPolicy::Auto,
             }),
         };

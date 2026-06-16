@@ -37,7 +37,9 @@ pub struct View {
 #[derive(Debug)]
 struct LayoutResult {
     pages: Vec<LayoutPage>,
-    page_fragments: Vec<PageFragmentTree>,
+    // Per-page fragment trees, built lazily on first access (render/query of that
+    // page) and cached. Off-screen pages are never built. See `fragment_for_page`.
+    page_fragments: Vec<std::sync::OnceLock<PageFragmentTree>>,
     content_width: f32,
     layout_index: query::layout_index::LayoutIndex,
 }
@@ -98,6 +100,13 @@ impl View {
             {
                 self.measurer.invalidate_with_ancestors(new_doc, gp.parent);
             }
+        }
+
+        // A pure text edit with no pending-style/gap-phantom shift keeps every
+        // container's structure intact, so containers can patch only the changed
+        // child instead of rebuilding (O(log N) per keystroke).
+        if !pending_changed && !gap_changed {
+            self.measurer.note_incremental_text(old_doc, new_doc, ops);
         }
 
         let dirty = nodes_invalidated || attrs_changed || pending_changed || gap_changed;
@@ -201,7 +210,9 @@ impl View {
         let paginated = paginator.paginate(measured_tree);
 
         let pages = paginated.pages;
-        let page_fragments = paginated.page_fragments;
+        let page_fragments = (0..pages.len())
+            .map(|_| std::sync::OnceLock::new())
+            .collect();
         let layout_index = query::layout_index::LayoutIndex::new(paginated.tree, &pages);
         self.layout = Some(LayoutResult {
             pages,
@@ -209,14 +220,29 @@ impl View {
             content_width,
             layout_index,
         });
+
+        self.measurer.clear_incremental();
     }
 
     pub fn visit_page(&self, page_idx: usize, visitor: &mut impl query::PageVisitor) {
-        if let Some(ref result) = self.layout
-            && let Some(fragment_tree) = result.page_fragments.get(page_idx)
-        {
+        if let Some(fragment_tree) = self.fragment_for_page(page_idx) {
             query::visit_page(fragment_tree, visitor);
         }
+    }
+
+    /// Returns the fragment tree for `page_idx`, building and caching it on first
+    /// access. Only pages that are actually rendered/queried pay the build cost.
+    fn fragment_for_page(&self, page_idx: usize) -> Option<&PageFragmentTree> {
+        let result = self.layout.as_ref()?;
+        let cell = result.page_fragments.get(page_idx)?;
+        let page = result.pages.get(page_idx)?;
+        Some(cell.get_or_init(|| {
+            crate::page_fragment::build_page_fragment_tree(
+                result.layout_index.tree(),
+                page_idx,
+                page,
+            )
+        }))
     }
 
     pub fn hit_test(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
@@ -519,16 +545,45 @@ impl View {
         crate::external::external_elements(&result.layout_index, doc, selection)
     }
 
-    pub fn table_overlays(&self, doc: &Doc, selection: Option<&Selection>) -> Vec<TableOverlay> {
+    /// External elements on a single page — the per-visible-page entry point.
+    pub fn page_external_elements(
+        &self,
+        doc: &Doc,
+        page_idx: usize,
+        selection: Option<&Selection>,
+    ) -> Vec<ExternalElement> {
         let Some(ref result) = self.layout else {
+            return Vec::new();
+        };
+        crate::external::page_external_elements(&result.layout_index, doc, page_idx, selection)
+    }
+
+    /// Table overlays for a single page. Builds (and caches) only that page's
+    /// fragment tree — the per-visible-page entry point preferred by the host.
+    pub fn page_table_overlays(
+        &self,
+        doc: &Doc,
+        page_idx: usize,
+        selection: Option<&Selection>,
+    ) -> Vec<TableOverlay> {
+        let Some(content_width) = self.layout.as_ref().map(|r| r.content_width) else {
             return vec![];
         };
-        crate::table_overlay::table_overlays(
-            &result.page_fragments,
-            doc,
-            selection,
-            result.content_width,
-        )
+        let Some(fragment) = self.fragment_for_page(page_idx) else {
+            return vec![];
+        };
+        crate::table_overlay::page_table_overlays(fragment, doc, selection, content_width)
+    }
+
+    /// Whole-document table overlays. Retained for the existing FFI surface; it
+    /// builds every page's fragment, so prefer `page_table_overlays` per visible page.
+    pub fn table_overlays(&self, doc: &Doc, selection: Option<&Selection>) -> Vec<TableOverlay> {
+        let page_count = self.layout.as_ref().map(|r| r.pages.len()).unwrap_or(0);
+        let mut overlays = Vec::new();
+        for page_idx in 0..page_count {
+            overlays.extend(self.page_table_overlays(doc, page_idx, selection));
+        }
+        overlays
     }
 
     pub fn viewport(&self) -> &Viewport {
@@ -2090,6 +2145,56 @@ mod tests {
         };
         let dirty = view.reconcile_with_ops(&doc_old, &doc_new, &[op], None, None);
         assert!(dirty);
+    }
+
+    #[test]
+    fn page_fragments_are_lazy_and_table_overlays_match_whole_doc() {
+        let mut view = View::new_test();
+        let (doc,) = doc! {
+            root {
+                paragraph { text("before") }
+                table {
+                    table_row { table_cell { paragraph { text("A") } } }
+                }
+            }
+        };
+        view.layout(&doc);
+
+        // Laziness: layout/reconcile must not build any page fragment.
+        {
+            let result = view.layout.as_ref().unwrap();
+            assert!(
+                result.page_fragments.iter().all(|c| c.get().is_none()),
+                "no page fragment should be built before it is visited"
+            );
+        }
+
+        // Per-page access builds (and caches) only that page.
+        let page0 = view.page_table_overlays(&doc, 0, None);
+        {
+            let result = view.layout.as_ref().unwrap();
+            assert!(result.page_fragments[0].get().is_some());
+            assert!(
+                result
+                    .page_fragments
+                    .iter()
+                    .skip(1)
+                    .all(|c| c.get().is_none()),
+                "only the accessed page should be built"
+            );
+        }
+        assert_eq!(page0.len(), 1, "the single table is on page 0");
+        assert_eq!(page0[0].page_idx, 0);
+
+        // Whole-doc helper equals the concatenation of per-page results.
+        let whole = view.table_overlays(&doc, None);
+        let page_count = view.layout.as_ref().unwrap().pages.len();
+        let mut per_page = Vec::new();
+        for p in 0..page_count {
+            per_page.extend(view.page_table_overlays(&doc, p, None));
+        }
+        assert_eq!(whole.len(), per_page.len());
+        assert_eq!(whole.len(), 1);
     }
 
     #[test]

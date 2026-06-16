@@ -65,13 +65,11 @@ pub(super) fn expand_first_line(
             let mut running_y = b.style.padding.top + b.style.border.top;
             for (i, child) in b.children.iter().enumerate() {
                 if let Some(expanded) = expand_first_line(child, expansion) {
-                    let mut new_children: Vec<Arc<MeasuredNode>> =
-                        Vec::with_capacity(b.children.len());
-                    new_children.extend(b.children[..i].iter().cloned());
-                    new_children.push(Arc::new(expanded.tree));
-                    new_children.extend(b.children[i + 1..].iter().cloned());
-
                     let delta = expanded.height - child.height;
+                    // Replace child `i` with its expanded form — O(log N), sharing
+                    // the rest of the (persistent) children structure.
+                    let mut new_children = b.children.clone();
+                    new_children.set(i, Arc::new(expanded.tree));
                     return Some(ExpandedFirstLine {
                         tree: MeasuredNode {
                             width: node.width,

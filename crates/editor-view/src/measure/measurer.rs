@@ -12,6 +12,15 @@ use super::nodes::dispatch;
 pub struct Measurer {
     pub(crate) cache: MeasureCache,
     pub(crate) resource: Arc<Mutex<Resource>>,
+    /// Last fully-built node per id, retained across invalidation (the cache
+    /// evicts on invalidate; this survives so an incremental re-measure can
+    /// patch the prior result). Cleared only on `clear_cache`.
+    prev: hashbrown::HashMap<NodeId, Arc<MeasuredNode>>,
+    /// For a pure text-content edit, maps each container to the direct children
+    /// whose subtree changed, so its `layout_vertical` swaps only those slots
+    /// instead of rebuilding. Populated by `note_incremental_text`, consumed by
+    /// `compute`.
+    dirty_children: hashbrown::HashMap<NodeId, hashbrown::HashSet<NodeId>>,
 }
 
 impl std::fmt::Debug for Measurer {
@@ -27,11 +36,76 @@ impl Measurer {
         Self {
             cache: MeasureCache::new(),
             resource,
+            prev: hashbrown::HashMap::new(),
+            dirty_children: hashbrown::HashMap::new(),
         }
     }
 
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.prev.clear();
+        self.dirty_children.clear();
+    }
+
+    /// Records, for a pure text-content batch, which direct child of each
+    /// container changed — the input to the `O(log N)` incremental patch in
+    /// `layout_vertical`. Gated to `DocOp::Text`/`StablePositionRemap` only:
+    /// such ops never alter structure, gaps, or measured widths, so a container
+    /// keeps its child set and slot layout, and swapping the changed child's
+    /// measured block equals a full rebuild. Any other op kind disables the
+    /// fast path (callers fall back to the existing full re-measure).
+    pub fn note_incremental_text(&mut self, old_doc: &Doc, new_doc: &Doc, ops: &[Op<DocOp>]) {
+        let patchable = !ops.is_empty()
+            && ops.iter().all(|op| {
+                matches!(
+                    &op.payload,
+                    DocOp::Text { .. } | DocOp::StablePositionRemap { .. }
+                )
+            });
+        if !patchable {
+            return;
+        }
+        for op in ops {
+            if !matches!(&op.payload, DocOp::Text { .. }) {
+                continue;
+            }
+            for id in affected_node_ids_for_doc_op(&op.payload, old_doc) {
+                let mut child = id;
+                let mut current = id;
+                while let Some(node_ref) = new_doc.node(current)
+                    && let Some(parent) = node_ref.parent()
+                {
+                    let parent_id = parent.id();
+                    self.dirty_children
+                        .entry(parent_id)
+                        .or_default()
+                        .insert(child);
+                    child = parent_id;
+                    current = parent_id;
+                }
+            }
+        }
+    }
+
+    /// Returns the prior children and the changed-child set for an incremental
+    /// patch of `node_id`, or `None` to rebuild. `Some` only when a text batch
+    /// marked it dirty and a prior `Box` measurement exists to patch from.
+    pub(crate) fn patch_plan(
+        &self,
+        node_id: NodeId,
+    ) -> Option<(super::types::MeasuredChildren, hashbrown::HashSet<NodeId>)> {
+        let dirty = self.dirty_children.get(&node_id)?.clone();
+        let prev = self.prev.get(&node_id)?;
+        match &prev.content {
+            super::MeasuredContent::Box(b) => Some((b.children.clone(), dirty)),
+            _ => None,
+        }
+    }
+
+    /// Discards incremental hints after a compute pass so a later, unrelated
+    /// invalidation never patches against them.
+    pub fn clear_incremental(&mut self) {
+        self.dirty_children.clear();
     }
 
     pub fn invalidate_with_doc_ops(
@@ -141,6 +215,7 @@ impl Measurer {
         let measured = dispatch::measure_node(self, doc, &node, width, view_state);
         let arc = Arc::new(measured);
         self.cache.insert(node_id, arc.clone());
+        self.prev.insert(node_id, arc.clone());
         arc
     }
 }

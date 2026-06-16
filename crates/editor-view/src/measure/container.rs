@@ -9,6 +9,7 @@ use crate::measure::Measurer;
 use crate::measure::resolve::resolve_inherited;
 use crate::measure::text::measure::build_strut_only_line;
 use crate::measure::text::resolve::resolve_text_style;
+use crate::measure::types::MeasuredChildren;
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{BorderMode, BoxStyle, Direction};
 use crate::view_state::ViewState;
@@ -69,7 +70,57 @@ pub fn layout_vertical(
     node: &NodeRef<'_>,
     width: f32,
     view_state: &ViewState,
-) -> (Vec<Arc<MeasuredNode>>, f32) {
+) -> (MeasuredChildren, f32) {
+    if let Some(patched) = try_patch_vertical(measurer, doc, node, width, view_state) {
+        #[cfg(debug_assertions)]
+        {
+            let full = layout_vertical_full(measurer, doc, node, width, view_state);
+            debug_assert_eq!(
+                patched.0.len(),
+                full.0.len(),
+                "incremental patch changed the child count"
+            );
+            debug_assert!(
+                (patched.1 - full.1).abs() < 0.1,
+                "incremental patch height {} != full rebuild {}",
+                patched.1,
+                full.1
+            );
+        }
+        return patched;
+    }
+    layout_vertical_full(measurer, doc, node, width, view_state)
+}
+
+/// Incremental fast path: when a pure text edit marked only some of this
+/// container's children dirty, re-measure just those and swap their slots in
+/// the prior children (`O(changed · log N)`), reusing every unchanged child and
+/// its trailing spacing. Returns `None` to fall back to a full rebuild.
+fn try_patch_vertical(
+    measurer: &mut Measurer,
+    doc: &Doc,
+    node: &NodeRef<'_>,
+    width: f32,
+    view_state: &ViewState,
+) -> Option<(MeasuredChildren, f32)> {
+    let (mut children, dirty) = measurer.patch_plan(node.id())?;
+    for child_id in dirty {
+        let measured = measurer.measure(doc, child_id, width, view_state);
+        if !children.set_block(child_id, measured) {
+            return None;
+        }
+    }
+    let total_height = children.total_height();
+    Some((children, total_height))
+}
+
+fn layout_vertical_full(
+    measurer: &mut Measurer,
+    doc: &Doc,
+    node: &NodeRef<'_>,
+    width: f32,
+    view_state: &ViewState,
+) -> (MeasuredChildren, f32) {
     let children_refs: Vec<_> = node.children().collect();
     let phantom_index: Option<usize> = view_state
         .gap_phantom
@@ -95,10 +146,8 @@ pub fn layout_vertical(
     }
 
     let mut result = Vec::with_capacity(blocks.len() * 2);
-    let mut total_height = 0.0;
     let n = blocks.len();
     for (idx, (mnode, gap_after)) in blocks.into_iter().enumerate() {
-        total_height += mnode.height;
         result.push(mnode);
         if idx + 1 < n && gap_after > 0.0 {
             result.push(Arc::new(MeasuredNode {
@@ -106,11 +155,15 @@ pub fn layout_vertical(
                 height: gap_after,
                 content: MeasuredContent::Spacing(gap_after),
             }));
-            total_height += gap_after;
         }
     }
 
-    (result, total_height)
+    // Total via the children aggregate (tree-order f32 sum) so it matches the
+    // incremental patch's `total_height()` bit-for-bit and the children tree
+    // every downstream consumer reads.
+    let children = MeasuredChildren::from_blocks(result);
+    let total_height = children.total_height();
+    (children, total_height)
 }
 
 pub struct PaddedLayoutConfig {
@@ -225,7 +278,7 @@ mod tests {
     }
 
     fn count_lines_with(
-        children: &[std::sync::Arc<MeasuredNode>],
+        children: &crate::measure::types::MeasuredChildren,
         id: NodeId,
         range: std::ops::Range<usize>,
     ) -> usize {
@@ -283,7 +336,7 @@ mod tests {
             "phantom height {hg} must match real-paragraph height {hr}"
         );
         assert_eq!(count_lines_with(&cg, NodeId::ROOT, 1..1), 1);
-        let sp = |c: &[std::sync::Arc<MeasuredNode>]| {
+        let sp = |c: &crate::measure::types::MeasuredChildren| {
             c.iter()
                 .filter(|n| matches!(n.content, crate::measure::MeasuredContent::Spacing(_)))
                 .count()

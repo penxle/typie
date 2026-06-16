@@ -7,6 +7,7 @@ use editor_model::{Alignment, Doc, Modifier, ModifierType, Node, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
+use crate::measure::types::MeasuredChildren;
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{BorderMode, BoxStyle, Direction};
 use crate::view_state::ViewState;
@@ -161,7 +162,7 @@ pub fn measure_table(
                     decorations: vec![],
                     monolithic: node.spec().monolithic,
                 },
-                children: vec![],
+                children: MeasuredChildren::default(),
                 page_break_policy: PageBreakPolicy::Auto,
             }),
         };
@@ -250,7 +251,7 @@ pub fn measure_table(
                     decorations: vec![],
                     monolithic: row.spec().monolithic,
                 },
-                children: row_children,
+                children: MeasuredChildren::from_blocks(row_children),
                 page_break_policy: PageBreakPolicy::Avoid,
             }),
         };
@@ -291,7 +292,7 @@ pub fn measure_table(
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
-            children: row_measurements,
+            children: MeasuredChildren::from_blocks(row_measurements),
             page_break_policy: PageBreakPolicy::Auto,
         }),
     }
@@ -302,7 +303,7 @@ mod tests {
     use super::*;
     use editor_macros::doc;
 
-    fn box_children(node: &MeasuredNode) -> &[Arc<MeasuredNode>] {
+    fn box_children(node: &MeasuredNode) -> &MeasuredChildren {
         let MeasuredContent::Box(ref b) = node.content else {
             panic!()
         };

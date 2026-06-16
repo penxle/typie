@@ -16,7 +16,12 @@ pub(crate) struct LayoutIndex {
     entries: Vec<LayoutEntry>,
     boxes_by_node_id: HashMap<NodeId, LayoutEntryId>,
     entries_by_node: HashMap<NodeId, Vec<LayoutEntryId>>,
-    spatial: RTree<SpatialEntry>,
+    // `entries_on_page` (render path) only iterates these; the R-tree's spatial
+    // index is built lazily on the first point hit-test (mouse), keeping the
+    // O(N log N) `bulk_load` off the per-keystroke compute path.
+    spatial_entries: Vec<SpatialEntry>,
+    entries_by_page: Vec<Vec<LayoutEntryId>>,
+    rtree: std::sync::OnceLock<RTree<SpatialEntry>>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +54,7 @@ struct LayoutIndexBuilder<'a> {
     ancestors: Vec<NodeId>,
     path: Vec<usize>,
     spatial: Vec<SpatialEntry>,
+    entries_by_page: Vec<Vec<LayoutEntryId>>,
 }
 
 impl LayoutIndex {
@@ -61,6 +67,7 @@ impl LayoutIndex {
             ancestors: Vec::new(),
             path: Vec::new(),
             spatial: Vec::new(),
+            entries_by_page: vec![Vec::new(); pages.len()],
         };
         builder.build_node(&tree.root);
         Self {
@@ -69,7 +76,9 @@ impl LayoutIndex {
             entries: builder.entries,
             boxes_by_node_id: builder.boxes_by_node_id,
             entries_by_node: builder.entries_by_node,
-            spatial: RTree::bulk_load(builder.spatial),
+            spatial_entries: builder.spatial,
+            entries_by_page: builder.entries_by_page,
+            rtree: std::sync::OnceLock::new(),
         }
     }
 
@@ -231,22 +240,18 @@ impl LayoutIndex {
     }
 
     pub(crate) fn entries_on_page(&self, page_idx: usize) -> Vec<&LayoutEntry> {
-        let Some(page) = self.pages.get(page_idx) else {
-            return Vec::new();
-        };
-        let envelope = AABB::from_corners([-f32::MAX, page.y_start], [f32::MAX, page.y_end]);
-        let mut entry_ids: Vec<_> = self
-            .spatial
-            .locate_in_envelope_intersecting(envelope)
-            .filter(|spatial| spatial.page_idx == page_idx)
-            .map(|spatial| spatial.entry_id)
-            .collect();
-        entry_ids.sort_unstable();
-        entry_ids.dedup();
-        entry_ids
-            .into_iter()
-            .map(|entry_id| &self.entries[entry_id])
-            .collect()
+        // Per-page entry lists are populated during the build walk in ascending
+        // entry-id (i.e. layout) order with no duplicates, so this is a direct
+        // lookup — no spatial query and no R-tree needed on the render path.
+        match self.entries_by_page.get(page_idx) {
+            Some(ids) => ids.iter().map(|&id| &self.entries[id]).collect(),
+            None => Vec::new(),
+        }
+    }
+
+    fn rtree(&self) -> &RTree<SpatialEntry> {
+        self.rtree
+            .get_or_init(|| RTree::bulk_load(self.spatial_entries.clone()))
     }
 
     pub(crate) fn entries(&self) -> std::slice::Iter<'_, LayoutEntry> {
@@ -278,7 +283,7 @@ impl LayoutIndex {
         map: impl Fn(&LayoutEntry, &LayoutNode) -> Option<T>,
     ) -> Option<(LayoutEntryId, T)> {
         let envelope = AABB::from_point([point.x, point.y]);
-        self.spatial
+        self.rtree()
             .locate_in_envelope_intersecting(envelope)
             .filter(|spatial| spatial.page_idx == point.page_idx)
             .map(|spatial| spatial.entry_id)
@@ -387,13 +392,22 @@ impl LayoutIndexBuilder<'_> {
         });
         if rect.width > 0.0 && rect.height > 0.0 {
             let bounds = AABB::from_corners([rect.x, rect.y], [rect.right(), rect.bottom()]);
-            for (page_idx, page) in self.pages.iter().enumerate() {
+            // Pages are y-sorted and contiguous, so the overlapping range is
+            // found by binary search instead of scanning every page — turns the
+            // index build from O(entries · pages) into O(entries · log pages).
+            let first = self.pages.partition_point(|p| p.y_end <= rect.y);
+            for page_idx in first..self.pages.len() {
+                let page = &self.pages[page_idx];
+                if page.y_start >= rect.bottom() {
+                    break;
+                }
                 if rect_overlaps_y_range(&rect, page.y_start, page.y_end) {
                     self.spatial.push(SpatialEntry {
                         entry_id,
                         page_idx,
                         bounds,
                     });
+                    self.entries_by_page[page_idx].push(entry_id);
                 }
             }
         }

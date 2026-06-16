@@ -75,17 +75,6 @@ impl PageFragmentNode {
     }
 }
 
-pub(crate) fn build_page_fragment_trees(
-    tree: &LayoutTree,
-    pages: &[LayoutPage],
-) -> Vec<PageFragmentTree> {
-    pages
-        .iter()
-        .enumerate()
-        .map(|(page_idx, page)| build_page_fragment_tree(tree, page_idx, page))
-        .collect()
-}
-
 pub(crate) fn build_page_fragment_tree(
     tree: &LayoutTree,
     page_idx: usize,

@@ -786,8 +786,10 @@ declare class Editor {
     materialize_at(heads: Uint8Array): PlainDoc;
     modifier_span_selection(pos: Position, modifier_type: ModifierType): Selection | undefined;
     modifier_state(): ModifierState | undefined;
+    page_external_elements(page: number): ExternalElement[];
     page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];
+    page_table_overlays(page: number): TableOverlay[];
     placeholder(): PlaceholderMetrics | undefined;
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
     prose_text(): string;

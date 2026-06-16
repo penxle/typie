@@ -63,25 +63,25 @@ pub struct TableOverlayColumn {
     pub background_color: Option<String>,
 }
 
-pub(crate) fn table_overlays(
-    page_fragments: &[PageFragmentTree],
+/// Table overlays for a single page's fragment tree. Callers iterate only the
+/// pages they actually render (see `View::page_table_overlays`).
+pub(crate) fn page_table_overlays(
+    fragment_tree: &PageFragmentTree,
     doc: &Doc,
     selection: Option<&Selection>,
     content_width: f32,
 ) -> Vec<TableOverlay> {
     let resolved = selection.and_then(|s| s.resolve(doc));
     let mut overlays = Vec::new();
-    for fragment_tree in page_fragments {
-        if let Some(root) = &fragment_tree.root {
-            collect_table_overlays(
-                root,
-                fragment_tree.page_idx,
-                doc,
-                resolved.as_ref(),
-                content_width,
-                &mut overlays,
-            );
-        }
+    if let Some(root) = &fragment_tree.root {
+        collect_table_overlays(
+            root,
+            fragment_tree.page_idx,
+            doc,
+            resolved.as_ref(),
+            content_width,
+            &mut overlays,
+        );
     }
     overlays
 }
@@ -437,8 +437,13 @@ mod tests {
         let paginated =
             Paginator::paginated(400.0, 130.0, EdgeInsets::all(10.0)).paginate(measured_tree(root));
 
-        let overlays = table_overlays(&paginated.page_fragments, &doc, None, 380.0);
         let pages = paginated.pages;
+        let mut overlays = Vec::new();
+        for (idx, page) in pages.iter().enumerate() {
+            let fragment =
+                crate::page_fragment::build_page_fragment_tree(&paginated.tree, idx, page);
+            overlays.extend(page_table_overlays(&fragment, &doc, None, 380.0));
+        }
 
         assert_eq!(overlays.len(), 2);
         assert_eq!(overlays[0].page_idx, 0);

@@ -103,7 +103,6 @@ pub enum StyleOp {
 }
 
 pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
-    doc.invalidate_flat_layout();
     match &op.payload {
         DocOp::Presence {
             node_id,
@@ -402,6 +401,13 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
             }
             doc.stable_position_remap.record(*from, *to, op.id);
         }
+    }
+    // Flat-layout maintenance: a text op changes only one text node's size, so
+    // update that leaf in O(log N); any structural/other op invalidates for a
+    // lazy rebuild. This keeps typing off the O(N) flat-rebuild path.
+    match &op.payload {
+        DocOp::Text { node_id, .. } => doc.update_flat_text_size(*node_id),
+        _ => doc.invalidate_flat_layout(),
     }
     Ok(doc)
 }

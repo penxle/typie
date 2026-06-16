@@ -28,38 +28,60 @@ pub struct ExternalElement {
     pub is_selected: bool,
 }
 
+/// External elements (images/files/embeds) on a single page, with page-local
+/// bounds. Queries only that page's entries (R-tree scoped), so it is O(page)
+/// — the per-visible-page entry point. See `View::page_external_elements`.
+pub(crate) fn page_external_elements(
+    layout_index: &LayoutIndex,
+    doc: &Doc,
+    page_idx: usize,
+    selection: Option<&Selection>,
+) -> Vec<ExternalElement> {
+    let Some(page) = layout_index.pages().get(page_idx) else {
+        return Vec::new();
+    };
+    let selection = selection.and_then(|s| s.resolve(doc));
+    let mut elements = Vec::new();
+    for entry in layout_index.entries_on_page(page_idx) {
+        let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
+            continue;
+        };
+        let Some(data) = external_element_data(doc, atom.node_id) else {
+            continue;
+        };
+        let is_selected = selection.as_ref().is_some_and(|sel| {
+            doc.node(atom.node_id)
+                .is_some_and(|node_ref| sel.contains_subtree(&node_ref))
+        });
+        elements.push(ExternalElement {
+            page_idx,
+            node_id: atom.node_id,
+            bounds: Rect::from_xywh(
+                entry.rect.x,
+                entry.rect.y - page.y_start,
+                entry.rect.width,
+                entry.rect.height,
+            ),
+            data,
+            is_selected,
+        });
+    }
+    elements
+}
+
 pub(crate) fn external_elements(
     layout_index: &LayoutIndex,
     doc: &Doc,
     selection: Option<&Selection>,
 ) -> Vec<ExternalElement> {
-    let selection = selection.and_then(|s| s.resolve(doc));
     let mut elements = Vec::new();
-    for (page_idx, page) in layout_index.pages().iter().enumerate() {
-        for entry in layout_index.entries_on_page(page_idx) {
-            let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
-                continue;
-            };
-            let Some(data) = external_element_data(doc, atom.node_id) else {
-                continue;
-            };
-            let is_selected = selection.as_ref().is_some_and(|sel| {
-                doc.node(atom.node_id)
-                    .is_some_and(|node_ref| sel.contains_subtree(&node_ref))
-            });
-            elements.push(ExternalElement {
-                page_idx,
-                node_id: atom.node_id,
-                bounds: Rect::from_xywh(
-                    entry.rect.x,
-                    entry.rect.y - page.y_start,
-                    entry.rect.width,
-                    entry.rect.height,
-                ),
-                data,
-                is_selected,
-            });
-        }
+    for page_idx in 0..layout_index.pages().len() {
+        elements.extend(page_external_elements(
+            layout_index,
+            doc,
+            page_idx,
+            selection,
+        ));
     }
     elements
 }
@@ -114,6 +136,21 @@ mod tests {
         assert_eq!(
             elements.iter().map(|el| el.node_id).collect::<Vec<_>>(),
             vec![img, file, embed, archived]
+        );
+
+        // Per-page query equals the whole-doc concatenation.
+        let page_count = elements.iter().map(|e| e.page_idx).max().unwrap_or(0) + 1;
+        let mut per_page = Vec::new();
+        for p in 0..page_count {
+            per_page.extend(view.page_external_elements(
+                &doc,
+                p,
+                Some(&Selection::collapsed(Position::new(img, 0))),
+            ));
+        }
+        assert_eq!(
+            per_page.iter().map(|el| el.node_id).collect::<Vec<_>>(),
+            elements.iter().map(|el| el.node_id).collect::<Vec<_>>(),
         );
     }
 

@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::sync::Arc;
 
 use editor_commands::{self as commands, CommandError, CommandResult};
@@ -70,15 +71,7 @@ fn uniform_text_modifiers_in_range(doc: &Doc, start: usize, end: usize) -> Optio
     }
 
     let mut range_modifiers: Option<Vec<Modifier>> = None;
-    for (seg_start, seg) in doc.flat_segments() {
-        let seg_end = seg_start + seg.size();
-        if seg_end <= start {
-            continue;
-        }
-        if seg_start >= end {
-            break;
-        }
-
+    for (_seg_start, seg) in doc.flat_segments_in_range(start..end) {
         let FlatSegment::Text { node_id, .. } = seg else {
             return None;
         };
@@ -99,10 +92,7 @@ fn composition_range_valid(doc: &Doc, start: usize, end: usize) -> bool {
     if start > end || end > doc.flat_size() {
         return false;
     }
-    for (seg_start, seg) in doc.flat_segments() {
-        if seg_start >= end {
-            break;
-        }
+    for (seg_start, seg) in doc.flat_segments_in_range(start..end) {
         if seg_start < start {
             continue;
         }
@@ -126,14 +116,7 @@ fn is_token(c: char) -> bool {
 fn balanced_structural_body_range(doc: &Doc, start: usize, end: usize) -> Option<(usize, usize)> {
     let mut stack = Vec::new();
     let mut body: Option<(usize, usize)> = None;
-    for (seg_start, seg) in doc.flat_segments() {
-        if seg_start >= end {
-            break;
-        }
-        if seg_start + seg.size() <= start {
-            continue;
-        }
-
+    for (seg_start, seg) in doc.flat_segments_in_range(start..end) {
         match seg {
             FlatSegment::Open { node_id } => stack.push((node_id, seg_start)),
             FlatSegment::Close { node_id } => {
@@ -170,9 +153,103 @@ fn utf16_units_to_chars(iter: impl Iterator<Item = char>, utf16_units: usize) ->
     count
 }
 
+/// A window of the document's flat char buffer around the edit site, addressed
+/// in absolute flat coordinates. `from_editor` materializes only `[base, base +
+/// chars.len())` (a handful of chars for a keystroke) instead of the whole
+/// document, which is the per-keystroke cost that grows with document size.
+/// `len()` still reports the full flat size so offset clamping is unchanged.
+#[derive(Debug, Clone, PartialEq)]
+struct FlatText {
+    base: usize,
+    chars: Vec<char>,
+    total: usize,
+}
+
+impl FlatText {
+    fn whole(chars: Vec<char>) -> Self {
+        let total = chars.len();
+        Self {
+            base: 0,
+            chars,
+            total,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.total
+    }
+
+    fn at(&self, abs: usize) -> char {
+        self.chars[abs - self.base]
+    }
+
+    fn slice(&self, range: Range<usize>) -> &[char] {
+        &self.chars[range.start - self.base..range.end - self.base]
+    }
+
+    fn iter_from(&self, abs: usize) -> impl Iterator<Item = char> + '_ {
+        self.chars[abs - self.base..].iter().copied()
+    }
+
+    fn iter_rev_to(&self, abs: usize) -> impl Iterator<Item = char> + '_ {
+        self.chars[..abs - self.base].iter().rev().copied()
+    }
+
+    fn splice(&mut self, range: Range<usize>, replacement: impl IntoIterator<Item = char>) {
+        let start = range.start - self.base;
+        let end = range.end - self.base;
+        let before = self.chars.len();
+        self.chars.splice(start..end, replacement);
+        self.total = self.total - before + self.chars.len();
+    }
+}
+
+/// Flat-offset window covering everything `ops` can read or edit, starting from
+/// the current selection/composition and widened by each op's reach (insert
+/// length, surrounding-delete counts, cursor moves). Over-covers (sums reaches)
+/// so no access falls outside; for a keystroke the window is a few chars.
+fn ime_window(
+    total: usize,
+    sel_start: usize,
+    sel_end: usize,
+    comp: Option<(usize, usize)>,
+    ops: &[FlatImeOp],
+) -> Range<usize> {
+    let mut lo = sel_start;
+    let mut hi = sel_end;
+    if let Some((cs, ce)) = comp {
+        lo = lo.min(cs);
+        hi = hi.max(ce);
+    }
+    let mut reach: usize = 0;
+    for op in ops {
+        match op {
+            FlatImeOp::SetSelection { start, end } | FlatImeOp::SetComposition { start, end } => {
+                lo = lo.min(*start);
+                hi = hi.max(*end);
+            }
+            FlatImeOp::ReplaceSelection { text } | FlatImeOp::Compose { text } => {
+                reach += text.chars().count();
+            }
+            FlatImeOp::DeleteSurrounding { before, after }
+            | FlatImeOp::DeleteSurroundingUtf16 { before, after } => {
+                reach += *before + *after;
+            }
+            FlatImeOp::MoveCursor { delta } => {
+                reach += delta.unsigned_abs() as usize;
+            }
+            _ => {}
+        }
+    }
+    const MARGIN: usize = 16;
+    let start = lo.saturating_sub(reach + MARGIN);
+    let end = hi.saturating_add(reach + MARGIN).min(total);
+    start..end
+}
+
 #[derive(Debug, Clone)]
 struct FlatImeState {
-    text: Vec<char>,
+    text: FlatText,
     sel_start: usize,
     sel_end: usize,
     comp: Option<(usize, usize)>,
@@ -183,7 +260,7 @@ struct FlatImeReduction {
     text_change: Option<FlatImeTextChange>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct FlatImeTextChange {
     replace_start: usize,
     replace_end: usize,
@@ -226,12 +303,12 @@ impl FlatImeTextChange {
         }
     }
 
-    fn without_reinserted_boundary_tokens(mut self, initial: &[char]) -> Self {
+    fn without_reinserted_boundary_tokens(mut self, initial: &FlatText) -> Self {
         while self.replace_start < self.replace_end {
             let Some(&inserted) = self.insert.first() else {
                 break;
             };
-            let deleted = initial[self.replace_start];
+            let deleted = initial.at(self.replace_start);
             if !is_token(deleted) || deleted != inserted {
                 break;
             }
@@ -244,7 +321,7 @@ impl FlatImeTextChange {
             let Some(&inserted) = self.insert.last() else {
                 break;
             };
-            let deleted = initial[self.replace_end - 1];
+            let deleted = initial.at(self.replace_end - 1);
             if !is_token(deleted) || deleted != inserted {
                 break;
             }
@@ -260,8 +337,8 @@ impl FlatImeTextChange {
         self.insert.iter().any(|c| is_token(*c))
     }
 
-    fn deleted_from<'a>(&self, initial: &'a [char]) -> &'a [char] {
-        &initial[self.replace_start..self.replace_end]
+    fn deleted_from<'a>(&self, initial: &'a FlatText) -> &'a [char] {
+        initial.slice(self.replace_start..self.replace_end)
     }
 }
 
@@ -278,10 +355,10 @@ struct FlatImeAnchoredChangeTracker {
 }
 
 impl FlatImeAnchoredChangeTracker {
-    fn new(change: FlatImeTextChange, text_after: &[char]) -> Self {
+    fn new(change: FlatImeTextChange, text_after: &FlatText) -> Self {
         let current_start = change.replace_start;
         let current_end = change.replace_start + change.insert.len();
-        let insert = text_after[current_start..current_end].to_vec();
+        let insert = text_after.slice(current_start..current_end).to_vec();
         Self {
             replace_start: change.replace_start,
             replace_end: change.replace_end,
@@ -291,7 +368,7 @@ impl FlatImeAnchoredChangeTracker {
         }
     }
 
-    fn absorb(&mut self, change: FlatImeTextChange, text_after: &[char]) -> bool {
+    fn absorb(&mut self, change: FlatImeTextChange, text_after: &FlatText) -> bool {
         if change.replace_end < self.current_start || change.replace_start > self.current_end {
             return false;
         }
@@ -316,7 +393,9 @@ impl FlatImeAnchoredChangeTracker {
         self.replace_end = self.replace_end.max(replace_end);
         self.current_start = current_start;
         self.current_end = current_end;
-        self.insert = text_after[self.current_start..self.current_end].to_vec();
+        self.insert = text_after
+            .slice(self.current_start..self.current_end)
+            .to_vec();
         true
     }
 
@@ -342,23 +421,50 @@ impl FlatImeAnchoredChangeTracker {
 }
 
 impl FlatImeState {
-    fn from_editor(editor: &Editor) -> Option<Self> {
+    fn from_editor(editor: &Editor, ops: &[FlatImeOp]) -> Option<Self> {
         let state = editor.state();
         let doc = &state.doc;
-        let flat_size = doc.flat_size();
-        let text: Vec<char> = doc.flat_text(0..flat_size).chars().collect();
+        let total = doc.flat_size();
 
         let selection = state.selection?;
         let anchor = selection.anchor.resolve(doc)?.to_flat();
         let head = selection.head.resolve(doc)?.to_flat();
+        let sel_start = anchor.min(head);
+        let sel_end = anchor.max(head);
 
         let comp = state
             .composition
             .filter(|c| composition_range_valid(doc, c.start, c.end))
             .map(|c| (c.start, c.end));
 
+        let window = ime_window(total, sel_start, sel_end, comp, ops);
+        let text = FlatText {
+            base: window.start,
+            chars: doc.flat_chars(window),
+            total,
+        };
+
         Some(FlatImeState {
             text,
+            sel_start,
+            sel_end,
+            comp,
+        })
+    }
+
+    fn from_editor_whole(editor: &Editor) -> Option<Self> {
+        let state = editor.state();
+        let doc = &state.doc;
+        let flat_size = doc.flat_size();
+        let selection = state.selection?;
+        let anchor = selection.anchor.resolve(doc)?.to_flat();
+        let head = selection.head.resolve(doc)?.to_flat();
+        let comp = state
+            .composition
+            .filter(|c| composition_range_valid(doc, c.start, c.end))
+            .map(|c| (c.start, c.end));
+        Some(FlatImeState {
+            text: FlatText::whole(doc.flat_chars(0..flat_size)),
             sel_start: anchor.min(head),
             sel_end: anchor.max(head),
             comp,
@@ -424,9 +530,8 @@ impl FlatImeState {
             }
             FlatImeOp::DeleteSurroundingUtf16 { before, after } => {
                 let cursor = self.sel_start.min(self.text.len());
-                let before_chars =
-                    utf16_units_to_chars(self.text[..cursor].iter().rev().copied(), *before);
-                let after_chars = utf16_units_to_chars(self.text[cursor..].iter().copied(), *after);
+                let before_chars = utf16_units_to_chars(self.text.iter_rev_to(cursor), *before);
+                let after_chars = utf16_units_to_chars(self.text.iter_from(cursor), *after);
                 let del_start = cursor - before_chars;
                 let del_end = cursor + after_chars;
                 let change = (del_start < del_end).then_some(FlatImeTextChange {
@@ -566,13 +671,13 @@ struct FlatDelta {
 
 fn analyze_delta(
     doc: &Doc,
-    chars: &[char],
+    chars: &FlatText,
     del_start: usize,
     del_end: usize,
     ins: &[char],
     cursor: usize,
 ) -> FlatDelta {
-    let del = &chars[del_start..del_end];
+    let del = chars.slice(del_start..del_end);
     let ins_text: String = ins.iter().collect();
     let text_body = del
         .iter()
@@ -596,8 +701,8 @@ fn analyze_delta(
         (cursor, cursor)
     };
 
-    let left_tokens = &chars[del_start..replace_start];
-    let right_tokens = &chars[replace_end..del_end];
+    let left_tokens = chars.slice(del_start..replace_start);
+    let right_tokens = chars.slice(replace_end..del_end);
     let backward_count = count_opens(left_tokens).max(count_closes(left_tokens));
     let forward_count = count_opens(right_tokens).max(count_closes(right_tokens));
 
@@ -607,7 +712,8 @@ fn analyze_delta(
         replace_end,
         end_tokens: forward_count,
         ins_text,
-        composition_text_start: chars[replace_start..replace_end]
+        composition_text_start: chars
+            .slice(replace_start..replace_end)
             .iter()
             .any(|c| is_token(*c))
             .then_some(replace_start),
@@ -618,12 +724,25 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
     let commit_as_is = ops.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs));
 
     (|| -> Result<(), EditorError> {
-        let initial = match FlatImeState::from_editor(editor) {
+        let initial = match FlatImeState::from_editor(editor, &ops) {
             Some(s) => s,
             None => return Ok(()),
         };
 
         let reduced = initial.clone().reduce_flat_ime_ops(&ops);
+
+        // The cursor-windowed snapshot must reduce identically to one built over
+        // the whole document; a mismatch means the window failed to cover an
+        // access. Checked in debug across the IME test suite.
+        #[cfg(debug_assertions)]
+        if let Some(whole) = FlatImeState::from_editor_whole(editor) {
+            let whole_reduced = whole.reduce_flat_ime_ops(&ops);
+            debug_assert_eq!(
+                reduced.text_change, whole_reduced.text_change,
+                "windowed IME reduction diverged from whole-document reduction"
+            );
+        }
+
         if reduced.text_change.is_none() {
             return Ok(());
         }
@@ -642,7 +761,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                 commands::materialize_gap_paragraph(tr)?;
                 Ok(())
             })?;
-            let initial = match FlatImeState::from_editor(editor) {
+            let initial = match FlatImeState::from_editor_whole(editor) {
                 Some(s) => s,
                 None => return Ok(()),
             };
@@ -1585,7 +1704,7 @@ mod tests {
 
     fn flat_ime_state(text: &str, sel: usize) -> FlatImeState {
         FlatImeState {
-            text: text.chars().collect(),
+            text: FlatText::whole(text.chars().collect()),
             sel_start: sel,
             sel_end: sel,
             comp: None,
@@ -1594,7 +1713,7 @@ mod tests {
 
     fn flat_ime_state_sel(text: &str, sel_start: usize, sel_end: usize) -> FlatImeState {
         FlatImeState {
-            text: text.chars().collect(),
+            text: FlatText::whole(text.chars().collect()),
             sel_start,
             sel_end,
             comp: None,
@@ -1602,7 +1721,7 @@ mod tests {
     }
 
     fn flat_ime_text(s: &FlatImeState) -> String {
-        s.text.iter().collect()
+        s.text.chars.iter().collect()
     }
 
     #[test]
@@ -1655,7 +1774,7 @@ mod tests {
         let c = FLAT_CLOSE;
         let initial = format!("{o}!ㅇ{c}");
         let s = FlatImeState {
-            text: initial.chars().collect(),
+            text: FlatText::whole(initial.chars().collect()),
             sel_start: 3,
             sel_end: 3,
             comp: None,
@@ -1677,7 +1796,7 @@ mod tests {
         let c = FLAT_CLOSE;
         let initial = format!("{o}{c}");
         let s = FlatImeState {
-            text: initial.chars().collect(),
+            text: FlatText::whole(initial.chars().collect()),
             sel_start: 1,
             sel_end: 1,
             comp: None,

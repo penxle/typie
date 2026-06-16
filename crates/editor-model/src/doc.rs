@@ -26,14 +26,24 @@ pub(crate) struct NodePos {
 struct ChildIndex {
     pos: HashMap<NodeId, NodePos>,
     ordered: HashMap<NodeId, Vec<NodeId>>,
+    /// Each child's dot in its parent's `children` RGA, so resolving a node's
+    /// stable anchor doesn't scan the parent's children (`Rga::dot_for` is
+    /// `O(siblings)` — `O(N)` for a document whose root holds every block).
+    dots: HashMap<NodeId, Dot>,
 }
 
 #[derive(Default)]
-struct ChildIndexCache(OnceLock<ChildIndex>);
+struct ChildIndexCache(OnceLock<std::sync::Arc<ChildIndex>>);
 
 impl Clone for ChildIndexCache {
     fn clone(&self) -> Self {
-        Self(OnceLock::new())
+        // Share the built index via Arc (O(1)): it depends only on doc content,
+        // identical at clone time. Structural ops (Parent/Children) invalidate
+        // the mutated doc's own pointer (`invalidate_child_index`); the Arc stays
+        // valid for clones that keep it. A pure text edit clones the doc per op
+        // (`apply_internal`) but leaves structure untouched, so this avoids an
+        // O(N) index rebuild every keystroke.
+        Self(self.0.clone())
     }
 }
 
@@ -58,24 +68,73 @@ pub enum FlatKind {
     Atom,
 }
 
+/// One leaf of the flattened document: its node and flat kind. The flat *size*
+/// is carried by the sum tree, not stored here, so a text-size change is an
+/// `O(log N)` tree update rather than an `O(N)` absolute-offset shift.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct FlatEntry {
-    pub start: usize,
+pub struct FlatLeaf {
     pub node_id: NodeId,
     pub kind: FlatKind,
-    pub size: usize,
 }
 
-#[derive(Default)]
+/// Flattened view of the document as an order-statistics sum tree of leaves.
+/// Offsets are derived from cached subtree sizes (`O(log N)`); a text-size edit
+/// updates one leaf in `O(log N)` while sharing the rest (`with_text_size`), so
+/// the layout is maintained incrementally rather than rebuilt per keystroke.
+#[derive(Clone, Default)]
 pub struct FlatLayout {
-    pub entries: Vec<FlatEntry>,
-    pub size: usize,
-    pub(crate) text_starts: HashMap<NodeId, usize>,
+    tree: editor_common::SumTree<FlatLeaf>,
+    text_positions: imbl::HashMap<NodeId, usize>,
 }
 
 impl FlatLayout {
+    /// Total flat size — `O(1)`.
+    pub fn size(&self) -> usize {
+        self.tree.total_size() as usize
+    }
+
+    /// Flat start offset of a text node — `O(log N)`.
     pub fn text_start(&self, node_id: NodeId) -> Option<usize> {
-        self.text_starts.get(&node_id).copied()
+        self.text_positions
+            .get(&node_id)
+            .map(|&i| self.tree.offset_before(i) as usize)
+    }
+
+    /// Visits every flat leaf in order as `(start_offset, node_id, kind, size)`.
+    pub fn for_each_segment(&self, mut f: impl FnMut(usize, NodeId, FlatKind, usize)) {
+        let mut offset = 0usize;
+        self.tree.for_each(|leaf, size| {
+            f(offset, leaf.node_id, leaf.kind, size as usize);
+            offset += size as usize;
+        });
+    }
+
+    /// Visits flat leaves overlapping `[start, end)` as `(start_offset, node_id,
+    /// kind, size)` — `O(span + log N)`.
+    pub fn for_each_segment_in_range(
+        &self,
+        start: usize,
+        end: usize,
+        mut f: impl FnMut(usize, NodeId, FlatKind, usize),
+    ) {
+        self.tree
+            .for_each_in_range(start as u64, end as u64, |item_start, leaf, size| {
+                f(item_start as usize, leaf.node_id, leaf.kind, size as usize)
+            });
+    }
+
+    /// A layout with the given text node's flat size updated, sharing all other
+    /// structure (`O(log N)`). `None` if the node is not a text leaf here.
+    pub(crate) fn with_text_size(&self, node_id: NodeId, new_size: usize) -> Option<FlatLayout> {
+        let &index = self.text_positions.get(&node_id)?;
+        let mut tree = self.tree.clone();
+        if !tree.set_size(index, new_size as u64) {
+            return None;
+        }
+        Some(FlatLayout {
+            tree,
+            text_positions: self.text_positions.clone(),
+        })
     }
 }
 
@@ -103,11 +162,17 @@ fn classify_flat(node: &Node) -> NodeFlatClass {
 }
 
 #[derive(Default)]
-struct FlatLayoutCache(OnceLock<FlatLayout>);
+struct FlatLayoutCache(OnceLock<std::sync::Arc<FlatLayout>>);
 
 impl Clone for FlatLayoutCache {
     fn clone(&self) -> Self {
-        Self(OnceLock::new())
+        // Share the built layout with the clone via Arc (O(1)). The flattening
+        // depends only on doc content, which is identical at clone time, so the
+        // clone may reuse it. Any mutation invalidates the mutated doc's own
+        // pointer (see `invalidate_flat_layout`); the immutable Arc stays valid
+        // for every other doc that still holds it. This avoids the O(N) rebuild
+        // when a transaction clones the doc for read-only access.
+        Self(self.0.clone())
     }
 }
 
@@ -148,16 +213,30 @@ impl Doc {
         self.child_index().ordered.get(&parent)?.get(index).copied()
     }
 
+    /// This node's dot in its parent's `children` RGA (`O(1)`), or `None` for the
+    /// root / orphans.
+    pub fn child_dot(&self, id: NodeId) -> Option<Dot> {
+        self.child_index().dots.get(&id).copied()
+    }
+
     fn child_index(&self) -> &ChildIndex {
-        self.child_index.0.get_or_init(|| self.build_child_index())
+        self.child_index
+            .0
+            .get_or_init(|| std::sync::Arc::new(self.build_child_index()))
     }
 
     fn build_child_index(&self) -> ChildIndex {
         let mut pos = HashMap::new();
         let mut ordered = HashMap::new();
+        let mut dots = HashMap::new();
         for (parent_id, entry) in self.entries.iter() {
-            let children: Vec<NodeId> = entry.children.iter().copied().collect();
-            for (i, &child) in children.iter().enumerate() {
+            let children_with_dots: Vec<(Dot, NodeId)> = entry
+                .children
+                .iter_with_dot()
+                .map(|(d, id)| (d, *id))
+                .collect();
+            let children: Vec<NodeId> = children_with_dots.iter().map(|(_, id)| *id).collect();
+            for (i, &(dot, child)) in children_with_dots.iter().enumerate() {
                 let parent_matches = self
                     .entries
                     .get(&child)
@@ -174,10 +253,11 @@ impl Doc {
                         next: children.get(i + 1).copied(),
                     },
                 );
+                dots.insert(child, dot);
             }
             ordered.insert(*parent_id, children);
         }
-        ChildIndex { pos, ordered }
+        ChildIndex { pos, ordered, dots }
     }
 
     pub(crate) fn invalidate_child_index(&mut self) {
@@ -185,29 +265,28 @@ impl Doc {
     }
 
     pub fn flat_layout(&self) -> &FlatLayout {
-        self.flat_layout.0.get_or_init(|| self.build_flat_layout())
+        self.flat_layout
+            .0
+            .get_or_init(|| std::sync::Arc::new(self.build_flat_layout()))
     }
 
     fn build_flat_layout(&self) -> FlatLayout {
-        let mut entries = Vec::new();
-        let mut text_starts = HashMap::new();
-        let mut cursor = 0usize;
+        let mut leaves: Vec<(FlatLeaf, u64)> = Vec::new();
+        let mut text_positions = imbl::HashMap::new();
         if let Some(root) = self.root() {
-            self.visit_flat_layout(root.id(), &mut cursor, &mut entries, &mut text_starts);
+            self.visit_flat_layout(root.id(), &mut leaves, &mut text_positions);
         }
         FlatLayout {
-            entries,
-            size: cursor,
-            text_starts,
+            tree: editor_common::SumTree::from_items(leaves),
+            text_positions,
         }
     }
 
     fn visit_flat_layout(
         &self,
         node_id: NodeId,
-        cursor: &mut usize,
-        entries: &mut Vec<FlatEntry>,
-        text_starts: &mut HashMap<NodeId, usize>,
+        leaves: &mut Vec<(FlatLeaf, u64)>,
+        text_positions: &mut imbl::HashMap<NodeId, usize>,
     ) {
         let Some(entry) = self.get_entry(node_id) else {
             return;
@@ -222,49 +301,45 @@ impl Doc {
                         Node::Text(t) => t.text.len(),
                         _ => unreachable!("classified as Text"),
                     };
-                    text_starts.insert(child_id, *cursor);
-                    entries.push(FlatEntry {
-                        start: *cursor,
-                        node_id: child_id,
-                        kind: FlatKind::Text,
-                        size: text_len,
-                    });
-                    *cursor += text_len;
+                    text_positions.insert(child_id, leaves.len());
+                    leaves.push((
+                        FlatLeaf {
+                            node_id: child_id,
+                            kind: FlatKind::Text,
+                        },
+                        text_len as u64,
+                    ));
                 }
-                NodeFlatClass::Break => {
-                    entries.push(FlatEntry {
-                        start: *cursor,
+                NodeFlatClass::Break => leaves.push((
+                    FlatLeaf {
                         node_id: child_id,
                         kind: FlatKind::Break,
-                        size: 1,
-                    });
-                    *cursor += 1;
-                }
-                NodeFlatClass::Atom => {
-                    entries.push(FlatEntry {
-                        start: *cursor,
+                    },
+                    1,
+                )),
+                NodeFlatClass::Atom => leaves.push((
+                    FlatLeaf {
                         node_id: child_id,
                         kind: FlatKind::Atom,
-                        size: 1,
-                    });
-                    *cursor += 1;
-                }
+                    },
+                    1,
+                )),
                 NodeFlatClass::Container => {
-                    entries.push(FlatEntry {
-                        start: *cursor,
-                        node_id: child_id,
-                        kind: FlatKind::Open,
-                        size: 1,
-                    });
-                    *cursor += 1;
-                    self.visit_flat_layout(child_id, cursor, entries, text_starts);
-                    entries.push(FlatEntry {
-                        start: *cursor,
-                        node_id: child_id,
-                        kind: FlatKind::Close,
-                        size: 1,
-                    });
-                    *cursor += 1;
+                    leaves.push((
+                        FlatLeaf {
+                            node_id: child_id,
+                            kind: FlatKind::Open,
+                        },
+                        1,
+                    ));
+                    self.visit_flat_layout(child_id, leaves, text_positions);
+                    leaves.push((
+                        FlatLeaf {
+                            node_id: child_id,
+                            kind: FlatKind::Close,
+                        },
+                        1,
+                    ));
                 }
             }
         }
@@ -374,7 +449,53 @@ impl Doc {
             return;
         };
         text_node.text = Text::from_visible_placements(visible);
-        self.invalidate_flat_layout();
+        // Flat-layout maintenance is handled at the `apply_doc_op` level (text
+        // ops update incrementally, structural ops invalidate), so this internal
+        // text refresh does not touch the cache itself.
+    }
+
+    /// Incrementally updates the cached flat layout after a text op changed
+    /// `node_id`'s content: `O(log N)` if the layout is built and the node is a
+    /// text leaf, otherwise invalidate (lazy rebuild). Keeps typing off the
+    /// O(N) full-rebuild path.
+    pub(crate) fn update_flat_text_size(&mut self, node_id: NodeId) {
+        let new_size = match self.get_entry(node_id).map(|e| &e.node) {
+            Some(Node::Text(t)) => t.text.len(),
+            _ => {
+                self.invalidate_flat_layout();
+                return;
+            }
+        };
+        if let Some(old) = self.flat_layout.0.take() {
+            if let Some(updated) = old.with_text_size(node_id, new_size) {
+                let _ = self.flat_layout.0.set(std::sync::Arc::new(updated));
+                #[cfg(debug_assertions)]
+                self.debug_assert_flat_layout_matches_rebuild(node_id);
+            }
+            // `None` (node not a text leaf in this layout) → leave empty for a
+            // lazy rebuild, which will be correct.
+        }
+        // Not yet built → nothing to do; the lazy build reflects current content.
+    }
+
+    /// Debug-only guard: the incrementally-maintained flat layout must agree with
+    /// a from-scratch rebuild. Catches any divergence in dev/CI at no release cost.
+    #[cfg(debug_assertions)]
+    fn debug_assert_flat_layout_matches_rebuild(&self, node_id: NodeId) {
+        let Some(maintained) = self.flat_layout.0.get() else {
+            return;
+        };
+        let fresh = self.build_flat_layout();
+        debug_assert_eq!(
+            maintained.size(),
+            fresh.size(),
+            "incremental flat size diverged from rebuild"
+        );
+        debug_assert_eq!(
+            maintained.text_start(node_id),
+            fresh.text_start(node_id),
+            "incremental flat text_start diverged from rebuild"
+        );
     }
 
     fn text_projection_for(&self, node_id: NodeId) -> Option<Vec<TextPlacement>> {

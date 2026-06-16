@@ -6,14 +6,12 @@ use std::ops::Range;
 use crate::glyph_run::{GlyphRun, RubyAnnotation};
 use crate::measure::TabGap;
 use crate::page::LayoutPage;
-use crate::page_fragment::PageFragmentTree;
 use crate::style::BoxStyle;
 
 #[derive(Debug)]
 pub struct PaginatedLayout {
     pub tree: LayoutTree,
     pub pages: Vec<LayoutPage>,
-    pub page_fragments: Vec<PageFragmentTree>,
 }
 
 #[derive(Debug, Clone)]

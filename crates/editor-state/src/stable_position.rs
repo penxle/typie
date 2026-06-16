@@ -471,15 +471,11 @@ pub(crate) fn build_chain(node_id: NodeId, doc: &Doc) -> Vec<ChainLink> {
             .expect("build_chain: ancestor must be alive in doc at capture time");
         let parent = *entry.parent.get();
         let child_dot = match parent {
-            Some(parent_id) => {
-                let parent_entry = doc
-                    .get_entry(parent_id)
-                    .expect("build_chain: parent must be alive in doc at capture time");
-                parent_entry
-                    .children
-                    .dot_for(&id)
-                    .expect("build_chain: child must be present in parent's children RGA")
-            }
+            // `child_dot` is an O(1) lookup in the doc's child index instead of an
+            // O(siblings) scan of the parent's children RGA.
+            Some(_) => doc
+                .child_dot(id)
+                .expect("build_chain: child must be present in parent's children RGA"),
             None => Dot::new(0, 0),
         };
         chain.push(ChainLink {

@@ -681,6 +681,7 @@ fn partial_cs_delivery_rejected() {
         .changesets()
         .last()
         .expect("commit must have sealed at least one changeset")
+        .as_ref()
         .clone();
     assert!(
         cs.ops.len() >= 2,

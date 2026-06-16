@@ -23,7 +23,13 @@ pub struct OpGraph<P> {
     actor: u64,
     next_clock: u64,
 
-    changesets: imbl::Vector<crate::Changeset<P>>,
+    // `Arc`-wrapped so cloning the `OpGraph` (every transaction does, via
+    // `State::clone`) shares each sealed changeset by pointer. A bare
+    // `Vector<Changeset>` with few elements stores them inline and deep-copies
+    // the contained ops `Vec` on every clone — `O(total ops)` per keystroke when
+    // `from_plain` seals the whole document into one changeset. The `Arc` is an
+    // internal storage detail; the wire/FFI form is still `Changeset`.
+    changesets: imbl::Vector<std::sync::Arc<crate::Changeset<P>>>,
 
     /// Local-write accumulator. `add` pushes here; `commit` drains into
     /// `changesets`. Remote ingestion (`receive_changeset`) never touches
@@ -93,7 +99,7 @@ impl<P> OpGraph<P> {
         self.ops.is_empty()
     }
 
-    pub fn changesets(&self) -> &imbl::Vector<crate::Changeset<P>> {
+    pub fn changesets(&self) -> &imbl::Vector<std::sync::Arc<crate::Changeset<P>>> {
         &self.changesets
     }
 
@@ -190,7 +196,10 @@ impl<P> Default for OpGraph<P> {
 
 impl<P: Clone> OpGraph<P> {
     pub fn changesets_as_vec(&self) -> Vec<crate::Changeset<P>> {
-        self.changesets.iter().cloned().collect()
+        self.changesets
+            .iter()
+            .map(|cs| cs.as_ref().clone())
+            .collect()
     }
 
     pub fn add(&self, payload: P) -> Result<(Self, Op<P>), CrdtError> {
@@ -259,7 +268,8 @@ impl<P: Clone> OpGraph<P> {
     pub fn commit_mut(&mut self) {
         if !self.pending.is_empty() {
             let ops = std::mem::take(&mut self.pending);
-            self.changesets.push_back(crate::Changeset { ops });
+            self.changesets
+                .push_back(std::sync::Arc::new(crate::Changeset { ops }));
         }
     }
 
@@ -326,7 +336,7 @@ impl<P: Clone> OpGraph<P> {
                     .collect();
                 return Err(CrdtError::PartialDuplicate { dots });
             }
-            out.push(cs.clone());
+            out.push(cs.as_ref().clone());
         }
         Ok(out)
     }
@@ -500,7 +510,7 @@ impl<P: Clone + Eq> OpGraph<P> {
         // different boundary, or partial overlap, both signal corruption.
         if !already_dots.is_empty() {
             let all_known = already_dots.len() == cs.ops.len();
-            if all_known && self.changesets.iter().any(|c| c == &cs) {
+            if all_known && self.changesets.iter().any(|c| c.as_ref() == &cs) {
                 return Ok(self.clone());
             }
             return Err(CrdtError::PartialDuplicate { dots: already_dots });
@@ -529,7 +539,7 @@ impl<P: Clone + Eq> OpGraph<P> {
         for op in &cs.ops {
             next = next.try_promote_self_contained(op.id);
         }
-        next.changesets.push_back(cs);
+        next.changesets.push_back(std::sync::Arc::new(cs));
         Ok(next)
     }
 
