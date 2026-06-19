@@ -16,7 +16,6 @@ permissions:
 
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  TURBO_CACHE: remote:rw
 
 jobs:
   lint:
