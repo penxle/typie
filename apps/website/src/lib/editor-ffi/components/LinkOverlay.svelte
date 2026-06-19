@@ -1,16 +1,16 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '../editor.svelte';
+  import type { LinkRect } from '@typie/editor-ffi/browser';
 
   type Props = {
-    page: number;
+    links: LinkRect[];
   };
 
-  let { page }: Props = $props();
+  let { links }: Props = $props();
 
   const { editor } = getEditorContext();
 
-  const links = $derived(editor?.linkRects.filter((r) => r.page_idx === page) ?? []);
   const interactive = $derived((editor?.readOnly ?? false) || (editor?.modifierHeld ?? false));
 
   const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);

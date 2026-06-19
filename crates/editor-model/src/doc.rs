@@ -188,6 +188,20 @@ impl std::fmt::Debug for FlatLayoutCache {
     }
 }
 
+/// Text nodes whose materialized projection (`Text::visible`) is stale after a
+/// batch of text ops. Rebuilding a node's projection is `O(node)`, so doing it
+/// per op turns a K-character delete into `O(K·node)`; deferring lets the batch
+/// boundary refresh each node once. Excluded from `Doc` equality (a transient
+/// cache): always flushed before the doc is observed/compared.
+#[derive(Clone, Debug, Default)]
+struct PendingTextRefresh(imbl::HashSet<NodeId>);
+
+impl PartialEq for PendingTextRefresh {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Doc {
     pub(crate) nodes: OrMap<NodeId, NodeType>,
@@ -198,6 +212,7 @@ pub struct Doc {
     pub(crate) style_entries: imbl::HashMap<String, StyleEntry>,
     child_index: ChildIndexCache,
     flat_layout: FlatLayoutCache,
+    pending_text_refresh: PendingTextRefresh,
 }
 
 impl Doc {
@@ -355,6 +370,7 @@ impl Doc {
         for op in graph.topo_sort(&dots) {
             doc = apply_doc_op(doc, &op)?;
         }
+        doc.flush_text_projections();
         Ok(doc)
     }
 
@@ -370,6 +386,7 @@ impl Doc {
         for op in graph.topo_sort(&ancestry) {
             doc = apply_doc_op(doc, &op)?;
         }
+        doc.flush_text_projections();
         Ok(doc)
     }
 
@@ -436,6 +453,26 @@ impl Doc {
             self.extract_text_recursive(root.id(), &mut out);
         }
         out.trim_end_matches('\n').to_string()
+    }
+
+    /// Marks a text node's projection stale to be rebuilt at the next
+    /// [`flush_text_projections`](Self::flush_text_projections) instead of
+    /// immediately, so a multi-op batch refreshes each node once.
+    pub(crate) fn mark_text_dirty(&mut self, node_id: NodeId) {
+        self.pending_text_refresh.0.insert(node_id);
+    }
+
+    /// Rebuilds every text node marked dirty since the last flush (projection +
+    /// its flat-layout size). Must be called at each apply boundary before the
+    /// doc is measured, queried, or compared.
+    pub fn flush_text_projections(&mut self) {
+        if self.pending_text_refresh.0.is_empty() {
+            return;
+        }
+        for node_id in std::mem::take(&mut self.pending_text_refresh.0) {
+            self.refresh_text_projection(node_id);
+            self.update_flat_text_size(node_id);
+        }
     }
 
     pub(crate) fn refresh_text_projection(&mut self, node_id: NodeId) {

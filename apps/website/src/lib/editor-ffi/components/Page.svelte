@@ -23,6 +23,10 @@
   let attached = $state(false);
 
   let isVisible = false;
+  // Reactive mirror of `isVisible` used only by the overlay queries below, so
+  // off-screen pages never build their fragments. Kept separate from the plain
+  // `isVisible` so the imperative render effects are untouched.
+  let overlaysVisible = $state(false);
   let dirtyLayers = 0;
   let needsResize = false;
 
@@ -73,6 +77,7 @@
     const observer = new IntersectionObserver(
       (entries) => {
         isVisible = entries.at(-1)?.isIntersecting ?? isVisible;
+        overlaysVisible = isVisible;
         if (!isVisible) return;
         if (needsResize) {
           editor.resizeSurface(page, width, height);
@@ -99,8 +104,21 @@
   const slotWidth = $derived(Math.round(width * displayZoom * scaleFactor) / scaleFactor);
   const slotHeight = $derived(Math.round(height * displayZoom * scaleFactor) / scaleFactor);
   const showCropMarker = $derived(layoutMode?.type === 'paginated' && !(ctx.editor?.readOnly ?? false));
-  const externalElements = $derived(ctx.editor?.externalElements.filter((element) => element.page_idx === page) ?? []);
-  const tableOverlays = $derived(ctx.editor?.tableOverlays.filter((overlay) => overlay.page_idx === page) ?? []);
+  // Per-visible-page queries: only on-screen pages build their fragment, turning
+  // the old whole-document O(pages · N) recompute (every keystroke) into O(N) for
+  // the few visible pages.
+  const externalElements = $derived.by(() => {
+    void ctx.editor?.tickRevision;
+    return overlaysVisible && ctx.editor ? ctx.editor.pageExternalElements(page) : [];
+  });
+  const tableOverlays = $derived.by(() => {
+    void ctx.editor?.tickRevision;
+    return overlaysVisible && ctx.editor ? ctx.editor.pageTableOverlays(page) : [];
+  });
+  const linkRects = $derived.by(() => {
+    void ctx.editor?.tickRevision;
+    return overlaysVisible && ctx.editor ? ctx.editor.pageLinkRects(page) : [];
+  });
 </script>
 
 <div style:width={`${slotWidth}px`} style:height={`${slotHeight}px`} class={css({ position: 'relative', flexShrink: '0' })}>
@@ -153,7 +171,7 @@
       <TableOverlay {overlay} />
     {/each}
 
-    <LinkOverlay {page} />
+    <LinkOverlay links={linkRects} />
 
     {#if showCropMarker && layoutMode?.type === 'paginated'}
       {@const marginLeft = layoutMode.page_margin_left}

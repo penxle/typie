@@ -194,9 +194,13 @@ export class Editor {
   #selection = $state<Selection | undefined>();
   #lastHistoryTag = $state<HistoryTag>();
   #pageSizes = $state<Size[]>([]);
-  #externalElements = $state<ExternalElement[]>([]);
-  #tableOverlays = $state<TableOverlay[]>([]);
-  #linkRects = $state<LinkRect[]>([]);
+  // Whole-document derived data is expensive (O(pages · N): each builds every
+  // page's fragment). It is needed only by pointer/keyboard-driven consumers
+  // (link tooltip), so compute it lazily and memoize per tick instead of eagerly
+  // every keystroke. Per-page rendering uses the `page*` methods below.
+  #externalElementsCache: { rev: number; value: ExternalElement[] } | undefined;
+  #tableOverlaysCache: { rev: number; value: TableOverlay[] } | undefined;
+  #linkRectsCache: { rev: number; value: LinkRect[] } | undefined;
   #rootAttrs = $state<PlainRootNode>();
   #modifierState = $state<ModifierState | undefined>();
   #blockState = $state<BlockState | undefined>();
@@ -443,16 +447,42 @@ export class Editor {
     return this.#pageSizes;
   }
 
-  get externalElements() {
-    return this.#externalElements;
+  get externalElements(): ExternalElement[] {
+    const rev = this.tickRevision;
+    if (this.#externalElementsCache?.rev !== rev) {
+      this.#externalElementsCache = { rev, value: this.#wasm.external_elements() };
+    }
+    return this.#externalElementsCache.value;
   }
 
-  get tableOverlays() {
-    return this.#tableOverlays;
+  get tableOverlays(): TableOverlay[] {
+    const rev = this.tickRevision;
+    if (this.#tableOverlaysCache?.rev !== rev) {
+      this.#tableOverlaysCache = { rev, value: this.#wasm.table_overlays() };
+    }
+    return this.#tableOverlaysCache.value;
   }
 
-  get linkRects() {
-    return this.#linkRects;
+  get linkRects(): LinkRect[] {
+    const rev = this.tickRevision;
+    if (this.#linkRectsCache?.rev !== rev) {
+      this.#linkRectsCache = { rev, value: this.#wasm.link_rects() };
+    }
+    return this.#linkRectsCache.value;
+  }
+
+  // Per-visible-page derived data — `O(N)` for one page instead of `O(pages · N)`
+  // for the whole document. Drives the per-page overlay rendering.
+  pageExternalElements(page: number): ExternalElement[] {
+    return this.#wasm.page_external_elements(page);
+  }
+
+  pageTableOverlays(page: number): TableOverlay[] {
+    return this.#wasm.page_table_overlays(page);
+  }
+
+  pageLinkRects(page: number): LinkRect[] {
+    return this.#wasm.page_link_rects(page);
   }
 
   get rootAttrs() {
@@ -1546,17 +1576,10 @@ export class Editor {
       this.#pageSizes = this.#wasm.page_sizes();
     }
 
-    if (fields.includes('external_elements')) {
-      this.#externalElements = this.#wasm.external_elements();
-    }
-
-    if (fields.includes('table_overlays')) {
-      this.#tableOverlays = this.#wasm.table_overlays();
-    }
-
-    if (fields.includes('link_rects')) {
-      this.#linkRects = this.#wasm.link_rects();
-    }
+    // external_elements / table_overlays / link_rects are intentionally NOT
+    // recomputed here. The per-tick `tickRevision` bump invalidates their lazy
+    // getters and drives the per-visible-page overlay queries, so off-screen
+    // pages never build their fragments on a keystroke.
 
     if (fields.includes('root_attrs')) {
       this.#rootAttrs = this.#wasm.root_attrs();

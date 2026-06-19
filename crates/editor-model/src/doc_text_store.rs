@@ -29,6 +29,12 @@ pub(crate) struct DocTextStore {
     entries: TextEntryStore,
     index: TextIndex,
     placements_by_node: imbl::HashMap<NodeId, Rga<TextPlacementRecord>>,
+    /// Reverse index `entry_dot -> every (node, placement) it has ever held`
+    /// (including tombstoned moves). Lets `latest_placement_for_entry` look up an
+    /// entry's placements directly instead of scanning every node's placements —
+    /// the difference between `O(document)` and `O(entry's own placements)` on
+    /// the deleted-stable-cursor resolution path that runs each keystroke.
+    placements_by_entry: imbl::HashMap<EntryDot, imbl::Vector<(NodeId, PlacementId)>>,
 }
 
 impl DocTextStore {
@@ -181,21 +187,13 @@ impl DocTextStore {
         entry_dot: EntryDot,
         horizon: Option<PlacementId>,
     ) -> Option<(NodeId, PlacementId)> {
-        self.placements_by_node
-            .iter()
-            .flat_map(|(node_id, placements)| {
-                placements
-                    .iter_all_in_order()
-                    .map(move |(placement_id, record, _)| {
-                        (*node_id, PlacementId(placement_id), record.entry_dot)
-                    })
-            })
-            .filter(|(_, _, candidate)| *candidate == entry_dot)
-            .filter(|(_, placement_id, _)| {
-                horizon.is_none_or(|horizon| placement_id.0 <= horizon.0)
-            })
-            .max_by_key(|(_, placement_id, _)| placement_id.0)
-            .map(|(node_id, placement_id, _)| (node_id, placement_id))
+        self.placements_by_entry
+            .get(&entry_dot)
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|(_, placement_id)| horizon.is_none_or(|horizon| placement_id.0 <= horizon.0))
+            .max_by_key(|(_, placement_id)| placement_id.0)
     }
 
     fn visible_offset_near_entry(
@@ -310,6 +308,14 @@ impl DocTextStore {
             },
         )?;
         self.placements_by_node.insert(node_id, next);
+
+        let mut entry_placements = self
+            .placements_by_entry
+            .get(&entry_dot)
+            .cloned()
+            .unwrap_or_default();
+        entry_placements.push_back((node_id, placement));
+        self.placements_by_entry.insert(entry_dot, entry_placements);
         Ok(())
     }
 

@@ -108,6 +108,7 @@ impl Doc {
         }
 
         emit_style_entries(&mut graph, &mut doc, &plain);
+        doc.flush_text_projections();
 
         let graph = graph.commit();
         (doc, graph)

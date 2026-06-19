@@ -23,6 +23,13 @@ impl<'a> BatchedState<'a> {
         Ok(op)
     }
 
+    /// Rebuilds any text projections deferred by the ops applied so far. Callers
+    /// that read the doc's text between steps in one batch (e.g. multi-step undo
+    /// replay) must call this so the next step sees the materialized text.
+    pub fn flush_text_projections(&mut self) {
+        self.inner.doc.flush_text_projections();
+    }
+
     pub fn set_selection(&mut self, selection: Option<Selection>) {
         self.inner.selection = selection.map(|sel| sel.normalize(&self.inner.doc).unwrap_or(sel));
     }
@@ -59,6 +66,10 @@ impl State {
     pub fn apply(&self, payload: DocOp) -> Result<(Self, Op<DocOp>), StateError> {
         let mut next = self.clone();
         let op = next.apply_internal(payload)?;
+        next.doc.flush_text_projections();
+        // Doc-invariant verification is an `O(N)` debug check; release relies on
+        // the CRDT keeping the doc well-formed (matches `batch_with_ops_mut`).
+        #[cfg(any(test, debug_assertions))]
         next.verify()?;
         Ok((next, op))
     }
@@ -82,6 +93,11 @@ impl State {
         } else {
             Vec::new()
         };
+        next.doc.flush_text_projections();
+        // `O(N)` doc-invariant check; gated to debug so applying a stream of
+        // remote changesets (each calls this) is not `O(changesets · N)` in
+        // release. The CRDT's `receive_changeset` already validates structure.
+        #[cfg(any(test, debug_assertions))]
         next.verify()?;
         Ok((next, applied_ops))
     }
@@ -120,6 +136,8 @@ impl State {
             f(&mut batched)?;
             std::mem::take(&mut batched.emitted_ops)
         };
+        next.doc.flush_text_projections();
+        #[cfg(any(test, debug_assertions))]
         next.verify().map_err(E::from)?;
         Ok((next, ops))
     }
@@ -143,6 +161,7 @@ impl State {
             f(&mut batched)?;
             std::mem::take(&mut batched.emitted_ops)
         };
+        self.doc.flush_text_projections();
         // Doc-invariant verification only matters when the closure mutated
         // the doc. State-only writes (set_selection/set_composition/etc.) emit
         // no ops, so the Doc is bit-identical to the pre-batch state and the

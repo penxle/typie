@@ -220,7 +220,7 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                     *after,
                     *ch,
                 )?;
-                doc.refresh_text_projection(*node_id);
+                doc.mark_text_dirty(*node_id);
             }
             TextOp::RemoveChar { observed } => {
                 let entry = doc
@@ -241,7 +241,7 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                     .map(|loc| loc.node_id);
                 doc.text.mark_deleted(*observed, op.id);
                 if let Some(owner) = old_owner {
-                    doc.refresh_text_projection(owner);
+                    doc.mark_text_dirty(owner);
                 }
             }
         },
@@ -406,7 +406,10 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
     // update that leaf in O(log N); any structural/other op invalidates for a
     // lazy rebuild. This keeps typing off the O(N) flat-rebuild path.
     match &op.payload {
-        DocOp::Text { node_id, .. } => doc.update_flat_text_size(*node_id),
+        // A char op's projection + flat-size refresh is deferred to
+        // `flush_text_projections` (see `mark_text_dirty`) so a multi-op batch
+        // rebuilds each text node once instead of per op.
+        DocOp::Text { .. } => {}
         _ => doc.invalidate_flat_layout(),
     }
     Ok(doc)
@@ -458,13 +461,15 @@ mod tests {
             after = Some(placement);
         }
 
+        doc.flush_text_projections();
         (graph, doc, node_id, entries, placements)
     }
 
     fn apply_next(graph: &mut OpGraph<DocOp>, doc: Doc, payload: DocOp) -> (Doc, Op<DocOp>) {
         let (next_graph, op) = first_op(graph, payload);
         *graph = next_graph;
-        let doc = apply_doc_op(doc, &op).unwrap();
+        let mut doc = apply_doc_op(doc, &op).unwrap();
+        doc.flush_text_projections();
         (doc, op)
     }
 
@@ -837,7 +842,8 @@ mod tests {
                 },
             },
         );
-        let doc = apply_doc_op(doc, &op2).unwrap();
+        let mut doc = apply_doc_op(doc, &op2).unwrap();
+        doc.flush_text_projections();
 
         if let Node::Text(t) = &doc.get_entry(id).unwrap().node {
             assert_eq!(t.text.to_string(), "hi");
@@ -1372,7 +1378,8 @@ mod tests {
                 },
             },
         );
-        let doc = apply_doc_op(doc, &remove).unwrap();
+        let mut doc = apply_doc_op(doc, &remove).unwrap();
+        doc.flush_text_projections();
 
         assert_eq!(doc.text_view(t1).unwrap().text(), "");
         assert_eq!(doc.text_view(t2).unwrap().text(), "");

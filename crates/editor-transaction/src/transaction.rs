@@ -508,6 +508,11 @@ impl Transaction {
                 }
                 let mut effect = StepEffect::default();
                 step.apply_to_with_effect(batched, &mut validations, &mut effect)?;
+                // Materialize this step's text edits so the next step (which
+                // resolves offsets against the live doc) does not read a stale
+                // projection. Deferred per-op refreshes within a single step are
+                // still coalesced into this one rebuild.
+                batched.flush_text_projections();
                 step_effects[i] = effect;
             }
             for i in [
@@ -522,6 +527,7 @@ impl Transaction {
                 let step = &steps[i];
                 let mut effect = StepEffect::default();
                 step.apply_to_with_effect(batched, &mut validations, &mut effect)?;
+                batched.flush_text_projections();
                 step_effects[i] = effect;
             }
             Ok(())

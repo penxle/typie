@@ -25,9 +25,14 @@
   const keyboardTarget = $derived.by<TooltipTarget | undefined>(() => {
     const instance = editor;
     if (!instance) return;
+    // Read the whole-document `linkRects` (O(pages · N)) only when the caret is
+    // actually inside a uniform link — otherwise `resolveSelectionTarget` returns
+    // immediately, so guarding here keeps that cost off the normal typing path.
+    const modifierStateLink = instance.modifierState?.link;
+    if (modifierStateLink?.type !== 'uniform') return;
     return resolveSelectionTarget({
       linkRects: instance.linkRects,
-      modifierStateLink: instance.modifierState?.link,
+      modifierStateLink,
       selection: instance.selection,
       selectionHeadRect: instance.selectionHeadRect(),
     });
