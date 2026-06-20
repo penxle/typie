@@ -176,7 +176,8 @@ export async function buildExportFonts(userId: string): Promise<ExportFontFamily
   const families: ExportFontFamily[] = [];
 
   // 기본 폰트
-  for (const family of fontFamilies.filter((f) => f.source === 'DEFAULT')) {
+  for (const family of fontFamilies) {
+    if (family.source !== 'DEFAULT') continue;
     families.push({
       family: family.familyName,
       weights: family.fonts.map((f) => ({

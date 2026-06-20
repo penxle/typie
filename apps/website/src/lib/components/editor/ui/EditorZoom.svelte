@@ -262,10 +262,12 @@
   }
 
   $effect(() => {
-    if (!isPaginated) {
-      pinchSession = null;
-      pinchQueuedUpdate = null;
+    if (isPaginated) {
+      return;
     }
+
+    pinchSession = null;
+    pinchQueuedUpdate = null;
   });
 </script>
 
@@ -338,10 +340,12 @@
 
       const teardown = $effect.root(() => {
         $effect(() => {
-          if (!resizing && pending) {
-            pending = false;
-            syncViewportMetrics();
+          if (!(!resizing && pending)) {
+            return;
           }
+
+          pending = false;
+          syncViewportMetrics();
         });
       });
 

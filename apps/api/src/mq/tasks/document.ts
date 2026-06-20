@@ -30,12 +30,11 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
     return;
   }
 
-  let updates: string[];
   let parsedUpdates: { userId: string; data: string; retryCount?: number }[] = [];
   let updated = false;
 
   try {
-    updates = (await redis.rpop(`document:sync:updates:${documentId}`, 5)) ?? [];
+    const updates = (await redis.rpop(`document:sync:updates:${documentId}`, 5)) ?? [];
     if (updates.length === 0) {
       return;
     }

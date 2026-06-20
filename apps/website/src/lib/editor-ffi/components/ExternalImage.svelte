@@ -282,10 +282,12 @@
           if (!canEdit) enlarged = true;
         }}
         onkeydown={(event) => {
-          if (!canEdit && (event.key === 'Enter' || event.key === ' ')) {
-            event.preventDefault();
-            enlarged = true;
+          if (!(!canEdit && (event.key === 'Enter' || event.key === ' '))) {
+            return;
           }
+
+          event.preventDefault();
+          enlarged = true;
         }}
         onpointerdown={(event) => {
           if (!canEdit) event.stopPropagation();

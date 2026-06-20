@@ -30,14 +30,14 @@ describe('web IME context', () => {
 
   it('keeps structural flat tokens in the hidden input context', () => {
     const ime: Ime = {
-      text: '\u2028e\u2029',
+      text: '\u{2028}e\u{2029}',
       window_start: 0,
       selection: { start: 2, end: 2 },
       composing: undefined,
     };
 
     expect(normalizeImeContext(ime)).toEqual({
-      text: '\u2028e\u2029',
+      text: '\u{2028}e\u{2029}',
       windowStart: 0,
       selection: { start: 2, end: 2 },
       composing: null,
@@ -46,14 +46,14 @@ describe('web IME context', () => {
 
   it('keeps an insertion point inside an empty flat token window', () => {
     const ime: Ime = {
-      text: '\u2028\u2029',
+      text: '\u{2028}\u{2029}',
       window_start: 0,
       selection: { start: 1, end: 1 },
       composing: undefined,
     };
 
     expect(normalizeImeContext(ime)).toEqual({
-      text: '\u2028\u2029',
+      text: '\u{2028}\u{2029}',
       windowStart: 0,
       selection: { start: 1, end: 1 },
       composing: null,
@@ -99,13 +99,13 @@ describe('web IME context', () => {
     const input = document.createElement('textarea');
 
     syncInputElementToContext(input, {
-      text: '\u2028prev\u2029\u2028\u2029',
+      text: '\u{2028}prev\u{2029}\u{2028}\u{2029}',
       windowStart: 0,
       selection: { start: 7, end: 7 },
       composing: null,
     });
 
-    expect(input.value).toBe('\u2028prev\u2029\u2028\u2029');
+    expect(input.value).toBe('\u{2028}prev\u{2029}\u{2028}\u{2029}');
     expect(input.selectionStart).toBe(7);
     expect(input.selectionEnd).toBe(7);
   });

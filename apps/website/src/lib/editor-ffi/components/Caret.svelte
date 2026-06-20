@@ -11,7 +11,9 @@
   const visible = $derived(!!cursor && !!point && !!editor?.focused);
 
   const resetAnimation = () => {
-    element?.getAnimations().forEach((a) => (a.currentTime = 0));
+    for (const a of element?.getAnimations() ?? []) {
+      a.currentTime = 0;
+    }
   };
 
   $effect(() => {

@@ -9,7 +9,7 @@
 
   type Size = 16 | 24 | 32 | 48 | 64 | 96 | 128 | 256 | 512 | 1024 | 'full';
 
-  type Props = {
+  type Props = Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt' | 'placeholder'> & {
     url: string;
     alt: string;
     style?: SystemStyleObject;
@@ -18,7 +18,7 @@
     quality?: number;
     placeholder?: string;
     progressive?: boolean;
-  } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt' | 'placeholder'>;
+  };
 
   let { url, alt, style, size, ratio, quality, placeholder, progressive = false, ...rest }: Props = $props();
 
@@ -89,10 +89,12 @@
       loaded = false;
 
       const observer = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          load();
-          observer.disconnect();
+        if (entries.every((entry) => !entry.isIntersecting)) {
+          return;
         }
+
+        load();
+        observer.disconnect();
       });
 
       observer.observe(containerEl);

@@ -57,8 +57,8 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       'X-Device-Id': deviceId,
       'X-Device-Name': deviceName,
       'X-Device-Platform': platform,
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(bootstrapBypass ? { 'X-Bootstrap-Bypass': bootstrapBypass } : {}),
+      ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+      ...(bootstrapBypass && { 'X-Bootstrap-Bypass': bootstrapBypass }),
     },
     body: await request.arrayBuffer(),
   });

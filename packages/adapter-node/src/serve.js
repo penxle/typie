@@ -49,20 +49,19 @@ export const serve = async ({ Server, manifest, prerendered }) => {
               'content-type': mime || 'application/octet-stream',
             },
           });
-        } else {
-          return c.text('Not Found', {
-            status: 404,
-            headers: {
-              'cache-control': 'no-store',
-            },
-          });
         }
+        return c.text('Not Found', {
+          status: 404,
+          headers: {
+            'cache-control': 'no-store',
+          },
+        });
       } finally {
         await file?.close();
       }
     }
 
-    if (c.req.path in prerendered) {
+    if (Object.hasOwn(prerendered, c.req.path)) {
       const filePath = path.join(basePath, 'assets', prerendered[c.req.path]);
 
       let file;
@@ -80,14 +79,13 @@ export const serve = async ({ Server, manifest, prerendered }) => {
               'content-type': mime || 'application/octet-stream',
             },
           });
-        } else {
-          return c.text('Not Found', {
-            status: 404,
-            headers: {
-              'cache-control': 'no-store',
-            },
-          });
         }
+        return c.text('Not Found', {
+          status: 404,
+          headers: {
+            'cache-control': 'no-store',
+          },
+        });
       } finally {
         await file?.close();
       }

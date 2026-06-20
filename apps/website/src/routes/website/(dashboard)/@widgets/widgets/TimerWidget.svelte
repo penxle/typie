@@ -176,15 +176,17 @@
   };
 
   const pause = () => {
-    if (isRunning && !isPaused) {
-      isPaused = true;
-      pausedTime = remainingSeconds;
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-      saveSettings();
+    if (!(isRunning && !isPaused)) {
+      return;
     }
+
+    isPaused = true;
+    pausedTime = remainingSeconds;
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    saveSettings();
   };
 
   const reset = () => {

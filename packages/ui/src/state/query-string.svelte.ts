@@ -96,10 +96,12 @@ export class QueryString<T = string> {
   }
 
   set current(value: T) {
-    if (this.#current !== value) {
-      this.#current = value;
-      this.#update.call();
+    if (this.#current === value) {
+      return;
     }
+
+    this.#current = value;
+    this.#update.call();
   }
 }
 

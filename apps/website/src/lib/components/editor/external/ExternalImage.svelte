@@ -340,10 +340,12 @@
           enlarged = true;
         }}
         onkeydown={(event) => {
-          if (!isEditable && (event.key === 'Enter' || event.key === ' ')) {
-            event.preventDefault();
-            enlarged = true;
+          if (!(!isEditable && (event.key === 'Enter' || event.key === ' '))) {
+            return;
           }
+
+          event.preventDefault();
+          enlarged = true;
         }}
         onpointerdown={(e) => {
           if (isEditable) {

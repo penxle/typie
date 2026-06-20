@@ -27,14 +27,16 @@
       },
     });
 
-    location.href = qs.stringifyUrl({
-      url: `${env.PUBLIC_AUTH_URL}/authorize`,
-      query: {
-        client_id: env.PUBLIC_OIDC_CLIENT_ID,
-        response_type: 'code',
-        ...deserializeOAuthState(resp.authorizeSignUpEmail),
-      },
-    });
+    location.assign(
+      qs.stringifyUrl({
+        url: `${env.PUBLIC_AUTH_URL}/authorize`,
+        query: {
+          client_id: env.PUBLIC_OIDC_CLIENT_ID,
+          response_type: 'code',
+          ...deserializeOAuthState(resp.authorizeSignUpEmail),
+        },
+      }),
+    );
   });
 </script>
 

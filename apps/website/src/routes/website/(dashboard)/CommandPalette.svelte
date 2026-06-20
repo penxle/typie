@@ -378,19 +378,19 @@
         if (selectedResultIndex === null) {
           selectedResultIndex = 0;
         } else if (event.key === 'ArrowDown') {
-          selectedResultIndex = selectedResultIndex + 1;
+          selectedResultIndex += 1;
           if (selectedResultIndex >= searchHits.length) {
             selectedResultIndex = 0;
           }
         } else if (event.key === 'ArrowUp') {
-          selectedResultIndex = selectedResultIndex - 1;
+          selectedResultIndex -= 1;
           if (selectedResultIndex < -1) {
             selectedResultIndex = searchHits.length - 1;
           }
         }
 
         await tick();
-        const selectedElem = listEl?.querySelector<HTMLElement>(`& > [aria-selected="true"]`);
+        const selectedElem = listEl?.querySelector<HTMLElement>(`:scope > [aria-selected="true"]`);
 
         if (
           selectedElem &&
@@ -458,10 +458,12 @@
       })}
       aria-live={query ? 'polite' : 'off'}
       onkeydown={(e) => {
-        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.isComposing) {
-          e.preventDefault();
-          e.stopPropagation();
+        if (!((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.isComposing)) {
+          return;
         }
+
+        e.preventDefault();
+        e.stopPropagation();
       }}
       placeholder={`${user.data.name}님, ${greeting}`}
       tabindex="0"
@@ -565,7 +567,7 @@
           onclick={() => {
             mixpanel.track('command_palette_select', {
               type: hit.__typename,
-              ...(hit.__typename === 'SearchHitCommand' ? { name: hit.name } : {}),
+              ...(hit.__typename === 'SearchHitCommand' && { name: hit.name }),
             });
 
             hit.action();

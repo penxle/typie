@@ -133,7 +133,7 @@ export function convertBlockquoteNode(entry: NodeEntry, ctx: HwpConvertContext, 
     );
   }
 
-  const borderColor = variant === 'left_quote' ? hexToColorref('000000') : hexToColorref('CCCCCC');
+  const borderColor = hexToColorref(variant === 'left_quote' ? '000000' : 'CCCCCC');
   return makeSimpleTableFromParagraphs(
     paragraphs,
     ctx,
@@ -164,7 +164,7 @@ export function convertCalloutNode(entry: NodeEntry, ctx: HwpConvertContext, isF
   const variant = (entry as { variant?: string }).variant ?? 'info';
   const colorKey = `ui.callout.${variant}`;
   const hex = resolveColorToHex(colorKey);
-  const borderColor = hex ? hexToColorref(hex) : hexToColorref('CCCCCC');
+  const borderColor = hexToColorref(hex || 'CCCCCC');
 
   const bgColors: Record<string, string> = {
     info: 'DBEAFE',
@@ -211,7 +211,7 @@ export function convertFoldNode(entry: NodeEntry, ctx: HwpConvertContext, isFirs
     if (!childEntry) continue;
 
     if (childEntry.type === 'fold_title') {
-      titleSegments.push({ text: '\u25B6 ', charShapeId: ctx.defaultCharShapeId }, ...collectInlineSegments(childEntry, ctx));
+      titleSegments.push({ text: '\u{25B6} ', charShapeId: ctx.defaultCharShapeId }, ...collectInlineSegments(childEntry, ctx));
     } else if (childEntry.type === 'fold_content') {
       for (const contentChildId of childEntry.children ?? []) {
         const contentChild = ctx.nodes[contentChildId];

@@ -64,7 +64,7 @@
     const handleCenterY = customPaintTop + totalHeight / 2;
     const touchTargetTop = handleCenterY - touchHeight / 2;
 
-    const handleXOffset = type === 'from' ? -STEM_WIDTH / 2 : STEM_WIDTH / 2;
+    const handleXOffset = (type === 'from' ? -STEM_WIDTH : STEM_WIDTH) / 2;
     const touchTargetLeft = handleXOffset - TOUCH_TARGET_SIZE / 2;
 
     const paintTop = customPaintTop - touchTargetTop;

@@ -197,7 +197,7 @@
       if (e.key === 'ArrowDown') {
         newIndex = currentIndex === -1 || currentIndex >= sortedSizes.length - 1 ? 0 : currentIndex + 1;
       } else {
-        newIndex = currentIndex === -1 || currentIndex <= 0 ? sortedSizes.length - 1 : currentIndex - 1;
+        newIndex = (currentIndex === -1 || currentIndex <= 0 ? sortedSizes.length : currentIndex) - 1;
       }
 
       const newValue = sortedSizes[newIndex];

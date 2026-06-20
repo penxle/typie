@@ -107,7 +107,7 @@
   function toggleGroup(nodeId: string) {
     collapsedGroupsByNodeId = {
       ...collapsedGroupsByNodeId,
-      [nodeId]: !collapsedGroupsByNodeId[nodeId],
+      [nodeId]: collapsedGroupsByNodeId[nodeId] !== true,
     };
   }
 

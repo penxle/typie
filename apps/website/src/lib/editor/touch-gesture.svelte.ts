@@ -186,6 +186,255 @@ export class TouchGestureController {
     this.#editor = editor;
   }
 
+  #nextContextMenuRequestId(): number {
+    return ++this.#contextMenuRequestId;
+  }
+
+  #isContextMenuRequestActive(requestId: number): boolean {
+    return this.#contextMenuRequestId === requestId;
+  }
+
+  #setPhase(next: TouchPhase): void {
+    this.#phase = next;
+  }
+
+  #startLongPressTimer(): void {
+    this.#clearLongPressTimer();
+    this.#longPressTimer = setTimeout(() => {
+      if (this.#phase !== 'pressing' || !this.#press) {
+        return;
+      }
+
+      const point = this.#lastClientPoint ?? this.#press;
+      const resolved = this.#editor.resolvePointerCoordinateFromClient(point.x, point.y);
+      if (!resolved) {
+        return;
+      }
+
+      if (this.#press.selectionHit) {
+        this.#setPhase('dndArmed');
+        this.#setDragCandidate(true);
+        this.#setDragArmed(true);
+        this.#suppressTapOnPointerUp = true;
+        this.#updateAutoScroll();
+        return;
+      }
+
+      this.#dispatchPointerClick(resolved, 2);
+      this.#setPhase('doubleTapPending');
+      this.#doubleTapStart = { x: point.x, y: point.y };
+      this.#suppressTapOnPointerUp = true;
+    }, TOUCH_LONG_PRESS_MS);
+  }
+
+  #clearLongPressTimer(): void {
+    if (this.#longPressTimer === null) {
+      return;
+    }
+
+    clearTimeout(this.#longPressTimer);
+    this.#longPressTimer = null;
+  }
+
+  #openTouchContextMenuFromSelection(): void {
+    const zoom = this.#editor.layout?.layoutMode.type === 'paginated' ? this.#editor.displayZoom : 1;
+    const position = computeTouchContextMenuPosition(this.#editor.selection, this.#editor.pageContainerEls, zoom);
+    if (!position) {
+      this.#editor.closeContextMenu();
+      return;
+    }
+
+    this.#editor.openContextMenu({ x: position.x, y: position.y, source: 'touch', placement: position.placement });
+  }
+
+  #openTouchContextMenuFromSelectionDeferred(): void {
+    const requestId = this.#nextContextMenuRequestId();
+    this.#editor.runAfterSettled(() => {
+      if (!this.#isContextMenuRequestActive(requestId)) {
+        return;
+      }
+
+      this.#openTouchContextMenuFromSelection();
+    });
+  }
+
+  #dispatchPointerClick(point: ResolvedTouchPoint, clickCount: number): void {
+    this.#editor.dispatch({
+      type: 'pointerDown',
+      pageIdx: point.pageIdx,
+      x: point.x,
+      y: point.y,
+      clickCount,
+      button: 'primary',
+      modifier: { shift: false, ctrl: false, alt: false, meta: false },
+    });
+    this.#editor.dispatch({
+      type: 'pointerUp',
+      pageIdx: point.pageIdx,
+      x: point.x,
+      y: point.y,
+      button: 'primary',
+      modifier: { shift: false, ctrl: false, alt: false, meta: false },
+    });
+  }
+
+  #resolveDoubleTapDragSelectionContext(): {
+    anchor: SelectionEndpointBounds;
+    doubleTapInitialRange: { anchor: Position; head: Position };
+  } | null {
+    if (!this.#doubleTapInitialRange) {
+      const selection = this.#editor.selection;
+      if (!selection || selection.collapsed) {
+        return null;
+      }
+
+      this.#doubleTapInitialRange = { anchor: selection.anchor, head: selection.head };
+    }
+
+    if (!this.#dragAnchor) {
+      const handles = getOrderedSelectionHandles(this.#editor.selection);
+      if (!handles) {
+        return null;
+      }
+      this.#dragAnchor = handles.from;
+    }
+
+    if (!this.#dragAnchor || !this.#doubleTapInitialRange) {
+      return null;
+    }
+
+    return {
+      anchor: this.#dragAnchor,
+      doubleTapInitialRange: this.#doubleTapInitialRange,
+    };
+  }
+
+  #dispatchDragSelectionAtCurrentPoint(): void {
+    const current = this.#lastClientPoint;
+    if (!current) {
+      return;
+    }
+
+    const resolved = this.#editor.resolvePointerCoordinateFromClient(current.x, current.y);
+    if (!resolved) {
+      return;
+    }
+
+    let anchor = this.#dragAnchor;
+    let doubleTapInitialRange: { anchor: Position; head: Position } | undefined;
+
+    if (this.#phase === 'doubleTapDragging') {
+      const context = this.#resolveDoubleTapDragSelectionContext();
+      if (!context) {
+        return;
+      }
+
+      anchor = context.anchor;
+      doubleTapInitialRange = context.doubleTapInitialRange;
+    } else if (!anchor) {
+      return;
+    }
+
+    this.#editor.dispatch({
+      type: 'extendSelectionTo',
+      anchorPageIdx: anchor.pageIdx,
+      anchorX: anchor.bounds.x,
+      anchorY: anchor.bounds.y + anchor.bounds.height / 2,
+      headPageIdx: resolved.pageIdx,
+      headX: resolved.x,
+      headY: resolved.y,
+      doubleTapInitialRange,
+    });
+  }
+
+  #updateAutoScroll(): void {
+    if (!this.#shouldAutoScroll() || this.#lastClientPoint === null || this.#editor.scrollViewport === null) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    if (this.#autoScrollCleanup !== null) {
+      this.#autoScrollCleanup();
+      this.#autoScrollCleanup = null;
+    }
+
+    const pointer = this.#lastClientPoint;
+    this.#autoScrollCleanup =
+      handleDragScroll(this.#editor.scrollViewport, true, {
+        scrollZoneSize: TOUCH_EDGE_SCROLL_THRESHOLD_PX,
+        minScrollSpeed: TOUCH_EDGE_MIN_SCROLL_SPEED,
+        maxScrollSpeed: TOUCH_EDGE_MAX_SCROLL_SPEED,
+        axis: 'both',
+        initialPointer: { clientX: pointer.x, clientY: pointer.y },
+        onScrollThrottleMs: 16,
+        onScroll: (clientX, clientY) => {
+          this.#lastClientPoint = { x: clientX, y: clientY };
+          if (this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') {
+            this.#dispatchDragSelectionAtCurrentPoint();
+          }
+        },
+      }) ?? null;
+  }
+
+  #stopAutoScroll(): void {
+    if (this.#autoScrollCleanup === null) {
+      return;
+    }
+
+    this.#autoScrollCleanup();
+    this.#autoScrollCleanup = null;
+  }
+
+  #shouldAutoScroll(): boolean {
+    return this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging' || this.#phase === 'dndArmed';
+  }
+
+  #resetSession(): void {
+    this.#setPhase('idle');
+    this.#activePointerId = null;
+    this.#press = null;
+    this.#dragAnchor = null;
+    this.#doubleTapInitialRange = null;
+    this.#doubleTapStart = null;
+    this.#lastClientPoint = null;
+    this.#suppressTapOnPointerUp = false;
+    this.#movedPastTapThreshold = false;
+    this.#readOnlyDragStarted = false;
+    this.#wasTouchMenuOpenOnPointerDown = false;
+    this.#setDragCandidate(false);
+    this.#setDragArmed(false);
+    this.#clearLongPressTimer();
+    this.#stopAutoScroll();
+  }
+
+  #setDragArmed(armed: boolean): void {
+    if (this.#dragArmed === armed) {
+      return;
+    }
+
+    this.#dragArmed = armed;
+  }
+
+  #setDragCandidate(candidate: boolean): void {
+    if (this.#dragCandidate === candidate) {
+      return;
+    }
+
+    this.#dragCandidate = candidate;
+  }
+
+  #clearNativeSelection(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {
+      // ignore
+    }
+  }
+
   get gestureActive(): boolean {
     return this.#editor.readOnly && (this.#activePointerId !== null || this.#phase !== 'idle');
   }
@@ -219,14 +468,6 @@ export class TouchGestureController {
     );
   }
 
-  #nextContextMenuRequestId(): number {
-    return ++this.#contextMenuRequestId;
-  }
-
-  #isContextMenuRequestActive(requestId: number): boolean {
-    return this.#contextMenuRequestId === requestId;
-  }
-
   cancelContextMenuRequest(): void {
     this.#contextMenuRequestId++;
   }
@@ -236,10 +477,6 @@ export class TouchGestureController {
     this.#setDragArmed(false);
     this.#setDragCandidate(false);
     this.cancelContextMenuRequest();
-  }
-
-  #setPhase(next: TouchPhase): void {
-    this.#phase = next;
   }
 
   handlePointerDown(e: PointerEvent, resolved: ResolvedTouchPoint | null): void {
@@ -322,7 +559,7 @@ export class TouchGestureController {
         return;
       }
 
-      this.#setPhase('doubleTapDragging');
+      this.#phase = 'doubleTapDragging';
     }
 
     if (this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') {
@@ -483,238 +720,5 @@ export class TouchGestureController {
 
   destroy(): void {
     this.#resetSession();
-  }
-
-  #startLongPressTimer(): void {
-    this.#clearLongPressTimer();
-    this.#longPressTimer = setTimeout(() => {
-      if (this.#phase !== 'pressing' || !this.#press) {
-        return;
-      }
-
-      const point = this.#lastClientPoint ?? this.#press;
-      const resolved = this.#editor.resolvePointerCoordinateFromClient(point.x, point.y);
-      if (!resolved) {
-        return;
-      }
-
-      if (this.#press.selectionHit) {
-        this.#setPhase('dndArmed');
-        this.#setDragCandidate(true);
-        this.#setDragArmed(true);
-        this.#suppressTapOnPointerUp = true;
-        this.#updateAutoScroll();
-        return;
-      }
-
-      this.#dispatchPointerClick(resolved, 2);
-      this.#setPhase('doubleTapPending');
-      this.#doubleTapStart = { x: point.x, y: point.y };
-      this.#suppressTapOnPointerUp = true;
-    }, TOUCH_LONG_PRESS_MS);
-  }
-
-  #clearLongPressTimer(): void {
-    if (this.#longPressTimer !== null) {
-      clearTimeout(this.#longPressTimer);
-      this.#longPressTimer = null;
-    }
-  }
-
-  #openTouchContextMenuFromSelection(): void {
-    const zoom = this.#editor.layout?.layoutMode.type === 'paginated' ? this.#editor.displayZoom : 1;
-    const position = computeTouchContextMenuPosition(this.#editor.selection, this.#editor.pageContainerEls, zoom);
-    if (!position) {
-      this.#editor.closeContextMenu();
-      return;
-    }
-
-    this.#editor.openContextMenu({ x: position.x, y: position.y, source: 'touch', placement: position.placement });
-  }
-
-  #openTouchContextMenuFromSelectionDeferred(): void {
-    const requestId = this.#nextContextMenuRequestId();
-    this.#editor.runAfterSettled(() => {
-      if (!this.#isContextMenuRequestActive(requestId)) {
-        return;
-      }
-
-      this.#openTouchContextMenuFromSelection();
-    });
-  }
-
-  #dispatchPointerClick(point: ResolvedTouchPoint, clickCount: number): void {
-    this.#editor.dispatch({
-      type: 'pointerDown',
-      pageIdx: point.pageIdx,
-      x: point.x,
-      y: point.y,
-      clickCount,
-      button: 'primary',
-      modifier: { shift: false, ctrl: false, alt: false, meta: false },
-    });
-    this.#editor.dispatch({
-      type: 'pointerUp',
-      pageIdx: point.pageIdx,
-      x: point.x,
-      y: point.y,
-      button: 'primary',
-      modifier: { shift: false, ctrl: false, alt: false, meta: false },
-    });
-  }
-
-  #resolveDoubleTapDragSelectionContext(): {
-    anchor: SelectionEndpointBounds;
-    doubleTapInitialRange: { anchor: Position; head: Position };
-  } | null {
-    if (!this.#doubleTapInitialRange) {
-      const selection = this.#editor.selection;
-      if (!selection || selection.collapsed) {
-        return null;
-      }
-
-      this.#doubleTapInitialRange = { anchor: selection.anchor, head: selection.head };
-    }
-
-    if (!this.#dragAnchor) {
-      const handles = getOrderedSelectionHandles(this.#editor.selection);
-      if (!handles) {
-        return null;
-      }
-      this.#dragAnchor = handles.from;
-    }
-
-    if (!this.#dragAnchor || !this.#doubleTapInitialRange) {
-      return null;
-    }
-
-    return {
-      anchor: this.#dragAnchor,
-      doubleTapInitialRange: this.#doubleTapInitialRange,
-    };
-  }
-
-  #dispatchDragSelectionAtCurrentPoint(): void {
-    const current = this.#lastClientPoint;
-    if (!current) {
-      return;
-    }
-
-    const resolved = this.#editor.resolvePointerCoordinateFromClient(current.x, current.y);
-    if (!resolved) {
-      return;
-    }
-
-    let anchor = this.#dragAnchor;
-    let doubleTapInitialRange: { anchor: Position; head: Position } | undefined;
-
-    if (this.#phase === 'doubleTapDragging') {
-      const context = this.#resolveDoubleTapDragSelectionContext();
-      if (!context) {
-        return;
-      }
-
-      anchor = context.anchor;
-      doubleTapInitialRange = context.doubleTapInitialRange;
-    } else if (!anchor) {
-      return;
-    }
-
-    this.#editor.dispatch({
-      type: 'extendSelectionTo',
-      anchorPageIdx: anchor.pageIdx,
-      anchorX: anchor.bounds.x,
-      anchorY: anchor.bounds.y + anchor.bounds.height / 2,
-      headPageIdx: resolved.pageIdx,
-      headX: resolved.x,
-      headY: resolved.y,
-      doubleTapInitialRange,
-    });
-  }
-
-  #updateAutoScroll(): void {
-    if (!this.#shouldAutoScroll() || this.#lastClientPoint === null || this.#editor.scrollViewport === null) {
-      this.#stopAutoScroll();
-      return;
-    }
-
-    if (this.#autoScrollCleanup !== null) {
-      this.#autoScrollCleanup();
-      this.#autoScrollCleanup = null;
-    }
-
-    const pointer = this.#lastClientPoint;
-    this.#autoScrollCleanup =
-      handleDragScroll(this.#editor.scrollViewport, true, {
-        scrollZoneSize: TOUCH_EDGE_SCROLL_THRESHOLD_PX,
-        minScrollSpeed: TOUCH_EDGE_MIN_SCROLL_SPEED,
-        maxScrollSpeed: TOUCH_EDGE_MAX_SCROLL_SPEED,
-        axis: 'both',
-        initialPointer: { clientX: pointer.x, clientY: pointer.y },
-        onScrollThrottleMs: 16,
-        onScroll: (clientX, clientY) => {
-          this.#lastClientPoint = { x: clientX, y: clientY };
-          if (this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') {
-            this.#dispatchDragSelectionAtCurrentPoint();
-          }
-        },
-      }) ?? null;
-  }
-
-  #stopAutoScroll(): void {
-    if (this.#autoScrollCleanup !== null) {
-      this.#autoScrollCleanup();
-      this.#autoScrollCleanup = null;
-    }
-  }
-
-  #shouldAutoScroll(): boolean {
-    return this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging' || this.#phase === 'dndArmed';
-  }
-
-  #resetSession(): void {
-    this.#setPhase('idle');
-    this.#activePointerId = null;
-    this.#press = null;
-    this.#dragAnchor = null;
-    this.#doubleTapInitialRange = null;
-    this.#doubleTapStart = null;
-    this.#lastClientPoint = null;
-    this.#suppressTapOnPointerUp = false;
-    this.#movedPastTapThreshold = false;
-    this.#readOnlyDragStarted = false;
-    this.#wasTouchMenuOpenOnPointerDown = false;
-    this.#setDragCandidate(false);
-    this.#setDragArmed(false);
-    this.#clearLongPressTimer();
-    this.#stopAutoScroll();
-  }
-
-  #setDragArmed(armed: boolean): void {
-    if (this.#dragArmed === armed) {
-      return;
-    }
-
-    this.#dragArmed = armed;
-  }
-
-  #setDragCandidate(candidate: boolean): void {
-    if (this.#dragCandidate === candidate) {
-      return;
-    }
-
-    this.#dragCandidate = candidate;
-  }
-
-  #clearNativeSelection(): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    try {
-      window.getSelection()?.removeAllRanges();
-    } catch {
-      // ignore
-    }
   }
 }

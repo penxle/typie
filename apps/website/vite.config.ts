@@ -23,27 +23,29 @@ const wasmReloadPlugin = (): Plugin => {
       server.watcher.add([editorPkgDir]);
     },
     handleHotUpdate({ file, server }) {
-      if (file.startsWith(editorPkgDir) && !file.endsWith('.gitignore')) {
-        changedFiles.add(file);
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          const time = new Date().toLocaleTimeString();
-          const filesArray = [...changedFiles];
-          const mainFile = path.basename(filesArray[0]);
-          const extraCount = filesArray.length - 1;
-          const fileInfo = extraCount > 0 ? `${mainFile} (+${extraCount})` : mainFile;
-
-          console.log(
-            `\u001B[90m${time}\u001B[0m \u001B[36m[wasm-reload]\u001B[0m \u001B[32mWASM Reloaded\u001B[0m \u001B[90m${fileInfo}\u001B[0m`,
-          );
-          server.ws.send({
-            type: 'full-reload',
-            path: '*',
-          });
-          changedFiles.clear();
-        }, 100);
-        return [];
+      if (!(file.startsWith(editorPkgDir) && !file.endsWith('.gitignore'))) {
+        return;
       }
+
+      changedFiles.add(file);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const time = new Date().toLocaleTimeString();
+        const filesArray = [...changedFiles];
+        const mainFile = path.basename(filesArray[0]);
+        const extraCount = filesArray.length - 1;
+        const fileInfo = extraCount > 0 ? `${mainFile} (+${extraCount})` : mainFile;
+
+        console.log(
+          `\u{1B}[90m${time}\u{1B}[0m \u{1B}[36m[wasm-reload]\u{1B}[0m \u{1B}[32mWASM Reloaded\u{1B}[0m \u{1B}[90m${fileInfo}\u{1B}[0m`,
+        );
+        server.ws.send({
+          type: 'full-reload',
+          path: '*',
+        });
+        changedFiles.clear();
+      }, 100);
+      return [];
     },
   };
 };

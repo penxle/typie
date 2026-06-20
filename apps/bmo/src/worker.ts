@@ -316,7 +316,7 @@ export const handler = async (event: SlackAppMentionEvent) => {
                 entries.push({ type: 'text', text: latestAssistantText });
               }
             }
-            if (!entries.some((e) => e.type === 'text')) {
+            if (entries.every((e) => e.type !== 'text')) {
               entries.push({ type: 'error', text: '응답을 생성할 수 없었어요.' });
             }
             await flushSlackMessage();

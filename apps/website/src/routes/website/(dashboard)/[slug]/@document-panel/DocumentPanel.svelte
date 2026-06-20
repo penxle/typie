@@ -75,7 +75,7 @@
   const paneGroup = getPaneGroup();
 
   const isExpanded = $derived(
-    Boolean(paneGroup.state.current.panelExpandedByPaneId[paneId] && paneGroup.state.current.panelTabByPaneId[paneId]),
+    paneGroup.state.current.panelExpandedByPaneId[paneId] === true && Object.hasOwn(paneGroup.state.current.panelTabByPaneId, paneId),
   );
 
   type Resizer = {

@@ -176,13 +176,13 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
       if (paneId !== newPaneId) {
         const { panelExpandedByPaneId, panelTabByPaneId } = context.state.current;
 
-        if (paneId in panelExpandedByPaneId) {
+        if (Object.hasOwn(panelExpandedByPaneId, paneId)) {
           panelExpandedByPaneId[newPaneId] = panelExpandedByPaneId[paneId];
           // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
           delete panelExpandedByPaneId[paneId];
         }
 
-        if (paneId in panelTabByPaneId) {
+        if (Object.hasOwn(panelTabByPaneId, paneId)) {
           panelTabByPaneId[newPaneId] = panelTabByPaneId[paneId];
           // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
           delete panelTabByPaneId[paneId];

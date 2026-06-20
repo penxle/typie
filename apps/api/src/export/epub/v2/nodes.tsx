@@ -119,7 +119,7 @@ export const epubVisitorV2: NodeVisitorV2<EpubConvertContext, React.ReactNode> =
     const widthPercent = Math.round(t.proportion * 100);
 
     return (
-      <table style={{ ...(hasBorder ? { border: '1px solid #cccccc' } : {}), width: `${widthPercent}%` }}>
+      <table style={{ ...(hasBorder && { border: '1px solid #cccccc' }), width: `${widthPercent}%` }}>
         <tbody>
           {t.rows.map((row, ri) => (
             <tr key={ri}>

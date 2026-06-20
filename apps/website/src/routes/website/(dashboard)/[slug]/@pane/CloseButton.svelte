@@ -41,7 +41,7 @@
       if (!success) return;
 
       mixpanel.track('close_pane');
-    });
+    }, 0);
   }}
   onfocusin={(e) => {
     e.stopPropagation();

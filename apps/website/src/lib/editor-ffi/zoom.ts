@@ -14,8 +14,8 @@ export type ZoomBounds = {
 
 export function computePaginatedZoomBounds(pageWidth: number, minDisplayWidth = MIN_DOCUMENT_DISPLAY_WIDTH): ZoomBounds {
   const safePageWidth = Number.isFinite(pageWidth) && pageWidth > 0 ? pageWidth : 1;
-  const minZoom = clamp(minDisplayWidth / safePageWidth, 0.01, Number.POSITIVE_INFINITY);
-  const maxZoom = clamp(MAX_DOCUMENT_ZOOM, minZoom, Number.POSITIVE_INFINITY);
+  const minZoom = clamp(minDisplayWidth / safePageWidth, 0.01, Infinity);
+  const maxZoom = clamp(MAX_DOCUMENT_ZOOM, minZoom, Infinity);
   return { min: minZoom, max: maxZoom };
 }
 
@@ -44,7 +44,7 @@ export function clampPaginatedZoom({ zoom, pageWidth, viewportWidth }: { zoom: n
   const unitZoom = clampDocumentZoom(1, bounds);
 
   let snapped: number | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestDistance = Infinity;
 
   const fitWidthDistance = Math.abs(clamped - fitWidthZoom);
   if (fitWidthDistance <= FIT_WIDTH_ZOOM_SNAP_THRESHOLD) {

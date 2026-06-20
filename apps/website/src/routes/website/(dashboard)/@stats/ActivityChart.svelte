@@ -79,10 +79,10 @@
 
   const compressionRange = $derived.by(() => {
     const allValues: number[] = [];
-    daysData.forEach((d) => {
+    for (const d of daysData) {
       const effectiveTotal = (showAdditions ? d.additions : 0) + (showDeletions ? d.deletions : 0);
       if (effectiveTotal > 0) allValues.push(effectiveTotal);
-    });
+    }
 
     if (allValues.length === 0) return { start: 0, end: 0 };
 

@@ -10,13 +10,17 @@ export const reroute: Reroute = async ({ url }) => {
     url.pathname === '/_internal/ffi'
   ) {
     return url.pathname;
-  } else if (url.origin === env.PUBLIC_AUTH_URL) {
+  }
+  if (url.origin === env.PUBLIC_AUTH_URL) {
     return `/auth${url.pathname}`;
-  } else if (url.origin === env.PUBLIC_WEBSITE_URL) {
+  }
+  if (url.origin === env.PUBLIC_WEBSITE_URL) {
     return `/website${url.pathname}`;
-  } else if (url.host === env.PUBLIC_USERSITE_HOST) {
+  }
+  if (url.host === env.PUBLIC_USERSITE_HOST) {
     return `/usersite/apex${url.pathname}`;
-  } else if (url.host.endsWith(`.${env.PUBLIC_USERSITE_HOST}`)) {
+  }
+  if (url.host.endsWith(`.${env.PUBLIC_USERSITE_HOST}`)) {
     return `/usersite/wildcard${url.pathname}`;
   }
 

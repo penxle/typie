@@ -52,12 +52,15 @@
       open = false;
     },
     onError: (error) => {
-      if (error instanceof TypieError) {
-        if (error.code === 'invalid_password') {
-          throw new FormError('currentPassword', '비밀번호가 일치하지 않습니다.');
-        } else if (error.code === 'current_password_required') {
-          throw new FormError('currentPassword', '현재 비밀번호를 입력해주세요.');
-        }
+      if (!(error instanceof TypieError)) {
+        return;
+      }
+
+      if (error.code === 'invalid_password') {
+        throw new FormError('currentPassword', '비밀번호가 일치하지 않습니다.');
+      }
+      if (error.code === 'current_password_required') {
+        throw new FormError('currentPassword', '현재 비밀번호를 입력해주세요.');
       }
     },
   });

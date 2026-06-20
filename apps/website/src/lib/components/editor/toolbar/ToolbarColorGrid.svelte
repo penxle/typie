@@ -72,7 +72,7 @@
       (buttons[nextPos] as HTMLElement).focus();
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      const prevPos = pos - 1 >= 0 ? pos - 1 : buttons.length - 1;
+      const prevPos = (pos >= 1 ? pos : buttons.length) - 1;
       (buttons[prevPos] as HTMLElement).focus();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();

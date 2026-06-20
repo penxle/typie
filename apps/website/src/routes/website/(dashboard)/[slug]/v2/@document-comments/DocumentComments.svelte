@@ -151,7 +151,7 @@
 
   $effect(() => {
     if (composing) return;
-    if (activeThreadId && !justCreated.has(activeThreadId) && !threads.some((t) => t.id === activeThreadId)) {
+    if (activeThreadId && !justCreated.has(activeThreadId) && threads.every((t) => t.id !== activeThreadId)) {
       close(false);
     }
   });

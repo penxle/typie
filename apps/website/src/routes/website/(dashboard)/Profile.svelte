@@ -92,7 +92,7 @@
         }
       };
 
-      document.addEventListener('click', handleClickOutside, true);
+      document.addEventListener('click', handleClickOutside, { capture: true });
 
       const cleanup = pushEscapeHandler(() => {
         close();
@@ -165,12 +165,14 @@
   });
 
   $effect(() => {
-    if (open) {
-      untrack(() => app.state.openMenuCount++);
-      return () => {
-        untrack(() => app.state.openMenuCount--);
-      };
+    if (!open) {
+      return;
     }
+
+    untrack(() => app.state.openMenuCount++);
+    return () => {
+      untrack(() => app.state.openMenuCount--);
+    };
   });
 
   const staggerChildren = (node: HTMLElement) => {
@@ -258,12 +260,14 @@
             onclick={() => {
               mixpanel.track('logout', { via: 'sidebar' });
 
-              location.href = qs.stringifyUrl({
-                url: '/logout',
-                query: {
-                  redirect_uri: env.PUBLIC_WEBSITE_URL,
-                },
-              });
+              location.assign(
+                qs.stringifyUrl({
+                  url: '/logout',
+                  query: {
+                    redirect_uri: env.PUBLIC_WEBSITE_URL,
+                  },
+                }),
+              );
             }}
             type="button"
           >

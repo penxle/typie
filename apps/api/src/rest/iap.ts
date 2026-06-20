@@ -198,10 +198,9 @@ iap.post('/googleplay', async (c) => {
       if (production) {
         // prod 환경에서는 inAppPurchase 없을 시 오류 반환하고 pubsub에 재시도 맡김
         return c.json({ error: 'invalid_request' }, 400);
-      } else {
-        // dev 환경에서는 inAppPurchase 없어도 무시함
-        return c.json({}, 200);
       }
+      // dev 환경에서는 inAppPurchase 없어도 무시함
+      return c.json({}, 200);
     }
 
     const subscription = await db

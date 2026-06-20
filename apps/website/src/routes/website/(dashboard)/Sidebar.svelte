@@ -290,10 +290,12 @@
   });
 
   $effect(() => {
-    if (sidebarState === 'hidden') {
-      spaceMenuOpen = false;
-      profileOpen = false;
+    if (sidebarState !== 'hidden') {
+      return;
     }
+
+    spaceMenuOpen = false;
+    profileOpen = false;
   });
 
   const handleMouseEnter = () => {

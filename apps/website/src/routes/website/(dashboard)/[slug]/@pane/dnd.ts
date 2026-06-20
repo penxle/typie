@@ -132,10 +132,12 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
   node.style.touchAction = 'none';
 
   const clearHold = () => {
-    if (holdTimer) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
+    if (!holdTimer) {
+      return;
     }
+
+    clearTimeout(holdTimer);
+    holdTimer = null;
   };
 
   const resetState = () => {

@@ -246,7 +246,7 @@
     const rect = track.getBoundingClientRect();
     const geometryetry = axis === 'y' ? y : x;
 
-    const click = axis === 'y' ? e.clientY - rect.top - TRACK_PADDING : e.clientX - rect.left - TRACK_PADDING;
+    const click = (axis === 'y' ? e.clientY - rect.top : e.clientX - rect.left) - TRACK_PADDING;
     const ratio = Math.max(0, Math.min(1, (click - geometryetry.thumbSize / 2) / (geometryetry.trackSize - geometryetry.thumbSize)));
     if (axis === 'y') scrollContainer.scrollTop = ratio * geometryetry.maxScroll;
     else scrollContainer.scrollLeft = ratio * geometryetry.maxScroll;

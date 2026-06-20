@@ -173,6 +173,15 @@ export const markNativeSelectionDragStarted = (editor: Editor): void => {
 class PointerState {
   static #instances = new WeakMap<Editor, PointerState>();
 
+  static of(editor: Editor): PointerState {
+    let state = this.#instances.get(editor);
+    if (!state) {
+      state = new PointerState();
+      this.#instances.set(editor, state);
+    }
+    return state;
+  }
+
   #clickTime = 0;
   #clickX = 0;
   #clickY = 0;
@@ -192,13 +201,56 @@ class PointerState {
     dragging: boolean;
   } | null = null;
 
-  static of(editor: Editor): PointerState {
-    let state = this.#instances.get(editor);
-    if (!state) {
-      state = new PointerState();
-      this.#instances.set(editor, state);
+  #flushDragPending(editor: Editor): void {
+    const point = this.#dragPending;
+    this.#dragPending = null;
+    if (!point) return;
+
+    if (this.#extendSelectionTo(editor, point, { respectThreshold: true })) {
+      this.#edgeAutoScroll.update(editor, point, (clientX, clientY) => {
+        if (editor.destroyed) {
+          this.#edgeAutoScroll.stop();
+          return;
+        }
+
+        const local = editor.clientToLocal(clientX, clientY);
+        if (!local) return;
+
+        if (this.#extendSelectionTo(editor, { ...local, clientX, clientY }, { respectThreshold: false })) {
+          editor.flush();
+        }
+      });
     }
-    return state;
+  }
+
+  #extendSelectionTo(editor: Editor, point: DragPoint, { respectThreshold }: { respectThreshold: boolean }): boolean {
+    if (!this.#session?.anchor) return false;
+    const { down } = this.#session;
+    const dx = point.x - down.x;
+    const dy = point.y - down.y;
+    if (
+      respectThreshold &&
+      !this.#session.dragging &&
+      point.page === down.page &&
+      dx * dx + dy * dy < DRAG_START_THRESHOLD_PX * DRAG_START_THRESHOLD_PX
+    ) {
+      return false;
+    }
+
+    this.#session.dragging = true;
+    editor.enqueue({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: this.#session.anchor,
+        head_page: point.page,
+        head_x: point.x,
+        head_y: point.y,
+        base_selection: this.#session.baseSelection,
+        allow_collapse: this.#session.baseSelection === undefined,
+      },
+    });
+    return true;
   }
 
   resolveClickCount(e: PointerEvent): number {
@@ -288,57 +340,5 @@ class PointerState {
     if (this.#session?.nativeDragCandidate) {
       this.#session.nativeDragStarted = true;
     }
-  }
-
-  #flushDragPending(editor: Editor): void {
-    const point = this.#dragPending;
-    this.#dragPending = null;
-    if (!point) return;
-
-    if (this.#extendSelectionTo(editor, point, { respectThreshold: true })) {
-      this.#edgeAutoScroll.update(editor, point, (clientX, clientY) => {
-        if (editor.destroyed) {
-          this.#edgeAutoScroll.stop();
-          return;
-        }
-
-        const local = editor.clientToLocal(clientX, clientY);
-        if (!local) return;
-
-        if (this.#extendSelectionTo(editor, { ...local, clientX, clientY }, { respectThreshold: false })) {
-          editor.flush();
-        }
-      });
-    }
-  }
-
-  #extendSelectionTo(editor: Editor, point: DragPoint, { respectThreshold }: { respectThreshold: boolean }): boolean {
-    if (!this.#session?.anchor) return false;
-    const { down } = this.#session;
-    const dx = point.x - down.x;
-    const dy = point.y - down.y;
-    if (
-      respectThreshold &&
-      !this.#session.dragging &&
-      point.page === down.page &&
-      dx * dx + dy * dy < DRAG_START_THRESHOLD_PX * DRAG_START_THRESHOLD_PX
-    ) {
-      return false;
-    }
-
-    this.#session.dragging = true;
-    editor.enqueue({
-      type: 'selection',
-      op: {
-        type: 'extend_to',
-        anchor: this.#session.anchor,
-        head_page: point.page,
-        head_x: point.x,
-        head_y: point.y,
-        base_selection: this.#session.baseSelection,
-        allow_collapse: this.#session.baseSelection === undefined,
-      },
-    });
-    return true;
   }
 }

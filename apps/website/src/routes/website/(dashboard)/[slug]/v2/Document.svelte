@@ -99,14 +99,16 @@
     void ctx.resetKey;
 
     return () => {
-      if (prevDocumentId !== null) {
-        if (mountedTimer !== null) clearTimeout(mountedTimer);
-        mounted = false;
-        mountedTimer = setTimeout(() => {
-          mountedTimer = null;
-          mounted = true;
-        }, 0);
+      if (prevDocumentId === null) {
+        return;
       }
+
+      if (mountedTimer !== null) clearTimeout(mountedTimer);
+      mounted = false;
+      mountedTimer = setTimeout(() => {
+        mountedTimer = null;
+        mounted = true;
+      }, 0);
     };
   });
 </script>

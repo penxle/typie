@@ -122,7 +122,8 @@ export const payAmountWithBillingKey = async (
           creditAmount,
           data: { approvalNumber: result.approvalNumber, receiptUrl: result.receiptUrl },
         };
-      } else if (result.status === 'failed') {
+      }
+      if (result.status === 'failed') {
         return {
           status: 'failed',
           billingAmount,
@@ -218,7 +219,8 @@ export const payInvoiceWithBillingKey = async (tx: Transaction, invoiceId: strin
         await compensateReferrer(tx, invoice.userId);
 
         return true;
-      } else if (result.status === 'failed') {
+      }
+      if (result.status === 'failed') {
         await tx.insert(PaymentRecords).values({
           invoiceId: invoice.id,
           outcome: PaymentOutcome.FAILURE,

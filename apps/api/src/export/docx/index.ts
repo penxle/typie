@@ -266,7 +266,7 @@ const docxVisitor: NodeVisitor<ConvertContext, FileChild[]> = {
     }
 
     const titleParagraph = new Paragraph({
-      children: [new TextRun({ text: '\u25B6 ', bold: true }), ...(titleChildren ?? [])],
+      children: [new TextRun({ text: '\u{25B6} ', bold: true }), ...(titleChildren ?? [])],
       run: { bold: true },
       spacing: { after: 0 },
     });

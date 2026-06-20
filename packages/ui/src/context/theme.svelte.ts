@@ -28,9 +28,8 @@ export class ThemeState {
     const value = this.#overrideTheme ?? this.#currentTheme;
     if (value === 'auto') {
       return this.#prefersDark.current ? 'dark' : 'light';
-    } else {
-      return value;
     }
+    return value;
   });
 
   #lightVariant = $state<LightVariant>('white');

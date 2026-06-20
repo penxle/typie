@@ -37,9 +37,9 @@ const theme: Handle = async ({ event, resolve }) => {
       const defaultTheme = event.url.pathname.includes('_webview') ? 'light' : 'auto';
       const themeValue = theme && ['auto', 'light', 'dark'].includes(theme) ? theme : defaultTheme;
       return html
-        .replace('%app.theme%', themeValue)
-        .replace('%app.variant.light%', lightVariant)
-        .replace('%app.variant.dark%', darkVariant);
+        .replace('%app.theme%', () => themeValue)
+        .replace('%app.variant.light%', () => lightVariant)
+        .replace('%app.variant.dark%', () => darkVariant);
     },
   });
 };

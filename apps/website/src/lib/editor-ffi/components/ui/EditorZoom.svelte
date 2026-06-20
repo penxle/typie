@@ -266,10 +266,12 @@
   });
 
   $effect(() => {
-    if (!active || !isPaginated) {
-      pinchSession = null;
-      pinchQueuedUpdate = null;
+    if (!(!active || !isPaginated)) {
+      return;
     }
+
+    pinchSession = null;
+    pinchQueuedUpdate = null;
   });
 </script>
 

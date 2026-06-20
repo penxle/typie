@@ -783,7 +783,7 @@
                   });
                 } else {
                   updateTemplate({
-                    layout: { type: 'continuous', maxWidth: layout.type === 'continuous' ? layout.maxWidth : defaultValues.maxWidth },
+                    layout: { type: 'continuous', maxWidth: (layout.type === 'continuous' ? layout : defaultValues).maxWidth },
                   });
                 }
               }}
@@ -963,7 +963,7 @@
                   updateTemplate({ layout: { type: 'continuous', maxWidth: value } });
                 }}
                 size="sm"
-                value={layout.type === 'continuous' ? layout.maxWidth : defaultValues.maxWidth}
+                value={(layout.type === 'continuous' ? layout : defaultValues).maxWidth}
               />
             </div>
           {/snippet}

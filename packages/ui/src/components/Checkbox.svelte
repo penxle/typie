@@ -5,14 +5,14 @@
   import type { Snippet } from 'svelte';
   import type { HTMLInputAttributes } from 'svelte/elements';
 
-  type Props = {
-    style?: SystemStyleObject;
-    checked?: boolean;
-    children?: Snippet;
-    label?: string;
-    clickPadding?: boolean;
-  } & Omit<HTMLInputAttributes, 'size' | 'style'> &
-    RecipeVariantProps<typeof recipe>;
+  type Props = Omit<HTMLInputAttributes, 'size' | 'style'> &
+    RecipeVariantProps<typeof recipe> & {
+      style?: SystemStyleObject;
+      checked?: boolean;
+      children?: Snippet;
+      label?: string;
+      clickPadding?: boolean;
+    };
 
   let {
     size = 'md',

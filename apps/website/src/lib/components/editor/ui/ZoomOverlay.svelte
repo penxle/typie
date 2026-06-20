@@ -45,10 +45,12 @@
 
   $effect(() => {
     return () => {
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
+      if (!hideTimer) {
+        return;
       }
+
+      clearTimeout(hideTimer);
+      hideTimer = null;
     };
   });
 

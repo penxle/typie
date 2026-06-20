@@ -37,7 +37,6 @@ healthz.get('/readiness', async (c) => {
   const all = Object.values(checks).every((check) => check === true);
   if (all) {
     return c.json({ '*': true, ...checks });
-  } else {
-    return c.json({ '*': false, ...checks }, 503);
   }
+  return c.json({ '*': false, ...checks }, 503);
 });

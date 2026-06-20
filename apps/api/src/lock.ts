@@ -21,6 +21,51 @@ export class Lock {
     this.#controller = new AbortController();
   }
 
+  #start() {
+    if (!this.#acquired) return;
+
+    this.#timer = setInterval(async () => {
+      try {
+        const renewed = await this.#extend();
+        if (!renewed) {
+          this.#stop();
+          this.#acquired = false;
+          this.#controller.abort();
+        }
+      } catch {
+        this.#stop();
+        this.#acquired = false;
+        this.#controller.abort();
+      }
+    }, 10_000);
+
+    this.#timer.unref();
+  }
+
+  #stop() {
+    if (!this.#timer) {
+      return;
+    }
+
+    clearInterval(this.#timer);
+    this.#timer = undefined;
+  }
+
+  async #extend() {
+    if (!this.#acquired) return false;
+
+    const script = dedent`
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("expire", KEYS[1], ARGV[2])
+      else
+        return 0
+      end
+    `;
+
+    const result = await redis.eval(script, 1, this.#lockKey, this.#id, 30);
+    return result === 1;
+  }
+
   get signal(): AbortSignal {
     return this.#controller.signal;
   }
@@ -80,49 +125,6 @@ export class Lock {
     }
 
     return false;
-  }
-
-  #start() {
-    if (!this.#acquired) return;
-
-    this.#timer = setInterval(async () => {
-      try {
-        const renewed = await this.#extend();
-        if (!renewed) {
-          this.#stop();
-          this.#acquired = false;
-          this.#controller.abort();
-        }
-      } catch {
-        this.#stop();
-        this.#acquired = false;
-        this.#controller.abort();
-      }
-    }, 10_000);
-
-    this.#timer.unref();
-  }
-
-  #stop() {
-    if (this.#timer) {
-      clearInterval(this.#timer);
-      this.#timer = undefined;
-    }
-  }
-
-  async #extend() {
-    if (!this.#acquired) return false;
-
-    const script = dedent`
-      if redis.call("get", KEYS[1]) == ARGV[1] then
-        return redis.call("expire", KEYS[1], ARGV[2])
-      else
-        return 0
-      end
-    `;
-
-    const result = await redis.eval(script, 1, this.#lockKey, this.#id, 30);
-    return result === 1;
   }
 }
 

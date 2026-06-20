@@ -15,7 +15,7 @@ const plugin = () => {
         }
       });
 
-      darkThemeRules.forEach((rule) => {
+      for (const rule of darkThemeRules) {
         let mediaSelector;
 
         const variantMatch = rule.selector.match(/\[data-variant-dark=['"]?([^'"\]]+)['"]?\]/);
@@ -48,7 +48,7 @@ const plugin = () => {
 
         mediaRule.append(innerRule);
         rule.parent.insertAfter(rule, mediaRule);
-      });
+      }
     },
   };
 };

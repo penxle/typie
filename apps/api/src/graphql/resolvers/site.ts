@@ -30,7 +30,7 @@ ISite.implement({
 
     dateDisplay: t.expose('dateDisplay', { type: SiteDateDisplay }),
 
-    url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', self.slug) }),
+    url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', () => self.slug) }),
   }),
 });
 

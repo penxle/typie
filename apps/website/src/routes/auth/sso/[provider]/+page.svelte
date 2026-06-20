@@ -53,7 +53,7 @@
       const loginUrl = qs.stringifyUrl({
         url: `${env.PUBLIC_AUTH_URL}/login`,
         query: {
-          ...(state ? deserializeOAuthState(state) : {}),
+          ...(state && deserializeOAuthState(state)),
           toast: '로그인 중 오류가 발생했습니다. 다시 시도해주세요.',
         },
       });

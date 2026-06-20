@@ -334,10 +334,12 @@
   };
 
   const clearDragTimeout = () => {
-    if (dragTimeout) {
-      clearTimeout(dragTimeout);
-      dragTimeout = null;
+    if (!dragTimeout) {
+      return;
     }
+
+    clearTimeout(dragTimeout);
+    dragTimeout = null;
   };
 
   const clearPendingTouchDrag = () => {
@@ -454,7 +456,7 @@
 
     const targetElement =
       document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-id]') ??
-      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
+      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector(':scope > [data-id]:last-child');
 
     if (!targetElement && dragging.eligible && dragging.element.dataset.type === 'document') {
       const zone = paneGroup.hitTest(clientX, clientY);
@@ -548,11 +550,13 @@
 
         if (!detailsElement.open) {
           folderHoverTimeout = setTimeout(async () => {
-            if (hoveredFolderId === folderId && dragging?.eligible && detailsElement) {
-              detailsElement.open = true;
-              await tick();
-              updateDropTarget(clientX, clientY);
+            if (!(hoveredFolderId === folderId && dragging?.eligible && detailsElement)) {
+              return;
             }
+
+            detailsElement.open = true;
+            await tick();
+            updateDropTarget(clientX, clientY);
           }, 500);
         }
       }
@@ -756,7 +760,8 @@
           Toast.error('삭제 중 오류가 발생했습니다');
         }
         return;
-      } else if (target === 'tree') {
+      }
+      if (target === 'tree') {
         const { parentId, lowerOrder, upperOrder } = dragging.drop;
 
         endDragging();
@@ -770,7 +775,8 @@
         });
         mixpanel.track('move_entities', { totalCount: selectedIds.length, parentEntityId: parentId ?? null, lowerOrder, upperOrder });
         return;
-      } else if (target === 'view') {
+      }
+      if (target === 'view') {
         const entitySlug = dragging.element.dataset.slug;
         const entityType = dragging.element.dataset.type;
         if (entitySlug && entityType === 'document') {
@@ -796,10 +802,12 @@
   };
 
   const handleContextMenuCapture: MouseEventHandler<HTMLDivElement> = (e) => {
-    if (pendingTouchDrag || (dragging && dragging.event.pointerType === 'touch')) {
-      e.preventDefault();
-      e.stopPropagation();
+    if (!(pendingTouchDrag || (dragging && dragging.event.pointerType === 'touch'))) {
+      return;
     }
+
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const endDragging = (canceled = false) => {

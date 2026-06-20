@@ -3,7 +3,7 @@ import { env } from '../env.ts';
 
 export const client = PortOneClient({ secret: env.PORTONE_API_SECRET });
 
-type PortOneSuccessResult<T> = { status: 'succeeded' } & T;
+type PortOneSuccessResult<T> = T & { status: 'succeeded' };
 type PortOneFailureResult = { status: 'failed'; code: string; message: string };
 
 type PortOneResult<T> = PortOneSuccessResult<T> | PortOneFailureResult;
@@ -186,17 +186,17 @@ const makeFailureResult = (error: unknown): PortOneFailureResult => {
           code: error.data.pgCode,
           message: error.data.pgMessage,
         };
-      } else if (error instanceof Error) {
+      }
+      if (error instanceof Error) {
         return {
           code: error.name,
           message: error.message,
         };
-      } else {
-        return {
-          code: 'unknown',
-          message: String(error),
-        };
       }
+      return {
+        code: 'unknown',
+        message: String(error),
+      };
     })(),
   };
 };

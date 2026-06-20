@@ -7,9 +7,9 @@ export const resolveAppStoreUrl = (userAgent: string | null | undefined, desktop
 
   if (/android/i.test(userAgent)) {
     return PLAY_STORE_URL;
-  } else if (/iphone|ipad|ipod/i.test(userAgent)) {
-    return APP_STORE_URL;
-  } else {
-    return desktopFallback;
   }
+  if (/iphone|ipad|ipod/i.test(userAgent)) {
+    return APP_STORE_URL;
+  }
+  return desktopFallback;
 };

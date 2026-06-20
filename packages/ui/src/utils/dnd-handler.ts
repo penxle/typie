@@ -142,10 +142,12 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   };
 
   const handlePointerCancel = () => {
-    if (dragging) {
-      cleanup();
-      onDragCancel?.();
+    if (!dragging) {
+      return;
     }
+
+    cleanup();
+    onDragCancel?.();
   };
 
   const handlePointerDown = (e: PointerEvent) => {
@@ -223,10 +225,12 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && dragging) {
-      cleanup();
-      onDragCancel?.();
+    if (!(e.key === 'Escape' && dragging)) {
+      return;
     }
+
+    cleanup();
+    onDragCancel?.();
   };
 
   node.addEventListener('pointercancel', handlePointerCancel);

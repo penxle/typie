@@ -31,7 +31,8 @@ export const getClientAddress = (c: Context) => {
         R.map((v) => v.trim()),
         R.filter((v) => IPAddr.isValid(v)),
         R.map((v) => IPAddr.parse(v)),
-        R.filter((v) => !proxies.some((p) => v.match(p))),
+        // eslint-disable-next-line unicorn/prefer-regexp-test -- v is an ipaddr.js IPv4/IPv6, .match(cidr) is CIDR matching, not String#match
+        R.filter((v) => proxies.every((p) => !v.match(p))),
         R.findLast((v) => v.range() !== 'private'),
       );
 

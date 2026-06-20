@@ -21,7 +21,7 @@ export function applySvgRootColor(svg: string, color?: string | null): string {
 
   return svg.replace(/^<svg\b([^>]*)>/, (_match, attrs: string) => {
     if (/\scolor=/.test(attrs)) {
-      return `<svg${attrs.replace(/\scolor="[^"]*"/, ` color="${color}"`)}>`;
+      return `<svg${attrs.replace(/\scolor="[^"]*"/, () => ` color="${color}"`)}>`;
     }
 
     return `<svg color="${color}"${attrs}>`;

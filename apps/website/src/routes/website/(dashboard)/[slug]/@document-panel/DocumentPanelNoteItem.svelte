@@ -372,18 +372,19 @@
         handleContentChanged();
       }}
       onkeydown={(e) => {
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
-          e.preventDefault();
-          onAddNote();
+        if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing)) {
+          return;
         }
+
+        e.preventDefault();
+        onAddNote();
       }}
       placeholder={displayStatus === 'RESOLVED' && !resolving
         ? '(내용 없음)'
         : '기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요.'}
       rows={1}
       bind:value={content}
-      use:autosize={{ cacheKey: `document-panel-note-${note.data.id}` }}
-    ></textarea>
+      use:autosize={{ cacheKey: `document-panel-note-${note.data.id}` }}></textarea>
   </div>
 
   <!-- ⋯ More button with Menu -->

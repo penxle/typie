@@ -83,8 +83,7 @@ export const getMinSizeForMember = (node: Member, parentDirection: 'horizontal' 
     const childrenMinSize = node.children.reduce((sum: number, child: Member) => sum + getMinSizeForMember(child, parentDirection), 0);
     const resizerCount = Math.max(0, node.children.length - 1);
     return childrenMinSize + resizerCount * PANE_RESIZER_SIZE;
-  } else {
-    // NOTE: 부모와 다른 방향: 자식들 중 최대 크기
-    return Math.max(...node.children.map((child: Member) => getMinSizeForMember(child, parentDirection)));
   }
+  // NOTE: 부모와 다른 방향: 자식들 중 최대 크기
+  return Math.max(...node.children.map((child: Member) => getMinSizeForMember(child, parentDirection)));
 };

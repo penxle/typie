@@ -27,7 +27,7 @@ const TARGET_MAJOR_DISPLAY_PX = 80;
 
 function pickNearest(value: number, candidates: readonly number[]): number {
   let best = candidates[0] ?? value;
-  let bestScore = Number.POSITIVE_INFINITY;
+  let bestScore = Infinity;
 
   for (const candidate of candidates) {
     const score = Math.abs(candidate - value);
@@ -102,14 +102,13 @@ export function calculateTicks({ totalSize, unit, dpi, zoom = 1 }: CalculateTick
 export function formatTickLabel(value: number, unit: 'px' | 'cm'): string {
   if (unit === 'px') {
     return Math.round(value).toString();
-  } else {
-    const rounded = Math.round(value * 100) / 100;
-    if (Math.abs(rounded - Math.round(rounded)) < 0.0001) {
-      return Math.round(rounded).toString();
-    }
-    if (Math.abs(rounded * 10 - Math.round(rounded * 10)) < 0.0001) {
-      return rounded.toFixed(1);
-    }
-    return rounded.toFixed(2);
   }
+  const rounded = Math.round(value * 100) / 100;
+  if (Math.abs(rounded - Math.round(rounded)) < 0.0001) {
+    return Math.round(rounded).toString();
+  }
+  if (Math.abs(rounded * 10 - Math.round(rounded * 10)) < 0.0001) {
+    return rounded.toFixed(1);
+  }
+  return rounded.toFixed(2);
 }

@@ -135,17 +135,19 @@
     };
 
     const handleClick = (e: MouseEvent) => {
-      if (isSafezoneTarget(e)) {
-        e.stopPropagation();
-        e.preventDefault();
-        submenuOpen = false;
+      if (!isSafezoneTarget(e)) {
+        return;
       }
+
+      e.stopPropagation();
+      e.preventDefault();
+      submenuOpen = false;
     };
 
     menuContainer.dataset.submenuSafezone = '';
     menuContainer.addEventListener('pointerover', handlePointerOver);
-    menuContainer.addEventListener('pointerdown', handlePointerDown, true);
-    menuContainer.addEventListener('click', handleClick, true);
+    menuContainer.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    menuContainer.addEventListener('click', handleClick, { capture: true });
     submenuEl.addEventListener('pointerenter', handleSubmenuEnter);
     return () => {
       clearTimeout(safeZoneTimeout);
@@ -194,17 +196,19 @@
   onblur={() => (focused = false)}
   onfocus={() => (focused = true)}
   onkeydown={(e) => {
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      e.stopPropagation();
-      submenuOpen = true;
-      tick().then(() => {
-        const items = getSubmenuItems();
-        if (items && items.length > 0) {
-          (items[0] as HTMLElement).focus();
-        }
-      });
+    if (e.key !== 'ArrowRight') {
+      return;
     }
+
+    e.preventDefault();
+    e.stopPropagation();
+    submenuOpen = true;
+    tick().then(() => {
+      const items = getSubmenuItems();
+      if (items && items.length > 0) {
+        (items[0] as HTMLElement).focus();
+      }
+    });
   }}
   onpointerenter={() => {
     submenuOpen = true;

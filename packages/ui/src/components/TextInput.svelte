@@ -6,19 +6,19 @@
   import type { Component, Snippet } from 'svelte';
   import type { HTMLInputAttributes } from 'svelte/elements';
 
-  type Props = {
-    style?: SystemStyleObject;
-    element?: HTMLInputElement;
-    name?: string;
-    leftIcon?: Component;
-    rightIcon?: Component;
-    hidden?: boolean;
-    leftItem?: Snippet;
-    rightItem?: Snippet;
-    rightItemAttached?: boolean;
-    autofocus?: boolean;
-  } & RecipeVariantProps<typeof recipe> &
-    Omit<HTMLInputAttributes, 'class' | 'style' | 'size' | 'name' | 'autofocus'>;
+  type Props = RecipeVariantProps<typeof recipe> &
+    Omit<HTMLInputAttributes, 'class' | 'style' | 'size' | 'name' | 'autofocus'> & {
+      style?: SystemStyleObject;
+      element?: HTMLInputElement;
+      name?: string;
+      leftIcon?: Component;
+      rightIcon?: Component;
+      hidden?: boolean;
+      leftItem?: Snippet;
+      rightItem?: Snippet;
+      rightItemAttached?: boolean;
+      autofocus?: boolean;
+    };
 
   let {
     name,
@@ -40,7 +40,7 @@
     if (autofocus) {
       setTimeout(() => {
         element?.focus();
-      });
+      }, 0);
     }
   });
 

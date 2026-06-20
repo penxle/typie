@@ -10,7 +10,7 @@
     "./"
   ],
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.111",
+    "@iconify-json/lucide": "^1.2.113",
     "@iconify/tools": "^5.0.12"
   }
 }

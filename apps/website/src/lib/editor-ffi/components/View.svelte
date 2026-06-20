@@ -215,11 +215,13 @@
           editor.scrollViewport = useWindowScroll ? windowScrollViewport() : elementScrollViewport(el);
           editor.scrollRootEl = useWindowScroll ? null : el;
           return () => {
-            if (editor.scrollContainerEl === el) {
-              editor.scrollContainerEl = undefined;
-              editor.scrollViewport = undefined;
-              editor.scrollRootEl = undefined;
+            if (editor.scrollContainerEl !== el) {
+              return;
             }
+
+            editor.scrollContainerEl = undefined;
+            editor.scrollViewport = undefined;
+            editor.scrollRootEl = undefined;
           };
         });
       });

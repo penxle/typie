@@ -611,7 +611,7 @@ builder.queryFields((t) => ({
         .then(firstOrThrowWith(new NotFoundError()));
 
       return {
-        siteUrl: env.USERSITE_URL.replace('*', entity.siteSlug),
+        siteUrl: env.USERSITE_URL.replace('*', () => entity.siteSlug),
         entitySlug: entity.entitySlug,
       };
     },

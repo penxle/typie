@@ -91,17 +91,17 @@
     const groups: { date: string; versions: typeof loadedVersions }[] = [];
     const dateGroups: Record<string, typeof loadedVersions> = {};
 
-    loadedVersions.forEach((version) => {
+    for (const version of loadedVersions) {
       const date = dayjs(version.createdAt).format('YYYY년 M월 D일');
-      if (!dateGroups[date]) {
+      if (!Object.hasOwn(dateGroups, date)) {
         dateGroups[date] = [];
       }
       dateGroups[date].unshift(version);
-    });
+    }
 
-    Object.entries(dateGroups).forEach(([date, versionList]) => {
+    for (const [date, versionList] of Object.entries(dateGroups)) {
       groups.push({ date, versions: versionList });
-    });
+    }
 
     return groups.toSorted((a, b) => dayjs(b.versions[0].createdAt).valueOf() - dayjs(a.versions[0].createdAt).valueOf());
   });
@@ -291,7 +291,7 @@
     const ratio = clamp((pointerLeft - parentLeft) / parentWidth, 0, 1);
     const index = Math.round(ratio * max);
 
-    if (versionMetas[index]) {
+    if (Object.hasOwn(versionMetas, index)) {
       selectedVersionId = versionMetas[index].id;
     }
   };

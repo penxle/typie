@@ -68,14 +68,16 @@
   });
 
   $effect(() => {
-    if (templateSlug && query.data && !query.loading) {
-      if (query.data.document.snapshot) {
-        const snapshot = Uint8Array.fromBase64(query.data.document.snapshot);
-        editor.insertTemplateFragment(snapshot);
-      }
-      templateSlug = null;
-      open = false;
+    if (!(templateSlug && query.data && !query.loading)) {
+      return;
     }
+
+    if (query.data.document.snapshot) {
+      const snapshot = Uint8Array.fromBase64(query.data.document.snapshot);
+      editor.insertTemplateFragment(snapshot);
+    }
+    templateSlug = null;
+    open = false;
   });
 
   const loadTemplate = (slug: string) => {

@@ -40,29 +40,33 @@
   let themeMenuOpen = $state(false);
   onMount(() => {
     if (!query.data.me && !document.cookie.includes('typie-af')) {
-      location.href = qs.stringifyUrl({
-        url: `${env.PUBLIC_AUTH_URL}/authorize`,
-        query: {
-          client_id: env.PUBLIC_OIDC_CLIENT_ID,
-          response_type: 'code',
-          redirect_uri: `${page.url.origin}/authorize`,
-          state: serializeOAuthState({ redirect_uri: page.url.href }),
-          prompt: 'none',
-        },
-      });
+      location.assign(
+        qs.stringifyUrl({
+          url: `${env.PUBLIC_AUTH_URL}/authorize`,
+          query: {
+            client_id: env.PUBLIC_OIDC_CLIENT_ID,
+            response_type: 'code',
+            redirect_uri: `${page.url.origin}/authorize`,
+            state: serializeOAuthState({ redirect_uri: page.url.href }),
+            prompt: 'none',
+          },
+        }),
+      );
     }
   });
 
   $effect(() => {
-    if (query.data.me) {
-      mixpanel.identify(query.data.me.id);
-
-      mixpanel.people.set({
-        $email: query.data.me.email,
-        $name: query.data.me.name,
-        $avatar: qs.stringifyUrl({ url: query.data.me.avatar.url, query: { s: 256, f: 'png' } }),
-      });
+    if (!query.data.me) {
+      return;
     }
+
+    mixpanel.identify(query.data.me.id);
+
+    mixpanel.people.set({
+      $email: query.data.me.email,
+      $name: query.data.me.name,
+      $avatar: qs.stringifyUrl({ url: query.data.me.avatar.url, query: { s: 256, f: 'png' } }),
+    });
   });
 
   const authorizeUrl = $derived(
@@ -181,12 +185,14 @@
               onclick={() => {
                 mixpanel.track('logout', { via: 'header' });
 
-                location.href = qs.stringifyUrl({
-                  url: '/logout',
-                  query: {
-                    redirect_uri: page.url.href,
-                  },
-                });
+                location.assign(
+                  qs.stringifyUrl({
+                    url: '/logout',
+                    query: {
+                      redirect_uri: page.url.href,
+                    },
+                  }),
+                );
               }}
             >
               로그아웃

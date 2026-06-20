@@ -23,7 +23,7 @@ export function buildFontSpecimenUrl(apiUrl: string, fontId: string, text: strin
     url.searchParams.append(key, value);
   }
 
-  return url.toString();
+  return url.href;
 }
 
 export function buildFontSpecimenCacheKey(fontId: string, text: string, fallbacks: readonly string[] = []): string {

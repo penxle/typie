@@ -116,10 +116,12 @@
   }
 
   $effect(() => {
-    if (expanded && textareaEl) {
-      textareaEl.focus();
-      textareaEl.setSelectionRange(content.length, content.length);
+    if (!(expanded && textareaEl)) {
+      return;
     }
+
+    textareaEl.focus();
+    textareaEl.setSelectionRange(content.length, content.length);
   });
 </script>
 
@@ -311,17 +313,18 @@
           }}
           oninput={() => handleContentChanged()}
           onkeydown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              e.stopPropagation();
-              flushContentUpdate();
-              oncollapse();
+            if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
+              return;
             }
+
+            e.preventDefault();
+            e.stopPropagation();
+            flushContentUpdate();
+            oncollapse();
           }}
           rows={1}
           bind:value={content}
-          use:autosize={{ cacheKey: `note-${note.id}` }}
-        ></textarea>
+          use:autosize={{ cacheKey: `note-${note.id}` }}></textarea>
       {:else}
         <p
           style:transition={cancelling

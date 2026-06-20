@@ -20,11 +20,12 @@
   function formatNumber(num: number): string {
     if (num >= 100_000_000) {
       const value = (num / 100_000_000).toFixed(1);
-      const formatted = value.endsWith('.0') ? value.slice(0, -2) + '억' : value + '억';
+      const formatted = (value.endsWith('.0') ? value.slice(0, -2) : value) + '억';
       return formatted.replaceAll(/(\d)(?=(\d{3})+(?!\d))/g, '<script lang="ts">,');
-    } else if (num >= 10_000) {
+    }
+    if (num >= 10_000) {
       const value = (num / 10_000).toFixed(1);
-      const formatted = value.endsWith('.0') ? value.slice(0, -2) + '만' : value + '만';
+      const formatted = (value.endsWith('.0') ? value.slice(0, -2) : value) + '만';
       return formatted.replaceAll(/(\d)(?=(\d{3})+(?!\d))/g, '<script lang="ts">,');
     }
     return num.toLocaleString();

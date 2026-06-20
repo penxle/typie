@@ -58,7 +58,7 @@
         (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
     }));
 
-    if (currentWeight != null && !items.some((w) => w.value === currentWeight)) {
+    if (currentWeight != null && items.every((w) => w.value !== currentWeight)) {
       items.push({ value: currentWeight, label: values.fontWeight.find((f) => f.value === currentWeight)?.label ?? String(currentWeight) });
       items.sort((a, b) => a.value - b.value);
     }

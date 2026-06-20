@@ -8,7 +8,7 @@ export type TipOptions = {
 };
 
 const append = (key: string, message: string, options?: TipOptions) => {
-  if (globalThis.window === undefined) {
+  if (window === undefined) {
     throw new TypeError('tip can only be used in browser');
   }
 

@@ -116,18 +116,20 @@
   let editing = $state(false);
 
   $effect(() => {
-    if (editing) {
-      untrack(() => app.state.openMenuCount++);
-
-      // NOTE: Menu 닫힐 때 포커스 트랩에 의해 select 하자마자 blur되지 않도록 setTimeout
-      setTimeout(() => {
-        inputEl?.select();
-      });
-
-      return () => {
-        untrack(() => app.state.openMenuCount--);
-      };
+    if (!editing) {
+      return;
     }
+
+    untrack(() => app.state.openMenuCount++);
+
+    // NOTE: Menu 닫힐 때 포커스 트랩에 의해 select 하자마자 blur되지 않도록 setTimeout
+    setTimeout(() => {
+      inputEl?.select();
+    }, 0);
+
+    return () => {
+      untrack(() => app.state.openMenuCount--);
+    };
   });
 
   $effect(() => {
@@ -158,17 +160,19 @@
   });
 
   $effect(() => {
-    if (app.state.newFolderId === folder.data.id) {
-      editing = true;
-      app.state.newFolderId = undefined;
+    if (app.state.newFolderId !== folder.data.id) {
+      return;
+    }
 
-      if (detailsEl) {
-        const rect = detailsEl.getBoundingClientRect();
-        const isInViewport = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    editing = true;
+    app.state.newFolderId = undefined;
 
-        if (!isInViewport) {
-          detailsEl.scrollIntoView({ behavior: 'instant', block: 'nearest' });
-        }
+    if (detailsEl) {
+      const rect = detailsEl.getBoundingClientRect();
+      const isInViewport = rect.top >= 0 && rect.bottom <= window.innerHeight;
+
+      if (!isInViewport) {
+        detailsEl.scrollIntoView({ behavior: 'instant', block: 'nearest' });
       }
     }
   });
@@ -268,11 +272,13 @@
           defaultValue={folder.data.name}
           onblur={(e) => e.currentTarget.form?.requestSubmit()}
           onkeydown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              e.currentTarget.form?.reset();
-              editing = false;
+            if (e.key !== 'Escape') {
+              return;
             }
+
+            e.preventDefault();
+            e.currentTarget.form?.reset();
+            editing = false;
           }}
         />
       </form>

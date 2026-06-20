@@ -17,9 +17,7 @@ import type { Env } from '#/context.ts';
 type FontFamilyEntry = { source: 'DEFAULT' | 'FALLBACK'; fonts: { id: string; path: string }[] };
 const fontFamilies = fontFamiliesJson as unknown as FontFamilyEntry[];
 
-const defaultFontMap = new Map(
-  fontFamilies.filter((f) => f.source === 'DEFAULT').flatMap((f) => f.fonts.map((v) => [v.id, v.path] as const)),
-);
+const defaultFontMap = new Map(fontFamilies.flatMap((f) => (f.source === 'DEFAULT' ? f.fonts.map((v) => [v.id, v.path] as const) : [])));
 
 export const font = new Hono<Env>();
 

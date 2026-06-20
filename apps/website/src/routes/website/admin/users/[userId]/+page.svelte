@@ -26,7 +26,7 @@
 
   const handleImpersonate = async () => {
     await adminImpersonate({ input: { userId: query.data.adminUser.id } });
-    location.href = '/initial';
+    location.assign('/initial');
   };
 
   const [adminGiveCredit] = createMutation(

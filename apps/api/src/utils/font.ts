@@ -78,7 +78,7 @@ function findBestStrategy(
   const base = fontName.split('-')[0];
 
   for (const [locale, strategyName] of LOCALE_TO_STRATEGY) {
-    if (base.endsWith(locale) && strategyName in strategies) {
+    if (base.endsWith(locale) && Object.hasOwn(strategies, strategyName)) {
       const groups = strategies[strategyName];
       const strategyCps = new Set(groups.flat());
       let overlap = 0;

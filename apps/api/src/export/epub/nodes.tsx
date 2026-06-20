@@ -6,10 +6,10 @@ import type { NodeVisitor } from '../core/traverse.ts';
 import type { Annotation, InlineSegment, NodeEntry, TextSegment } from '../core/types.ts';
 
 const CALLOUT_ICONS: Record<string, string> = {
-  info: '\u2139\uFE0F',
-  success: '\u2705',
-  warning: '\u26A0\uFE0F',
-  danger: '\uD83D\uDEA8',
+  info: '\u{2139}\u{FE0F}',
+  success: '\u{2705}',
+  warning: '\u{26A0}\u{FE0F}',
+  danger: '\u{1F6A8}',
 };
 
 export type EpubConvertContext = {
@@ -130,7 +130,8 @@ function renderInlineContent(entry: NodeEntry, ctx: EpubConvertContext): React.R
     if (childEntry.type === 'text') {
       const segments = (childEntry.text ?? []) as TextSegment[];
       return <Fragment key={i}>{segments.map((seg, j) => renderSegment(seg, j))}</Fragment>;
-    } else if (childEntry.type === 'hard_break') {
+    }
+    if (childEntry.type === 'hard_break') {
       return <br key={i} />;
     }
 
@@ -282,7 +283,7 @@ export const epubVisitor: NodeVisitor<EpubConvertContext, React.ReactNode> = {
         return <blockquote className="left-line">{renderParagraphChildren(entry, ctx)}</blockquote>;
       }
       case 'left_quote': {
-        return <blockquote style={{ marginLeft: 0 }}>{renderPrefixedChildren(entry, ctx, '\u275D\u2002')}</blockquote>;
+        return <blockquote style={{ marginLeft: 0 }}>{renderPrefixedChildren(entry, ctx, '\u{275D}\u{2002}')}</blockquote>;
       }
       case 'message_sent': {
         return <blockquote className="message-sent">{renderParagraphChildren(entry, ctx)}</blockquote>;

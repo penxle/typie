@@ -10,11 +10,11 @@
 
   type Snippets = Record<ColumnKey, Snippet<[T]>>;
 
-  type Props = {
+  type Props = Snippets & {
     columns: Column[];
     dataKey: keyof T;
     data: T[] | undefined;
-  } & Snippets;
+  };
 
   let { columns, dataKey, data, ...rest }: Props = $props();
 

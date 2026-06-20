@@ -139,15 +139,17 @@
       }),
     })}
     {@attach (el) => {
-      if (editor) {
-        editor.pageEls[page] = el;
-        pageEl = el;
-
-        return () => {
-          editor.pageEls[page] = undefined;
-          pageEl = undefined;
-        };
+      if (!editor) {
+        return;
       }
+
+      editor.pageEls[page] = el;
+      pageEl = el;
+
+      return () => {
+        editor.pageEls[page] = undefined;
+        pageEl = undefined;
+      };
     }}
   >
     {#each [0, 1, 2, 3] as layer (layer)}

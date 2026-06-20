@@ -666,10 +666,12 @@
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
-    if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && focused) {
-      e.preventDefault();
-      showFindReplace = true;
+    if (!((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && focused)) {
+      return;
     }
+
+    e.preventDefault();
+    showFindReplace = true;
   }
 
   onDestroy(() => {
@@ -928,10 +930,12 @@
                       color: 'text.subtle',
                     })}
                     onpointerenter={() => {
-                      if (lockedToastTimer) {
-                        clearTimeout(lockedToastTimer);
-                        lockedToastTimer = null;
+                      if (!lockedToastTimer) {
+                        return;
                       }
+
+                      clearTimeout(lockedToastTimer);
+                      lockedToastTimer = null;
                     }}
                     onpointerleave={() => {
                       lockedToastTimer = setTimeout(() => {
@@ -1026,8 +1030,7 @@
                             rows={1}
                             spellcheck="false"
                             bind:value={localTitle}
-                            use:autosize
-                          ></textarea>
+                            use:autosize></textarea>
 
                           <textarea
                             bind:this={subtitleEl}
@@ -1079,8 +1082,7 @@
                             rows={1}
                             spellcheck="false"
                             bind:value={localSubtitle}
-                            use:autosize
-                          ></textarea>
+                            use:autosize></textarea>
 
                           {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
                             <HorizontalDivider style={css.raw({ marginTop: '10px' })} />

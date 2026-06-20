@@ -23,7 +23,9 @@ const createDeps = () => {
       setInflightFile: (nodeId: string, data: { name: string; size: number }) => inflight.set(nodeId, data),
       deleteInflightFile: (nodeId: string) => inflight.delete(nodeId),
       setFileAsset: (asset: FileAsset) => assets.set(asset.id, asset),
-      enqueue: (message: Message) => messages.push(message),
+      enqueue: (message: Message) => {
+        messages.push(message);
+      },
       focus,
     },
     messages,

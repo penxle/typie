@@ -36,7 +36,9 @@ const createDeps = () => {
       setInflightImage: (nodeId: string, image: { url: string; width: number; height: number }) => inflight.set(nodeId, image),
       deleteInflightImage: (nodeId: string) => inflight.delete(nodeId),
       setImageAsset: (asset: ImageAsset) => assets.set(asset.id, asset),
-      enqueue: (message: Message) => messages.push(message),
+      enqueue: (message: Message) => {
+        messages.push(message);
+      },
       focus,
     },
     messages,

@@ -5,11 +5,11 @@
   import type { Component } from 'svelte';
   import type { SVGAttributes } from 'svelte/elements';
 
-  type Props = {
+  type Props = Omit<SVGAttributes<SVGSVGElement>, 'style' | 'size'> & {
     icon: Component;
     style?: SystemStyleObject;
     size?: 12 | 14 | 16 | 18 | 20 | 24 | 28 | 32;
-  } & Omit<SVGAttributes<SVGSVGElement>, 'style' | 'size'>;
+  };
 
   let { icon, style, size = 16, ...rest }: Props = $props();
 </script>

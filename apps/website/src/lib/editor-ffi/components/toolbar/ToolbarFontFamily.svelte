@@ -27,7 +27,7 @@
   const activeFamilies = $derived(fontFamilies.filter((f) => f.state === 'ACTIVE'));
 
   const fontFamilyItems = $derived.by(() => {
-    if (currentFontFamilyValue && !activeFamilies.some((f) => f.familyName === currentFontFamilyValue)) {
+    if (currentFontFamilyValue && activeFamilies.every((f) => f.familyName !== currentFontFamilyValue)) {
       const current = fontFamilies.find((f) => f.familyName === currentFontFamilyValue);
       if (current) {
         return [...activeFamilies, current];

@@ -13,8 +13,8 @@ export const useLogger = (): Plugin<Context> => ({
     Sentry.getCurrentScope().setTransactionName(`POST /graphql (${operationName})`);
 
     return {
-      onExecuteDone(payload) {
-        return handleStreamOrSingleExecutionResult(payload, ({ result }) => {
+      onExecuteDone: (payload) =>
+        handleStreamOrSingleExecutionResult(payload, ({ result }) => {
           if (result.errors?.some((e) => e.extensions?.code === 'RATE_LIMITED')) {
             return;
           }
@@ -24,8 +24,7 @@ export const useLogger = (): Plugin<Context> => ({
             ip: args.contextValue.ip,
             userId: args.contextValue.session?.userId,
           });
-        });
-      },
+        }),
     };
   },
 });

@@ -117,7 +117,7 @@
 
   const fontFamilyItems = $derived.by(() => {
     const families =
-      fontFamily && !activeFontFamilies.some((f) => f.familyName === fontFamily)
+      fontFamily && activeFontFamilies.every((f) => f.familyName !== fontFamily)
         ? [...activeFontFamilies, ...fontFamilies.filter((f) => f.familyName === fontFamily)]
         : activeFontFamilies;
     return families.map((f) => ({ value: f.familyName, label: f.displayName }));
@@ -153,7 +153,7 @@
         (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
     }));
 
-    if (fontWeight != null && !items.some((w) => w.value === fontWeight)) {
+    if (fontWeight != null && items.every((w) => w.value !== fontWeight)) {
       items.push({
         value: fontWeight,
         label: values.fontWeight.find((f) => f.value === fontWeight)?.label ?? String(fontWeight),
@@ -259,7 +259,7 @@
       if (e.key === 'ArrowDown') {
         newIndex = currentIndex === -1 || currentIndex >= sortedSizes.length - 1 ? 0 : currentIndex + 1;
       } else {
-        newIndex = currentIndex === -1 || currentIndex <= 0 ? sortedSizes.length - 1 : currentIndex - 1;
+        newIndex = (currentIndex === -1 || currentIndex <= 0 ? sortedSizes.length : currentIndex) - 1;
       }
 
       const newValue = sortedSizes[newIndex];

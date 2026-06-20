@@ -20,10 +20,12 @@
   });
 
   $effect(() => {
-    if (!open && ctx.editor?.contextMenu.isOpen && ctx.editor.contextMenu.source === 'mouse') {
-      ctx.editor.closeContextMenu();
-      ctx.editor.focus();
+    if (!(!open && ctx.editor?.contextMenu.isOpen && ctx.editor.contextMenu.source === 'mouse')) {
+      return;
     }
+
+    ctx.editor.closeContextMenu();
+    ctx.editor.focus();
   });
 
   const contextMenuPosition = $derived(

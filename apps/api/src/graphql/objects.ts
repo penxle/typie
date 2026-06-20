@@ -10,9 +10,10 @@ import type { PlanRules } from '#/db/schemas/json.ts';
 import type { Builder } from './builder.ts';
 
 type IdColumn = AnyPgColumn<{ data: string; notNull: true }>;
-type TableWithIdColumn<T extends TableConfig> = AnyPgTable<{ columns: { id: IdColumn } }> & {
-  id: IdColumn;
-} & PgTable<T>;
+type TableWithIdColumn<T extends TableConfig> = AnyPgTable<{ columns: { id: IdColumn } }> &
+  PgTable<T> & {
+    id: IdColumn;
+  };
 
 type SchemaTypes = Builder extends PothosSchemaTypes.SchemaBuilder<infer T> ? T : never;
 

@@ -32,7 +32,7 @@ export type AllDialog = Alert | Confirm;
 
 export const store = writable<AllDialog[]>([]);
 const append = (dialog: Omit<AllDialog, 'id'>) => {
-  if (globalThis.window === undefined) {
+  if (window === undefined) {
     throw new TypeError('dialog can only be used in browser');
   }
 

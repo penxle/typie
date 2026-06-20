@@ -95,14 +95,14 @@ export function setupEditorScroll(ctx: EditorContext): void {
 }
 
 export class EditorScrollScope {
-  visibleArea = $state<EditorVisibleArea>(DEFAULT_VISIBLE_AREA);
-
   #pendingRequest: PendingScrollRequest | null = null;
   #keepVisibleTarget = $state<EditorScrollIntoViewTarget | null>(null);
   #commitQueued = false;
   #destroyed = false;
   readonly #editor: Editor;
   readonly #typewriterPreferences: () => TypewriterPreferences;
+
+  visibleArea = $state<EditorVisibleArea>(DEFAULT_VISIBLE_AREA);
 
   bottomPadding = $derived.by(() => {
     void this.#editor.viewport.height;
@@ -123,40 +123,6 @@ export class EditorScrollScope {
   constructor(editor: Editor, typewriterPreferences: () => TypewriterPreferences) {
     this.#editor = editor;
     this.#typewriterPreferences = typewriterPreferences;
-  }
-
-  destroy(): void {
-    this.#destroyed = true;
-    this.#pendingRequest = null;
-  }
-
-  setVisibleArea(visibleArea: EditorVisibleArea): void {
-    const next = sanitizeVisibleArea(visibleArea);
-    if (sameVisibleArea(this.visibleArea, next)) {
-      return;
-    }
-    this.visibleArea = next;
-  }
-
-  scrollIntoView({ target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions): void {
-    if (this.#destroyed) {
-      return;
-    }
-
-    this.#pendingRequest = {
-      target,
-      mode,
-      behavior: behavior ?? (target.type === 'tracked_item' ? 'smooth' : 'instant'),
-    };
-    this.#keepVisibleTarget = target;
-    this.scheduleCommit();
-  }
-
-  scheduleCommit(): void {
-    if (this.#destroyed || this.#editor.hasQueuedTick || this.#commitQueued || !this.#pendingRequest) return;
-    this.#commitQueued = true;
-
-    void this.#commit();
   }
 
   async #commit(): Promise<void> {
@@ -269,5 +235,39 @@ export class EditorScrollScope {
       position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
       trailingBottomMargin,
     });
+  }
+
+  destroy(): void {
+    this.#destroyed = true;
+    this.#pendingRequest = null;
+  }
+
+  setVisibleArea(visibleArea: EditorVisibleArea): void {
+    const next = sanitizeVisibleArea(visibleArea);
+    if (sameVisibleArea(this.visibleArea, next)) {
+      return;
+    }
+    this.visibleArea = next;
+  }
+
+  scrollIntoView({ target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions): void {
+    if (this.#destroyed) {
+      return;
+    }
+
+    this.#pendingRequest = {
+      target,
+      mode,
+      behavior: behavior ?? (target.type === 'tracked_item' ? 'smooth' : 'instant'),
+    };
+    this.#keepVisibleTarget = target;
+    this.scheduleCommit();
+  }
+
+  scheduleCommit(): void {
+    if (this.#destroyed || this.#editor.hasQueuedTick || this.#commitQueued || !this.#pendingRequest) return;
+    this.#commitQueued = true;
+
+    void this.#commit();
   }
 }

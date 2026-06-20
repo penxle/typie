@@ -534,7 +534,7 @@ DocumentView.implement({
             userId: ctx.session?.userId,
             siteId: document.siteId,
           }).then(() => DocumentAvailableAction.EDIT),
-        ]).then((results) => results.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value));
+        ]).then((results) => results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])));
       },
     }),
 
@@ -1844,11 +1844,11 @@ builder.subscriptionFields((t) => ({
         filter(({ target }) => {
           if (target === '*') {
             return true;
-          } else if (target.startsWith('!')) {
-            return target.slice(1) !== args.clientId;
-          } else {
-            return target === args.clientId;
           }
+          if (target.startsWith('!')) {
+            return target.slice(1) !== args.clientId;
+          }
+          return target === args.clientId;
         }),
       );
     },

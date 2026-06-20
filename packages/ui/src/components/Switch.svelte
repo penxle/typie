@@ -6,13 +6,13 @@
   import type { Snippet } from 'svelte';
   import type { HTMLInputAttributes } from 'svelte/elements';
 
-  type Props = {
-    style?: SystemStyleObject;
-    checked?: boolean;
-    values?: boolean[];
-    children?: Snippet;
-  } & Omit<HTMLInputAttributes, 'size' | 'style'> &
-    RecipeVariantProps<typeof recipe>;
+  type Props = Omit<HTMLInputAttributes, 'size' | 'style'> &
+    RecipeVariantProps<typeof recipe> & {
+      style?: SystemStyleObject;
+      checked?: boolean;
+      values?: boolean[];
+      children?: Snippet;
+    };
 
   let { size = 'lg', style, checked = $bindable(false), values, children, ...rest }: Props = $props();
 

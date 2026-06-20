@@ -69,7 +69,7 @@
 
     let longestStreak = 0;
     let tempStreak = 0;
-    const sortedDates = [...activeDates].toSorted();
+    const sortedDates = [...activeDates].toSorted((a, b) => a.localeCompare(b));
 
     for (let i = 0; i < sortedDates.length; i++) {
       if (i === 0) {

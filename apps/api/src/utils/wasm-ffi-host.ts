@@ -48,7 +48,11 @@ export async function useHost<T>(fn: (host: EditorHost) => T): Promise<Awaited<T
   }
   await poolReady;
 
-  const host = available.pop() ?? (await new Promise<EditorHost>((resolve) => waiting.push(resolve)));
+  const host =
+    available.pop() ??
+    (await new Promise<EditorHost>((resolve) => {
+      waiting.push(resolve);
+    }));
   try {
     const result = await fn(host);
     returnToPool(host);

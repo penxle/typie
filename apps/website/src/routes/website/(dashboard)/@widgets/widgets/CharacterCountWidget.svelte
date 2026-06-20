@@ -26,10 +26,12 @@
   };
 
   $effect(() => {
-    if (editor) {
-      void editor.characterCountsVersion;
-      editor.updateCharacterCounts();
+    if (!editor) {
+      return;
     }
+
+    void editor.characterCountsVersion;
+    editor.updateCharacterCounts();
   });
 
   const counts = $derived(editor?.characterCounts);

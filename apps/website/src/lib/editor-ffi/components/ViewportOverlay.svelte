@@ -2,8 +2,8 @@
   import { createContext } from 'svelte';
 
   class ViewportOverlayContext {
-    change = $state(0);
     #frame: number | null = null;
+    change = $state(0);
 
     requestSync = () => {
       if (this.#frame !== null) return;

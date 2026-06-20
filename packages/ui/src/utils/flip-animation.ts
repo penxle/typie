@@ -22,13 +22,13 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
   const elements = container.querySelectorAll(selector);
   const firstPositions: Record<string, DOMRect> = {};
 
-  elements.forEach((el) => {
-    if (!(el instanceof HTMLElement)) return;
+  for (const el of elements) {
+    if (!(el instanceof HTMLElement)) continue;
     const id = el.dataset[idAttribute];
     if (id) {
       firstPositions[id] = el.getBoundingClientRect();
     }
-  });
+  }
 
   const firstContainerHeight = containerElement?.getBoundingClientRect().height;
 
@@ -75,7 +75,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
   for (const el of elementsAfter) {
     if (!(el instanceof HTMLElement)) continue;
     const id = el.dataset[idAttribute];
-    if (!id || !firstPositions[id]) continue;
+    if (!id || !Object.hasOwn(firstPositions, id)) continue;
 
     const prevPos = firstPositions[id];
     const lastPos = el.getBoundingClientRect();

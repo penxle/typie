@@ -48,7 +48,11 @@ async function use<T>(fn: (host: EditorServer) => T): Promise<Awaited<T>> {
   }
   await poolReady;
 
-  const host = available.pop() ?? (await new Promise<EditorServer>((resolve) => waiting.push(resolve)));
+  const host =
+    available.pop() ??
+    (await new Promise<EditorServer>((resolve) => {
+      waiting.push(resolve);
+    }));
   try {
     const result = await fn(host);
     returnToPool(host);

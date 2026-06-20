@@ -147,7 +147,7 @@
                 actionHandler: async () => {
                   await deleteUser();
                   mixpanel.track('delete_user');
-                  globalThis.location.href = '/';
+                  location.assign('/');
                 },
               });
             }}

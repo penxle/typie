@@ -92,7 +92,8 @@ function isMultiColor(svgContent: string): boolean {
   for (const match of svgContent.matchAll(ELEMENT_RE)) {
     const attrs = parseAttrs(match[2]);
     for (const key of ['fill', 'stroke']) {
-      if (attrs[key] && !COLORS.has(attrs[key])) return true;
+      const value = attrs[key];
+      if (value && !COLORS.has(value)) return true;
     }
   }
   return false;
@@ -164,7 +165,12 @@ async function processIcon(svgContent: string): Promise<IconData | null> {
 async function loadLucideIcons(): Promise<Record<string, IconData>> {
   const iconSet = new IconSet(lucideIcons);
   const names: string[] = [];
-  iconSet.forEachSync((n) => names.push(n), ['icon']);
+  iconSet.forEachSync(
+    (n) => {
+      names.push(n);
+    },
+    ['icon'],
+  );
 
   const result: Record<string, IconData> = {};
   for (const name of names) {
@@ -181,7 +187,7 @@ async function loadTypieIcons(): Promise<Record<string, IconData>> {
   let files: string[];
   try {
     const entries = await fs.readdir(TYPIE_SVG_DIR);
-    files = entries.toSorted();
+    files = entries.toSorted((a, b) => a.localeCompare(b));
   } catch {
     console.warn(`⚠ Typie icon directory not found: ${TYPIE_SVG_DIR}`);
     return result;

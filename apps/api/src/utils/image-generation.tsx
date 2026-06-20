@@ -179,15 +179,15 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
     activitiesByMonth[monthKey] = [];
   }
 
-  activities.forEach((activity) => {
+  for (const activity of activities) {
     const monthKey = activity.date.format('YYYY-MM');
-    if (activitiesByMonth[monthKey]) {
+    if (Object.hasOwn(activitiesByMonth, monthKey)) {
       activitiesByMonth[monthKey].push(activity);
     }
-  });
+  }
 
   const sortedMonths = Object.keys(activitiesByMonth)
-    .toSorted()
+    .toSorted((a, b) => a.localeCompare(b))
     .map((monthKey) => ({
       key: monthKey,
       name: monthNames[Number.parseInt(monthKey.split('-')[1]) - 1],

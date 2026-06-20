@@ -75,7 +75,7 @@
     const ids: string[] = [];
     const tree = treeState.element;
     const collectIds = (entities: TreeEntity[]) => {
-      entities.forEach((entity) => {
+      for (const entity of entities) {
         ids.push(entity.id);
 
         if (entity.children && tree) {
@@ -86,7 +86,7 @@
             collectIds(entity.children);
           }
         }
-      });
+      }
     };
     collectIds(treeState.entities);
     return ids;

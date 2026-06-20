@@ -25,24 +25,22 @@ class UnexpectedError extends GraphQLError {
   constructor(error: Error, operation?: OperationInfo) {
     const eventId = Sentry.captureException(error, {
       tags: {
-        ...(operation?.operationName ? { 'graphql.operation': operation.operationName } : {}),
+        ...(operation?.operationName && { 'graphql.operation': operation.operationName }),
       },
       contexts: {
-        ...(operation
-          ? {
-              graphql: {
-                operationName: operation.operationName,
-                variables: operation.variableValues,
-                query: operation.query,
-              },
-            }
-          : {}),
+        ...(operation && {
+          graphql: {
+            operationName: operation.operationName,
+            variables: operation.variableValues,
+            query: operation.query,
+          },
+        }),
       },
       user:
         operation?.userId || operation?.ip
           ? {
-              ...(operation.userId ? { id: operation.userId } : {}),
-              ...(operation.ip ? { ip_address: operation.ip } : {}),
+              ...(operation.userId && { id: operation.userId }),
+              ...(operation.ip && { ip_address: operation.ip }),
             }
           : undefined,
     });
@@ -65,17 +63,19 @@ class UnexpectedError extends GraphQLError {
 const transformError = (error: unknown, operation?: OperationInfo): GraphQLError => {
   if (error instanceof TypieError) {
     return error;
-  } else if (error instanceof GraphQLError && error.extensions?.code === 'RATE_LIMITED') {
+  }
+  if (error instanceof GraphQLError && error.extensions?.code === 'RATE_LIMITED') {
     return error;
-  } else if (error instanceof GraphQLError && error.originalError) {
+  }
+  if (error instanceof GraphQLError && error.originalError) {
     return transformError(error.originalError, operation);
-  } else if (error instanceof Error) {
+  }
+  if (error instanceof Error) {
     log.error('Unexpected error {*}', { error });
     return new UnexpectedError(error, operation);
-  } else {
-    log.error('Unexpected error {*}', { error });
-    return new UnexpectedError(new Error(String(error)), operation);
   }
+  log.error('Unexpected error {*}', { error });
+  return new UnexpectedError(new Error(String(error)), operation);
 };
 
 type ErrorHandlerPayload = { error: unknown; setError: (err: unknown) => void };
@@ -97,10 +97,9 @@ const createResultHandler = (operation: OperationInfo) => {
 
     if (isAsyncIterable(result)) {
       return { onNext: handler };
-    } else {
-      handler({ result, setResult });
-      return;
     }
+    handler({ result, setResult });
+    return;
   };
 };
 

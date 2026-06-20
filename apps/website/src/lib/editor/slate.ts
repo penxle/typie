@@ -108,29 +108,6 @@ export class SlateReader {
     this.#slabView = new DataView(memory.buffer);
   }
 
-  refresh(slatePtr: number, slabPtr: number): void {
-    this.#slatePtr = slatePtr;
-    this.#slabPtr = slabPtr;
-    if (this.#buffer !== this.#memory.buffer) {
-      this.#buffer = this.#memory.buffer;
-      this.#view = new DataView(this.#buffer);
-      this.#slabView = new DataView(this.#buffer);
-    }
-    const lo = this.#view.getUint32(this.#slatePtr + this.#offsets.dirty, true);
-    const hi = this.#view.getUint32(this.#slatePtr + this.#offsets.dirty + 4, true);
-    this.#dirtyLo = lo;
-    this.#dirtyHi = hi;
-  }
-
-  isDirty(bit: number): boolean {
-    if (bit < 32) return (this.#dirtyLo & (1 << bit)) !== 0;
-    return (this.#dirtyHi & (1 << (bit - 32))) !== 0;
-  }
-
-  get hasDirty(): boolean {
-    return this.#dirtyLo !== 0 || this.#dirtyHi !== 0;
-  }
-
   #u32(field: string): number {
     return this.#view.getUint32(this.#slatePtr + this.#offsets[field], true);
   }
@@ -153,6 +130,29 @@ export class SlateReader {
         .padStart(2, '0');
     }
     return hex;
+  }
+
+  refresh(slatePtr: number, slabPtr: number): void {
+    this.#slatePtr = slatePtr;
+    this.#slabPtr = slabPtr;
+    if (this.#buffer !== this.#memory.buffer) {
+      this.#buffer = this.#memory.buffer;
+      this.#view = new DataView(this.#buffer);
+      this.#slabView = new DataView(this.#buffer);
+    }
+    const lo = this.#view.getUint32(this.#slatePtr + this.#offsets.dirty, true);
+    const hi = this.#view.getUint32(this.#slatePtr + this.#offsets.dirty + 4, true);
+    this.#dirtyLo = lo;
+    this.#dirtyHi = hi;
+  }
+
+  isDirty(bit: number): boolean {
+    if (bit < 32) return (this.#dirtyLo & (1 << bit)) !== 0;
+    return (this.#dirtyHi & (1 << (bit - 32))) !== 0;
+  }
+
+  get hasDirty(): boolean {
+    return this.#dirtyLo !== 0 || this.#dirtyHi !== 0;
   }
 
   readSettings(): {

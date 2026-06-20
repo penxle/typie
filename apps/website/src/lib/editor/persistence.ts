@@ -40,18 +40,6 @@ export class IndexeddbPersistence {
     this.#documentId = documentId;
   }
 
-  get version(): Uint8Array {
-    return this.#version;
-  }
-
-  get checkpoint(): Uint8Array {
-    return this.#checkpoint;
-  }
-
-  get generation(): number {
-    return this.#generation;
-  }
-
   async #ensureDb(): Promise<IDBDatabase> {
     if (this.#db) return this.#db;
     let db = await openDatabase();
@@ -88,6 +76,18 @@ export class IndexeddbPersistence {
     if (updated) {
       await this.#request(store.put(updated));
     }
+  }
+
+  get version(): Uint8Array {
+    return this.#version;
+  }
+
+  get checkpoint(): Uint8Array {
+    return this.#checkpoint;
+  }
+
+  get generation(): number {
+    return this.#generation;
   }
 
   async load(): Promise<{ snapshot: Uint8Array; updates: Uint8Array[] } | null> {

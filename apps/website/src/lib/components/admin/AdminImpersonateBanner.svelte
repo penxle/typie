@@ -46,7 +46,7 @@
 
   const handleStop = async () => {
     await adminStopImpersonation();
-    location.href = '/admin';
+    location.assign('/admin');
   };
 </script>
 

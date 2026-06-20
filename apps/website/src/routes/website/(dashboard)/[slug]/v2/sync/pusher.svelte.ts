@@ -36,10 +36,6 @@ type PusherOpts = {
 };
 
 export class Pusher {
-  status = $state<PushStatus>('idle');
-  retryAttempt = $state(0);
-  lastSentHeads: Uint8Array;
-
   private readonly opts: PusherOpts;
   private readonly outbox: ChangesetOutboxStore;
   private readonly ownsOutbox: boolean;
@@ -56,6 +52,10 @@ export class Pusher {
     this.retryNow();
   };
 
+  status = $state<PushStatus>('idle');
+  retryAttempt = $state(0);
+  lastSentHeads: Uint8Array;
+
   constructor(opts: PusherOpts) {
     this.opts = opts;
     this.ownsOutbox = opts.outbox === undefined;
@@ -63,37 +63,6 @@ export class Pusher {
     this.lastSentHeads = opts.initialServerHeads;
     window.addEventListener('online', this.handleOnline);
     void this.firePush();
-  }
-
-  schedule(): void {
-    if (this.stopped) return;
-    if (this.status === 'error') return;
-
-    void this.capturePendingLocalChangesets().catch((err) => {
-      console.warn('Pusher: failed to persist pending local changesets', err);
-    });
-
-    if (this.idleTimer) clearTimeout(this.idleTimer);
-    this.idleTimer = setTimeout(() => {
-      this.idleTimer = null;
-      void this.flushScheduledChanges();
-    }, IDLE_MS);
-
-    if (!this.maxWaitTimer) {
-      this.maxWaitTimer = setTimeout(() => {
-        this.maxWaitTimer = null;
-        void this.flushScheduledChanges();
-      }, MAX_WAIT_MS);
-    }
-  }
-
-  stop(): void {
-    this.stopped = true;
-    this.clearTimers();
-    window.removeEventListener('online', this.handleOnline);
-    if (!this.inflight && !this.capturePromise) {
-      this.destroyOwnedOutbox();
-    }
   }
 
   private destroyOwnedOutbox(): void {
@@ -244,6 +213,7 @@ export class Pusher {
 
     await this.outbox.replace(
       record,
+      // eslint-disable-next-line unicorn/no-unsafe-string-replacement
       compactableRecords.map((record) => record.id),
     );
   }
@@ -314,6 +284,37 @@ export class Pusher {
     }
     this.status = 'idle';
     void this.firePush();
+  }
+
+  schedule(): void {
+    if (this.stopped) return;
+    if (this.status === 'error') return;
+
+    void this.capturePendingLocalChangesets().catch((err) => {
+      console.warn('Pusher: failed to persist pending local changesets', err);
+    });
+
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      void this.flushScheduledChanges();
+    }, IDLE_MS);
+
+    if (!this.maxWaitTimer) {
+      this.maxWaitTimer = setTimeout(() => {
+        this.maxWaitTimer = null;
+        void this.flushScheduledChanges();
+      }, MAX_WAIT_MS);
+    }
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.clearTimers();
+    window.removeEventListener('online', this.handleOnline);
+    if (!this.inflight && !this.capturePromise) {
+      this.destroyOwnedOutbox();
+    }
   }
 }
 

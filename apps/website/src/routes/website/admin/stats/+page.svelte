@@ -275,9 +275,9 @@
   }
 
   function loadAllData() {
-    columns.forEach((column) => {
+    for (const column of columns) {
       fetchColumnData(column);
-    });
+    }
   }
 
   $effect(() => {
@@ -315,11 +315,11 @@
     const date = dayjs.kst(period);
     if (granularity.current === 'day') {
       return date.format('YYYY-MM-DD');
-    } else if (granularity.current === 'week') {
-      return date.format('YYYY-MM-DD') + ' (주)';
-    } else {
-      return date.format('YYYY-MM');
     }
+    if (granularity.current === 'week') {
+      return date.format('YYYY-MM-DD') + ' (주)';
+    }
+    return date.format('YYYY-MM');
   };
 
   type DatePreset = {

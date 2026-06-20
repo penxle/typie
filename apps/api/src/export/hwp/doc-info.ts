@@ -351,7 +351,7 @@ function buildNumberingRecord(): Uint8Array {
     levelView.setUint32(8, 0, true); // charShapeId
 
     // format string: "^1." → ^은 번호 자리표시자
-    const formatStr = `\u0005${level + 1},1,1,1,1,1,1`;
+    const formatStr = `\u{5}${level + 1},1,1,1,1,1,1`;
     const formatBytes = encodeUTF16LE(formatStr);
     const { buf: fmtBuf, view: fmtView } = allocate(2 + formatBytes.byteLength + 2);
     fmtView.setUint16(0, formatStr.length, true);

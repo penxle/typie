@@ -35,6 +35,10 @@ export class SlateReader {
     this.#view = new DataView(memory.buffer);
   }
 
+  #u32(field: string): number {
+    return this.#view.getUint32(this.#slatePtr + this.#offsets[field], true);
+  }
+
   refresh(slatePtr: number, slabPtr: number): void {
     this.#slatePtr = slatePtr;
     this.#slabPtr = slabPtr;
@@ -47,10 +51,6 @@ export class SlateReader {
 
   isDirty(bit: number): boolean {
     return (this.#dirtyLo & (1 << bit)) !== 0;
-  }
-
-  #u32(field: string): number {
-    return this.#view.getUint32(this.#slatePtr + this.#offsets[field], true);
   }
 
   get pagesCount(): number {

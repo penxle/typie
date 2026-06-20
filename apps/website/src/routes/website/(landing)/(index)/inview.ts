@@ -2,10 +2,12 @@ export const inview = (node: HTMLElement) => {
   const isMobile = window.innerWidth < 1024;
   const observer = new IntersectionObserver(
     ([entry]) => {
-      if (entry.isIntersecting) {
-        node.classList.add('in-view');
-        observer.disconnect();
+      if (!entry.isIntersecting) {
+        return;
       }
+
+      node.classList.add('in-view');
+      observer.disconnect();
     },
     {
       threshold: isMobile ? 0.05 : 0.1,

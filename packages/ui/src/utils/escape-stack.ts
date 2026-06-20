@@ -13,10 +13,12 @@ export function runEscapeStack(): boolean {
 }
 
 function handleGlobalEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape' && runEscapeStack()) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (!(e.key === 'Escape' && runEscapeStack())) {
+    return;
   }
+
+  e.preventDefault();
+  e.stopPropagation();
 }
 
 if (typeof window !== 'undefined') {

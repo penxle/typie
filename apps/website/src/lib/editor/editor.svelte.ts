@@ -173,16 +173,90 @@ export class Editor {
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
+  #onEditBlocked?: (reason: 'locked' | 'restrictedText' | 'restrictedBlob') => void;
+  #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   #pendingSelectAllShortcut = false;
   #readyResolve?: () => void;
   #renderer: WebGLRenderer | null = null;
-  ready: Promise<void>;
+  #pendingDocChanged = false;
+  #pendingScrollRequest: { mode: 'cursor' | 'typewriter' } | null = null;
+  #typewriterAvailable = false;
+  #cursorFollowScrollActive = false;
+  #cursorFollowScrollMode: 'cursor' | 'typewriter' = 'cursor';
+  #programmaticScrollDepth = 0;
+  #pageRenderedVersionByPage = new SvelteMap<number, number>();
+  #pendingScrollAfterRender: {
+    mode: 'cursor' | 'typewriter';
+    pageIdx: number;
+    cursor: { pageIdx: number; bounds: Rect | null; visible: boolean };
+  } | null = null;
+  #lastClickTime = 0;
+  #lastClickPos: { x: number; y: number } | null = null;
+  #clickCount = 0;
+  #tick = (): void => {
+    this.#rafId = null;
+    if (!this.#running) return;
+    const hadPendingSelectAllShortcut = this.#pendingSelectAllShortcut;
 
-  constructor() {
-    this.ready = new Promise((resolve) => {
-      this.#readyResolve = resolve;
-    });
-  }
+    if (this.#wasmEditor && this.#slateReader && this.#awake) {
+      this.#awake = false;
+
+      if (this.#span) {
+        this.#span.end();
+        this.#span = null;
+      }
+
+      this.#span = startFrameSpan(this.#documentId);
+
+      if (this.#span) {
+        const ctx = this.#span.spanContext();
+        this.#wasmEditor.setTracing(ctx.traceId, ctx.spanId);
+      }
+
+      this.#wasmEditor.tick();
+
+      if (this.#span) {
+        this.#wasmEditor.clearTracing();
+      }
+
+      this.#slateReader.refresh(this.#wasmEditor.getSlatePtr(), this.#wasmEditor.getSlabPtr());
+      if (this.#slateReader.hasDirty) {
+        this.#readSlate(this.#slateReader);
+      }
+
+      // Defer callbacks that may call into WASM (and grow memory) until after
+      // #readSlate has finished reading from the shared DataView.
+      if (this.#pendingDocChanged) {
+        this.#pendingDocChanged = false;
+        this.#onDocChanged?.();
+      }
+
+      if (!this.#flushPending) {
+        this.#flushPending = true;
+        idleCallback(() => {
+          this.#flushPending = false;
+          this.#wasmEditor?.flush();
+        });
+      }
+    }
+
+    if (hadPendingSelectAllShortcut) {
+      this.#pendingSelectAllShortcut = false;
+    }
+
+    if (this.#settledResolvers.length > 0) {
+      const resolvers = this.#settledResolvers;
+      this.#settledResolvers = [];
+      for (const resolve of resolvers) {
+        resolve();
+      }
+    }
+
+    if (this.#awake) {
+      this.#rafId = requestAnimationFrame(this.#tick);
+    }
+  };
+  ready: Promise<void>;
 
   fontFamilies = $state<readonly FontFamily[]>([]);
 
@@ -203,11 +277,9 @@ export class Editor {
     selectionWithoutWhitespaceAndPunctuation: 0,
   });
 
-  attrs = $state<Attribute[]>([]);
+  characterCountsVersion = $state(0);
 
-  getAttr(type: string): Attribute | undefined {
-    return this.attrs.find((a) => a.type === type);
-  }
+  attrs = $state<Attribute[]>([]);
 
   settings = $state({
     paragraphIndent: defaultValues.paragraphIndent as number,
@@ -249,18 +321,6 @@ export class Editor {
   });
 
   pendingScrollConsumer = $state<'cursor' | 'typewriter' | null>(null);
-  #pendingDocChanged = false;
-  #pendingScrollRequest: { mode: 'cursor' | 'typewriter' } | null = null;
-  #typewriterAvailable = false;
-  #cursorFollowScrollActive = false;
-  #cursorFollowScrollMode: 'cursor' | 'typewriter' = 'cursor';
-  #programmaticScrollDepth = 0;
-  #pageRenderedVersionByPage = new SvelteMap<number, number>();
-  #pendingScrollAfterRender: {
-    mode: 'cursor' | 'typewriter';
-    pageIdx: number;
-    cursor: { pageIdx: number; bounds: Rect | null; visible: boolean };
-  } | null = null;
 
   inputElement = $state<HTMLTextAreaElement | null>(null);
 
@@ -327,89 +387,12 @@ export class Editor {
   displayZoom = $state(1);
   touchGesture = new TouchGestureController(this);
 
-  #lastClickTime = 0;
-  #lastClickPos: { x: number; y: number } | null = null;
-  #clickCount = 0;
-
   uploadQueue = new SvelteMap<string, File>();
 
-  queueUpload(uploadId: string, file: File): void {
-    this.uploadQueue.set(uploadId, file);
-    setTimeout(() => {
-      if (this.uploadQueue.has(uploadId)) {
-        this.uploadQueue.delete(uploadId);
-        console.warn('Upload timed out for', uploadId);
-      }
-    }, 30_000);
-  }
-
-  popUpload(uploadId: string): File | undefined {
-    const file = this.uploadQueue.get(uploadId);
-    if (file) {
-      this.uploadQueue.delete(uploadId);
-    }
-    return file;
-  }
-
-  insertImagesFromFiles(files: Iterable<File>): boolean {
-    let handled = false;
-
-    for (const file of files) {
-      if (!file.type.startsWith('image/')) continue;
-
-      const uploadId = nanoid();
-      this.queueUpload(uploadId, file);
-      this.dispatch({ type: 'insertImage', uploadId }).scrollIntoView({ mode: 'typewriter' });
-      handled = true;
-    }
-
-    return handled;
-  }
-
-  async initialize(options: EditorOptions): Promise<void> {
-    if (this.#wasmEditor) {
-      return;
-    }
-
-    if (options.fontFamilies?.length) {
-      this.fontFamilies = options.fontFamilies;
-    }
-
-    this.#documentId = options.documentId;
-    this.#onDocChanged = options.onDocChanged;
-    this.#onExitedDocumentStart = options.onExitedDocumentStart;
-    this.#onSelectionChanged = options.onSelectionChanged;
-
-    await ensureInitialized();
-
-    const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
-    const wasmEditor = wasm.createEditor(scaleFactor, options.snapshot);
-    this.#wasmEditor = wasmEditor;
-    wasmEditor.setRenderDebug(this.#renderDebugEnabled);
-    wasmEditor.setLayoutDebug(this.#layoutDebugEnabled);
-
-    const memory = wasm.getMemory() as WebAssembly.Memory;
-    const rawOffsets = wasmEditor.getSlateOffsets();
-    const offsets: Record<string, number> = {};
-    for (const [key, value] of rawOffsets) {
-      offsets[key] = value;
-    }
-    this.#slateReader = new SlateReader(memory, offsets, wasmEditor.getSlatePtr(), wasmEditor.getSlabPtr());
-
-    this.dispatch({
-      type: 'initialize',
-      theme: options.theme,
-      viewportWidth: options.initialViewportWidth,
-      viewportHeight: options.initialViewportHeight,
-      scaleFactor,
+  constructor() {
+    this.ready = new Promise((resolve) => {
+      this.#readyResolve = resolve;
     });
-
-    if (options.readOnly) {
-      this.setReadOnly(true);
-    }
-
-    this.#start();
-    this.#readyResolve?.();
   }
 
   #start(): void {
@@ -434,10 +417,12 @@ export class Editor {
   }
 
   #wakeUp(): void {
-    if (!this.#awake) {
-      this.#awake = true;
-      this.#ensureActive();
+    if (this.#awake) {
+      return;
     }
+
+    this.#awake = true;
+    this.#ensureActive();
   }
 
   #ensureActive(): void {
@@ -445,70 +430,6 @@ export class Editor {
       this.#rafId = requestAnimationFrame(this.#tick);
     }
   }
-
-  #tick = (): void => {
-    this.#rafId = null;
-    if (!this.#running) return;
-    const hadPendingSelectAllShortcut = this.#pendingSelectAllShortcut;
-
-    if (this.#wasmEditor && this.#slateReader && this.#awake) {
-      this.#awake = false;
-
-      if (this.#span) {
-        this.#span.end();
-        this.#span = null;
-      }
-
-      this.#span = startFrameSpan(this.#documentId);
-
-      if (this.#span) {
-        const ctx = this.#span.spanContext();
-        this.#wasmEditor.setTracing(ctx.traceId, ctx.spanId);
-      }
-
-      this.#wasmEditor.tick();
-
-      if (this.#span) {
-        this.#wasmEditor.clearTracing();
-      }
-
-      this.#slateReader.refresh(this.#wasmEditor.getSlatePtr(), this.#wasmEditor.getSlabPtr());
-      if (this.#slateReader.hasDirty) {
-        this.#readSlate(this.#slateReader);
-      }
-
-      // Defer callbacks that may call into WASM (and grow memory) until after
-      // #readSlate has finished reading from the shared DataView.
-      if (this.#pendingDocChanged) {
-        this.#pendingDocChanged = false;
-        this.#onDocChanged?.();
-      }
-
-      if (!this.#flushPending) {
-        this.#flushPending = true;
-        idleCallback(() => {
-          this.#flushPending = false;
-          this.#wasmEditor?.flush();
-        });
-      }
-    }
-
-    if (hadPendingSelectAllShortcut) {
-      this.#pendingSelectAllShortcut = false;
-    }
-
-    if (this.#settledResolvers.length > 0) {
-      const resolvers = this.#settledResolvers;
-      this.#settledResolvers = [];
-      for (const resolve of resolvers) {
-        resolve();
-      }
-    }
-
-    if (this.#awake) {
-      this.#rafId = requestAnimationFrame(this.#tick);
-    }
-  };
 
   #readSlate(slate: SlateReader): void {
     if (slate.isDirty(DIRTY_DOC_CHANGED)) {
@@ -713,11 +634,11 @@ export class Editor {
             sorted.findLast((f) => f.weight < weight) ??
             sorted.find((f) => f.weight > 500)
           );
-        } else if (weight < 400) {
-          return sorted.findLast((f) => f.weight <= weight) ?? sorted.find((f) => f.weight > weight);
-        } else {
-          return sorted.find((f) => f.weight >= weight) ?? sorted.findLast((f) => f.weight < weight);
         }
+        if (weight < 400) {
+          return sorted.findLast((f) => f.weight <= weight) ?? sorted.find((f) => f.weight > weight);
+        }
+        return sorted.find((f) => f.weight >= weight) ?? sorted.findLast((f) => f.weight < weight);
       })();
     if (!font) return;
 
@@ -770,6 +691,474 @@ export class Editor {
     }
   }
 
+  #scrollSearchMatchIntoView(id: string): void {
+    if (this.revealTrackedItem(2, id)) {
+      this.settled().then(() => {
+        this.scrollTrackedItemIntoView(id);
+      });
+      return;
+    }
+
+    this.scrollTrackedItemIntoView(id);
+  }
+
+  #getClickCount(x: number, y: number, timestamp: number): number {
+    const isSamePosition = this.#lastClickPos !== null && Math.hypot(x - this.#lastClickPos.x, y - this.#lastClickPos.y) < CLICK_DISTANCE;
+    const isWithinInterval = timestamp - this.#lastClickTime < CLICK_INTERVAL;
+
+    if (isSamePosition && isWithinInterval) {
+      this.#clickCount = this.#clickCount >= 3 ? 1 : this.#clickCount + 1;
+    } else {
+      this.#clickCount = 1;
+    }
+
+    this.#lastClickTime = timestamp;
+    this.#lastClickPos = { x, y };
+    return this.#clickCount;
+  }
+
+  #coordinateZoom(): number {
+    if (this.layout?.layoutMode.type !== 'paginated') {
+      return 1;
+    }
+    return Number.isFinite(this.displayZoom) && this.displayZoom > 0 ? this.displayZoom : 1;
+  }
+
+  #resolvePointerCoordinate(
+    e: MouseEvent | PointerEvent,
+    targetEl: HTMLElement,
+  ): { pageIdx: number; x: number; y: number; pageElement: HTMLElement; isExtensionArea: boolean } | null {
+    const fromTarget = this.#resolvePageCoordinateFromElement(e, targetEl);
+    if (fromTarget) {
+      return fromTarget;
+    }
+
+    if (this.layout?.layoutMode.type === 'paginated') {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (el instanceof HTMLElement) {
+        return this.#resolvePageCoordinateFromElement(e, el);
+      }
+    }
+
+    const { containerEl, pageElements } = this.extensionArea;
+    if (containerEl && pageElements.length > 0) {
+      const coord = findNearestPageCoordinate(e, pageElements, this.layout?.pages[0]?.width ?? 0, this.#coordinateZoom());
+      if (coord) {
+        return {
+          pageIdx: coord.pageIdx,
+          x: coord.x,
+          y: coord.y,
+          pageElement: coord.pageElement,
+          isExtensionArea: true,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #resolvePageCoordinateFromElement(
+    e: MouseEvent | PointerEvent,
+    element: HTMLElement,
+  ): { pageIdx: number; x: number; y: number; pageElement: HTMLElement; isExtensionArea: boolean } | null {
+    const pageElement = getPageElement(element);
+    if (!pageElement) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const pageIdx = Number.parseInt(pageElement.dataset.pageIndex!);
+    const point = calculateRelativePosition(pageElement, e);
+    const pageRect = pageElement.getBoundingClientRect();
+    const zoom = this.#coordinateZoom();
+    const logicalX = point.x / zoom;
+    const logicalY = point.y / zoom;
+    const logicalWidth = pageRect.width / zoom;
+    const logicalHeight = pageRect.height / zoom;
+
+    // NOTE: continuous 모드에서 캔버스 경계에 걸친 table overlay 클릭 대응
+    if (logicalX < 0 || logicalY < 0 || logicalX > logicalWidth || logicalY > logicalHeight) {
+      return null;
+    }
+
+    return {
+      pageIdx,
+      x: logicalX,
+      y: logicalY,
+      pageElement,
+      isExtensionArea: false,
+    };
+  }
+
+  #findInteractiveOverlay(pageIdx: number, x: number, y: number): InteractiveOverlay | null {
+    for (const overlay of this.interactiveOverlays) {
+      if (
+        overlay.pageIdx === pageIdx &&
+        x >= overlay.bounds.x &&
+        x <= overlay.bounds.x + overlay.bounds.width &&
+        y >= overlay.bounds.y &&
+        y <= overlay.bounds.y + overlay.bounds.height
+      ) {
+        const p = overlay.passthrough;
+        if (p && x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height) {
+          continue;
+        }
+        return overlay;
+      }
+    }
+    return null;
+  }
+
+  async #writeToClipboard(html: string, text: string): Promise<void> {
+    try {
+      const items = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+      });
+      await navigator.clipboard.write([items]);
+    } catch {
+      await navigator.clipboard.writeText(text);
+    }
+  }
+
+  #renderDragImage(visiblePages: number[], pageIdx: number): { element: HTMLCanvasElement; offsetX: number; offsetY: number } | null {
+    const dragImageInfo = this.#wasmEditor?.renderDragImage(new Uint32Array(visiblePages), pageIdx);
+    if (!dragImageInfo) return null;
+
+    const { ptr, len, width, height, offsetX, offsetY, scaleFactor } = dragImageInfo;
+
+    const wasmMemory = wasm.getMemory() as WebAssembly.Memory;
+    if (!wasmMemory) return null;
+
+    const buffer = new Uint8ClampedArray(wasmMemory.buffer, ptr, len);
+    const imageData = new ImageData(new Uint8ClampedArray(buffer), width, height);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const cssWidth = Math.ceil(width / scaleFactor);
+    const cssHeight = Math.ceil(height / scaleFactor);
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const selectedImages = this.#getSelectedDragImages(visiblePages, pageIdx);
+    for (const { image, rect } of selectedImages) {
+      const destX = (rect.x - offsetX) * scaleFactor;
+      const destY = (rect.y - offsetY) * scaleFactor;
+      const destW = rect.width * scaleFactor;
+      const destH = rect.height * scaleFactor;
+      ctx.drawImage(image, destX, destY, destW, destH);
+    }
+
+    ctx.restore();
+
+    return { element: canvas, offsetX, offsetY };
+  }
+
+  #getSelectedDragImages(
+    visiblePages: number[],
+    pageIdx: number,
+  ): { image: HTMLImageElement; rect: { x: number; y: number; width: number; height: number } }[] {
+    const selectedImages: { image: HTMLImageElement; rect: { x: number; y: number; width: number; height: number } }[] = [];
+
+    for (const el of this.externalElements) {
+      if (!el.isSelected || el.data.type !== 'image' || !visiblePages.includes(el.pageIdx)) {
+        continue;
+      }
+
+      let relativePageY = 0;
+      if (el.pageIdx !== pageIdx) {
+        const start = Math.min(pageIdx, el.pageIdx);
+        const end = Math.max(pageIdx, el.pageIdx);
+        let dist = 0;
+        for (let i = start; i < end; i++) {
+          dist += (this.layout?.pages[i]?.height ?? 0) + PAGE_GAP;
+        }
+        relativePageY = el.pageIdx < pageIdx ? -dist : dist;
+      }
+
+      let imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img:not([loading="lazy"])`);
+      if (!imgElement) {
+        imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img`);
+      }
+
+      if (imgElement instanceof HTMLImageElement) {
+        const imageId = el.data.id;
+        const uploadId = el.data.uploadId;
+        const asset = imageId ? this.imageAssets.get(imageId) : undefined;
+        const inflight = uploadId ? this.inflightImages.get(uploadId) : undefined;
+        const originalWidth = asset?.width ?? inflight?.width ?? 0;
+        const originalHeight = asset?.height ?? inflight?.height ?? 0;
+        const { displayWidth, xOffset } = calculateImageDisplaySize(el.bounds, originalWidth, originalHeight);
+
+        const globalX = el.bounds.x + xOffset;
+        const globalY = relativePageY + el.bounds.y;
+
+        const rect = {
+          x: globalX,
+          y: globalY,
+          width: displayWidth,
+          height: el.bounds.height,
+        };
+
+        selectedImages.push({ image: imgElement, rect });
+      }
+    }
+    return selectedImages;
+  }
+
+  #armPendingScrollRequest(): void {
+    const pending = this.#pendingScrollRequest;
+    if (!pending) {
+      return;
+    }
+
+    this.#pendingScrollRequest = null;
+    this.#armScrollConsumerForMode(pending.mode);
+  }
+
+  #snapshotCurrentCursor(): { pageIdx: number; bounds: Rect | null; visible: boolean } {
+    return {
+      pageIdx: this.cursor.pageIdx,
+      bounds: this.cursor.bounds ? { ...this.cursor.bounds } : null,
+      visible: this.cursor.visible,
+    };
+  }
+
+  #snapshotSelectionHead(): { pageIdx: number; bounds: Rect | null; visible: boolean } | null {
+    const headBounds = this.selection?.collapsed === false ? this.selection.headBounds : null;
+    if (!headBounds) {
+      return null;
+    }
+
+    return {
+      pageIdx: headBounds.pageIdx,
+      bounds: { ...headBounds.bounds },
+      visible: false,
+    };
+  }
+
+  #snapshotScrollTarget(): { pageIdx: number; bounds: Rect | null; visible: boolean } | null {
+    const selectionHead = this.#snapshotSelectionHead();
+    if (selectionHead) {
+      return selectionHead;
+    }
+
+    const cursorSnapshot = this.#snapshotCurrentCursor();
+    if (cursorSnapshot.pageIdx < 0 || !cursorSnapshot.bounds) {
+      return null;
+    }
+
+    return cursorSnapshot;
+  }
+
+  #isSameCursorSnapshot(
+    a: { pageIdx: number; bounds: Rect | null; visible: boolean },
+    b: { pageIdx: number; bounds: Rect | null; visible: boolean },
+  ): boolean {
+    if (a.pageIdx !== b.pageIdx) {
+      return false;
+    }
+
+    if (!a.bounds || !b.bounds) {
+      return a.bounds === b.bounds;
+    }
+
+    return (
+      a.bounds.x === b.bounds.x && a.bounds.y === b.bounds.y && a.bounds.width === b.bounds.width && a.bounds.height === b.bounds.height
+    );
+  }
+
+  #applyPresentedCursor(cursor: { pageIdx: number; bounds: Rect | null; visible: boolean } | null): void {
+    if (!cursor || cursor.pageIdx < 0 || !cursor.bounds) {
+      this.presentedCursor.pageIdx = -1;
+      this.presentedCursor.bounds = null;
+      this.presentedCursor.visible = false;
+      return;
+    }
+
+    this.presentedCursor.pageIdx = cursor.pageIdx;
+    this.presentedCursor.bounds = { ...cursor.bounds };
+    this.presentedCursor.visible = cursor.visible;
+  }
+
+  #clearPendingScrollAfterRender(): void {
+    this.#pendingScrollAfterRender = null;
+  }
+
+  #invalidatePendingScrollIntent(): void {
+    this.#pendingScrollRequest = null;
+    this.pendingScrollConsumer = null;
+    this.#cursorFollowScrollActive = false;
+    this.#clearPendingScrollAfterRender();
+  }
+
+  #isPageRenderableSoon(pageIdx: number): boolean {
+    const pageEl = this.pageContainerEls[pageIdx];
+    const viewport = this.scrollViewport;
+    if (!pageEl || !viewport) {
+      return false;
+    }
+
+    const viewportRect = viewport.getRect();
+    const viewportHeight = viewportRect.bottom - viewportRect.top;
+    const marginPx = viewportHeight * 2;
+    const pageRect = pageEl.getBoundingClientRect();
+
+    return pageRect.bottom > viewportRect.top - marginPx && pageRect.top < viewportRect.bottom + marginPx;
+  }
+
+  #shouldDeferScrollUntilRender(pageIdx: number): boolean {
+    if (!this.#isPageRenderableSoon(pageIdx)) {
+      return false;
+    }
+
+    const renderedVersion = this.#pageRenderedVersionByPage.get(pageIdx);
+    return renderedVersion === undefined || renderedVersion < this.renderVersion;
+  }
+
+  #armScrollConsumerForMode(mode: 'cursor' | 'typewriter'): void {
+    const scrollTarget = this.#snapshotScrollTarget();
+    if (!scrollTarget) {
+      return;
+    }
+
+    const resolvedMode = mode === 'typewriter' && this.#typewriterAvailable ? 'typewriter' : 'cursor';
+    const cursorSnapshot = scrollTarget;
+
+    if (this.#shouldDeferScrollUntilRender(cursorSnapshot.pageIdx)) {
+      this.#pendingScrollAfterRender = {
+        mode: resolvedMode,
+        pageIdx: cursorSnapshot.pageIdx,
+        cursor: cursorSnapshot,
+      };
+      this.pendingScrollConsumer = null;
+      return;
+    }
+
+    this.#clearPendingScrollAfterRender();
+    this.#applyPresentedCursor(cursorSnapshot);
+    this.pendingScrollConsumer = resolvedMode;
+  }
+
+  #toPointerButton(button: number): PointerButton {
+    switch (button) {
+      case 0: {
+        return 'primary';
+      }
+      case 1: {
+        return 'auxiliary';
+      }
+      case 2: {
+        return 'secondary';
+      }
+      default: {
+        return 'primary';
+      }
+    }
+  }
+
+  #toModifier(e: MouseEvent | PointerEvent): Modifier {
+    return {
+      shift: e.shiftKey,
+      ctrl: e.ctrlKey,
+      alt: e.altKey,
+      meta: e.metaKey,
+    };
+  }
+
+  #isTouchLikePointer(e: PointerEvent): boolean {
+    return e.pointerType === 'touch';
+  }
+  getAttr(type: string): Attribute | undefined {
+    return this.attrs.find((a) => a.type === type);
+  }
+
+  queueUpload(uploadId: string, file: File): void {
+    this.uploadQueue.set(uploadId, file);
+    setTimeout(() => {
+      if (!this.uploadQueue.has(uploadId)) {
+        return;
+      }
+
+      this.uploadQueue.delete(uploadId);
+      console.warn('Upload timed out for', uploadId);
+    }, 30_000);
+  }
+
+  popUpload(uploadId: string): File | undefined {
+    const file = this.uploadQueue.get(uploadId);
+    if (file) {
+      this.uploadQueue.delete(uploadId);
+    }
+    return file;
+  }
+
+  insertImagesFromFiles(files: Iterable<File>): boolean {
+    let handled = false;
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+
+      const uploadId = nanoid();
+      this.queueUpload(uploadId, file);
+      this.dispatch({ type: 'insertImage', uploadId }).scrollIntoView({ mode: 'typewriter' });
+      handled = true;
+    }
+
+    return handled;
+  }
+
+  async initialize(options: EditorOptions): Promise<void> {
+    if (this.#wasmEditor) {
+      return;
+    }
+
+    if (options.fontFamilies?.length) {
+      this.fontFamilies = options.fontFamilies;
+    }
+
+    this.#documentId = options.documentId;
+    this.#onDocChanged = options.onDocChanged;
+    this.#onExitedDocumentStart = options.onExitedDocumentStart;
+    this.#onSelectionChanged = options.onSelectionChanged;
+
+    await ensureInitialized();
+
+    const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
+    const wasmEditor = wasm.createEditor(scaleFactor, options.snapshot);
+    this.#wasmEditor = wasmEditor;
+    wasmEditor.setRenderDebug(this.#renderDebugEnabled);
+    wasmEditor.setLayoutDebug(this.#layoutDebugEnabled);
+
+    const memory = wasm.getMemory() as WebAssembly.Memory;
+    const rawOffsets = wasmEditor.getSlateOffsets();
+    const offsets: Record<string, number> = Object.fromEntries(rawOffsets);
+    this.#slateReader = new SlateReader(memory, offsets, wasmEditor.getSlatePtr(), wasmEditor.getSlabPtr());
+
+    this.dispatch({
+      type: 'initialize',
+      theme: options.theme,
+      viewportWidth: options.initialViewportWidth,
+      viewportHeight: options.initialViewportHeight,
+      scaleFactor,
+    });
+
+    if (options.readOnly) {
+      this.setReadOnly(true);
+    }
+
+    this.#start();
+    this.#readyResolve?.();
+  }
+
   scrollTrackedItemIntoView(id: string): void {
     const item = this.trackedItems.find((v) => v.id === id);
     if (item && item.bounds.length > 0) {
@@ -786,17 +1175,6 @@ export class Editor {
         scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
       }
     }
-  }
-
-  #scrollSearchMatchIntoView(id: string): void {
-    if (this.revealTrackedItem(2, id)) {
-      this.settled().then(() => {
-        this.scrollTrackedItemIntoView(id);
-      });
-      return;
-    }
-
-    this.scrollTrackedItemIntoView(id);
   }
 
   highlightRemark(remark: Pick<RemarkOverlay, 'pageIdx' | 'bounds'>): void {
@@ -818,8 +1196,6 @@ export class Editor {
       this.#settledResolvers.push(resolve);
     });
   }
-
-  #onEditBlocked?: (reason: 'locked' | 'restrictedText' | 'restrictedBlob') => void;
 
   setEditBlockedHandler(handler: (reason: 'locked' | 'restrictedText' | 'restrictedBlob') => void): void {
     this.#onEditBlocked = handler;
@@ -940,92 +1316,6 @@ export class Editor {
     return this.#wasmEditor?.inspectSelectionAsFragmentMacro();
   }
 
-  #getClickCount(x: number, y: number, timestamp: number): number {
-    const isSamePosition = this.#lastClickPos !== null && Math.hypot(x - this.#lastClickPos.x, y - this.#lastClickPos.y) < CLICK_DISTANCE;
-    const isWithinInterval = timestamp - this.#lastClickTime < CLICK_INTERVAL;
-
-    if (isSamePosition && isWithinInterval) {
-      this.#clickCount = this.#clickCount >= 3 ? 1 : this.#clickCount + 1;
-    } else {
-      this.#clickCount = 1;
-    }
-
-    this.#lastClickTime = timestamp;
-    this.#lastClickPos = { x, y };
-    return this.#clickCount;
-  }
-
-  #coordinateZoom(): number {
-    if (this.layout?.layoutMode.type !== 'paginated') {
-      return 1;
-    }
-    return Number.isFinite(this.displayZoom) && this.displayZoom > 0 ? this.displayZoom : 1;
-  }
-
-  #resolvePointerCoordinate(
-    e: MouseEvent | PointerEvent,
-    targetEl: HTMLElement,
-  ): { pageIdx: number; x: number; y: number; pageElement: HTMLElement; isExtensionArea: boolean } | null {
-    const fromTarget = this.#resolvePageCoordinateFromElement(e, targetEl);
-    if (fromTarget) {
-      return fromTarget;
-    }
-
-    if (this.layout?.layoutMode.type === 'paginated') {
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (el instanceof HTMLElement) {
-        return this.#resolvePageCoordinateFromElement(e, el);
-      }
-    }
-
-    const { containerEl, pageElements } = this.extensionArea;
-    if (containerEl && pageElements.length > 0) {
-      const coord = findNearestPageCoordinate(e, pageElements, this.layout?.pages[0]?.width ?? 0, this.#coordinateZoom());
-      if (coord) {
-        return {
-          pageIdx: coord.pageIdx,
-          x: coord.x,
-          y: coord.y,
-          pageElement: coord.pageElement,
-          isExtensionArea: true,
-        };
-      }
-    }
-
-    return null;
-  }
-
-  #resolvePageCoordinateFromElement(
-    e: MouseEvent | PointerEvent,
-    element: HTMLElement,
-  ): { pageIdx: number; x: number; y: number; pageElement: HTMLElement; isExtensionArea: boolean } | null {
-    const pageElement = getPageElement(element);
-    if (!pageElement) return null;
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const pageIdx = Number.parseInt(pageElement.dataset.pageIndex!);
-    const point = calculateRelativePosition(pageElement, e);
-    const pageRect = pageElement.getBoundingClientRect();
-    const zoom = this.#coordinateZoom();
-    const logicalX = point.x / zoom;
-    const logicalY = point.y / zoom;
-    const logicalWidth = pageRect.width / zoom;
-    const logicalHeight = pageRect.height / zoom;
-
-    // NOTE: continuous 모드에서 캔버스 경계에 걸친 table overlay 클릭 대응
-    if (logicalX < 0 || logicalY < 0 || logicalX > logicalWidth || logicalY > logicalHeight) {
-      return null;
-    }
-
-    return {
-      pageIdx,
-      x: logicalX,
-      y: logicalY,
-      pageElement,
-      isExtensionArea: false,
-    };
-  }
-
   resolvePointerCoordinateFromClient(clientX: number, clientY: number): { pageIdx: number; x: number; y: number } | null {
     const pointEl = document.elementFromPoint(clientX, clientY);
     const targetEl = pointEl instanceof HTMLElement ? pointEl : this.extensionArea.containerEl;
@@ -1060,25 +1350,6 @@ export class Editor {
   runAfterSettled(task: () => void): void {
     this.#wakeUp();
     void this.settled().then(task);
-  }
-
-  #findInteractiveOverlay(pageIdx: number, x: number, y: number): InteractiveOverlay | null {
-    for (const overlay of this.interactiveOverlays) {
-      if (
-        overlay.pageIdx === pageIdx &&
-        x >= overlay.bounds.x &&
-        x <= overlay.bounds.x + overlay.bounds.width &&
-        y >= overlay.bounds.y &&
-        y <= overlay.bounds.y + overlay.bounds.height
-      ) {
-        const p = overlay.passthrough;
-        if (p && x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height) {
-          continue;
-        }
-        return overlay;
-      }
-    }
-    return null;
   }
 
   handlePointerDown(e: PointerEvent): void {
@@ -1315,18 +1586,6 @@ export class Editor {
     this.closeContextMenu();
   }
 
-  async #writeToClipboard(html: string, text: string): Promise<void> {
-    try {
-      const items = new ClipboardItem({
-        'text/html': new Blob([html], { type: 'text/html' }),
-        'text/plain': new Blob([text], { type: 'text/plain' }),
-      });
-      await navigator.clipboard.write([items]);
-    } catch {
-      await navigator.clipboard.writeText(text);
-    }
-  }
-
   async handlePaste(): Promise<void> {
     try {
       const items = await navigator.clipboard.read();
@@ -1485,101 +1744,6 @@ export class Editor {
     }
 
     this.dispatch({ type: 'dragStart', pageIdx, x, y }).scrollIntoView();
-  }
-
-  #renderDragImage(visiblePages: number[], pageIdx: number): { element: HTMLCanvasElement; offsetX: number; offsetY: number } | null {
-    const dragImageInfo = this.#wasmEditor?.renderDragImage(new Uint32Array(visiblePages), pageIdx);
-    if (!dragImageInfo) return null;
-
-    const { ptr, len, width, height, offsetX, offsetY, scaleFactor } = dragImageInfo;
-
-    const wasmMemory = wasm.getMemory() as WebAssembly.Memory;
-    if (!wasmMemory) return null;
-
-    const buffer = new Uint8ClampedArray(wasmMemory.buffer, ptr, len);
-    const imageData = new ImageData(new Uint8ClampedArray(buffer), width, height);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-
-    const cssWidth = Math.ceil(width / scaleFactor);
-    const cssHeight = Math.ceil(height / scaleFactor);
-    canvas.style.width = `${cssWidth}px`;
-    canvas.style.height = `${cssHeight}px`;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-
-    ctx.putImageData(imageData, 0, 0);
-
-    const selectedImages = this.#getSelectedDragImages(visiblePages, pageIdx);
-    for (const { image, rect } of selectedImages) {
-      const destX = (rect.x - offsetX) * scaleFactor;
-      const destY = (rect.y - offsetY) * scaleFactor;
-      const destW = rect.width * scaleFactor;
-      const destH = rect.height * scaleFactor;
-      ctx.drawImage(image, destX, destY, destW, destH);
-    }
-
-    ctx.restore();
-
-    return { element: canvas, offsetX, offsetY };
-  }
-
-  #getSelectedDragImages(
-    visiblePages: number[],
-    pageIdx: number,
-  ): { image: HTMLImageElement; rect: { x: number; y: number; width: number; height: number } }[] {
-    const selectedImages: { image: HTMLImageElement; rect: { x: number; y: number; width: number; height: number } }[] = [];
-
-    for (const el of this.externalElements) {
-      if (!el.isSelected || el.data.type !== 'image' || !visiblePages.includes(el.pageIdx)) {
-        continue;
-      }
-
-      let relativePageY = 0;
-      if (el.pageIdx !== pageIdx) {
-        const start = Math.min(pageIdx, el.pageIdx);
-        const end = Math.max(pageIdx, el.pageIdx);
-        let dist = 0;
-        for (let i = start; i < end; i++) {
-          dist += (this.layout?.pages[i]?.height ?? 0) + PAGE_GAP;
-        }
-        relativePageY = el.pageIdx < pageIdx ? -dist : dist;
-      }
-
-      let imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img:not([loading="lazy"])`);
-      if (!imgElement) {
-        imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img`);
-      }
-
-      if (imgElement instanceof HTMLImageElement) {
-        const imageId = el.data.id;
-        const uploadId = el.data.uploadId;
-        const asset = imageId ? this.imageAssets.get(imageId) : undefined;
-        const inflight = uploadId ? this.inflightImages.get(uploadId) : undefined;
-        const originalWidth = asset?.width ?? inflight?.width ?? 0;
-        const originalHeight = asset?.height ?? inflight?.height ?? 0;
-        const { displayWidth, xOffset } = calculateImageDisplaySize(el.bounds, originalWidth, originalHeight);
-
-        const globalX = el.bounds.x + xOffset;
-        const globalY = relativePageY + el.bounds.y;
-
-        const rect = {
-          x: globalX,
-          y: globalY,
-          width: displayWidth,
-          height: el.bounds.height,
-        };
-
-        selectedImages.push({ image: imgElement, rect });
-      }
-    }
-    return selectedImages;
   }
 
   handleDragOver(e: DragEvent): void {
@@ -1803,9 +1967,6 @@ export class Editor {
     return this.#wasmEditor?.getClipboardData() ?? null;
   }
 
-  #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  characterCountsVersion = $state(0);
-
   updateCharacterCounts(): void {
     if (this.#characterCountsDebounceTimer) {
       clearTimeout(this.#characterCountsDebounceTimer);
@@ -1935,7 +2096,7 @@ export class Editor {
     this.#wakeUp();
 
     this.settled().then(() => {
-      if (this.searchMatches.length > 0 && !this.searchMatches.some((v) => v.active)) {
+      if (this.searchMatches.length > 0 && this.searchMatches.every((v) => !v.active)) {
         const nextIndex = matchIndex < this.searchMatches.length ? matchIndex : 0;
         this.searchMatches[nextIndex].active = true;
         this.#scrollSearchMatchIntoView(this.searchMatches[nextIndex].id);
@@ -1957,140 +2118,6 @@ export class Editor {
     this.#wasmEditor.replaceTextInBlocks(items.map((v) => [v.nodeId, v.startOffset, v.endOffset, replacement]));
     this.#wasmEditor.removeTrackedItems(2, [...ids]);
     this.#wakeUp();
-  }
-
-  #armPendingScrollRequest(): void {
-    const pending = this.#pendingScrollRequest;
-    if (!pending) {
-      return;
-    }
-
-    this.#pendingScrollRequest = null;
-    this.#armScrollConsumerForMode(pending.mode);
-  }
-
-  #snapshotCurrentCursor(): { pageIdx: number; bounds: Rect | null; visible: boolean } {
-    return {
-      pageIdx: this.cursor.pageIdx,
-      bounds: this.cursor.bounds ? { ...this.cursor.bounds } : null,
-      visible: this.cursor.visible,
-    };
-  }
-
-  #snapshotSelectionHead(): { pageIdx: number; bounds: Rect | null; visible: boolean } | null {
-    const headBounds = this.selection?.collapsed === false ? this.selection.headBounds : null;
-    if (!headBounds) {
-      return null;
-    }
-
-    return {
-      pageIdx: headBounds.pageIdx,
-      bounds: { ...headBounds.bounds },
-      visible: false,
-    };
-  }
-
-  #snapshotScrollTarget(): { pageIdx: number; bounds: Rect | null; visible: boolean } | null {
-    const selectionHead = this.#snapshotSelectionHead();
-    if (selectionHead) {
-      return selectionHead;
-    }
-
-    const cursorSnapshot = this.#snapshotCurrentCursor();
-    if (cursorSnapshot.pageIdx < 0 || !cursorSnapshot.bounds) {
-      return null;
-    }
-
-    return cursorSnapshot;
-  }
-
-  #isSameCursorSnapshot(
-    a: { pageIdx: number; bounds: Rect | null; visible: boolean },
-    b: { pageIdx: number; bounds: Rect | null; visible: boolean },
-  ): boolean {
-    if (a.pageIdx !== b.pageIdx) {
-      return false;
-    }
-
-    if (!a.bounds || !b.bounds) {
-      return a.bounds === b.bounds;
-    }
-
-    return (
-      a.bounds.x === b.bounds.x && a.bounds.y === b.bounds.y && a.bounds.width === b.bounds.width && a.bounds.height === b.bounds.height
-    );
-  }
-
-  #applyPresentedCursor(cursor: { pageIdx: number; bounds: Rect | null; visible: boolean } | null): void {
-    if (!cursor || cursor.pageIdx < 0 || !cursor.bounds) {
-      this.presentedCursor.pageIdx = -1;
-      this.presentedCursor.bounds = null;
-      this.presentedCursor.visible = false;
-      return;
-    }
-
-    this.presentedCursor.pageIdx = cursor.pageIdx;
-    this.presentedCursor.bounds = { ...cursor.bounds };
-    this.presentedCursor.visible = cursor.visible;
-  }
-
-  #clearPendingScrollAfterRender(): void {
-    this.#pendingScrollAfterRender = null;
-  }
-
-  #invalidatePendingScrollIntent(): void {
-    this.#pendingScrollRequest = null;
-    this.pendingScrollConsumer = null;
-    this.#cursorFollowScrollActive = false;
-    this.#clearPendingScrollAfterRender();
-  }
-
-  #isPageRenderableSoon(pageIdx: number): boolean {
-    const pageEl = this.pageContainerEls[pageIdx];
-    const viewport = this.scrollViewport;
-    if (!pageEl || !viewport) {
-      return false;
-    }
-
-    const viewportRect = viewport.getRect();
-    const viewportHeight = viewportRect.bottom - viewportRect.top;
-    const marginPx = viewportHeight * 2;
-    const pageRect = pageEl.getBoundingClientRect();
-
-    return pageRect.bottom > viewportRect.top - marginPx && pageRect.top < viewportRect.bottom + marginPx;
-  }
-
-  #shouldDeferScrollUntilRender(pageIdx: number): boolean {
-    if (!this.#isPageRenderableSoon(pageIdx)) {
-      return false;
-    }
-
-    const renderedVersion = this.#pageRenderedVersionByPage.get(pageIdx);
-    return renderedVersion === undefined || renderedVersion < this.renderVersion;
-  }
-
-  #armScrollConsumerForMode(mode: 'cursor' | 'typewriter'): void {
-    const scrollTarget = this.#snapshotScrollTarget();
-    if (!scrollTarget) {
-      return;
-    }
-
-    const resolvedMode = mode === 'typewriter' && this.#typewriterAvailable ? 'typewriter' : 'cursor';
-    const cursorSnapshot = scrollTarget;
-
-    if (this.#shouldDeferScrollUntilRender(cursorSnapshot.pageIdx)) {
-      this.#pendingScrollAfterRender = {
-        mode: resolvedMode,
-        pageIdx: cursorSnapshot.pageIdx,
-        cursor: cursorSnapshot,
-      };
-      this.pendingScrollConsumer = null;
-      return;
-    }
-
-    this.#clearPendingScrollAfterRender();
-    this.#applyPresentedCursor(cursorSnapshot);
-    this.pendingScrollConsumer = resolvedMode;
   }
 
   registerCursorAutoScroll(mode: 'cursor' | 'typewriter'): void {
@@ -2203,35 +2230,5 @@ export class Editor {
 
     this.#wasmEditor = null;
     this.#slateReader = null;
-  }
-
-  #toPointerButton(button: number): PointerButton {
-    switch (button) {
-      case 0: {
-        return 'primary';
-      }
-      case 1: {
-        return 'auxiliary';
-      }
-      case 2: {
-        return 'secondary';
-      }
-      default: {
-        return 'primary';
-      }
-    }
-  }
-
-  #toModifier(e: MouseEvent | PointerEvent): Modifier {
-    return {
-      shift: e.shiftKey,
-      ctrl: e.ctrlKey,
-      alt: e.altKey,
-      meta: e.metaKey,
-    };
-  }
-
-  #isTouchLikePointer(e: PointerEvent): boolean {
-    return e.pointerType === 'touch';
   }
 }

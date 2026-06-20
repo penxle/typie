@@ -124,10 +124,12 @@
   const focused = $derived(pane.id === paneGroup.state.current.focusedPaneId);
 
   $effect(() => {
-    if (focused) {
-      app.state.current = undefined;
-      app.state.ancestors = [];
+    if (!focused) {
+      return;
     }
+
+    app.state.current = undefined;
+    app.state.ancestors = [];
   });
 
   let mounted = $state(false);

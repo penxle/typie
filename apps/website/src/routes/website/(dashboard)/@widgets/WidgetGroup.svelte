@@ -346,7 +346,7 @@
       const groupWidgetIds = globalSorted.filter((w) => !w.data.position && w.id !== widgetId).map((w) => w.id);
 
       const leftId = targetIndex === 0 ? undefined : groupWidgetIds[targetIndex - 1];
-      const rightId = targetIndex >= groupWidgetIds.length ? undefined : groupWidgetIds[targetIndex];
+      const rightId = groupWidgetIds[targetIndex];
 
       const lowerOrder = leftId ? globalSorted.find((w) => w.id === leftId)?.order : undefined;
       const upperOrder = rightId ? globalSorted.find((w) => w.id === rightId)?.order : undefined;
@@ -488,7 +488,8 @@
       const isAlreadyInGroup = sorted.some((w) => {
         if (source === 'freePosition' && widgetId) {
           return w.id === widgetId;
-        } else if (source === 'palette') {
+        }
+        if (source === 'palette') {
           return w.name === widgetType;
         }
         return false;

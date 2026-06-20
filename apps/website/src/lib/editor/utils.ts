@@ -108,7 +108,7 @@ export const calculateRelativePosition = (element: HTMLElement, e: MouseEvent | 
 
 export const idleCallback = (callback: () => void): void => {
   if (typeof requestIdleCallback === 'undefined') {
-    setTimeout(callback);
+    setTimeout(callback, 0);
   } else {
     requestIdleCallback(callback);
   }
@@ -135,7 +135,7 @@ export const findNearestPageCoordinate = (
 
   let nearestPageIdx = 0;
   let nearestPageEl = pageElements[0];
-  let minDistance = Number.POSITIVE_INFINITY;
+  let minDistance = Infinity;
 
   for (const [i, pageEl] of pageElements.entries()) {
     if (!pageEl) continue;

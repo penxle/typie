@@ -158,7 +158,7 @@
               backgroundColor: 'gray.100',
               _hover: { backgroundColor: 'gray.200' },
             })}
-            onclick={() => (focusDuration = focusDuration + durationStep)}
+            onclick={() => (focusDuration += durationStep)}
             type="button"
           >
             <Icon icon={PlusIcon} size={16} />
@@ -189,7 +189,7 @@
               backgroundColor: 'gray.100',
               _hover: { backgroundColor: 'gray.200' },
             })}
-            onclick={() => (restDuration = restDuration + durationStep)}
+            onclick={() => (restDuration += durationStep)}
             type="button"
           >
             <Icon icon={PlusIcon} size={16} />

@@ -94,10 +94,12 @@
   });
 
   $effect(() => {
-    if ((editor.layout?.pages.length ?? 0) > 0 && editor.contentReady && !initialized) {
-      initialized = true;
-      tick().then(() => onEditorReady?.(editor));
+    if (!((editor.layout?.pages.length ?? 0) > 0 && editor.contentReady && !initialized)) {
+      return;
     }
+
+    initialized = true;
+    tick().then(() => onEditorReady?.(editor));
   });
 
   $effect(() => {

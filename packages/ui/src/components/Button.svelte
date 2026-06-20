@@ -7,13 +7,13 @@
   import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 
   type RecipeProps = RecipeVariantProps<typeof recipe>;
-  type BaseProps = {
+  type BaseProps = RecipeProps & {
     style?: SystemStyleObject;
     element?: HTMLElement;
     loading?: boolean;
     disabled?: boolean;
     children: Snippet;
-  } & RecipeProps;
+  };
 
   type ButtonAttributes = Omit<HTMLButtonAttributes, 'type' | 'class' | 'style' | 'disabled'>;
   type ButtonProps = ButtonAttributes & {

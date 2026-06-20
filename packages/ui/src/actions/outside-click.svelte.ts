@@ -11,7 +11,7 @@ export const outsideClick: Action<HTMLElement, undefined, { onoutsideclick: () =
           element.dispatchEvent(new CustomEvent('outsideclick'));
         }
       });
-    });
+    }, 0);
 
     return () => {
       onclick?.();

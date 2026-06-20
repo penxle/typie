@@ -41,10 +41,12 @@
   let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
   $effect(() => {
-    if (query.data) {
-      bootstrapData = query.data.getBootstrap as Bootstrap;
-      loading = false;
+    if (!query.data) {
+      return;
     }
+
+    bootstrapData = query.data.getBootstrap as Bootstrap;
+    loading = false;
   });
 
   async function handleSubmit(e: SubmitEvent) {
@@ -222,8 +224,7 @@
                   id="maintenance-message"
                   class={textareaStyle}
                   placeholder="점검 안내 메시지"
-                  bind:value={bootstrapData.maintenance.message}
-                ></textarea>
+                  bind:value={bootstrapData.maintenance.message}></textarea>
               </div>
 
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
@@ -281,10 +282,12 @@
                   <input
                     class={inputStyle}
                     onkeydown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addIp();
+                      if (e.key !== 'Enter') {
+                        return;
                       }
+
+                      e.preventDefault();
+                      addIp();
                     }}
                     placeholder="0.0.0.0"
                     type="text"

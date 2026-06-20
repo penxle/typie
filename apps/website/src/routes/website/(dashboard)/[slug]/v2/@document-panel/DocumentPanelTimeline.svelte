@@ -227,7 +227,7 @@
     const { left: parentLeft, width: parentWidth } = e.currentTarget.parentElement.getBoundingClientRect();
     const ratio = clamp((e.clientX - parentLeft) / parentWidth, 0, 1);
     const index = Math.round(ratio * max);
-    if (headsAsc[index]) selectedHeadId = headsAsc[index].id;
+    if (Object.hasOwn(headsAsc, index)) selectedHeadId = headsAsc[index].id;
   };
 
   const restore = async () => {

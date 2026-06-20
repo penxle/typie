@@ -50,10 +50,12 @@
   const hasEditContent = $derived($state.eager(editText.length) > 0);
 
   $effect(() => {
-    if (editing && textareaEl) {
-      textareaEl.focus();
-      textareaEl.scrollIntoView({ block: 'nearest' });
+    if (!(editing && textareaEl)) {
+      return;
     }
+
+    textareaEl.focus();
+    textareaEl.scrollIntoView({ block: 'nearest' });
   });
 
   $effect(() => {
@@ -251,8 +253,7 @@
           onkeydown={handleKeydown}
           rows={1}
           bind:value={editText}
-          use:autosize
-        ></textarea>
+          use:autosize></textarea>
         <div
           style:top={hasEditContent ? 'auto' : '50%'}
           style:bottom={hasEditContent ? '6px' : 'auto'}

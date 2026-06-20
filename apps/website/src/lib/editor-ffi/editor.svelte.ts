@@ -150,12 +150,80 @@ export { getEditorContext };
 export const setupEditorContext = () => setEditorContext(new EditorContext());
 
 export class Editor {
+  static async create(graph: Uint8Array, viewport: Viewport, themeVariant: ThemeVariant = 'light-white') {
+    await ensureWasmInitialized();
+
+    const self = new this();
+
+    self.#wasm = wasm.create_editor_from_graph(graph, viewport);
+    self.#initInstance(viewport);
+
+    wasm.set_theme_variant(themeVariant);
+    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
+    self.enqueue({ type: 'system', event: { type: 'initialize' } });
+
+    self.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'search-match',
+        style: {
+          background: 'ui.search-match',
+          background_radius: 2,
+          background_inset: 2,
+          underline: undefined,
+        },
+        enabled: true,
+        z_index: 0,
+      },
+    });
+    self.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'search-match-active',
+        style: {
+          background: 'ui.search-match-active',
+          background_radius: 2,
+          background_inset: 2,
+          underline: undefined,
+        },
+        enabled: true,
+        z_index: 1,
+      },
+    });
+
+    return self;
+  }
+
+  static async createFromDoc(plain: PlainDoc, viewport: Viewport, themeVariant: ThemeVariant = 'light-white'): Promise<Editor> {
+    await ensureWasmInitialized();
+
+    const self = new this();
+
+    self.#wasm = wasm.create_editor_from_doc(plain, viewport);
+    self.#initInstance(viewport);
+
+    wasm.set_theme_variant(themeVariant);
+    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
+    self.enqueue({ type: 'system', event: { type: 'initialize' } });
+
+    return self;
+  }
+
+  static setThemeVariant(variant: ThemeVariant): void {
+    const changed = wasm.set_theme_variant(variant);
+    if (!changed) return;
+    for (const editor of snapshot()) {
+      editor.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
+    }
+  }
+
   #wasm!: WasmEditor;
   #destroyed = false;
 
   #queued = false;
   #rafId: number | null = null;
-  tickRevision = $state(0);
 
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
@@ -165,26 +233,6 @@ export class Editor {
 
     this.#applyViewport(this.#viewport);
   }, VIEWPORT_RESIZE_DEBOUNCE_MS);
-
-  #applyViewport(viewport: Viewport): void {
-    this.#appliedViewport = viewport;
-    this.enqueue({
-      type: 'system',
-      event: { type: 'resize', width: viewport.width, height: viewport.height, scale_factor: viewport.scale_factor },
-    });
-  }
-
-  inputEl = $state<HTMLTextAreaElement>();
-  pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
-  surfaceEl = $state<HTMLDivElement>();
-  scrollContainerEl = $state<HTMLDivElement>();
-  scrollViewport = $state<ScrollViewport>();
-  scrollRootEl = $state<HTMLElement | null>();
-  displayZoom = $state(1);
-  renderZoom = $state(1);
-
-  readOnly = $state(false);
-  protectContent = $state(false);
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
@@ -223,6 +271,150 @@ export class Editor {
   #searchMatches = $state<{ id: string; selection: Selection }[]>([]);
   #searchActiveIdx = $state<number | undefined>();
 
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #contextMenuContributors = new Set<ContextMenuContributor>();
+
+  #gesture!: TouchGestureController;
+
+  #spellcheckDecorationsInstalled = false;
+
+  #aiFeedbackDecorationsInstalled = false;
+
+  #commentDecorationsInstalled = false;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #registeredCommentIds = new Set<string>();
+
+  #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  #tick = (): void => {
+    this.#rafId = null;
+
+    if (this.#queued) {
+      this.#queued = false;
+
+      const events = this.#wasm.tick();
+      for (const event of events) {
+        this.#emit(event);
+      }
+      this.tickRevision += 1;
+    }
+  };
+
+  #stateChangedHandler: EditorEventListener<'state_changed'> = (_, { fields }) => {
+    if (fields.includes('last_history_tag')) {
+      this.#lastHistoryTag = this.#wasm.last_history_tag();
+    }
+
+    if (fields.includes('cursor')) {
+      this.#cursor = this.#wasm.cursor();
+    }
+
+    if (fields.includes('placeholder')) {
+      this.#placeholder = this.#wasm.placeholder() ?? undefined;
+    }
+
+    if (fields.includes('selection')) {
+      this.#selection = this.#wasm.selection();
+      // null selection is the unfocused state; release DOM focus so OS caret and IME follow.
+      if (this.#selection === undefined) {
+        this.inputEl?.blur();
+      }
+      this.#syncActiveSpellcheckErrorFromSelection();
+      this.#syncActiveAiFeedbackFromSelection();
+    }
+
+    if (fields.includes('doc') || fields.includes('selection')) {
+      this.characterCountsVersion++;
+    }
+
+    if (fields.includes('page_sizes')) {
+      this.#pageSizes = this.#wasm.page_sizes();
+    }
+
+    // external_elements / table_overlays / link_rects are intentionally NOT
+    // recomputed here. The per-tick `tickRevision` bump invalidates their lazy
+    // getters and drives the per-visible-page overlay queries, so off-screen
+    // pages never build their fragments on a keystroke.
+
+    if (fields.includes('root_attrs')) {
+      this.#rootAttrs = this.#wasm.root_attrs();
+    }
+
+    if (fields.includes('modifiers')) {
+      this.#modifierState = this.#wasm.modifier_state();
+    }
+
+    if (fields.includes('block')) {
+      this.#blockState = this.#wasm.block_state();
+    }
+
+    if (fields.includes('styles')) {
+      this.#styleEntries = this.#wasm.style_entries();
+      this.#appliedStyle = this.#wasm.applied_style();
+    }
+
+    if (fields.includes('styles') || fields.includes('modifiers')) {
+      this.#styleDivergence = this.#wasm.style_divergence();
+    }
+
+    if (fields.includes('tracked_ranges')) {
+      this.trackedRanges = this.#wasm.tracked_ranges();
+
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const rangeById = new Map(this.trackedRanges.map((r) => [r.id, r]));
+
+      const isStale = (e: SpellcheckError): boolean => {
+        const r = rangeById.get(e.id);
+        if (!r) return true;
+        if (r.text !== e.context) return true;
+        return false;
+      };
+
+      for (const e of this.spellcheckErrors) {
+        const r = rangeById.get(e.id);
+        if (r && r.text !== e.context) {
+          this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: e.id } });
+        }
+      }
+
+      this.spellcheckErrors = this.spellcheckErrors.filter((e) => !isStale(e));
+
+      if (this.activeSpellcheckErrorId !== null && this.spellcheckErrors.every((e) => e.id !== this.activeSpellcheckErrorId)) {
+        this.activeSpellcheckErrorId = null;
+      }
+
+      this.aiFeedbacks = this.aiFeedbacks.filter((f) => {
+        const r = rangeById.get(f.id);
+        return r !== undefined;
+      });
+
+      if (this.activeAiFeedbackId !== null && this.aiFeedbacks.every((f) => f.id !== this.activeAiFeedbackId)) {
+        this.activeAiFeedbackId = null;
+      }
+    }
+
+    const pageDomChanged = fields.includes('root_attrs') || fields.includes('page_sizes');
+    if (pageDomChanged) {
+      this.refreshPointerStyleAfterDomUpdate();
+    } else if (fields.some((field) => ['doc', 'external_elements', 'modifiers', 'block'].includes(field))) {
+      this.refreshPointerStyle();
+    }
+  };
+
+  tickRevision = $state(0);
+
+  inputEl = $state<HTMLTextAreaElement>();
+  pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
+  surfaceEl = $state<HTMLDivElement>();
+  scrollContainerEl = $state<HTMLDivElement>();
+  scrollViewport = $state<ScrollViewport>();
+  scrollRootEl = $state<HTMLElement | null>();
+  displayZoom = $state(1);
+  renderZoom = $state(1);
+
+  readOnly = $state(false);
+  protectContent = $state(false);
+
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
 
@@ -235,32 +427,18 @@ export class Editor {
     extraItems: [] as ContextMenuItem[],
   });
 
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  #contextMenuContributors = new Set<ContextMenuContributor>();
-
-  #gesture!: TouchGestureController;
-
-  get gesture(): TouchGestureController {
-    return this.#gesture;
-  }
-
   inflightFiles = $state(new SvelteMap<string, { name: string; size: number }>());
 
   spellcheckErrors = $state<SpellcheckError[]>([]);
   trackedRanges = $state<TrackedRange[]>([]);
   activeSpellcheckErrorId = $state<string | null>(null);
-  #spellcheckDecorationsInstalled = false;
 
   aiFeedbacks = $state<AiFeedback[]>([]);
   activeAiFeedbackId = $state<string | null>(null);
-  #aiFeedbackDecorationsInstalled = false;
 
   activeCommentId = $state<string | null>(null);
   commentClickHandler: ((id: string) => void) | null = null;
   requestCommentCompose: (() => void) | null = null;
-  #commentDecorationsInstalled = false;
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  #registeredCommentIds = new Set<string>();
 
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
@@ -274,10 +452,157 @@ export class Editor {
     selectionWithoutWhitespaceAndPunctuation: 0,
   });
   characterCountsVersion = $state(0);
-  #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor() {
     // no-op
+  }
+
+  #applyViewport(viewport: Viewport): void {
+    this.#appliedViewport = viewport;
+    this.enqueue({
+      type: 'system',
+      event: { type: 'resize', width: viewport.width, height: viewport.height, scale_factor: viewport.scale_factor },
+    });
+  }
+
+  #setFocused(focused: boolean): void {
+    if (this.#focused === focused) {
+      return;
+    }
+
+    this.#focused = focused;
+    this.enqueue({ type: 'system', event: { type: 'set_focused', focused } });
+  }
+
+  #currentCursorLineRect(): PageRect | null {
+    const cursor = this.#cursor;
+    if (cursor) {
+      return { page_idx: cursor.page_idx, rect: cursor.line };
+    }
+    return null;
+  }
+
+  #scheduleTick(): void {
+    if (this.#queued) {
+      return;
+    }
+
+    this.#queued = true;
+
+    if (this.#rafId === null) {
+      this.#rafId = requestAnimationFrame(this.#tick);
+    }
+  }
+
+  #moveActive(delta: number): void {
+    const len = this.#searchMatches.length;
+    if (len === 0) return;
+    const current = this.#searchActiveIdx ?? 0;
+    const next = (((current + delta) % len) + len) % len;
+    this.#searchActiveIdx = next;
+    this.#applyActiveMark();
+    this.#scrollToActiveMatch();
+  }
+
+  #applyActiveMark(preferFresh = false): void {
+    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
+    const idx = this.#searchActiveIdx;
+    if (idx === undefined) return;
+    const match = this.#searchMatches[idx];
+    if (!match) return;
+    // search() 직후엔 새 매치가 아직 flush되지 않아 tracked range가 이전 검색어의 위치를
+    // 들고 있다(인덱스 기반 id 재사용으로 충돌). 이때는 조회를 건너뛰고 검색 결과를 그대로 쓴다.
+    const live = preferFresh ? undefined : this.#wasm.tracked_ranges('search-match').find((r) => r.id === match.id);
+    const selection = pickMatchSelection(match.selection, live);
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'add',
+        id: `search-match-active:${match.id}`,
+        group: 'search-match-active',
+        selection,
+        metadata: '',
+      },
+    });
+  }
+
+  #scrollToActiveMatch(): void {
+    const idx = this.#searchActiveIdx;
+    if (idx === undefined) return;
+    const match = this.#searchMatches[idx];
+    if (!match) return;
+    this.scrollIntoView({ target: { type: 'tracked_item', id: match.id } });
+  }
+
+  #handleSearchReplaceResult(id: string, outcome: string): void {
+    if (outcome !== 'replaced') return;
+    const idx = this.#searchMatches.findIndex((m) => m.id === id);
+    if (idx === -1) return;
+    this.#searchMatches = this.#searchMatches.filter((_, i) => i !== idx);
+    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
+    this.enqueue({
+      type: 'tracked_range',
+      op: { type: 'remove', id: `search-match-active:${id}` },
+    });
+    const len = this.#searchMatches.length;
+    if (len === 0) {
+      this.#searchActiveIdx = undefined;
+    } else {
+      this.#searchActiveIdx = Math.min(idx, len - 1);
+      this.#applyActiveMark();
+      this.#scrollToActiveMatch();
+    }
+  }
+
+  #syncActiveSpellcheckErrorFromSelection(): void {
+    const cursor = this.#cursor;
+    if (!cursor) return;
+
+    const cx = cursor.caret.x;
+    const cy = cursor.line.y + cursor.line.height / 2;
+    const pageIdx = cursor.page_idx;
+
+    const hit =
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck-active')[0] ??
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck')[0];
+
+    if (hit) {
+      this.setActiveSpellcheckError(hit.id);
+    } else if (this.activeSpellcheckErrorId !== null) {
+      this.setActiveSpellcheckError(null);
+    }
+  }
+
+  #syncActiveAiFeedbackFromSelection(): void {
+    const cursor = this.#cursor;
+    if (!cursor) return;
+
+    const cx = cursor.caret.x;
+    const cy = cursor.line.y + cursor.line.height / 2;
+    const pageIdx = cursor.page_idx;
+
+    const hit =
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback-active')[0] ??
+      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback')[0];
+
+    if (hit) {
+      this.setActiveAiFeedback(hit.id);
+    } else if (this.activeAiFeedbackId !== null) {
+      this.setActiveAiFeedback(null);
+    }
+  }
+
+  #emit(event: EditorEvent): void {
+    const set = this.#listeners.get(event.type);
+    if (set) {
+      for (const cb of set) {
+        (cb as EditorEventListener<typeof event.type>)(this, event as never);
+      }
+    }
+  }
+
+  #handleSpellcheckReplaceResult(id: string): void {
+    this.removeSpellcheckError(id);
   }
 
   #initInstance(viewport: Viewport): void {
@@ -346,65 +671,8 @@ export class Editor {
     });
   }
 
-  static async create(graph: Uint8Array, viewport: Viewport, themeVariant: ThemeVariant = 'light-white') {
-    await ensureWasmInitialized();
-
-    const self = new this();
-
-    self.#wasm = wasm.create_editor_from_graph(graph, viewport);
-    self.#initInstance(viewport);
-
-    wasm.set_theme_variant(themeVariant);
-    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
-    self.enqueue({ type: 'system', event: { type: 'initialize' } });
-
-    self.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'search-match',
-        style: {
-          background: 'ui.search-match',
-          background_radius: 2,
-          background_inset: 2,
-          underline: undefined,
-        },
-        enabled: true,
-        z_index: 0,
-      },
-    });
-    self.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'search-match-active',
-        style: {
-          background: 'ui.search-match-active',
-          background_radius: 2,
-          background_inset: 2,
-          underline: undefined,
-        },
-        enabled: true,
-        z_index: 1,
-      },
-    });
-
-    return self;
-  }
-
-  static async createFromDoc(plain: PlainDoc, viewport: Viewport, themeVariant: ThemeVariant = 'light-white'): Promise<Editor> {
-    await ensureWasmInitialized();
-
-    const self = new this();
-
-    self.#wasm = wasm.create_editor_from_doc(plain, viewport);
-    self.#initInstance(viewport);
-
-    wasm.set_theme_variant(themeVariant);
-    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
-    self.enqueue({ type: 'system', event: { type: 'initialize' } });
-
-    return self;
+  get gesture(): TouchGestureController {
+    return this.#gesture;
   }
 
   setDoc(plain: PlainDoc): void {
@@ -687,15 +955,6 @@ export class Editor {
     return this.#focused;
   }
 
-  #setFocused(focused: boolean): void {
-    if (this.#focused === focused) {
-      return;
-    }
-
-    this.#focused = focused;
-    this.enqueue({ type: 'system', event: { type: 'set_focused', focused } });
-  }
-
   get pointerStyle() {
     return this.#pointerStyle;
   }
@@ -722,14 +981,6 @@ export class Editor {
 
   clientDeltaToLocalDelta(delta: number): number {
     return delta / this.safeDisplayZoom();
-  }
-
-  #currentCursorLineRect(): PageRect | null {
-    const cursor = this.#cursor;
-    if (cursor) {
-      return { page_idx: cursor.page_idx, rect: cursor.line };
-    }
-    return null;
   }
 
   selectionHeadRect(): PageRect | null {
@@ -901,16 +1152,6 @@ export class Editor {
     this.tickRevision += 1;
   }
 
-  #scheduleTick(): void {
-    if (!this.#queued) {
-      this.#queued = true;
-
-      if (this.#rafId === null) {
-        this.#rafId = requestAnimationFrame(this.#tick);
-      }
-    }
-  }
-
   attachSurface(page: number, canvases: HTMLCanvasElement[], width: number, height: number): void {
     if (this.#destroyed) return;
     this.#wasm.attach_surface(page, canvases, width, height, this.surfaceScaleFactor);
@@ -937,14 +1178,6 @@ export class Editor {
 
   setThemeVariant(variant: ThemeVariant): void {
     Editor.setThemeVariant(variant);
-  }
-
-  static setThemeVariant(variant: ThemeVariant): void {
-    const changed = wasm.set_theme_variant(variant);
-    if (!changed) return;
-    for (const editor of snapshot()) {
-      editor.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
-    }
   }
 
   currentHeads(): Uint8Array {
@@ -1044,38 +1277,6 @@ export class Editor {
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
   }
 
-  #moveActive(delta: number): void {
-    const len = this.#searchMatches.length;
-    if (len === 0) return;
-    const current = this.#searchActiveIdx ?? 0;
-    const next = (((current + delta) % len) + len) % len;
-    this.#searchActiveIdx = next;
-    this.#applyActiveMark();
-    this.#scrollToActiveMatch();
-  }
-
-  #applyActiveMark(preferFresh = false): void {
-    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
-    const idx = this.#searchActiveIdx;
-    if (idx === undefined) return;
-    const match = this.#searchMatches[idx];
-    if (!match) return;
-    // search() 직후엔 새 매치가 아직 flush되지 않아 tracked range가 이전 검색어의 위치를
-    // 들고 있다(인덱스 기반 id 재사용으로 충돌). 이때는 조회를 건너뛰고 검색 결과를 그대로 쓴다.
-    const live = preferFresh ? undefined : this.#wasm.tracked_ranges('search-match').find((r) => r.id === match.id);
-    const selection = pickMatchSelection(match.selection, live);
-    this.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'add',
-        id: `search-match-active:${match.id}`,
-        group: 'search-match-active',
-        selection,
-        metadata: '',
-      },
-    });
-  }
-
   proseText(): string {
     this.flush();
     return this.#wasm.prose_text();
@@ -1163,34 +1364,6 @@ export class Editor {
     });
   }
 
-  #scrollToActiveMatch(): void {
-    const idx = this.#searchActiveIdx;
-    if (idx === undefined) return;
-    const match = this.#searchMatches[idx];
-    if (!match) return;
-    this.scrollIntoView({ target: { type: 'tracked_item', id: match.id } });
-  }
-
-  #handleSearchReplaceResult(id: string, outcome: string): void {
-    if (outcome !== 'replaced') return;
-    const idx = this.#searchMatches.findIndex((m) => m.id === id);
-    if (idx === -1) return;
-    this.#searchMatches = this.#searchMatches.filter((_, i) => i !== idx);
-    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
-    this.enqueue({
-      type: 'tracked_range',
-      op: { type: 'remove', id: `search-match-active:${id}` },
-    });
-    const len = this.#searchMatches.length;
-    if (len === 0) {
-      this.#searchActiveIdx = undefined;
-    } else {
-      this.#searchActiveIdx = Math.min(idx, len - 1);
-      this.#applyActiveMark();
-      this.#scrollToActiveMatch();
-    }
-  }
-
   setSpellcheckErrors(
     items: {
       id: string;
@@ -1251,12 +1424,12 @@ export class Editor {
     if (this.activeSpellcheckErrorId === id) return;
 
     const restoreToNormalGroup = (errorId: string) => {
-      if (!this.trackedRanges.some((r) => r.id === errorId)) return;
+      if (this.trackedRanges.every((r) => r.id !== errorId)) return;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck' } });
     };
 
     const promoteToActiveGroup = (errorId: string): boolean => {
-      if (!this.trackedRanges.some((r) => r.id === errorId)) return false;
+      if (this.trackedRanges.every((r) => r.id !== errorId)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck-active' } });
       return true;
     };
@@ -1274,25 +1447,6 @@ export class Editor {
         return;
       }
       this.scrollIntoView({ target: { type: 'tracked_item', id } });
-    }
-  }
-
-  #syncActiveSpellcheckErrorFromSelection(): void {
-    const cursor = this.#cursor;
-    if (!cursor) return;
-
-    const cx = cursor.caret.x;
-    const cy = cursor.line.y + cursor.line.height / 2;
-    const pageIdx = cursor.page_idx;
-
-    const hit =
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck-active')[0] ??
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck')[0];
-
-    if (hit) {
-      this.setActiveSpellcheckError(hit.id);
-    } else if (this.activeSpellcheckErrorId !== null) {
-      this.setActiveSpellcheckError(null);
     }
   }
 
@@ -1446,7 +1600,7 @@ export class Editor {
     if (this.activeCommentId === id) return;
 
     const move = (cid: string, group: 'comment' | 'comment-active'): boolean => {
-      if (!this.trackedRanges.some((r) => r.id === cid)) return false;
+      if (this.trackedRanges.every((r) => r.id !== cid)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: cid, group } });
       return true;
     };
@@ -1467,12 +1621,12 @@ export class Editor {
     if (this.activeAiFeedbackId === id) return;
 
     const restoreToNormalGroup = (feedbackId: string) => {
-      if (!this.trackedRanges.some((r) => r.id === feedbackId)) return;
+      if (this.trackedRanges.every((r) => r.id !== feedbackId)) return;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback' } });
     };
 
     const promoteToActiveGroup = (feedbackId: string): boolean => {
-      if (!this.trackedRanges.some((r) => r.id === feedbackId)) return false;
+      if (this.trackedRanges.every((r) => r.id !== feedbackId)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback-active' } });
       return true;
     };
@@ -1493,25 +1647,6 @@ export class Editor {
     }
   }
 
-  #syncActiveAiFeedbackFromSelection(): void {
-    const cursor = this.#cursor;
-    if (!cursor) return;
-
-    const cx = cursor.caret.x;
-    const cy = cursor.line.y + cursor.line.height / 2;
-    const pageIdx = cursor.page_idx;
-
-    const hit =
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback-active')[0] ??
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback')[0];
-
-    if (hit) {
-      this.setActiveAiFeedback(hit.id);
-    } else if (this.activeAiFeedbackId !== null) {
-      this.setActiveAiFeedback(null);
-    }
-  }
-
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {
     const output = match(mode)
       .with('state', () => this.#wasm.inspect_state())
@@ -1520,134 +1655,6 @@ export class Editor {
       .exhaustive();
 
     console.log(output);
-  }
-
-  #tick = (): void => {
-    this.#rafId = null;
-
-    if (this.#queued) {
-      this.#queued = false;
-
-      const events = this.#wasm.tick();
-      for (const event of events) {
-        this.#emit(event);
-      }
-      this.tickRevision += 1;
-    }
-  };
-
-  #emit(event: EditorEvent): void {
-    const set = this.#listeners.get(event.type);
-    if (set) {
-      for (const cb of set) {
-        (cb as EditorEventListener<typeof event.type>)(this, event as never);
-      }
-    }
-  }
-
-  #stateChangedHandler: EditorEventListener<'state_changed'> = (_, { fields }) => {
-    if (fields.includes('last_history_tag')) {
-      this.#lastHistoryTag = this.#wasm.last_history_tag();
-    }
-
-    if (fields.includes('cursor')) {
-      this.#cursor = this.#wasm.cursor();
-    }
-
-    if (fields.includes('placeholder')) {
-      this.#placeholder = this.#wasm.placeholder() ?? undefined;
-    }
-
-    if (fields.includes('selection')) {
-      this.#selection = this.#wasm.selection();
-      // null selection is the unfocused state; release DOM focus so OS caret and IME follow.
-      if (this.#selection === undefined) {
-        this.inputEl?.blur();
-      }
-      this.#syncActiveSpellcheckErrorFromSelection();
-      this.#syncActiveAiFeedbackFromSelection();
-    }
-
-    if (fields.includes('doc') || fields.includes('selection')) {
-      this.characterCountsVersion++;
-    }
-
-    if (fields.includes('page_sizes')) {
-      this.#pageSizes = this.#wasm.page_sizes();
-    }
-
-    // external_elements / table_overlays / link_rects are intentionally NOT
-    // recomputed here. The per-tick `tickRevision` bump invalidates their lazy
-    // getters and drives the per-visible-page overlay queries, so off-screen
-    // pages never build their fragments on a keystroke.
-
-    if (fields.includes('root_attrs')) {
-      this.#rootAttrs = this.#wasm.root_attrs();
-    }
-
-    if (fields.includes('modifiers')) {
-      this.#modifierState = this.#wasm.modifier_state();
-    }
-
-    if (fields.includes('block')) {
-      this.#blockState = this.#wasm.block_state();
-    }
-
-    if (fields.includes('styles')) {
-      this.#styleEntries = this.#wasm.style_entries();
-      this.#appliedStyle = this.#wasm.applied_style();
-    }
-
-    if (fields.includes('styles') || fields.includes('modifiers')) {
-      this.#styleDivergence = this.#wasm.style_divergence();
-    }
-
-    if (fields.includes('tracked_ranges')) {
-      this.trackedRanges = this.#wasm.tracked_ranges();
-
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const rangeById = new Map(this.trackedRanges.map((r) => [r.id, r]));
-
-      const isStale = (e: SpellcheckError): boolean => {
-        const r = rangeById.get(e.id);
-        if (!r) return true;
-        if (r.text !== e.context) return true;
-        return false;
-      };
-
-      for (const e of this.spellcheckErrors) {
-        const r = rangeById.get(e.id);
-        if (r && r.text !== e.context) {
-          this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: e.id } });
-        }
-      }
-
-      this.spellcheckErrors = this.spellcheckErrors.filter((e) => !isStale(e));
-
-      if (this.activeSpellcheckErrorId !== null && !this.spellcheckErrors.some((e) => e.id === this.activeSpellcheckErrorId)) {
-        this.activeSpellcheckErrorId = null;
-      }
-
-      this.aiFeedbacks = this.aiFeedbacks.filter((f) => {
-        const r = rangeById.get(f.id);
-        return r !== undefined;
-      });
-
-      if (this.activeAiFeedbackId !== null && !this.aiFeedbacks.some((f) => f.id === this.activeAiFeedbackId)) {
-        this.activeAiFeedbackId = null;
-      }
-    }
-
-    const pageDomChanged = fields.includes('root_attrs') || fields.includes('page_sizes');
-    if (pageDomChanged) {
-      this.refreshPointerStyleAfterDomUpdate();
-    } else if (fields.some((field) => ['doc', 'external_elements', 'modifiers', 'block'].includes(field))) {
-      this.refreshPointerStyle();
-    }
-  };
-
-  #handleSpellcheckReplaceResult(id: string): void {
-    this.removeSpellcheckError(id);
   }
 
   destroy(): void {

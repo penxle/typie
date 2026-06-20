@@ -124,7 +124,7 @@ export const resolvePreset = (preset?: TemplatePreset): ResolvedPreset => {
         }
       : {
           type: 'continuous' as const,
-          maxWidth: preset?.layout?.type === 'continuous' ? preset.layout.maxWidth : defaultValues.maxWidth,
+          maxWidth: (preset?.layout?.type === 'continuous' ? preset.layout : defaultValues).maxWidth,
         };
 
   return {
@@ -333,7 +333,7 @@ export const garbageCollectLoroDoc = (doc: LoroDoc): number => {
 };
 
 export const countCharacters = (text: string) => {
-  return [...text.replaceAll('\u200B', '').replaceAll(/\s+/g, ' ').trim()].length;
+  return [...text.replaceAll('\u{200B}', '').replaceAll(/\s+/g, ' ').trim()].length;
 };
 
 export const extractLoroDocContents = async (doc: LoroDoc) => {

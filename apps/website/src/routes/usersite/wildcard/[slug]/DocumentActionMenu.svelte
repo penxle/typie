@@ -117,8 +117,7 @@
         })}
         placeholder="신고 사유를 적어주세요"
         rows="3"
-        bind:value={form.fields.reason}
-      ></textarea>
+        bind:value={form.fields.reason}></textarea>
 
       <Button size="lg" type="submit">신고하기</Button>
     </form>

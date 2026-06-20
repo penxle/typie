@@ -187,16 +187,18 @@
   });
 
   $effect(() => {
-    if (app.state.nextCurrentSiteId && query.data.me.sites.some((s) => s.id === app.state.nextCurrentSiteId)) {
-      paneGroup.switchToSite(app.state.nextCurrentSiteId);
-      app.state.nextCurrentSiteId = undefined;
+    if (!(app.state.nextCurrentSiteId && query.data.me.sites.some((s) => s.id === app.state.nextCurrentSiteId))) {
+      return;
     }
+
+    paneGroup.switchToSite(app.state.nextCurrentSiteId);
+    app.state.nextCurrentSiteId = undefined;
   });
 
   // currentSiteId가 유효하지 않으면 (사이트 삭제 등) 첫 번째 사이트로 전환
   $effect(() => {
     const sites = query.data.me.sites;
-    if (sites.length > 0 && !sites.some((s) => s.id === app.preference.current.currentSiteId)) {
+    if (sites.length > 0 && sites.every((s) => s.id !== app.preference.current.currentSiteId)) {
       paneGroup.switchToSite(sites[0].id);
     }
   });
@@ -259,15 +261,17 @@
   });
 
   $effect(() => {
-    if (query.data.me) {
-      mixpanel.identify(query.data.me.id);
-
-      mixpanel.people.set({
-        $email: query.data.me.email,
-        $name: query.data.me.name,
-        $avatar: qs.stringifyUrl({ url: query.data.me.avatar.url, query: { s: 256, f: 'png' } }),
-      });
+    if (!query.data.me) {
+      return;
     }
+
+    mixpanel.identify(query.data.me.id);
+
+    mixpanel.people.set({
+      $email: query.data.me.email,
+      $name: query.data.me.name,
+      $avatar: qs.stringifyUrl({ url: query.data.me.avatar.url, query: { s: 256, f: 'png' } }),
+    });
   });
 
   $effect(() => {
@@ -370,12 +374,14 @@
           onclick={() => {
             mixpanel.track('logout', { via: 'mobile_dashboard' });
 
-            location.href = qs.stringifyUrl({
-              url: '/logout',
-              query: {
-                redirect_uri: env.PUBLIC_WEBSITE_URL,
-              },
-            });
+            location.assign(
+              qs.stringifyUrl({
+                url: '/logout',
+                query: {
+                  redirect_uri: env.PUBLIC_WEBSITE_URL,
+                },
+              }),
+            );
           }}
           size="lg"
           variant="secondary"

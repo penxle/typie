@@ -1,6 +1,6 @@
 import type { Selection } from './types';
 
-const SENTINEL = import.meta.env.PROD ? '\u200B' : '◆';
+const SENTINEL = import.meta.env.PROD ? '\u{200B}' : '◆';
 const MARKER_BASE = 0xe0_00;
 const EMPTY_COMPOSING = { start: -1, end: -1 } as const;
 
@@ -214,7 +214,7 @@ const stripSentinel = (text: string) => (text.startsWith(SENTINEL) ? text.slice(
 
 const normalizeInsertedText = (text: string) => text.replaceAll(/\r\n?/g, '\n');
 
-export const countTextChars = (text: string) => (graphemeSegmenter ? [...graphemeSegmenter.segment(text)].length : [...text].length);
+export const countTextChars = (text: string) => [...(graphemeSegmenter ? graphemeSegmenter.segment(text) : text)].length;
 
 export const positionMarker = (nodeId: string, cursorOffset: number) =>
   String.fromCodePoint(MARKER_BASE + ((hashString(nodeId) ^ cursorOffset) & 0xf_ff));
@@ -1148,7 +1148,7 @@ export const reduceEditingDeltas = (state: SyntheticTextInputState, deltas: Synt
     messages.push(compositionUpdateMessage(committed, countTextChars(replaceTextValue)), commitPreeditMessage());
   } else if (newValue.text.length === 0) {
     messages.push(deleteBackwardMessage(oldValue.selection.baseOffset));
-  } else if (!deltas.every((delta) => delta.type === 'nonTextUpdate')) {
+  } else if (deltas.some((delta) => delta.type !== 'nonTextUpdate')) {
     const effectiveOld = stripSentinel(oldValue.text);
     const effectiveNew = stripSentinel(newValue.text);
 

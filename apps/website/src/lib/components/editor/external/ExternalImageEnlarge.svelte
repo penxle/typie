@@ -57,12 +57,14 @@
   });
 
   $effect(() => {
-    if (referenceEl && targetEl) {
-      referenceRect = referenceEl.getBoundingClientRect();
-      targetRect = targetEl.getBoundingClientRect();
-
-      progress.target = 1;
+    if (!(referenceEl && targetEl)) {
+      return;
     }
+
+    referenceRect = referenceEl.getBoundingClientRect();
+    targetRect = targetEl.getBoundingClientRect();
+
+    progress.target = 1;
   });
 
   const handleClose = async () => {

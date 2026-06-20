@@ -86,23 +86,6 @@ class PreloadQueue {
   #inflight = 0;
   #promises = new Map<string, Promise<void>>();
 
-  enqueue(key: string, priority: number, fn: () => Promise<void>): Promise<void> {
-    if (loaded.has(key)) return Promise.resolve();
-
-    const existing = this.#promises.get(key);
-    if (existing) return existing;
-
-    const promise = new Promise<void>((resolve, reject) => {
-      const item: PreloadItem = { key, priority, fn, resolve, reject };
-      let i = this.#pending.findIndex((p) => p.priority < priority);
-      if (i === -1) i = this.#pending.length;
-      this.#pending.splice(i, 0, item);
-    });
-    this.#promises.set(key, promise);
-    this.#flush();
-    return promise;
-  }
-
   #flush(): void {
     while (this.#inflight < PRELOAD_CONCURRENCY && this.#pending.length > 0) {
       const item = this.#pending.shift();
@@ -130,6 +113,23 @@ class PreloadQueue {
         },
       );
     }
+  }
+
+  enqueue(key: string, priority: number, fn: () => Promise<void>): Promise<void> {
+    if (loaded.has(key)) return Promise.resolve();
+
+    const existing = this.#promises.get(key);
+    if (existing) return existing;
+
+    const promise = new Promise<void>((resolve, reject) => {
+      const item: PreloadItem = { key, priority, fn, resolve, reject };
+      let i = this.#pending.findIndex((p) => p.priority < priority);
+      if (i === -1) i = this.#pending.length;
+      this.#pending.splice(i, 0, item);
+    });
+    this.#promises.set(key, promise);
+    this.#flush();
+    return promise;
   }
 }
 
@@ -323,11 +323,11 @@ export async function resolveFallbackMappings(
           sorted.findLast((f) => f.weight < weight) ??
           sorted.find((f) => f.weight > 500)
         );
-      } else if (weight < 400) {
-        return sorted.findLast((f) => f.weight <= weight) ?? sorted.find((f) => f.weight > weight);
-      } else {
-        return sorted.find((f) => f.weight >= weight) ?? sorted.findLast((f) => f.weight < weight);
       }
+      if (weight < 400) {
+        return sorted.findLast((f) => f.weight <= weight) ?? sorted.find((f) => f.weight > weight);
+      }
+      return sorted.find((f) => f.weight >= weight) ?? sorted.findLast((f) => f.weight < weight);
     })();
     if (!fallbackFont) continue;
 

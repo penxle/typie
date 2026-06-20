@@ -13,12 +13,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.4",
-    "@sentry/sveltekit": "^10.57.0"
+    "@hono/node-server": "^2.0.5",
+    "@sentry/sveltekit": "^10.58.0"
   },
   "devDependencies": {
     "@floating-ui/dom": "^1.7.6",
-    "@iconify-json/lucide": "^1.2.111",
+    "@iconify-json/lucide": "^1.2.113",
     "@iconify-json/simple-icons": "^1.2.86",
     "@iconify-json/twemoji": "^1.2.5",
     "@mearie/core": "^0.6.7",
@@ -26,17 +26,17 @@
     "@number-flow/svelte": "^0.4.0",
     "@observablehq/plot": "^0.6.17",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
-    "@opentelemetry/resources": "^2.7.1",
-    "@opentelemetry/sdk-trace-base": "^2.7.1",
-    "@opentelemetry/sdk-trace-web": "^2.7.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.219.0",
+    "@opentelemetry/resources": "^2.8.0",
+    "@opentelemetry/sdk-trace-base": "^2.8.0",
+    "@opentelemetry/sdk-trace-web": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@pandacss/dev": "^1.11.3",
     "@pandacss/preset-base": "^1.11.3",
-    "@portone/browser-sdk": "^0.1.8",
-    "@sveltejs/kit": "^2.64.0",
+    "@portone/browser-sdk": "^0.1.9",
+    "@sveltejs/kit": "^2.65.2",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
-    "@types/node": "^25.9.2",
+    "@types/node": "^25.9.3",
     "@typie/adapter-node": "workspace:*",
     "@typie/assets": "workspace:*",
     "@typie/editor": "workspace:*",
@@ -50,7 +50,7 @@
     "fast-json-stable-stringify": "^2.1.0",
     "graphql-request": "^7.4.0",
     "graphql-ws": "^6.0.8",
-    "hono": "^4.12.25",
+    "hono": "^4.12.26",
     "jsdom": "^29.1.1",
     "ky": "^2.0.2",
     "lean-qr": "^2.7.1",
@@ -60,7 +60,7 @@
     "mixpanel-browser": "^2.80.0",
     "nanoid": "^5.1.11",
     "query-string": "^9.4.0",
-    "remeda": "^2.38.0",
+    "remeda": "^2.39.0",
     "svelte": "^5.56.3",
     "svelte-check": "^4.6.0",
     "svelte-sonner": "^1.1.1",
@@ -68,7 +68,7 @@
     "typescript": "^6.0.3",
     "unplugin-icons": "^23.0.1",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8",
+    "vitest": "^4.1.9",
     "zod": "^4.4.3"
   }
 }

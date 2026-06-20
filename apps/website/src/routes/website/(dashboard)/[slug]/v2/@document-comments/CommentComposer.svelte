@@ -123,8 +123,7 @@
       {placeholder}
       rows={1}
       bind:value
-      use:autosize
-    ></textarea>
+      use:autosize></textarea>
     <button
       style:top={hasContent ? 'auto' : '50%'}
       style:bottom={hasContent ? '6px' : 'auto'}

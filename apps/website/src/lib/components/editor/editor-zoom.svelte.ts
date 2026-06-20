@@ -35,9 +35,6 @@ export class EditorZoomController {
   static readonly WHEEL_MODE_SWITCH_MIN_DELTA_PX = 1.5;
   static readonly KEYBOARD_ZOOM_STEP = 0.1;
 
-  displayZoom = $state(1);
-  renderZoom = $state(1);
-
   #didApplyPaginatedInitialZoom = false;
   #renderZoomTimer: ReturnType<typeof setTimeout> | null = null;
   #wheelSessionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -47,8 +44,119 @@ export class EditorZoomController {
   #wheelRawZoom: number | null = null;
   #options: EditorZoomControllerOptions;
 
+  displayZoom = $state(1);
+  renderZoom = $state(1);
+
   constructor(options: EditorZoomControllerOptions) {
     this.#options = options;
+  }
+
+  async #stepZoomByKeyboard(delta: number): Promise<void> {
+    const isPaginated = this.#options.isPaginated();
+    const pageWidth = this.#options.pageWidth();
+    if (!isPaginated || pageWidth <= 0) {
+      return;
+    }
+    const anchor = this.#createZoomAnchorFromViewportCenter();
+    const nextZoom = this.displayZoom + delta;
+    await this.#setZoomWithAnchor(nextZoom, anchor);
+  }
+
+  #createZoomAnchorFromClient(clientX: number, clientY: number): ZoomAnchor | null {
+    const scrollContainer = this.#options.getScrollContainer();
+    if (!scrollContainer) {
+      return null;
+    }
+    const resolved = this.#options.editor.resolvePointerCoordinateFromClient(clientX, clientY);
+    if (!resolved) {
+      return null;
+    }
+    const rect = scrollContainer.getBoundingClientRect();
+    return {
+      ...resolved,
+      focalX: clientX - rect.left,
+      focalY: clientY - rect.top,
+    };
+  }
+
+  #createZoomAnchorFromViewportCenter(): ZoomAnchor | null {
+    const scrollContainer = this.#options.getScrollContainer();
+    if (!scrollContainer) {
+      return null;
+    }
+    const rect = scrollContainer.getBoundingClientRect();
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+    return this.#createZoomAnchorFromClient(clientX, clientY);
+  }
+
+  async #setZoomWithAnchor(nextZoom: number, anchor: ZoomAnchor | null, source: 'wheel' | 'programmatic' = 'programmatic'): Promise<void> {
+    const previousZoom = this.displayZoom;
+    this.setZoom(nextZoom, { source });
+    if (!anchor || zoomEquals(previousZoom, this.displayZoom)) {
+      return;
+    }
+    await this.#syncZoomAnchor(anchor, this.displayZoom);
+  }
+
+  #scheduleWheelSessionReset(): void {
+    if (this.#wheelSessionTimer) {
+      clearTimeout(this.#wheelSessionTimer);
+    }
+    this.#wheelSessionTimer = setTimeout(() => {
+      this.#wheelSessionTimer = null;
+      this.#wheelLastEventTs = null;
+      this.#clearWheelSessionModeState();
+    }, EditorZoomController.WHEEL_SESSION_RESET_MS);
+  }
+
+  #clearWheelSessionModeState(): void {
+    this.#wheelSessionMode = null;
+    this.#wheelRawZoom = null;
+    this.#wheelLowDeltaStreak = 0;
+  }
+
+  #resetWheelSession(): void {
+    if (this.#wheelSessionTimer) {
+      clearTimeout(this.#wheelSessionTimer);
+      this.#wheelSessionTimer = null;
+    }
+    this.#wheelLastEventTs = null;
+    this.#clearWheelSessionModeState();
+  }
+
+  async #syncZoomAnchor(anchor: ZoomAnchor, zoom: number): Promise<void> {
+    const scrollContainer = this.#options.getScrollContainer();
+    if (!scrollContainer) {
+      return;
+    }
+
+    const pageCount = this.#options.editor.layout?.pages.length ?? 0;
+    if (pageCount === 0) {
+      return;
+    }
+
+    const pageIdx = Math.max(0, Math.min(anchor.pageIdx, pageCount - 1));
+    const pageEl = this.#options.editor.pageContainerEls[pageIdx];
+    if (!pageEl) {
+      return;
+    }
+
+    await tick();
+
+    const pageRect = pageEl.getBoundingClientRect();
+    const scrollRect = scrollContainer.getBoundingClientRect();
+
+    const targetClientX = scrollRect.left + anchor.focalX;
+    const targetClientY = scrollRect.top + anchor.focalY;
+    const anchoredClientX = pageRect.left + anchor.x * zoom;
+    const anchoredClientY = pageRect.top + anchor.y * zoom;
+
+    const deltaX = anchoredClientX - targetClientX;
+    const deltaY = anchoredClientY - targetClientY;
+    if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
+      scrollContainer.scrollBy({ left: deltaX, top: deltaY });
+    }
   }
 
   destroy(): void {
@@ -178,7 +286,7 @@ export class EditorZoomController {
       return;
     }
 
-    const elapsedSinceLastEvent = this.#wheelLastEventTs === null ? Number.POSITIVE_INFINITY : event.timeStamp - this.#wheelLastEventTs;
+    const elapsedSinceLastEvent = this.#wheelLastEventTs === null ? Infinity : event.timeStamp - this.#wheelLastEventTs;
     this.#wheelLastEventTs = event.timeStamp;
 
     if (elapsedSinceLastEvent > EditorZoomController.WHEEL_BURST_GAP_MS) {
@@ -254,113 +362,5 @@ export class EditorZoomController {
 
     const anchor = this.#createZoomAnchorFromClient(clientX, clientY);
     await this.#setZoomWithAnchor(nextZoom, anchor);
-  }
-
-  async #stepZoomByKeyboard(delta: number): Promise<void> {
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
-    if (!isPaginated || pageWidth <= 0) {
-      return;
-    }
-    const anchor = this.#createZoomAnchorFromViewportCenter();
-    const nextZoom = this.displayZoom + delta;
-    await this.#setZoomWithAnchor(nextZoom, anchor);
-  }
-
-  #createZoomAnchorFromClient(clientX: number, clientY: number): ZoomAnchor | null {
-    const scrollContainer = this.#options.getScrollContainer();
-    if (!scrollContainer) {
-      return null;
-    }
-    const resolved = this.#options.editor.resolvePointerCoordinateFromClient(clientX, clientY);
-    if (!resolved) {
-      return null;
-    }
-    const rect = scrollContainer.getBoundingClientRect();
-    return {
-      ...resolved,
-      focalX: clientX - rect.left,
-      focalY: clientY - rect.top,
-    };
-  }
-
-  #createZoomAnchorFromViewportCenter(): ZoomAnchor | null {
-    const scrollContainer = this.#options.getScrollContainer();
-    if (!scrollContainer) {
-      return null;
-    }
-    const rect = scrollContainer.getBoundingClientRect();
-    const clientX = rect.left + rect.width / 2;
-    const clientY = rect.top + rect.height / 2;
-    return this.#createZoomAnchorFromClient(clientX, clientY);
-  }
-
-  async #setZoomWithAnchor(nextZoom: number, anchor: ZoomAnchor | null, source: 'wheel' | 'programmatic' = 'programmatic'): Promise<void> {
-    const previousZoom = this.displayZoom;
-    this.setZoom(nextZoom, { source });
-    if (!anchor || zoomEquals(previousZoom, this.displayZoom)) {
-      return;
-    }
-    await this.#syncZoomAnchor(anchor, this.displayZoom);
-  }
-
-  #scheduleWheelSessionReset(): void {
-    if (this.#wheelSessionTimer) {
-      clearTimeout(this.#wheelSessionTimer);
-    }
-    this.#wheelSessionTimer = setTimeout(() => {
-      this.#wheelSessionTimer = null;
-      this.#wheelLastEventTs = null;
-      this.#clearWheelSessionModeState();
-    }, EditorZoomController.WHEEL_SESSION_RESET_MS);
-  }
-
-  #clearWheelSessionModeState(): void {
-    this.#wheelSessionMode = null;
-    this.#wheelRawZoom = null;
-    this.#wheelLowDeltaStreak = 0;
-  }
-
-  #resetWheelSession(): void {
-    if (this.#wheelSessionTimer) {
-      clearTimeout(this.#wheelSessionTimer);
-      this.#wheelSessionTimer = null;
-    }
-    this.#wheelLastEventTs = null;
-    this.#clearWheelSessionModeState();
-  }
-
-  async #syncZoomAnchor(anchor: ZoomAnchor, zoom: number): Promise<void> {
-    const scrollContainer = this.#options.getScrollContainer();
-    if (!scrollContainer) {
-      return;
-    }
-
-    const pageCount = this.#options.editor.layout?.pages.length ?? 0;
-    if (pageCount === 0) {
-      return;
-    }
-
-    const pageIdx = Math.max(0, Math.min(anchor.pageIdx, pageCount - 1));
-    const pageEl = this.#options.editor.pageContainerEls[pageIdx];
-    if (!pageEl) {
-      return;
-    }
-
-    await tick();
-
-    const pageRect = pageEl.getBoundingClientRect();
-    const scrollRect = scrollContainer.getBoundingClientRect();
-
-    const targetClientX = scrollRect.left + anchor.focalX;
-    const targetClientY = scrollRect.top + anchor.focalY;
-    const anchoredClientX = pageRect.left + anchor.x * zoom;
-    const anchoredClientY = pageRect.top + anchor.y * zoom;
-
-    const deltaX = anchoredClientX - targetClientX;
-    const deltaY = anchoredClientY - targetClientY;
-    if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
-      scrollContainer.scrollBy({ left: deltaX, top: deltaY });
-    }
   }
 }

@@ -65,7 +65,7 @@
     const containerEls = editor.pageContainerEls;
     const inputEl = editor.inputElement;
 
-    if (bounds && containerEls[pageIdx]) {
+    if (bounds && Object.hasOwn(containerEls, pageIdx)) {
       containerEls[pageIdx].append(element);
 
       element.style.visibility = visible && editor.isFocused ? 'visible' : 'hidden';

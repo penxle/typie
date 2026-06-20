@@ -42,7 +42,7 @@
   <meta content="ko_KR" property="og:locale" />
   <link href={page.url.href} rel="canonical" />
   {#if struct}
-    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    <!-- eslint-disable-next-line svelte/no-at-html-tags, unicorn/no-useless-concat -->
     {@html '<' + `script type="application/ld+json">${JSON.stringify(struct)}</script>`}
   {/if}
 </svelte:head>

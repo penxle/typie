@@ -4,7 +4,7 @@ import type { CommentComposerV2_user$key, CommentPopoverV2_thread$key, DocumentP
 
 export type CommentAnchor = { rects: PageRect[] };
 
-export type CommentThread = { id: string; selection: unknown } & DocumentPanelV2CommentItem_thread$key & CommentPopoverV2_thread$key;
+export type CommentThread = DocumentPanelV2CommentItem_thread$key & CommentPopoverV2_thread$key & { id: string; selection: unknown };
 
 export type CommentController = {
   readonly threads: CommentThread[];

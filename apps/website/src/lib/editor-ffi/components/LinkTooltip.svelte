@@ -62,14 +62,16 @@
   });
 
   const clearHideTimer = () => {
-    if (hideTimer) {
-      clearTimeout(hideTimer);
-      hideTimer = null;
+    if (!hideTimer) {
+      return;
     }
+
+    clearTimeout(hideTimer);
+    hideTimer = null;
   };
 
   const copyHref = async () => {
-    if (editor?.readOnly && editor?.protectContent) return;
+    if (editor?.readOnly && editor.protectContent) return;
     const href = tooltipTarget?.link.href;
     if (!href) return;
     await navigator.clipboard.writeText(href);
@@ -187,7 +189,7 @@
           {tooltipTarget.link.href}
         </span>
 
-        {#if !(editor?.readOnly && editor?.protectContent)}
+        {#if !(editor?.readOnly && editor.protectContent)}
           <button
             class={css({
               display: 'flex',

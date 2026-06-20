@@ -35,7 +35,7 @@ const loadFonts = async (filenames: string[]) => {
     }
   };
 
-  return Object.fromEntries(await Promise.all(filenames.map(async (filename) => [`${filename}`, await load(filename)]))) as Record<
+  return Object.fromEntries(await Promise.all(filenames.map(async (filename) => [filename, await load(filename)]))) as Record<
     string,
     ArrayBuffer
   >;

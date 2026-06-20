@@ -84,13 +84,15 @@
   }
 
   $effect(() => {
-    if (!open) {
-      currentStep = 0;
-      surveyData = {
-        reasons: [],
-        comment: '',
-      };
+    if (open) {
+      return;
     }
+
+    currentStep = 0;
+    surveyData = {
+      reasons: [],
+      comment: '',
+    };
   });
 </script>
 
@@ -267,8 +269,7 @@
               },
             })}
             placeholder="더 자세한 의견을 남겨주시면 개선에 큰 도움이 됩니다 (선택사항)"
-            bind:value={surveyData.comment}
-          ></textarea>
+            bind:value={surveyData.comment}></textarea>
         </div>
       </div>
     {/if}

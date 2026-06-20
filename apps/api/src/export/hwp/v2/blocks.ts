@@ -77,7 +77,7 @@ export function blockquoteToRecordsV2(variant: string, children: Uint8Array[][],
     );
   }
 
-  const borderColor = variant === 'left_quote' ? hexToColorref('000000') : hexToColorref('CCCCCC');
+  const borderColor = hexToColorref(variant === 'left_quote' ? '000000' : 'CCCCCC');
   return makeSingleCellTableV2(
     cellRecords,
     ctx,
@@ -104,7 +104,7 @@ export function blockquoteToRecordsV2(variant: string, children: Uint8Array[][],
 
 export function calloutToRecordsV2(variant: string, children: Uint8Array[][], ctx: HwpConvertContext, isFirst: boolean): Uint8Array[] {
   const hex = resolveColorToHex(`ui.callout.${variant}`);
-  const borderColor = hex ? hexToColorref(hex) : hexToColorref('CCCCCC');
+  const borderColor = hexToColorref(hex || 'CCCCCC');
 
   const bgColors: Record<string, string> = {
     info: 'DBEAFE',

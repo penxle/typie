@@ -16,12 +16,12 @@ describe('web IME normalizer', () => {
     expect(
       readDomInputDiff(
         {
-          text: '\u2028e\u2029',
+          text: '\u{2028}e\u{2029}',
           windowStart: 0,
           selection: { start: 2, end: 2 },
           composing: null,
         },
-        '\u2028è\u2029',
+        '\u{2028}è\u{2029}',
       ),
     ).toEqual({
       start: 1,
@@ -34,12 +34,12 @@ describe('web IME normalizer', () => {
     expect(
       readDomInputDiff(
         {
-          text: '\u2028\u2029',
+          text: '\u{2028}\u{2029}',
           windowStart: 0,
           selection: { start: 1, end: 1 },
           composing: null,
         },
-        '\u2028a\u2029',
+        '\u{2028}a\u{2029}',
       ),
     ).toEqual({
       start: 1,
@@ -86,12 +86,12 @@ describe('web IME normalizer', () => {
 
   it('reads composition inside an empty token-only paragraph at inner flat offsets', () => {
     const current: ImeContext = {
-      text: '\u2028\u2029',
+      text: '\u{2028}\u{2029}',
       windowStart: 0,
       selection: { start: 1, end: 1 },
       composing: { start: 1, end: 1 },
     };
-    const nextText = '\u2028ㅎ\u2029';
+    const nextText = '\u{2028}ㅎ\u{2029}';
     const diff = readDomInputDiff(current, nextText);
 
     expect(diff).toEqual({ start: 1, end: 1, insertedText: 'ㅎ' });

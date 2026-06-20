@@ -48,7 +48,10 @@ const insertEmptyImageMessage = (): Message => ({
 
 export const queuePendingImages = (ctx: EditorContext, files: File[]): void => {
   ctx.pendingImageDrops.push(...files);
-  files.forEach(() => ctx.editor?.enqueue(insertEmptyImageMessage()));
+  let remaining = files.length;
+  while (remaining-- > 0) {
+    ctx.editor?.enqueue(insertEmptyImageMessage());
+  }
 };
 
 const imagePicker = (ctx: EditorContext, processFile: (file: File) => void): HTMLInputElement => {
@@ -64,7 +67,10 @@ const imagePicker = (ctx: EditorContext, processFile: (file: File) => void): HTM
 
 const uploadImages = (ctx: EditorContext, processFile: (file: File) => void, files: FileList | null): void => {
   const picked = [...(files ?? [])];
-  [picked.shift()].filter((file) => file !== undefined).forEach((file) => processFile(file));
+  const first = picked.shift();
+  if (first !== undefined) {
+    processFile(first);
+  }
   queuePendingImages(ctx, picked);
 };
 

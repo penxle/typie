@@ -88,7 +88,7 @@
     const entityIds = tree.selectedEntityIds;
 
     const collect = (entities: TreeEntity[]) => {
-      entities.forEach((entity) => {
+      for (const entity of entities) {
         if (entityIds.has(entity.id)) {
           if (entity.type === 'Folder') {
             folderIds.push(entity.id);
@@ -100,7 +100,7 @@
         if (entity.children) {
           collect(entity.children);
         }
-      });
+      }
     };
 
     collect(tree.entities);

@@ -50,9 +50,9 @@ export const typewriter = (node: Element, { delay = 0, speed = 50 } = {}): Trans
       const position = Math.floor(totalParts * t);
 
       if ((isIntro && t === 0) || (!isIntro && t === 1)) {
-        nodeRanges.forEach(({ textNode, originalText }) => {
+        for (const { textNode, originalText } of nodeRanges) {
           textNode.textContent = isIntro ? '' : originalText;
-        });
+        }
         currentNodeIndex = 0;
         return;
       }

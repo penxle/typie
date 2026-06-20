@@ -197,14 +197,15 @@
         _placeholder: { color: 'text.faint' },
       })}
       onkeydown={(e) => {
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
-          e.preventDefault();
-          handleSubmit();
+        if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing)) {
+          return;
         }
+
+        e.preventDefault();
+        handleSubmit();
       }}
       placeholder="칭찬도, 불만도, 아이디어도 다 좋아요!"
-      bind:value={content}
-    ></textarea>
+      bind:value={content}></textarea>
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
       <div class={flex({ gap: '2px' })}>
         {#each moods as m (m.value)}

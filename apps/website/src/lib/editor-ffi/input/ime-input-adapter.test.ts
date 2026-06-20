@@ -14,7 +14,9 @@ const createImeHarness = (initialContext: ImeContext) => {
   let editorContext = initialContext;
   const adapter = new ImeInputAdapter({
     readContext: () => editorContext,
-    enqueue: (next) => messages.push(...next),
+    enqueue: (next) => {
+      messages.push(...next);
+    },
   });
 
   return {
@@ -53,7 +55,9 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => context(''),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     const beforeInput = beforeInputEvent(input, 'insertText', 'a');
@@ -86,7 +90,9 @@ describe('ImeInputAdapter', () => {
         selection: { start: 53, end: 53 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
@@ -131,7 +137,9 @@ describe('ImeInputAdapter', () => {
               composing: null,
             };
       },
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
@@ -163,27 +171,29 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028e\u2029',
+        text: '\u{2028}e\u{2029}',
         windowStart: 0,
         selection: { start: 2, end: 2 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
-    expect(input.value).toBe('\u2028e\u2029');
+    expect(input.value).toBe('\u{2028}e\u{2029}');
 
     input.setSelectionRange(1, 2);
     const beforeInput = beforeInputEvent(input, 'insertText', 'è');
     adapter.handleBeforeInput(beforeInput);
     expect(beforeInput.preventDefault).not.toHaveBeenCalled();
 
-    input.value = '\u2028eè\u2029';
+    input.value = '\u{2028}eè\u{2029}';
     input.setSelectionRange(3, 3);
     adapter.handleInput(inputEvent(input));
 
-    expect(input.value).toBe('\u2028eè\u2029');
+    expect(input.value).toBe('\u{2028}eè\u{2029}');
     expect(input.selectionStart).toBe(3);
     expect(input.selectionEnd).toBe(3);
     expect(messages).toEqual([
@@ -202,12 +212,14 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028a\u2029',
+        text: '\u{2028}a\u{2029}',
         windowStart: 0,
         selection: { start: 0, end: 3 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
@@ -238,12 +250,14 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028a\u2029',
+        text: '\u{2028}a\u{2029}',
         windowStart: 0,
         selection: { start: 1, end: 2 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
@@ -254,7 +268,7 @@ describe('ImeInputAdapter', () => {
     adapter.handleBeforeInput(beforeInput);
     expect(beforeInput.preventDefault).not.toHaveBeenCalled();
 
-    input.value = '\u2028a\u2029';
+    input.value = '\u{2028}a\u{2029}';
     input.setSelectionRange(2, 2);
     adapter.handleInput(inputEvent(input));
 
@@ -274,12 +288,14 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028et\u2029',
+        text: '\u{2028}et\u{2029}',
         windowStart: 0,
         selection: { start: 2, end: 2 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
@@ -287,11 +303,11 @@ describe('ImeInputAdapter', () => {
     const beforeInput = beforeInputEvent(input, 'insertText', 'è');
     adapter.handleBeforeInput(beforeInput);
 
-    input.value = '\u2028èt\u2029';
+    input.value = '\u{2028}èt\u{2029}';
     input.setSelectionRange(2, 2);
     adapter.handleInput(inputEvent(input));
 
-    expect(input.value).toBe('\u2028èt\u2029');
+    expect(input.value).toBe('\u{2028}èt\u{2029}');
     expect(messages).toEqual([
       {
         type: 'text_input',
@@ -307,7 +323,7 @@ describe('ImeInputAdapter', () => {
     const input = createInput();
     const messages: Message[] = [];
     const spaces = ' '.repeat(79);
-    const text = `\u2028${spaces}e\u2029`;
+    const text = `\u{2028}${spaces}e\u{2029}`;
     const windowStart = 120;
     const eStart = 1 + spaces.length;
     const eEnd = eStart + 1;
@@ -318,18 +334,20 @@ describe('ImeInputAdapter', () => {
         selection: { start: windowStart + eEnd, end: windowStart + eEnd },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
     input.setSelectionRange(eEnd, eEnd + 1);
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertText', 'è'));
 
-    input.value = `\u2028${spaces}eè\u2029`;
+    input.value = `\u{2028}${spaces}eè\u{2029}`;
     input.setSelectionRange(eEnd + 1, eEnd + 1);
     adapter.handleInput(inputEvent(input));
 
-    expect(input.value).toBe(`\u2028${spaces}eè\u2029`);
+    expect(input.value).toBe(`\u{2028}${spaces}eè\u{2029}`);
     expect(messages).toEqual([
       {
         type: 'text_input',
@@ -346,19 +364,21 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028eX\u2029',
+        text: '\u{2028}eX\u{2029}',
         windowStart: 40,
         selection: { start: 42, end: 42 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
     input.setSelectionRange(2, 3);
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertText', 'è'));
 
-    input.value = '\u2028eXè\u2029';
+    input.value = '\u{2028}eXè\u{2029}';
     input.setSelectionRange(4, 4);
     adapter.handleInput(inputEvent(input));
 
@@ -378,21 +398,23 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028prev\u2029\u2028\u2029',
+        text: '\u{2028}prev\u{2029}\u{2028}\u{2029}',
         windowStart: 0,
         selection: { start: 7, end: 7 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
-    expect(input.value).toBe('\u2028prev\u2029\u2028\u2029');
+    expect(input.value).toBe('\u{2028}prev\u{2029}\u{2028}\u{2029}');
 
     const beforeInput = beforeInputEvent(input, 'insertText', 'a');
     adapter.handleBeforeInput(beforeInput);
 
-    input.value = '\u2028prev\u2029\u2028a\u2029';
+    input.value = '\u{2028}prev\u{2029}\u{2028}a\u{2029}';
     input.setSelectionRange(8, 8);
     adapter.handleInput(inputEvent(input));
 
@@ -412,7 +434,9 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => context(''),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     const beforeInput = beforeInputEvent(input, 'insertParagraph');
@@ -440,22 +464,24 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028123\n\u2029',
+        text: '\u{2028}123\n\u{2029}',
         windowStart: 0,
         selection: { start: 5, end: 5 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
 
-    expect(input.value).toBe('\u2028123\n\u2029');
+    expect(input.value).toBe('\u{2028}123\n\u{2029}');
     expect(input.selectionStart).toBe(5);
     expect(input.selectionEnd).toBe(5);
 
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertText', '1'));
-    input.value = '\u2028123\n1\u2029';
+    input.value = '\u{2028}123\n1\u{2029}';
     input.setSelectionRange(6, 6);
     adapter.handleInput(inputEvent(input));
 
@@ -475,7 +501,9 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => context(''),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.handleCompositionStart(compositionEvent(input));
@@ -527,28 +555,30 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028\u2029',
+        text: '\u{2028}\u{2029}',
         windowStart: 0,
         selection: { start: 1, end: 1 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
     adapter.handleCompositionStart(compositionEvent(input));
 
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅎ'));
-    input.value = '\u2028ㅎ\u2029';
+    input.value = '\u{2028}ㅎ\u{2029}';
     input.setSelectionRange(2, 2);
     adapter.handleInput(inputEvent(input));
 
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', '하'));
-    input.value = '\u2028ㅎ하\u2029';
+    input.value = '\u{2028}ㅎ하\u{2029}';
     input.setSelectionRange(3, 3);
     adapter.handleInput(inputEvent(input));
 
-    expect(input.value).toBe('\u2028하\u2029');
+    expect(input.value).toBe('\u{2028}하\u{2029}');
     expect(messages).toEqual([
       {
         type: 'text_input',
@@ -572,33 +602,35 @@ describe('ImeInputAdapter', () => {
     const messages: Message[] = [];
     const adapter = new ImeInputAdapter({
       readContext: () => ({
-        text: '\u2028ㅁㅁㅁ\u2029',
+        text: '\u{2028}ㅁㅁㅁ\u{2029}',
         windowStart: 0,
         selection: { start: 1, end: 4 },
         composing: null,
       }),
-      enqueue: (next) => messages.push(...next),
+      enqueue: (next) => {
+        messages.push(...next);
+      },
     });
 
     adapter.syncFromEditor(input);
     adapter.handleCompositionStart(compositionEvent(input));
 
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
-    input.value = '\u2028ㅁ\u2029';
+    input.value = '\u{2028}ㅁ\u{2029}';
     input.setSelectionRange(2, 2);
     adapter.handleInput(inputEvent(input));
 
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
-    input.value = '\u2028ㅁㅁ\u2029';
+    input.value = '\u{2028}ㅁㅁ\u{2029}';
     input.setSelectionRange(3, 3);
     adapter.handleInput(inputEvent(input));
 
     adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅁ'));
-    input.value = '\u2028ㅁㅁㅁ\u2029';
+    input.value = '\u{2028}ㅁㅁㅁ\u{2029}';
     input.setSelectionRange(4, 4);
     adapter.handleInput(inputEvent(input));
 
-    expect(input.value).toBe('\u2028ㅁㅁㅁ\u2029');
+    expect(input.value).toBe('\u{2028}ㅁㅁㅁ\u{2029}');
     expect(messages).toEqual([
       {
         type: 'text_input',
@@ -626,7 +658,7 @@ describe('ImeInputAdapter', () => {
 
   it('starts composition when selected text is replaced with the same Korean preedit', () => {
     const ime = createImeHarness({
-      text: '\u2028ㅁ\u2029',
+      text: '\u{2028}ㅁ\u{2029}',
       windowStart: 0,
       selection: { start: 1, end: 2 },
       composing: null,
@@ -635,9 +667,9 @@ describe('ImeInputAdapter', () => {
     ime.syncFromEditor();
     ime.compositionStart();
     ime.beforeCompositionInput('ㅁ');
-    ime.applyNativeInput('\u2028ㅁ\u2029', 2);
+    ime.applyNativeInput('\u{2028}ㅁ\u{2029}', 2);
 
-    ime.expectInput('\u2028ㅁ\u2029', 2);
+    ime.expectInput('\u{2028}ㅁ\u{2029}', 2);
     expect(ime.messages).toEqual([
       {
         type: 'text_input',
@@ -651,7 +683,7 @@ describe('ImeInputAdapter', () => {
 
   it('keeps appended Korean preedit text in composition after replacing the full IME buffer', () => {
     const ime = createImeHarness({
-      text: '\u2028ㅁㄴ\u2029',
+      text: '\u{2028}ㅁㄴ\u{2029}',
       windowStart: 0,
       selection: { start: 0, end: 4 },
       composing: null,
@@ -663,7 +695,7 @@ describe('ImeInputAdapter', () => {
     ime.applyNativeInput('ㅁ', 1);
 
     ime.setContext({
-      text: '\u2028ㅁ\u2029',
+      text: '\u{2028}ㅁ\u{2029}',
       windowStart: 0,
       selection: { start: 2, end: 2 },
       composing: { start: 1, end: 2 },
@@ -682,7 +714,7 @@ describe('ImeInputAdapter', () => {
     ime.expectInput('ㅁㄴ', 2);
 
     ime.setContext({
-      text: '\u2028ㅁㄴ\u2029',
+      text: '\u{2028}ㅁㄴ\u{2029}',
       windowStart: 0,
       selection: { start: 3, end: 3 },
       composing: { start: 2, end: 3 },
@@ -722,7 +754,7 @@ describe('ImeInputAdapter', () => {
 
   it('preserves the native buffer while rebasing an editor-restored structure during composition', () => {
     const ime = createImeHarness({
-      text: '\u2028\u2028\u2029\u2029',
+      text: '\u{2028}\u{2028}\u{2029}\u{2029}',
       windowStart: 0,
       selection: { start: 0, end: 4 },
       composing: null,
@@ -734,7 +766,7 @@ describe('ImeInputAdapter', () => {
     ime.applyNativeInput('ㅁ', 1);
 
     ime.setContext({
-      text: '\u2028\u2028\u2029\u2029\u2028ㅁ\u2029',
+      text: '\u{2028}\u{2028}\u{2029}\u{2029}\u{2028}ㅁ\u{2029}',
       windowStart: 0,
       selection: { start: 6, end: 6 },
       composing: { start: 5, end: 6 },
@@ -768,20 +800,20 @@ describe('ImeInputAdapter', () => {
 
   it('infers composition when editor-restored structure omits it during a full-buffer replacement', () => {
     const ime = createImeHarness({
-      text: '\u2028ㅁㄴㅇ\u2029',
+      text: '\u{2028}ㅁㄴㅇ\u{2029}',
       windowStart: 0,
       selection: { start: 0, end: 5 },
       composing: null,
     });
 
     ime.syncFromEditor();
-    ime.compositionStart('\u2028ㅁㄴㅇ\u2029');
+    ime.compositionStart('\u{2028}ㅁㄴㅇ\u{2029}');
     ime.compositionUpdate('ㅁ');
     ime.beforeCompositionInput('ㅁ');
     ime.applyNativeInput('ㅁ', 1);
 
     ime.setContext({
-      text: '\u2028ㅁ\u2029',
+      text: '\u{2028}ㅁ\u{2029}',
       windowStart: 0,
       selection: { start: 2, end: 2 },
       composing: null,
@@ -803,7 +835,7 @@ describe('ImeInputAdapter', () => {
     ime.expectInput('ㅁㄴ', 2);
 
     ime.setContext({
-      text: '\u2028ㅁㄴ\u2029',
+      text: '\u{2028}ㅁㄴ\u{2029}',
       windowStart: 0,
       selection: { start: 3, end: 3 },
       composing: null,
@@ -854,20 +886,20 @@ describe('ImeInputAdapter', () => {
 
   it('ignores duplicate committed preedit after replacing a selected empty paragraph', () => {
     const ime = createImeHarness({
-      text: '\u2028\u2029',
+      text: '\u{2028}\u{2029}',
       windowStart: 0,
       selection: { start: 0, end: 2 },
       composing: null,
     });
 
     ime.syncFromEditor();
-    ime.compositionStart('\u2028\u2029');
+    ime.compositionStart('\u{2028}\u{2029}');
     ime.compositionUpdate('ㅁ');
     ime.beforeCompositionInput('ㅁ');
     ime.applyNativeInput('ㅁ', 1);
 
     ime.setContext({
-      text: '\u2028ㅁ\u2029',
+      text: '\u{2028}ㅁ\u{2029}',
       windowStart: 0,
       selection: { start: 2, end: 2 },
       composing: { start: 1, end: 2 },
@@ -883,7 +915,7 @@ describe('ImeInputAdapter', () => {
     ime.applyNativeInput('ㅁㄴ', 2);
 
     ime.setContext({
-      text: '\u2028ㅁㄴ\u2029',
+      text: '\u{2028}ㅁㄴ\u{2029}',
       windowStart: 0,
       selection: { start: 3, end: 3 },
       composing: { start: 2, end: 3 },
@@ -925,20 +957,20 @@ describe('ImeInputAdapter', () => {
 
   it('preserves the native buffer while rebasing a selected empty paragraph during composition', () => {
     const ime = createImeHarness({
-      text: '\u2028\u2029',
+      text: '\u{2028}\u{2029}',
       windowStart: 0,
       selection: { start: 0, end: 2 },
       composing: null,
     });
 
     ime.syncFromEditor();
-    ime.compositionStart('\u2028\u2029');
+    ime.compositionStart('\u{2028}\u{2029}');
     ime.compositionUpdate('n');
     ime.beforeCompositionInput('n');
     ime.applyNativeInput('n', 1);
 
     ime.setContext({
-      text: '\u2028n\u2029',
+      text: '\u{2028}n\u{2029}',
       windowStart: 0,
       selection: { start: 2, end: 2 },
       composing: { start: 1, end: 2 },
@@ -973,20 +1005,20 @@ describe('ImeInputAdapter', () => {
 
   it('keeps a romanized IME composition in one native buffer after selected empty paragraph replacement', () => {
     const ime = createImeHarness({
-      text: '\u2028\u2029',
+      text: '\u{2028}\u{2029}',
       windowStart: 0,
       selection: { start: 0, end: 2 },
       composing: null,
     });
 
     ime.syncFromEditor();
-    ime.compositionStart('\u2028\u2029');
+    ime.compositionStart('\u{2028}\u{2029}');
     ime.compositionUpdate('n');
     ime.beforeCompositionInput('n');
     ime.applyNativeInput('n', 1);
 
     ime.setContext({
-      text: '\u2028n\u2029',
+      text: '\u{2028}n\u{2029}',
       windowStart: 0,
       selection: { start: 2, end: 2 },
       composing: { start: 1, end: 2 },

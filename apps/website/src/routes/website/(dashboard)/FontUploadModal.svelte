@@ -186,7 +186,7 @@
     }
 
     const dataTransfer = new DataTransfer();
-    fontFiles.forEach((file) => dataTransfer.items.add(file));
+    for (const file of fontFiles) dataTransfer.items.add(file);
     await processFiles(dataTransfer.files);
   };
 </script>
@@ -264,10 +264,12 @@
       ondragover={handleDragOver}
       ondrop={inflight ? undefined : handleDrop}
       onkeydown={(e) => {
-        if (!inflight && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault();
-          handleUpload();
+        if (!(!inflight && (e.key === 'Enter' || e.key === ' '))) {
+          return;
         }
+
+        e.preventDefault();
+        handleUpload();
       }}
       role="button"
       tabindex={inflight ? -1 : 0}

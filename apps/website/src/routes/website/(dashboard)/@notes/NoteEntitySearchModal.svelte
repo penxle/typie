@@ -32,11 +32,13 @@
   let debouncedQuery = $state('');
 
   $effect(() => {
-    if (open) {
-      query = '';
-      debouncedQuery = '';
-      selectedIndex = 0;
+    if (!open) {
+      return;
     }
+
+    query = '';
+    debouncedQuery = '';
+    selectedIndex = 0;
   });
 
   const handleQueryInput = () => {

@@ -140,11 +140,13 @@
   }
 
   $effect(() => {
-    if (!open) {
-      newRemarkText = '';
-      dirtyRemarkIds.clear();
-      activeRemarkId = null;
+    if (open) {
+      return;
     }
+
+    newRemarkText = '';
+    dirtyRemarkIds.clear();
+    activeRemarkId = null;
   });
 
   function removeAllRemarks() {
@@ -476,8 +478,7 @@
             placeholder="코멘트 입력..."
             rows={1}
             bind:value={newRemarkText}
-            use:autosize
-          ></textarea>
+            use:autosize></textarea>
           <button
             style:top={hasContent ? 'auto' : '50%'}
             style:bottom={hasContent ? '6px' : 'auto'}

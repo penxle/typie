@@ -138,9 +138,7 @@
           e.preventDefault();
           const next = (menuItems[pos + 1] || menuItems[0]) as HTMLElement;
           next?.focus();
-        }
-
-        if (e.key === 'ArrowUp') {
+        } else if (e.key === 'ArrowUp') {
           e.preventDefault();
           // eslint-disable-next-line unicorn/prefer-at
           const prev = (menuItems[pos - 1] || menuItems[menuItems.length - 1]) as HTMLElement;

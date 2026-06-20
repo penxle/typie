@@ -53,7 +53,11 @@ async function use<T>(fn: (app: Application) => T): Promise<Awaited<T>> {
   }
   await poolReady;
 
-  const app = available.pop() ?? (await new Promise<Application>((resolve) => waiting.push(resolve)));
+  const app =
+    available.pop() ??
+    (await new Promise<Application>((resolve) => {
+      waiting.push(resolve);
+    }));
   try {
     const result = await fn(app);
     returnToPool(app);

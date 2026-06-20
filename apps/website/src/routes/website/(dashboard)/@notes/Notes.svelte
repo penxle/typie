@@ -394,12 +394,14 @@
   });
 
   $effect(() => {
-    if (app.state.notesOpen) {
-      cache.invalidate({ __typename: 'Query', $field: 'notes' });
+    if (!app.state.notesOpen) {
+      return;
+    }
 
-      if (inputEl) {
-        inputEl.focus();
-      }
+    cache.invalidate({ __typename: 'Query', $field: 'notes' });
+
+    if (inputEl) {
+      inputEl.focus();
     }
   });
 
@@ -488,14 +490,15 @@
           resize: 'none',
         })}
         onkeydown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
-            e.preventDefault();
-            handleAddNote('shortcut');
+          if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing)) {
+            return;
           }
+
+          e.preventDefault();
+          handleAddNote('shortcut');
         }}
         placeholder="떠오르는 생각을 자유롭게 적어보세요..."
-        bind:value={inputValue}
-      ></textarea>
+        bind:value={inputValue}></textarea>
 
       <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '12px', paddingY: '6px' })}>
         <!-- Color dots -->

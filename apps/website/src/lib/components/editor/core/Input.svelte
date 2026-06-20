@@ -70,7 +70,7 @@
     [...text]
       .map((char) => {
         const codePoint = char.codePointAt(0) ?? 0;
-        if (char === '◆' || char === '\u200B') {
+        if (char === '◆' || char === '\u{200B}') {
           return '⟪S⟫';
         }
 
@@ -148,7 +148,7 @@
     const entry = {
       seq: ++imeDebugSequence,
       phase,
-      time: typeof performance === 'undefined' ? Date.now() : performance.now(),
+      time: (typeof performance === 'undefined' ? Date : performance).now(),
       compositionActive,
       pendingDelta: serializePendingDelta(),
       compositionTracking: serializeCompositionTracking(),
@@ -520,7 +520,7 @@
       });
     };
 
-    paneEl.addEventListener('pointerdown', handlePointerDown, true);
+    paneEl.addEventListener('pointerdown', handlePointerDown, { capture: true });
     return () => paneEl.removeEventListener('pointerdown', handlePointerDown, true);
   });
 
@@ -580,5 +580,4 @@
   oninput={handleInput}
   onkeydown={handleKeyDown}
   onpaste={handlePaste}
-  spellcheck={false}
-></textarea>
+  spellcheck={false}></textarea>
