@@ -62,7 +62,7 @@
     "fluent-ffmpeg": "^2.1.3",
     "fractional-indexing-jittered": "^1.0.0",
     "google-auth-library": "^10.7.0",
-    "graphql": "^17.0.1",
+    "graphql": "^16.14.2",
     "graphql-scalars": "^1.25.0",
     "graphql-ws": "^6.0.8",
     "graphql-yoga": "^5.21.2",
