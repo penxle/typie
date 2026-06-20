@@ -7,6 +7,7 @@ type Env = {
   SLACK_SIGNING_SECRET: string;
   API_KEY: string;
   API_BASE_URL: string;
+  MIXPANEL_SA_TOKEN: string;
 };
 
 const SSM_PARAMS: Record<keyof Env, string> = {
@@ -16,6 +17,7 @@ const SSM_PARAMS: Record<keyof Env, string> = {
   SLACK_SIGNING_SECRET: '/bmo/SLACK_SIGNING_SECRET',
   API_KEY: '/bmo/API_KEY',
   API_BASE_URL: '/bmo/API_BASE_URL',
+  MIXPANEL_SA_TOKEN: '/bmo/MIXPANEL_SA_TOKEN',
 };
 
 const ssm = new SSMClient({});

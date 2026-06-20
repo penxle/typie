@@ -176,8 +176,16 @@ export const handler = async (event: SlackAppMentionEvent) => {
       });
 
       const queryOptions: Options = {
-        mcpServers: { bmo: bmoServer },
-        allowedTools: ['mcp__bmo__*'],
+        mcpServers: {
+          bmo: bmoServer,
+          mixpanel: {
+            type: 'http',
+            url: 'https://mcp.mixpanel.com/mcp',
+            headers: { Authorization: `Bearer Basic ${env.MIXPANEL_SA_TOKEN}` },
+            alwaysLoad: true,
+          },
+        },
+        allowedTools: ['mcp__bmo__*', 'mcp__mixpanel__*'],
         model: 'claude-sonnet-4-6',
         thinking: { type: 'adaptive' },
         effort: 'high',
@@ -229,6 +237,11 @@ export const handler = async (event: SlackAppMentionEvent) => {
           ### 3. 시간 표현 처리
           - "오늘", "이번 주", "이번 달": 현재 시간 기준 계산
           - 부분 날짜 (예: "5월 1일"): 현재 연도 기준
+
+          # Mixpanel 도구 사용 규칙
+          - mcp__mixpanel__* 도구로 제품 분석 데이터(이벤트, 퍼널, 플로우, 리텐션, 세션 리플레이)에 접근할 수 있습니다.
+          - 사용자 행동·전환·이탈 등 이벤트 기반 분석은 Mixpanel을, 정형 데이터(엔티티, 결제, 가입 등)는 execute_sql_query를 사용합니다.
+          - 두 소스를 함께 봐야 정확한 경우 교차 분석합니다.
 
           # 응답 형식
 
