@@ -36,6 +36,7 @@ const createDataTransfer = ({
     effectAllowed: 'uninitialized',
     getData: vi.fn((type: string) => store.get(type) ?? ''),
     setData: vi.fn((type: string, value: string) => store.set(type, value)),
+    setDragImage: vi.fn(),
   } as unknown as DataTransfer;
 };
 
@@ -102,6 +103,7 @@ describe('handleDragStart', () => {
     expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-typie-internal-selection', '1');
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'Hello');
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/html', '<p>Hello</p>');
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(expect.any(HTMLImageElement), 0, 0);
     expect(messages).toEqual([
       {
         type: 'dnd',
@@ -122,6 +124,7 @@ describe('handleDragStart', () => {
     expect(dataTransfer.setData).not.toHaveBeenCalledWith('application/x-typie-internal-selection', expect.any(String));
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'Hello');
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/html', '<p>Hello</p>');
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(expect.any(HTMLImageElement), 0, 0);
     expect(messages).toEqual([
       {
         type: 'dnd',

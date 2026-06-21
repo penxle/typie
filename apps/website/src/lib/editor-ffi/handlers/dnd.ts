@@ -11,6 +11,18 @@ type EditorInstance = NonNullable<EditorContext['editor']>;
 const internalDndEditors = new WeakSet<EditorInstance>();
 const dndEdgeAutoScrolls = new WeakMap<EditorInstance, EditorEdgeAutoScroll>();
 
+let EMPTY_DRAG_IMAGE: HTMLImageElement | null = null;
+const setEmptyDragImage = (dataTransfer: DataTransfer): void => {
+  if (!EMPTY_DRAG_IMAGE && typeof Image !== 'undefined') {
+    EMPTY_DRAG_IMAGE = new Image();
+    EMPTY_DRAG_IMAGE.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  }
+
+  if (EMPTY_DRAG_IMAGE) {
+    dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0);
+  }
+};
+
 const edgeAutoScrollFor = (editor: EditorInstance): EditorEdgeAutoScroll => {
   let edgeAutoScroll = dndEdgeAutoScrolls.get(editor);
   if (!edgeAutoScroll) {
@@ -125,6 +137,8 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
     event.preventDefault();
     return;
   }
+
+  setEmptyDragImage(dataTransfer);
 
   if (editor.readOnly) {
     markNativeSelectionDragStarted(editor);
