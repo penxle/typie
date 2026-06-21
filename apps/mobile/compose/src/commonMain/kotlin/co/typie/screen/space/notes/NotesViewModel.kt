@@ -8,6 +8,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.domain.note.DEFAULT_NOTE_COLOR
+import co.typie.domain.note.NoteEditState
+import co.typie.domain.note.NoteListState
 import co.typie.domain.note.addNoteEntity as addNoteEntityMutation
 import co.typie.domain.note.createNote as createNoteMutation
 import co.typie.domain.note.deleteNote as deleteNoteMutation
@@ -31,7 +33,7 @@ import co.typie.storage.Preference
 import kotlinx.coroutines.launch
 
 internal class NotesViewModel : ViewModel() {
-  val screenState = NotesScreenState(scope = viewModelScope)
+  val noteEditState = NoteEditState(scope = viewModelScope)
 
   val siteId: String?
     get() = Preference.siteId
@@ -42,6 +44,8 @@ internal class NotesViewModel : ViewModel() {
   private var requestedStatus by mutableStateOf(NoteStatus.OPEN)
   private var liveDataStatus by mutableStateOf(NoteStatus.OPEN)
   private val settledNotesByStatus = mutableStateMapOf<NoteStatus, List<NoteCard_note>>()
+  private val openListState = NoteListState(NoteStatus.OPEN)
+  private val resolvedListState = NoteListState(NoteStatus.RESOLVED)
 
   val query =
     Apollo.watchQuery(
@@ -60,11 +64,20 @@ internal class NotesViewModel : ViewModel() {
             liveDataStatus = requestedStatus
             val notes = state.data.notes()
             settledNotesByStatus[liveDataStatus] = notes
-            screenState.syncScene(liveDataStatus, notes)
+            listState(liveDataStatus).sync(notes)
+
+            val activeNoteId = noteEditState.expandedNoteId ?: return@collect
+            notes.firstOrNull { it.id == activeNoteId }?.let(noteEditState::commitServerSnapshot)
           }
         }
     }
   }
+
+  fun listState(status: NoteStatus): NoteListState =
+    when (status) {
+      NoteStatus.RESOLVED -> resolvedListState
+      else -> openListState
+    }
 
   fun updateFilterStatus(status: NoteStatus) {
     if (status == NoteStatus.UNKNOWN__ || filterStatus == status) {

@@ -1,9 +1,6 @@
 package co.typie.domain.note
 
 import co.typie.graphql.type.NoteStatus
-import co.typie.screen.space.notes.emptyMessage
-import co.typie.screen.space.notes.filterLabel
-import co.typie.screen.space.notes.toggled
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

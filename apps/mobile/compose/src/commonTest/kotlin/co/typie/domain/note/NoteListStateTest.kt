@@ -1,16 +1,15 @@
-package co.typie.screen.space.notes
+package co.typie.domain.note
 
-import co.typie.domain.note.notesNote
 import co.typie.graphql.type.NoteStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class NotesSceneStateTest {
+class NoteListStateTest {
   @Test
   fun `entering note stays visible until server catches up`() {
-    val state = NotesSceneState(NoteStatus.OPEN)
+    val state = NoteListState(NoteStatus.OPEN)
     val created = notesNote(id = "a", order = "100", status = NoteStatus.OPEN)
 
     state.markEntering(created)
@@ -26,7 +25,7 @@ class NotesSceneStateTest {
 
   @Test
   fun `exiting note stays visible until exit finishes then waits for omission`() {
-    val state = NotesSceneState(NoteStatus.OPEN)
+    val state = NoteListState(NoteStatus.OPEN)
     val exiting = notesNote(id = "a", order = "100", status = NoteStatus.RESOLVED)
 
     state.markExiting(exiting)
@@ -46,7 +45,7 @@ class NotesSceneStateTest {
 
   @Test
   fun `finished exit suppresses stale server note until omission`() {
-    val state = NotesSceneState(NoteStatus.OPEN)
+    val state = NoteListState(NoteStatus.OPEN)
     val staleOpen = notesNote(id = "a", order = "100", status = NoteStatus.OPEN)
 
     state.markExiting(staleOpen.copy(status = NoteStatus.RESOLVED))
@@ -65,8 +64,8 @@ class NotesSceneStateTest {
 
   @Test
   fun `source scene exit does not hide destination scene note`() {
-    val openScene = NotesSceneState(NoteStatus.OPEN)
-    val resolvedScene = NotesSceneState(NoteStatus.RESOLVED)
+    val openScene = NoteListState(NoteStatus.OPEN)
+    val resolvedScene = NoteListState(NoteStatus.RESOLVED)
     val resolvedNote = notesNote(id = "a", order = "100", status = NoteStatus.RESOLVED)
 
     openScene.markExiting(resolvedNote)
@@ -78,7 +77,7 @@ class NotesSceneStateTest {
 
   @Test
   fun `expected destination note starts entering when server catches up`() {
-    val state = NotesSceneState(NoteStatus.RESOLVED)
+    val state = NoteListState(NoteStatus.RESOLVED)
     val note = notesNote(id = "a", order = "100", status = NoteStatus.RESOLVED)
 
     state.expectEntry(note)
@@ -94,7 +93,7 @@ class NotesSceneStateTest {
 
   @Test
   fun `remove clears entering and exiting notes`() {
-    val state = NotesSceneState(NoteStatus.OPEN)
+    val state = NoteListState(NoteStatus.OPEN)
     val note = notesNote(id = "a", order = "100", status = NoteStatus.OPEN)
 
     state.markEntering(note)
@@ -109,7 +108,7 @@ class NotesSceneStateTest {
 
   @Test
   fun `scene is settled only after first successful sync`() {
-    val state = NotesSceneState(NoteStatus.OPEN)
+    val state = NoteListState(NoteStatus.OPEN)
     val note = notesNote(id = "a", order = "100")
 
     assertFalse(state.hasSettled)

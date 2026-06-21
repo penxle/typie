@@ -23,7 +23,10 @@ import co.typie.domain.note.NoteLinkedEntityActionsSheet
 import co.typie.domain.note.NoteList
 import co.typie.domain.note.NoteListActions
 import co.typie.domain.note.NoteListItem
+import co.typie.domain.note.emptyMessage
+import co.typie.domain.note.filterLabel
 import co.typie.domain.note.rememberNoteColorOptions
+import co.typie.domain.note.toggled
 import co.typie.ext.navigationBarsPadding
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
@@ -61,7 +64,7 @@ fun NotesScreen() {
   val nav = Nav.current
   val dialog = LocalDialog.current
   val model = viewModel { NotesViewModel() }
-  val screenState = model.screenState
+  val noteEditState = model.noteEditState
   val scrollState = rememberScrollState()
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -69,9 +72,9 @@ fun NotesScreen() {
   val siteId = model.siteId
   val noteColorOptions = rememberNoteColorOptions()
 
-  DisposableEffect(screenState, model) {
+  DisposableEffect(noteEditState, model) {
     onDispose {
-      screenState.dispose(
+      noteEditState.dispose(
         savePendingContent = model::savePendingNoteContent,
         savePendingColor = model::savePendingNoteColor,
       )
@@ -81,7 +84,7 @@ fun NotesScreen() {
   suspend fun saveNoteContent(noteId: String, content: String): Boolean {
     return when (val result = model.updateNoteContent(noteId = noteId, content = content)) {
       is Result.Ok -> {
-        screenState.commitServerSnapshot(result.value)
+        noteEditState.commitServerSnapshot(result.value)
         true
       }
 
@@ -96,7 +99,7 @@ fun NotesScreen() {
   suspend fun saveNoteColor(noteId: String, color: String): Boolean {
     return when (val result = model.updateNoteColor(noteId = noteId, color = color)) {
       is Result.Ok -> {
-        screenState.commitServerSnapshot(result.value)
+        noteEditState.commitServerSnapshot(result.value)
         true
       }
 
@@ -109,7 +112,7 @@ fun NotesScreen() {
   }
 
   suspend fun flushNoteEdits(noteId: String): Boolean {
-    return screenState.flush(
+    return noteEditState.flush(
       noteId = noteId,
       saveContent = ::saveNoteContent,
       saveColor = ::saveNoteColor,
@@ -117,16 +120,16 @@ fun NotesScreen() {
   }
 
   suspend fun collapseExpandedNote(): Boolean {
-    return screenState.collapse(saveContent = ::saveNoteContent, saveColor = ::saveNoteColor)
+    return noteEditState.collapse(saveContent = ::saveNoteContent, saveColor = ::saveNoteColor)
   }
 
   suspend fun handleExpandNote(note: NoteCard_note) {
-    val expandedNoteId = screenState.expandedNoteId
+    val expandedNoteId = noteEditState.expandedNoteId
     if (expandedNoteId != null && expandedNoteId != note.id && !flushNoteEdits(expandedNoteId)) {
       return
     }
 
-    screenState.open(note = note)
+    noteEditState.open(note = note)
   }
 
   suspend fun handleFilterSelection(nextStatus: NoteStatus) {
@@ -158,8 +161,8 @@ fun NotesScreen() {
 
     when (val result = model.createNote()) {
       is Result.Ok -> {
-        screenState.sceneState(NoteStatus.OPEN).markEntering(result.value)
-        screenState.open(note = result.value)
+        model.listState(NoteStatus.OPEN).markEntering(result.value)
+        noteEditState.open(note = result.value)
         model.refetch()
       }
 
@@ -183,19 +186,19 @@ fun NotesScreen() {
       return
     }
 
-    screenState.cancelPendingSaves(note.id)
-    screenState.sceneState(sceneStatus).markExiting(note)
+    noteEditState.cancelPendingSaves(note.id)
+    model.listState(sceneStatus).markExiting(note)
 
     when (model.deleteNote(note.id)) {
       is Result.Ok -> {
-        screenState.remove(note.id)
+        noteEditState.remove(note.id)
         model.refetch()
         toast.show(ToastType.Success, "노트를 삭제했어요.")
       }
 
       is Result.Err,
       is Result.Exception -> {
-        screenState.sceneState(sceneStatus).remove(note.id)
+        model.listState(sceneStatus).remove(note.id)
         toast.show(ToastType.Error, "노트를 삭제할 수 없어요.")
       }
     }
@@ -207,19 +210,19 @@ fun NotesScreen() {
     }
 
     val nextStatus = note.status.toggled()
-    screenState.sceneState(sceneStatus).markExiting(note.copy(status = nextStatus))
+    model.listState(sceneStatus).markExiting(note.copy(status = nextStatus))
 
     when (val result = model.updateNoteStatus(noteId = note.id, status = nextStatus)) {
       is Result.Ok -> {
-        screenState.commitServerSnapshot(result.value)
-        screenState.clearExpanded(note.id)
-        screenState.sceneState(nextStatus).expectEntry(result.value)
+        noteEditState.commitServerSnapshot(result.value)
+        noteEditState.clearExpanded(note.id)
+        model.listState(nextStatus).expectEntry(result.value)
         model.refetch()
       }
 
       is Result.Err,
       is Result.Exception -> {
-        screenState.sceneState(sceneStatus).remove(note.id)
+        model.listState(sceneStatus).remove(note.id)
         toast.show(ToastType.Error, "상태를 바꿀 수 없어요.")
       }
     }
@@ -230,7 +233,7 @@ fun NotesScreen() {
       return
     }
 
-    screenState.updateColor(noteId = note.id, value = color, save = ::saveNoteColor)
+    noteEditState.updateColor(noteId = note.id, value = color, save = ::saveNoteColor)
   }
 
   suspend fun handleAddEntity(noteId: String, entityId: String): Boolean {
@@ -240,7 +243,7 @@ fun NotesScreen() {
 
     return when (val result = model.addNoteEntity(noteId = noteId, entityId = entityId)) {
       is Result.Ok -> {
-        screenState.commitServerSnapshot(result.value)
+        noteEditState.commitServerSnapshot(result.value)
         true
       }
 
@@ -259,7 +262,7 @@ fun NotesScreen() {
 
     return when (val result = model.removeNoteEntity(noteId = noteId, entityId = entityId)) {
       is Result.Ok -> {
-        screenState.commitServerSnapshot(result.value)
+        noteEditState.commitServerSnapshot(result.value)
         true
       }
 
@@ -331,18 +334,18 @@ fun NotesScreen() {
       modifier = Modifier,
       animationSpec = tween(durationMillis = 200),
     ) { status ->
-      val sceneState = screenState.sceneState(status)
-      val renderedNotes = sceneState.merge(model.notes(status)).map(screenState::overlay)
+      val listState = model.listState(status)
+      val renderedNotes = listState.merge(model.notes(status)).map(noteEditState::overlay)
       val listItems = renderedNotes.map { note ->
         NoteListItem(
           note = note,
-          expanded = screenState.expandedNoteId == note.id,
-          isSaving = screenState.isSaving(note.id) || screenState.isSavingColor(note.id),
-          hasPendingColor = screenState.hasPendingColor(note.id),
-          isDirty = screenState.isDirty(note.id),
-          isEntering = sceneState.isEntering(note.id),
-          isExiting = sceneState.isExiting(note.id),
-          isExitVisible = sceneState.isExitVisible(note.id),
+          expanded = noteEditState.expandedNoteId == note.id,
+          isSaving = noteEditState.isSaving(note.id) || noteEditState.isSavingColor(note.id),
+          hasPendingColor = noteEditState.hasPendingColor(note.id),
+          isDirty = noteEditState.isDirty(note.id),
+          isEntering = listState.isEntering(note.id),
+          isExiting = listState.isExiting(note.id),
+          isExitVisible = listState.isExitVisible(note.id),
         )
       }
       val listActions =
@@ -350,7 +353,7 @@ fun NotesScreen() {
           onExpand = { note -> scope.launch { handleExpandNote(note) } },
           onCollapse = { scope.launch { collapseExpandedNote() } },
           onContentChange = { noteId, content ->
-            screenState.updateContent(noteId = noteId, value = content, save = ::saveNoteContent)
+            noteEditState.updateContent(noteId = noteId, value = content, save = ::saveNoteContent)
           },
           onBlur = { noteId -> scope.launch { flushNoteEdits(noteId) } },
           onToggleStatus = { note -> scope.launch { handleToggleStatus(note, status) } },
@@ -367,8 +370,8 @@ fun NotesScreen() {
         emptyMessage = status.emptyMessage(),
         queryState = model.queryState(status),
         items = listItems,
-        onEnterAnimationFinished = sceneState::finishEntering,
-        onExitAnimationFinished = sceneState::finishExiting,
+        onEnterAnimationFinished = listState::finishEntering,
+        onExitAnimationFinished = listState::finishExiting,
         scrollState = scrollState,
         contentPadding = contentPadding,
         noteColorOptions = noteColorOptions,
@@ -424,24 +427,3 @@ private fun NotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus
     }
   }
 }
-
-internal fun NoteStatus.filterLabel(): String =
-  when (this) {
-    NoteStatus.OPEN -> "진행 중"
-    NoteStatus.RESOLVED -> "완료됨"
-    NoteStatus.UNKNOWN__ -> "진행 중"
-  }
-
-internal fun NoteStatus.emptyMessage(): String =
-  when (this) {
-    NoteStatus.OPEN -> "진행 중 노트가 없어요"
-    NoteStatus.RESOLVED -> "완료된 노트가 없어요"
-    NoteStatus.UNKNOWN__ -> "진행 중 노트가 없어요"
-  }
-
-internal fun NoteStatus.toggled(): NoteStatus =
-  when (this) {
-    NoteStatus.OPEN -> NoteStatus.RESOLVED
-    NoteStatus.RESOLVED -> NoteStatus.OPEN
-    NoteStatus.UNKNOWN__ -> NoteStatus.OPEN
-  }
