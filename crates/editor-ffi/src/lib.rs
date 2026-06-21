@@ -11,9 +11,11 @@ mod convert;
 mod doc_builder;
 pub mod editor;
 mod error;
+mod graph;
 pub mod host;
 #[cfg(not(feature = "wasm-server"))]
 mod platform;
 mod prelude;
+mod root;
 #[cfg(feature = "wasm-server")]
 mod server;

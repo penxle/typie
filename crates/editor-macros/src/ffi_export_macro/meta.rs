@@ -112,16 +112,33 @@ fn path_matches(path: &syn::Path, segments: &[&str]) -> bool {
         .all(|(seg, expected)| seg.ident == expected)
 }
 
-fn last_segment_name(ty: &syn::Type) -> Option<String> {
+fn type_name(ty: &syn::Type) -> Option<String> {
     if let syn::Type::Path(type_path) = ty {
-        type_path
-            .path
-            .segments
-            .last()
-            .map(|seg| seg.ident.to_string())
-    } else {
-        None
+        let seg = type_path.path.segments.last()?;
+        let ident = seg.ident.to_string();
+        if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+            let mapped = args
+                .args
+                .iter()
+                .filter_map(|arg| match arg {
+                    syn::GenericArgument::Type(ty) => type_name(ty),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            if !mapped.is_empty() {
+                return Some(format!("{}<{}>", ident, mapped.join(", ")));
+            }
+        }
+        return Some(ident);
     }
+
+    if let syn::Type::Tuple(tuple) = ty
+        && tuple.elems.is_empty()
+    {
+        return Some("()".into());
+    }
+
+    None
 }
 
 fn extract_angle_bracketed_inner(seg: &syn::PathSegment) -> Option<&syn::Type> {
@@ -143,7 +160,7 @@ fn parse_param_type(ty: &syn::Type) -> FfiParamType {
         match ident.as_str() {
             "Complex" => {
                 if let Some(inner) = extract_angle_bracketed_inner(seg) {
-                    let inner_name = last_segment_name(inner).unwrap_or_default();
+                    let inner_name = type_name(inner).unwrap_or_default();
                     return FfiParamType::Complex(inner_name);
                 }
             }
@@ -173,7 +190,7 @@ fn parse_scalar_param(ty: &syn::Type) -> FfiScalarParam {
         if ident == "Complex"
             && let Some(inner) = extract_angle_bracketed_inner(seg)
         {
-            let inner_name = last_segment_name(inner).unwrap_or_default();
+            let inner_name = type_name(inner).unwrap_or_default();
             return FfiScalarParam::Complex(inner_name);
         }
         return FfiScalarParam::Primitive(ident);
@@ -202,13 +219,13 @@ fn parse_return_type_inner(ty: &syn::Type, impl_name: &str) -> FfiReturnType {
             }
             "Owned" => {
                 if let Some(inner) = extract_angle_bracketed_inner(seg) {
-                    let inner_name = resolve_self(last_segment_name(inner), impl_name);
+                    let inner_name = resolve_self(type_name(inner), impl_name);
                     return FfiReturnType::Owned(inner_name);
                 }
             }
             "Complex" => {
                 if let Some(inner) = extract_angle_bracketed_inner(seg) {
-                    let inner_name = last_segment_name(inner).unwrap_or_default();
+                    let inner_name = type_name(inner).unwrap_or_default();
                     return FfiReturnType::Complex(inner_name);
                 }
             }
@@ -244,13 +261,13 @@ fn parse_scalar_return(ty: &syn::Type, impl_name: &str) -> FfiScalarReturn {
         match ident.as_str() {
             "Complex" => {
                 if let Some(inner) = extract_angle_bracketed_inner(seg) {
-                    let inner_name = last_segment_name(inner).unwrap_or_default();
+                    let inner_name = type_name(inner).unwrap_or_default();
                     return FfiScalarReturn::Complex(inner_name);
                 }
             }
             "Owned" => {
                 if let Some(inner) = extract_angle_bracketed_inner(seg) {
-                    let inner_name = resolve_self(last_segment_name(inner), impl_name);
+                    let inner_name = resolve_self(type_name(inner), impl_name);
                     return FfiScalarReturn::Owned(inner_name);
                 }
             }
@@ -265,5 +282,40 @@ fn resolve_self(name: Option<String>, impl_name: &str) -> String {
         Some("Self") => impl_name.into(),
         Some(n) => n.into(),
         None => impl_name.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn complex_return_preserves_generic_type_arguments() {
+        let method: syn::ImplItemFn = syn::parse_quote! {
+            pub fn applied_style(
+                &self,
+            ) -> EditorResult<Complex<editor_common::Tri<editor_core::StyleRefValue>>> {
+                todo!()
+            }
+        };
+
+        let extracted = extract_method(&method, "Editor");
+
+        assert_eq!(
+            extracted.return_type,
+            FfiReturnType::Complex("Tri<StyleRefValue>".into())
+        );
+    }
+
+    #[test]
+    fn complex_param_preserves_generic_type_arguments() {
+        let ty: syn::Type = syn::parse_quote! {
+            Complex<editor_common::Tri<editor_core::StyleRefValue>>
+        };
+
+        assert_eq!(
+            parse_param_type(&ty),
+            FfiParamType::Complex("Tri<StyleRefValue>".into())
+        );
     }
 }

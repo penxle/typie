@@ -127,13 +127,14 @@ impl Editor {
     pub fn root_attrs(&self) -> EditorResult<Complex<editor_model::PlainRootNode>> {
         self.with_inner(|inner| {
             let doc = &inner.editor.state().doc;
-            let entry = doc
-                .get_entry(editor_model::NodeId::ROOT)
-                .expect("root entry must exist");
-            match &entry.node.to_plain() {
-                editor_model::PlainNode::Root(r) => Ok(r.clone().into_ffi()?),
-                _ => unreachable!("root entry must be Root"),
-            }
+            let root = crate::root::attrs(doc).expect("root entry must exist");
+            Ok(root.into_ffi()?)
+        })
+    }
+
+    pub fn root_modifiers(&self) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
+        self.with_inner(|inner| {
+            Ok(crate::root::base_style_modifiers(&inner.editor.state().doc).into_ffi()?)
         })
     }
 
@@ -393,11 +394,7 @@ impl Editor {
 
     pub fn insert_template_fragment(&self, changesets: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
-            let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
-                editor_crdt::wire::decode(&changesets[..])
-                    .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-            let graph = editor_crdt::OpGraph::from_changesets(css)?;
-            let template_doc = editor_model::Doc::from_op_graph(&graph)?;
+            let (template_doc, _) = crate::graph::doc_from_changesets(changesets)?;
             inner
                 .editor
                 .insert_template_fragment(template_doc.to_plain())?;
@@ -893,6 +890,23 @@ mod tests {
         let editor = make_ffi_editor(initial);
         let result = editor.modifier_state().expect("ffi call returns Ok");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn ffi_root_modifiers_returns_root_base_style_modifiers() {
+        let (initial, ..) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600), block_gap(120)] }
+                root @base [] { p: paragraph { t1: text("hello") } }
+            }
+            selection: (t1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let result = editor.root_modifiers().expect("ffi call returns Ok");
+
+        assert!(result.contains(&editor_model::Modifier::FontSize { value: 1600 }));
+        assert!(result.contains(&editor_model::Modifier::BlockGap { value: 120 }));
     }
 
     #[test]

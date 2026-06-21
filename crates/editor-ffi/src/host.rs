@@ -99,7 +99,7 @@ impl EditorHost {
         changesets: Vec<u8>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let (doc, graph) = doc_from_graph_changesets(changesets)?;
+        let (doc, graph) = crate::graph::doc_from_changesets(changesets)?;
         let selection = doc_start_selection(&doc)?;
         let state = editor_state::State::new(doc, graph, Some(selection));
         let viewport = viewport.from_ffi()?;
@@ -108,7 +108,7 @@ impl EditorHost {
     }
 
     pub fn extract_text_from_graph(&self, changesets: Vec<u8>) -> EditorResult<String> {
-        let (doc, _) = doc_from_graph_changesets(changesets)?;
+        let (doc, _) = crate::graph::doc_from_changesets(changesets)?;
         Ok(doc.extract_text())
     }
 
@@ -116,14 +116,17 @@ impl EditorHost {
         &self,
         changesets: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainRootNode>> {
-        let (doc, _) = doc_from_graph_changesets(changesets)?;
-        let entry = doc
-            .get_entry(editor_model::NodeId::ROOT)
-            .ok_or(FfiError::NoInitialCursorPosition)?;
-        match &entry.node.to_plain() {
-            editor_model::PlainNode::Root(r) => Ok(r.clone().into_ffi()?),
-            _ => unreachable!("root entry must be Root"),
-        }
+        let (doc, _) = crate::graph::doc_from_changesets(changesets)?;
+        let root = crate::root::attrs(&doc).ok_or(FfiError::NoInitialCursorPosition)?;
+        Ok(root.into_ffi()?)
+    }
+
+    pub fn root_modifiers_from_graph(
+        &self,
+        changesets: Vec<u8>,
+    ) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
+        let (doc, _) = crate::graph::doc_from_changesets(changesets)?;
+        Ok(crate::root::base_style_modifiers(&doc).into_ffi()?)
     }
 
     pub fn set_fonts(
@@ -221,17 +224,25 @@ mod tests {
             .unwrap();
         assert!(!result);
     }
-}
 
-fn doc_from_graph_changesets(
-    changesets: Vec<u8>,
-) -> EditorResult<(editor_model::Doc, editor_crdt::OpGraph<editor_model::DocOp>)> {
-    let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
-        editor_crdt::wire::decode(&changesets[..])
-            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-    let graph = editor_crdt::OpGraph::from_changesets(css)?;
-    let doc = editor_model::Doc::from_op_graph(&graph)?;
-    Ok((doc, graph))
+    #[test]
+    fn root_modifiers_from_graph_returns_root_base_style_modifiers() {
+        let host = make_host();
+        let plain = crate::doc_builder::build_default_doc(
+            editor_model::PlainRootNode::default(),
+            vec![
+                editor_model::Modifier::FontSize { value: 1600 },
+                editor_model::Modifier::BlockGap { value: 120 },
+            ],
+        );
+        let (_, graph) = editor_model::Doc::from_plain(plain);
+        let graph = editor_crdt::wire::encode(&graph.changesets_as_vec()).unwrap();
+
+        let modifiers = host.root_modifiers_from_graph(graph).unwrap();
+
+        assert!(modifiers.contains(&editor_model::Modifier::FontSize { value: 1600 }));
+        assert!(modifiers.contains(&editor_model::Modifier::BlockGap { value: 120 }));
+    }
 }
 
 fn doc_start_selection(doc: &editor_model::Doc) -> EditorResult<editor_state::Selection> {

@@ -118,6 +118,26 @@ fn resolve_default(field: &FfiField, kt_type: &str, ctx: &CodegenContext) -> Str
         return "emptyList()".into();
     }
 
+    if rust_ty.starts_with("HashMap<")
+        || rust_ty.starts_with("imbl::HashMap<")
+        || rust_ty.starts_with("std::collections::HashMap<")
+        || rust_ty.starts_with("hashbrown::HashMap<")
+        || rust_ty.starts_with("BTreeMap<")
+        || rust_ty.starts_with("std::collections::BTreeMap<")
+    {
+        return "emptyMap()".into();
+    }
+
+    if rust_ty.starts_with("HashSet<")
+        || rust_ty.starts_with("imbl::HashSet<")
+        || rust_ty.starts_with("std::collections::HashSet<")
+        || rust_ty.starts_with("hashbrown::HashSet<")
+        || rust_ty.starts_with("BTreeSet<")
+        || rust_ty.starts_with("std::collections::BTreeSet<")
+    {
+        return "emptySet()".into();
+    }
+
     if let Some(meta) = ctx.meta_map.get(rust_ty.as_str()) {
         match &meta.kind {
             FfiKind::Enum {
@@ -242,6 +262,15 @@ fn map_type_path(
                 map_syn_type(key_ty, custom_types, known_types),
                 map_syn_type(val_ty, custom_types, known_types)
             )
+        }
+        "HashSet"
+        | "imbl::HashSet"
+        | "std::collections::HashSet"
+        | "hashbrown::HashSet"
+        | "BTreeSet"
+        | "std::collections::BTreeSet" => {
+            let inner = extract_single_type_arg(args);
+            format!("Set<{}>", map_syn_type(inner, custom_types, known_types))
         }
         _ => {
             // Unknown generic wrapper. If the head identifier is a known Ffi type,
@@ -689,6 +718,51 @@ mod tests {
         assert_eq!(
             map_type("std::collections::BTreeMap<String, Vec<u32>>", &ct, &kt),
             "Map<String, List<Int>>"
+        );
+    }
+
+    #[test]
+    fn map_btreeset_types() {
+        let ct = empty_custom_types();
+        let mut kt = HashSet::new();
+        kt.insert("Modifier");
+        assert_eq!(
+            map_type("BTreeSet<Modifier>", &ct, &kt),
+            "Set<co.typie.editor.ffi.Modifier>"
+        );
+        assert_eq!(
+            map_type("std::collections::BTreeSet<String>", &ct, &kt),
+            "Set<String>"
+        );
+    }
+
+    #[test]
+    fn default_collections_use_empty_factories() {
+        let ctx = test_context(&[]);
+        let fields = vec![
+            FfiField {
+                name: "styles".into(),
+                serde_rename: None,
+                ty: "BTreeMap<String, PlainStyleEntry>".into(),
+                has_serde_default: true,
+                ffi_default_override: None,
+            },
+            FfiField {
+                name: "modifiers".into(),
+                serde_rename: None,
+                ty: "BTreeSet<Modifier>".into(),
+                has_serde_default: true,
+                ffi_default_override: None,
+            },
+        ];
+
+        assert_eq!(
+            resolve_default(&fields[0], "Map<String, PlainStyleEntry>", &ctx),
+            "emptyMap()"
+        );
+        assert_eq!(
+            resolve_default(&fields[1], "Set<Modifier>", &ctx),
+            "emptySet()"
         );
     }
 
