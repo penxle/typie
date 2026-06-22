@@ -1,0 +1,5 @@
+query RelatedNotesSheet_Query($entityId: ID!, $status: NoteStatus!) {
+  notes(entityId: $entityId, status: $status) @catch(to: THROW) {
+    ...NoteCard_note
+  }
+}

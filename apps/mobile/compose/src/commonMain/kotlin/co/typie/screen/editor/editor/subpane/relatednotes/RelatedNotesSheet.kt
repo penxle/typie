@@ -1,15 +1,15 @@
-package co.typie.screen.space.notes
+package co.typie.screen.editor.editor.subpane.relatednotes
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,9 +19,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.entity.isFolder
+import co.typie.domain.note.NoteEditState
 import co.typie.domain.note.NoteEntityPickerSheet
 import co.typie.domain.note.NoteEntityPickerStops
 import co.typie.domain.note.NoteLinkedEntityActionsSheet
@@ -33,9 +36,6 @@ import co.typie.domain.note.filterLabel
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.domain.note.rememberNoteListReorderState
 import co.typie.domain.note.toggled
-import co.typie.ext.imePadding
-import co.typie.ext.navigationBarsPadding
-import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
@@ -43,47 +43,59 @@ import co.typie.graphql.type.NoteStatus
 import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.navigation.Nav
+import co.typie.navigation.PlatformBackHandler
 import co.typie.result.Result
 import co.typie.route.Route
-import co.typie.ui.component.Screen
+import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
+import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
+import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
+import co.typie.screen.editor.editor.subpane.resolveRelatedNotesVisibleAreaMode
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottombar.BottomBarAction
-import co.typie.ui.component.bottombar.BottomBarDefaults
-import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.reorder.reorderableViewport
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetBarButton
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.toast.LocalToast
-import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
-import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarButton
-import co.typie.ui.component.topbar.TopBarDefaults
-import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
-import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
-private object NotesFilterTopBarTrailingKey
+private const val RelatedNotesSheetViewModelKeyPrefix = "editor-related-notes"
+private val RelatedNotesInitialHeight = 360.dp
+private val RelatedNotesMinHeight = 240.dp
+private val RelatedNotesDismissThreshold = 128.dp
+private val RelatedNotesMinKeyboardVisibleHeight = 240.dp
+private val RelatedNotesListBottomContentPadding = 8.dp
 
 @Composable
-fun NotesScreen() {
-  val nav = Nav.current
-  val dialog = LocalDialog.current
-  val model = viewModel { NotesViewModel() }
+internal fun RelatedNotesSheet(
+  entityId: String,
+  maxTopInset: Dp,
+  safeBottomInset: Dp,
+  trustedImeBottomInset: Dp,
+  onDismiss: () -> Unit,
+  onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
+  onLayoutInfoCleared: (EditorSubPaneKey) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val keyboardOcclusion = (trustedImeBottomInset - safeBottomInset).coerceAtLeast(0.dp)
+  val model =
+    viewModel(key = "$RelatedNotesSheetViewModelKeyPrefix:$entityId") {
+      RelatedNotesViewModel(entityId)
+    }
   val noteEditState = model.noteEditState
-  val scrollState = rememberScrollState()
   val toast = LocalToast.current
-  val scope = rememberCoroutineScope()
-  val sheet = LocalSheet.current
-  val siteId = model.siteId
-  val noteColorOptions = rememberNoteColorOptions()
 
+  DisposableEffect(onLayoutInfoCleared) {
+    onDispose { onLayoutInfoCleared(EditorSubPaneKey.RelatedNotes) }
+  }
   DisposableEffect(noteEditState, model) {
     onDispose {
       noteEditState.dispose(
@@ -123,16 +135,77 @@ fun NotesScreen() {
     }
   }
 
+  suspend fun collapseExpandedNote(): Boolean {
+    return noteEditState.collapse(saveContent = ::saveNoteContent, saveColor = ::saveNoteColor)
+  }
+
+  EditorResizableSheetSurface(
+    initialHeight = RelatedNotesInitialHeight,
+    minHeight = RelatedNotesMinHeight,
+    dismissThreshold = RelatedNotesDismissThreshold,
+    maxTopInset = maxTopInset,
+    keyboardOcclusion = keyboardOcclusion,
+    minKeyboardVisibleHeight = RelatedNotesMinKeyboardVisibleHeight,
+    onDismissed = onDismiss,
+    onGeometryChanged = { geometry ->
+      onLayoutInfoChanged(
+        EditorSubPaneLayoutInfo(
+          key = EditorSubPaneKey.RelatedNotes,
+          visibleHeight = geometry.visibleHeight,
+          visibleAreaMode =
+            resolveRelatedNotesVisibleAreaMode(
+              sheetHeight = geometry.sheetHeight,
+              expandedHeight = geometry.expandedHeight,
+            ),
+        )
+      )
+    },
+    modifier = modifier,
+  ) {
+    PlatformBackHandler(enabled = true) { dismiss() }
+
+    RelatedNotesSheetContent(
+      entityId = entityId,
+      safeBottomInset = safeBottomInset,
+      keyboardOcclusion = keyboardOcclusion,
+      onDismiss = ::dismiss,
+      sheetDragHandleModifier = Modifier.sheetDragHandle(),
+      model = model,
+      noteEditState = noteEditState,
+      saveNoteContent = ::saveNoteContent,
+      saveNoteColor = ::saveNoteColor,
+      collapseExpandedNote = ::collapseExpandedNote,
+    )
+  }
+}
+
+@Composable
+private fun RelatedNotesSheetContent(
+  entityId: String,
+  safeBottomInset: Dp,
+  keyboardOcclusion: Dp,
+  onDismiss: () -> Unit,
+  sheetDragHandleModifier: Modifier,
+  model: RelatedNotesViewModel,
+  noteEditState: NoteEditState,
+  saveNoteContent: suspend (noteId: String, content: String) -> Boolean,
+  saveNoteColor: suspend (noteId: String, color: String) -> Boolean,
+  collapseExpandedNote: suspend () -> Boolean,
+) {
+  val nav = Nav.current
+  val dialog = LocalDialog.current
+  val scrollState = rememberScrollState()
+  val toast = LocalToast.current
+  val scope = rememberCoroutineScope()
+  val sheet = LocalSheet.current
+  val noteColorOptions = rememberNoteColorOptions()
+
   suspend fun flushNoteEdits(noteId: String): Boolean {
     return noteEditState.flush(
       noteId = noteId,
-      saveContent = ::saveNoteContent,
-      saveColor = ::saveNoteColor,
+      saveContent = saveNoteContent,
+      saveColor = saveNoteColor,
     )
-  }
-
-  suspend fun collapseExpandedNote(): Boolean {
-    return noteEditState.collapse(saveContent = ::saveNoteContent, saveColor = ::saveNoteColor)
   }
 
   suspend fun handleExpandNote(note: NoteCard_note) {
@@ -158,10 +231,6 @@ fun NotesScreen() {
   }
 
   suspend fun handleCreateNote() {
-    if (siteId == null) {
-      return
-    }
-
     if (!collapseExpandedNote()) {
       return
     }
@@ -245,15 +314,15 @@ fun NotesScreen() {
       return
     }
 
-    noteEditState.updateColor(noteId = note.id, value = color, save = ::saveNoteColor)
+    noteEditState.updateColor(noteId = note.id, value = color, save = saveNoteColor)
   }
 
-  suspend fun handleAddEntity(noteId: String, entityId: String): Boolean {
+  suspend fun handleAddEntity(noteId: String, linkedEntityId: String): Boolean {
     if (!flushNoteEdits(noteId)) {
       return false
     }
 
-    return when (val result = model.addNoteEntity(noteId = noteId, entityId = entityId)) {
+    return when (val result = model.addNoteEntity(noteId = noteId, entityId = linkedEntityId)) {
       is Result.Ok -> {
         noteEditState.commitServerSnapshot(result.value)
         true
@@ -267,42 +336,60 @@ fun NotesScreen() {
     }
   }
 
-  suspend fun handleRemoveEntity(noteId: String, entityId: String): Boolean {
-    if (!flushNoteEdits(noteId)) {
+  suspend fun handleRemoveEntity(
+    note: NoteCard_note,
+    linkedEntityId: String,
+    sceneStatus: NoteStatus,
+  ): Boolean {
+    if (!flushNoteEdits(note.id)) {
       return false
     }
 
-    return when (val result = model.removeNoteEntity(noteId = noteId, entityId = entityId)) {
+    val removesCurrentDocument = linkedEntityId == entityId
+    if (removesCurrentDocument) {
+      model.listState(sceneStatus).markExiting(note)
+    }
+
+    return when (val result = model.removeNoteEntity(noteId = note.id, entityId = linkedEntityId)) {
       is Result.Ok -> {
         noteEditState.commitServerSnapshot(result.value)
+        if (removesCurrentDocument) {
+          noteEditState.clearExpanded(note.id)
+          model.refetch()
+        }
         true
       }
 
       is Result.Err,
       is Result.Exception -> {
+        if (removesCurrentDocument) {
+          model.listState(sceneStatus).remove(note.id)
+        }
         toast.show(ToastType.Error, "연결을 해제할 수 없어요.")
         false
       }
     }
   }
 
-  fun presentEntityPicker(note: NoteCard_note) {
-    if (siteId == null) {
-      return
-    }
-
+  fun presentEntityPicker(note: NoteCard_note, sceneStatus: NoteStatus) {
     scope.launch {
       sheet.present(stops = NoteEntityPickerStops) {
         NoteEntityPickerSheet(
           linkedEntityIds = note.entities.mapTo(mutableSetOf()) { it.noteLinkedEntity_entity.id },
-          onAddEntity = { entityId -> handleAddEntity(note.id, entityId) },
-          onRemoveEntity = { entityId -> handleRemoveEntity(note.id, entityId) },
+          onAddEntity = { linkedEntityId -> handleAddEntity(note.id, linkedEntityId) },
+          onRemoveEntity = { linkedEntityId ->
+            handleRemoveEntity(note, linkedEntityId, sceneStatus)
+          },
         )
       }
     }
   }
 
-  fun presentLinkedEntityActions(note: NoteCard_note, linkedEntity: NoteLinkedEntity_entity) {
+  fun presentLinkedEntityActions(
+    note: NoteCard_note,
+    linkedEntity: NoteLinkedEntity_entity,
+    sceneStatus: NoteStatus,
+  ) {
     scope.launch {
       sheet.present {
         NoteLinkedEntityActionsSheet(
@@ -314,38 +401,31 @@ fun NotesScreen() {
               else nav.navigate(Route.Editor(linkedEntity.id))
             }
           },
-          onUnlink = { scope.launch { handleRemoveEntity(note.id, linkedEntity.id) } },
+          onUnlink = { scope.launch { handleRemoveEntity(note, linkedEntity.id, sceneStatus) } },
         )
       }
     }
   }
 
-  ProvideTopBar(
-    center = { Text("노트", style = AppTheme.typography.title) },
-    trailingKey = NotesFilterTopBarTrailingKey,
-    trailing = {
-      NotesFilterPopover(
+  SheetLayout(
+    modifier = Modifier.fillMaxSize(),
+    fillHeight = true,
+    bodyScroll = false,
+    handleModifier = sheetDragHandleModifier,
+    includeImeBottomInset = false,
+    padding = SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(0.dp)),
+    header = {
+      RelatedNotesSheetBar(
         selectedStatus = model.filterStatus,
-        onSelect = { nextStatus -> scope.launch { handleFilterSelection(nextStatus) } },
+        onDismiss = onDismiss,
+        onFilterSelect = { nextStatus -> scope.launch { handleFilterSelection(nextStatus) } },
+        onCreate = { scope.launch { handleCreateNote() } },
+        modifier = sheetDragHandleModifier,
       )
     },
-    scrollOffset = scrollState.topBarScrollOffset(),
-  )
-
-  ProvideBottomBar(
-    action =
-      BottomBarAction(
-        icon = Typie.StickyNotePlus,
-        onClick = { scope.launch { handleCreateNote() } },
-      )
-  )
-
-  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { contentPadding ->
-    Crossfade(
-      targetState = model.filterStatus,
-      modifier = Modifier,
-      animationSpec = tween(durationMillis = 200),
-    ) { status ->
+  ) {
+    Crossfade(targetState = model.filterStatus, animationSpec = tween(durationMillis = 200)) {
+      status ->
       val listState = model.listState(status)
       val renderedNotes = listState.merge(model.notes(status)).map(noteEditState::overlay)
       val listItems = renderedNotes.map { note ->
@@ -365,45 +445,32 @@ fun NotesScreen() {
           onExpand = { note -> scope.launch { handleExpandNote(note) } },
           onCollapse = { scope.launch { collapseExpandedNote() } },
           onContentChange = { noteId, content ->
-            noteEditState.updateContent(noteId = noteId, value = content, save = ::saveNoteContent)
+            noteEditState.updateContent(noteId = noteId, value = content, save = saveNoteContent)
           },
           onBlur = { noteId -> scope.launch { flushNoteEdits(noteId) } },
           onToggleStatus = { note -> scope.launch { handleToggleStatus(note, status) } },
           onColorChange = ::handleColorChange,
-          onAddEntity = ::presentEntityPicker,
-          onEntityClick = ::presentLinkedEntityActions,
+          onAddEntity = { note -> presentEntityPicker(note, status) },
+          onEntityClick = { note, entity -> presentLinkedEntityActions(note, entity, status) },
           onDelete = { note -> scope.launch { handleDeleteNote(note, status) } },
           onMoveNote = { noteId, lowerOrder, upperOrder ->
             model.moveNote(noteId = noteId, lowerOrder = lowerOrder, upperOrder = upperOrder)
           },
         )
       val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
-      val reorderViewportTopInset =
-        maxOf(
-          0.dp,
-          contentPadding.calculateTopPadding() -
-            TopBarDefaults.BlurFadeHeight -
-            TopBarDefaults.ContentTopSpacing,
-        )
-      val reorderViewportBottomInset =
-        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
 
       Box(
         modifier =
           Modifier.fillMaxSize()
             .reorderableViewport(
               state = reorderState,
-              viewportTopInset = reorderViewportTopInset,
-              viewportBottomInset = reorderViewportBottomInset,
+              viewportBottomInset = safeBottomInset + keyboardOcclusion,
             )
-            .imePadding()
       ) {
         Column(
-          modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+          modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 16.dp),
           verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-          Skeleton.Keep { Text(text = "노트", style = AppTheme.typography.display) }
-
           NoteList(
             emptyMessage = status.emptyMessage(),
             queryState = model.queryState(status),
@@ -416,23 +483,55 @@ fun NotesScreen() {
             actions = listActions,
           )
 
-          Spacer(Modifier.height(140.dp))
+          Spacer(
+            Modifier.height(
+              safeBottomInset + keyboardOcclusion + RelatedNotesListBottomContentPadding
+            )
+          )
         }
       }
     }
-
-    ToastAnchor(
-      modifier =
-        Modifier.align(Alignment.BottomCenter)
-          .navigationBarsPadding()
-          .padding(bottom = BottomBarDefaults.BarAreaHeight)
-    )
   }
 }
 
 @Composable
-private fun NotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus) -> Unit) {
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.ListFilter) }) {
+private fun RelatedNotesSheetBar(
+  selectedStatus: NoteStatus,
+  onDismiss: () -> Unit,
+  onFilterSelect: (NoteStatus) -> Unit,
+  onCreate: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Box(modifier = modifier.fillMaxWidth().height(44.dp).padding(horizontal = 0.dp)) {
+    SheetBarButton(
+      icon = Lucide.X,
+      onClick = { onDismiss() },
+      modifier = Modifier.align(Alignment.CenterStart),
+    )
+
+    Text(
+      text = "노트",
+      modifier = Modifier.align(Alignment.Center).padding(horizontal = 104.dp),
+      style = AppTheme.typography.title,
+      color = AppTheme.colors.textDefault,
+      overflow = TextOverflow.Ellipsis,
+      maxLines = 1,
+    )
+
+    Row(
+      modifier = Modifier.align(Alignment.CenterEnd),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      RelatedNotesFilterPopover(selectedStatus = selectedStatus, onSelect = onFilterSelect)
+      SheetBarButton(icon = Typie.StickyNotePlus, onClick = { onCreate() })
+    }
+  }
+}
+
+@Composable
+private fun RelatedNotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus) -> Unit) {
+  PopoverMenu(anchor = { SheetBarButton(icon = Lucide.ListFilter, onClick = {}) }) {
     listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
       item(
         content = {
@@ -461,10 +560,9 @@ private fun NotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus
               }
             }
           }
-        }
-      ) {
-        onSelect(status)
-      }
+        },
+        onClick = { onSelect(status) },
+      )
     }
   }
 }

@@ -23,6 +23,7 @@ internal fun BottomToolbar(
   panel: EditorToolbarBottomPanelKey,
   height: Dp,
   onEditorInputRequest: () -> Unit,
+  onToolAction: (EditorToolbarToolAction) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val hazeState = LocalHazeState.current
@@ -55,7 +56,8 @@ internal fun BottomToolbar(
           onEditorInputRequest = onEditorInputRequest,
           modifier = Modifier.fillMaxSize(),
         )
-      EditorToolbarBottomPanelKey.Tools -> BottomToolbarTools(modifier = Modifier.fillMaxSize())
+      EditorToolbarBottomPanelKey.Tools ->
+        BottomToolbarTools(onAction = onToolAction, modifier = Modifier.fillMaxSize())
     }
   }
 }

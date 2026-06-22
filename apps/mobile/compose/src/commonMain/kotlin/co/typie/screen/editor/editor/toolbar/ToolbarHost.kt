@@ -24,12 +24,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -38,10 +35,10 @@ import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.ui.component.ResponsiveContainerDefaults
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun EditorToolbarHost(
   editorState: EditorState,
@@ -50,14 +47,13 @@ internal fun EditorToolbarHost(
   editorFocused: Boolean,
   inputState: EditorToolbarInputState,
   environment: ToolbarInputEnvironment,
-  onEditorFocusRequest: () -> Unit,
+  onInputEffects: (List<EditorInputEffect>) -> Unit,
+  onToolAction: (EditorToolbarToolAction) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val commandScope = rememberCoroutineScope()
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
-  val focusManager = LocalFocusManager.current
-  val keyboardController = LocalSoftwareKeyboardController.current
   val toolbarContext = remember(editorState.version) { resolveEditorToolbarContext(editorState) }
   val pages = rememberEditorToolbarPages(toolbarContext)
   val panel = inputState.panel
@@ -106,18 +102,7 @@ internal fun EditorToolbarHost(
       !restoringKeyboard
     }
 
-  LaunchedEffect(environment) { inputState.onEnvironmentChanged(environment) }
-
-  LaunchedEffect(inputState.effectVersion) {
-    inputState.takeEffects().forEach { effect ->
-      when (effect) {
-        ToolbarEffect.ShowKeyboard -> keyboardController?.show()
-        ToolbarEffect.HideKeyboard -> keyboardController?.hide()
-        ToolbarEffect.RequestFocus -> onEditorFocusRequest()
-        ToolbarEffect.ClearFocus -> focusManager.clearFocus(force = true)
-      }
-    }
-  }
+  LaunchedEffect(environment) { onInputEffects(inputState.onEnvironmentChanged(environment)) }
 
   val previousImeVisible = remember { mutableStateOf(imeVisible) }
   val imeAppearing = !previousImeVisible.value && imeVisible
@@ -200,13 +185,13 @@ internal fun EditorToolbarHost(
           activeBottomPanel = activeBottomPanel,
           fixedAction = fixedAction,
           onEditorInputRequest = {
-            inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment)
+            onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
           },
           onKeyboardDismissRequest = {
-            inputState.dispatch(ToolbarIntent.DismissInput, environment)
+            onInputEffects(inputState.dispatch(ToolbarIntent.DismissInput, environment))
           },
           onBottomPanelToggle = { panel ->
-            inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment)
+            onInputEffects(inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment))
           },
           onEditorMessage = { message ->
             val editor = runtime.editor ?: return@EditorToolbarPages
@@ -249,8 +234,11 @@ internal fun EditorToolbarHost(
                   panel = visiblePanel,
                   height = bottomPanelHeight,
                   onEditorInputRequest = {
-                    inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment)
+                    onInputEffects(
+                      inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment)
+                    )
                   },
+                  onToolAction = onToolAction,
                 )
               }
             }

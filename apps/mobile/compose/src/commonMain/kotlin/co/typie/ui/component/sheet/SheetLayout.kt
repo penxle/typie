@@ -52,6 +52,8 @@ fun SheetLayout(
   fillHeight: Boolean = false,
   bodyScroll: Boolean = true,
   handle: Boolean = true,
+  handleModifier: Modifier = Modifier,
+  includeImeBottomInset: Boolean = true,
   padding: SheetPadding = SheetPadding(),
   verticalSpacing: Dp = 12.dp,
   backgroundColor: Color = AppTheme.colors.surfaceCanvas,
@@ -63,10 +65,10 @@ fun SheetLayout(
   val scrollState = rememberScrollState()
   val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
   val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val bottomInset = maxOf(imeBottom, navigationBarsBottom)
+  val bottomInset = maxOf(if (includeImeBottomInset) imeBottom else 0.dp, navigationBarsBottom)
 
   Column(modifier = modifier.fillMaxWidth().thenIf(fillHeight) { fillMaxHeight() }) {
-    if (handle) SheetHandle(modifier = Modifier.background(headerBackgroundColor))
+    if (handle) SheetHandle(modifier = handleModifier.background(headerBackgroundColor))
 
     if (header != null) {
       Column(

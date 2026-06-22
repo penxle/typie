@@ -25,7 +25,7 @@ class EditorVisibleAreaTest {
       EditorVisibleArea(
         viewport = Size(width = 720f, height = 900f),
         topInset = 120f,
-        imeInset = 80f,
+        bottomOcclusionInset = 80f,
       )
 
     assertEquals(120f, visibleArea.visibleViewportTop)

@@ -1,19 +1,51 @@
 package co.typie.screen.editor.editor.toolbar
 
 import androidx.compose.ui.unit.dp
+import co.typie.screen.editor.editor.state.EditorInputEffect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ToolbarInputStateTest {
+  @Test
+  fun hide_input_closes_panel_and_keyboard_without_restoring_or_clearing_focus() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), keyboardVisible)
+
+    val effects = state.dispatch(ToolbarIntent.HideInput, keyboardVisible)
+
+    assertEquals(null, state.panel)
+    assertEquals(null, state.keyboardRestoreInset)
+    assertEquals(0.dp, state.rememberedKeyboardInset)
+    assertEquals(listOf(EditorInputEffect.HideKeyboard), effects)
+  }
+
+  @Test
+  fun hide_input_returns_keyboard_effect_before_toolbar_visibility_reset() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), keyboardVisible)
+
+    val effects = state.dispatch(ToolbarIntent.HideInput, keyboardVisible)
+    state.onEnvironmentChanged(keyboardVisible.copy(visible = false))
+
+    assertEquals(listOf(EditorInputEffect.HideKeyboard), effects)
+  }
+
   @Test
   fun software_keyboard_panel_open_close_restores_keyboard_without_height_collapse() {
     val state = EditorToolbarInputState()
     val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
 
     state.onEnvironmentChanged(keyboardVisible)
-    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
+    val openEffects =
+      state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
 
-    assertEquals(listOf(ToolbarEffect.HideKeyboard), state.takeEffects())
+    assertEquals(listOf(EditorInputEffect.HideKeyboard), openEffects)
     assertEquals(
       PanelSession(
         key = EditorToolbarBottomPanelKey.Insert,
@@ -27,11 +59,11 @@ class ToolbarInputStateTest {
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
-    state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
+    val restoreEffects = state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
 
     assertEquals(
-      listOf(ToolbarEffect.RequestFocus, ToolbarEffect.ShowKeyboard),
-      state.takeEffects(),
+      listOf(EditorInputEffect.RequestFocus, EditorInputEffect.ShowKeyboard),
+      restoreEffects,
     )
     assertEquals(320.dp, state.keyboardRestoreInset)
     assertEquals(null, state.panel)
@@ -64,15 +96,15 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(environment)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), environment)
-    state.takeEffects()
 
     val transitioning = environment.copy(panelTransitionRunning = true)
-    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), transitioning)
+    val effects =
+      state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), transitioning)
 
     assertEquals(EditorToolbarBottomPanelKey.Tools, state.activeBottomPanel)
     assertEquals(288.dp, state.panel?.height)
     assertEquals(320.dp, state.panel?.keyboardSpace?.inset)
-    assertEquals(emptyList(), state.takeEffects())
+    assertEquals(emptyList(), effects)
   }
 
   @Test
@@ -82,21 +114,20 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
-    state.takeEffects()
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
-    state.takeEffects()
 
     val restoring = toolbarInputEnvironment(imeBottom = 120.dp, panelTransitionRunning = true)
     state.onEnvironmentChanged(restoring)
-    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), restoring)
+    val effects =
+      state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), restoring)
 
     assertEquals(EditorToolbarBottomPanelKey.Tools, state.activeBottomPanel)
     assertEquals(288.dp, state.panel?.height)
     assertEquals(320.dp, state.panel?.keyboardSpace?.inset)
-    assertEquals(listOf(ToolbarEffect.HideKeyboard), state.takeEffects())
+    assertEquals(listOf(EditorInputEffect.HideKeyboard), effects)
   }
 
   @Test
@@ -230,18 +261,17 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
-    state.takeEffects()
     state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 0.dp))
 
     val editorFocusLost = toolbarInputEnvironment(focused = false, imeBottom = 260.dp)
-    state.onEnvironmentChanged(editorFocusLost)
+    val effects = state.onEnvironmentChanged(editorFocusLost)
 
     assertEquals(null, state.panel)
     assertEquals(null, state.activeBottomPanel)
     assertEquals(EditorToolbarBottomPanelKey.Insert, state.lastBottomPanel)
     assertEquals(260.dp, state.retainedKeyboardInset())
     assertEquals(false, isEditorToolbarPresented(editorFocusLost, state.activeBottomPanel))
-    assertEquals(emptyList(), state.takeEffects())
+    assertEquals(emptyList(), effects)
   }
 
   @Test
@@ -251,17 +281,16 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
-    state.takeEffects()
     state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 0.dp))
 
     val editorFocusCleared = toolbarInputEnvironment(focused = false, imeBottom = 0.dp)
-    state.onEnvironmentChanged(editorFocusCleared)
+    val effects = state.onEnvironmentChanged(editorFocusCleared)
 
     assertEquals(null, state.activeBottomPanel)
     assertEquals(null, state.keyboardRestoreInset)
     assertEquals(0.dp, state.retainedKeyboardInset())
     assertEquals(false, isEditorToolbarPresented(editorFocusCleared, state.activeBottomPanel))
-    assertEquals(emptyList(), state.takeEffects())
+    assertEquals(emptyList(), effects)
   }
 
   @Test
@@ -271,17 +300,16 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
-    state.takeEffects()
     state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 0.dp))
     state.onEnvironmentChanged(toolbarInputEnvironment(focused = false, imeBottom = 0.dp))
 
     val externalKeyboardVisible = toolbarInputEnvironment(focused = false, imeBottom = 260.dp)
-    state.onEnvironmentChanged(externalKeyboardVisible)
+    val effects = state.onEnvironmentChanged(externalKeyboardVisible)
 
     assertEquals(null, state.panel)
     assertEquals(null, state.activeBottomPanel)
     assertEquals(false, isEditorToolbarPresented(externalKeyboardVisible, state.activeBottomPanel))
-    assertEquals(emptyList(), state.takeEffects())
+    assertEquals(emptyList(), effects)
   }
 
   @Test
@@ -291,22 +319,22 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
-    state.takeEffects()
     state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 0.dp))
     state.onEnvironmentChanged(toolbarInputEnvironment(focused = false, imeBottom = 0.dp))
     state.onEnvironmentChanged(toolbarInputEnvironment(focused = false, imeBottom = 320.dp))
 
     val editorRefocused = toolbarInputEnvironment(imeBottom = 320.dp)
     state.onEnvironmentChanged(editorRefocused)
-    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), editorRefocused)
+    val openEffects =
+      state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), editorRefocused)
 
     assertEquals(EditorToolbarBottomPanelKey.Insert, state.activeBottomPanel)
     assertEquals(288.dp, state.panel?.height)
-    assertEquals(listOf(ToolbarEffect.HideKeyboard), state.takeEffects())
+    assertEquals(listOf(EditorInputEffect.HideKeyboard), openEffects)
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
-    state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
+    val restoreEffects = state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
 
     assertEquals(null, state.activeBottomPanel)
     assertEquals(320.dp, state.keyboardRestoreInset)
@@ -319,8 +347,8 @@ class ToolbarInputStateTest {
       ),
     )
     assertEquals(
-      listOf(ToolbarEffect.RequestFocus, ToolbarEffect.ShowKeyboard),
-      state.takeEffects(),
+      listOf(EditorInputEffect.RequestFocus, EditorInputEffect.ShowKeyboard),
+      restoreEffects,
     )
   }
 
@@ -331,17 +359,14 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
-    state.takeEffects()
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
-    state.takeEffects()
 
     val hiddenRestoring = toolbarInputEnvironment(imeBottom = 0.dp, panelTransitionRunning = true)
     state.onEnvironmentChanged(hiddenRestoring)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), hiddenRestoring)
-    state.takeEffects()
 
     val staleRestoredKeyboard = toolbarInputEnvironment(imeBottom = 320.dp)
     state.onEnvironmentChanged(staleRestoredKeyboard)
@@ -358,12 +383,10 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), keyboardVisible)
-    state.takeEffects()
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
-    state.takeEffects()
 
     state.onEnvironmentChanged(
       toolbarInputEnvironment(imeBottom = 806.dp, panelTransitionRunning = true)
@@ -396,12 +419,10 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), keyboardVisible)
-    state.takeEffects()
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
-    state.takeEffects()
 
     state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 95.dp))
 
@@ -416,12 +437,10 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), keyboardVisible)
-    state.takeEffects()
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
-    state.takeEffects()
 
     val smallerKeyboardState =
       EditorKeyboardState(
@@ -480,12 +499,10 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Tools), keyboardVisible)
-    state.takeEffects()
 
     val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
     state.onEnvironmentChanged(keyboardHidden)
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
-    state.takeEffects()
 
     state.onEnvironmentChanged(
       toolbarInputEnvironment(
@@ -509,7 +526,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), keyboardVisible)
-    state.takeEffects()
 
     val hiddenKeyboardDuringPanel = toolbarInputEnvironment(focused = false, imeBottom = 0.dp)
     state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenKeyboardDuringPanel)
@@ -533,7 +549,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(software)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), software)
-    state.takeEffects()
 
     val hardwareHidden =
       toolbarInputEnvironment(
@@ -547,7 +562,6 @@ class ToolbarInputStateTest {
     assertEquals(false, suppressSoftwareKeyboard(requireNotNull(state.panel)))
 
     state.dispatch(ToolbarIntent.RestoreEditorInput, hardwareHidden)
-    state.takeEffects()
 
     val staleHardwareIme = hardwareHidden.copy(imeBottom = 320.dp)
     state.onEnvironmentChanged(staleHardwareIme)
@@ -568,7 +582,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(software)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), software)
-    state.takeEffects()
 
     val staleHardwareIme =
       toolbarInputEnvironment(
@@ -581,12 +594,12 @@ class ToolbarInputStateTest {
     assertEquals(null, state.panel?.keyboardSpace)
     assertEquals(0.dp, effectiveImeInset(staleHardwareIme))
 
-    state.dispatch(ToolbarIntent.RestoreEditorInput, staleHardwareIme)
+    val effects = state.dispatch(ToolbarIntent.RestoreEditorInput, staleHardwareIme)
 
     assertEquals(null, state.panel)
     assertEquals(null, state.keyboardRestoreInset)
     assertEquals(0.dp, state.retainedKeyboardInset())
-    assertEquals(listOf(ToolbarEffect.RequestFocus), state.takeEffects())
+    assertEquals(listOf(EditorInputEffect.RequestFocus), effects)
   }
 
   @Test
@@ -617,7 +630,8 @@ class ToolbarInputStateTest {
       )
 
     state.onEnvironmentChanged(environment)
-    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), environment)
+    val effects =
+      state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), environment)
 
     assertEquals(320.dp, effectiveImeInset(environment))
     assertEquals(288.dp, state.panel?.height)
@@ -625,7 +639,7 @@ class ToolbarInputStateTest {
       PanelKeyboardSpace.Fixed(inset = 320.dp, restoreKeyboardOnClose = true),
       state.panel?.keyboardSpace,
     )
-    assertEquals(listOf(ToolbarEffect.HideKeyboard), state.takeEffects())
+    assertEquals(listOf(EditorInputEffect.HideKeyboard), effects)
   }
 
   @Test
@@ -640,7 +654,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(visibleIme)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
-    state.takeEffects()
 
     val hiddenIme =
       toolbarInputEnvironment(
@@ -671,7 +684,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(visibleIme)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
-    state.takeEffects()
 
     val hiddenIme =
       toolbarInputEnvironment(
@@ -681,16 +693,13 @@ class ToolbarInputStateTest {
         panelTransitionRunning = true,
       )
     state.onEnvironmentChanged(hiddenIme)
-    state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenIme)
+    val effects = state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenIme)
     state.onEnvironmentChanged(hiddenIme.copy(panelTransitionRunning = true))
 
     assertEquals(null, state.panel)
     assertEquals(320.dp, state.keyboardRestoreInset)
     assertEquals(320.dp, state.retainedKeyboardInset())
-    assertEquals(
-      listOf(ToolbarEffect.RequestFocus, ToolbarEffect.ShowKeyboard),
-      state.takeEffects(),
-    )
+    assertEquals(listOf(EditorInputEffect.RequestFocus, EditorInputEffect.ShowKeyboard), effects)
   }
 
   @Test
@@ -705,7 +714,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(visibleIme)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
-    state.takeEffects()
 
     val hiddenFrame =
       toolbarInputEnvironment(
@@ -721,13 +729,10 @@ class ToolbarInputStateTest {
           EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 1)
       )
     state.onEnvironmentChanged(hiddenEvent)
-    state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenEvent)
+    val effects = state.dispatch(ToolbarIntent.RestoreEditorInput, hiddenEvent)
 
     assertEquals(320.dp, state.keyboardRestoreInset)
-    assertEquals(
-      listOf(ToolbarEffect.RequestFocus, ToolbarEffect.ShowKeyboard),
-      state.takeEffects(),
-    )
+    assertEquals(listOf(EditorInputEffect.RequestFocus, EditorInputEffect.ShowKeyboard), effects)
   }
 
   @Test
@@ -742,7 +747,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(visibleIme)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
-    state.takeEffects()
 
     val panelHiddenIme =
       toolbarInputEnvironment(
@@ -761,13 +765,13 @@ class ToolbarInputStateTest {
           EditorKeyboardState(type = EditorKeyboardType.Hardware, imeHideEventVersion = 2),
       )
     state.onEnvironmentChanged(userHiddenIme)
-    state.dispatch(ToolbarIntent.RestoreEditorInput, userHiddenIme)
+    val effects = state.dispatch(ToolbarIntent.RestoreEditorInput, userHiddenIme)
 
     assertEquals(null, state.panel)
     assertEquals(null, state.keyboardRestoreInset)
     assertEquals(0.dp, state.rememberedKeyboardInset)
     assertEquals(0.dp, state.retainedKeyboardInset())
-    assertEquals(listOf(ToolbarEffect.RequestFocus), state.takeEffects())
+    assertEquals(listOf(EditorInputEffect.RequestFocus), effects)
   }
 
   @Test
@@ -782,7 +786,6 @@ class ToolbarInputStateTest {
 
     state.onEnvironmentChanged(visibleIme)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanelKey.Insert), visibleIme)
-    state.takeEffects()
 
     val hiddenIme =
       toolbarInputEnvironment(

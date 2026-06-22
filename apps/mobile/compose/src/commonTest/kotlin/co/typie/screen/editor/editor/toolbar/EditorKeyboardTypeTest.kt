@@ -109,4 +109,45 @@ class EditorKeyboardTypeTest {
       ),
     )
   }
+
+  @Test
+  fun trusted_ime_bottom_ignores_raw_inset_when_keyboard_state_does_not_use_ime() {
+    assertEquals(
+      0.dp,
+      trustedImeBottomInset(
+        rawImeBottom = 320.dp,
+        keyboardState = EditorKeyboardState(type = EditorKeyboardType.Hardware),
+      ),
+    )
+  }
+
+  @Test
+  fun trusted_ime_bottom_bounds_refocus_overshoot_to_settled_inset() {
+    assertEquals(
+      350.dp,
+      trustedImeBottomInset(
+        rawImeBottom = 806.dp,
+        keyboardState =
+          EditorKeyboardState(
+            type = EditorKeyboardType.Software,
+            presentation = EditorKeyboardPresentation.Shown(settledImeBottom = 350.dp),
+          ),
+      ),
+    )
+  }
+
+  @Test
+  fun trusted_ime_bottom_preserves_unsettled_live_inset() {
+    assertEquals(
+      120.dp,
+      trustedImeBottomInset(
+        rawImeBottom = 120.dp,
+        keyboardState =
+          EditorKeyboardState(
+            type = EditorKeyboardType.Software,
+            presentation = EditorKeyboardPresentation.Showing,
+          ),
+      ),
+    )
+  }
 }

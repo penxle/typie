@@ -25,12 +25,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.EditorLocalChangesetBus
@@ -76,8 +79,14 @@ import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
+import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
+import co.typie.screen.editor.editor.subpane.EditorSubPaneHost
+import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
+import co.typie.screen.editor.editor.subpane.EditorSubPaneState
+import co.typie.screen.editor.editor.subpane.resolveSubPaneBottomOcclusion
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
+import co.typie.screen.editor.editor.toolbar.EditorToolbarToolAction
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelGap
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMillis
@@ -92,6 +101,7 @@ import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarInputState
 import co.typie.screen.editor.editor.toolbar.rememberToolbarPagerState
 import co.typie.screen.editor.editor.toolbar.suppressSoftwareKeyboard
 import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPanel
+import co.typie.screen.editor.editor.toolbar.trustedImeBottomInset
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
 import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
 import co.typie.storage.Preference
@@ -108,6 +118,7 @@ import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
@@ -120,9 +131,11 @@ fun EditorScreen(entityId: String) {
   val externalElementState = remember(entityId) { EditorExternalElementState() }
   val zoomController = rememberEditorZoomController(key = entityId)
   val screenState = rememberEditorScreenState(key = entityId)
+  val subPaneState = remember(entityId) { EditorSubPaneState() }
   val loading = model.query.state !is QueryState.Success
   val entity = model.query.data.entity
   val document = entity.node.onDocument
+
   DisposableEffect(model) {
     onDispose {
       interactionScope.reset()
@@ -249,7 +262,9 @@ fun EditorScreen(entityId: String) {
     val editorState = editor?.state ?: EditorState.Initial
     val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
+    val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val scrollGestureLockState = LocalScrollGestureLockState.current
     val layoutDirection = LocalLayoutDirection.current
     val topInset = contentPadding.calculateTopPadding()
@@ -267,15 +282,35 @@ fun EditorScreen(entityId: String) {
     bottomPanelTransition.targetState = bottomPanelOpen
     val panelTransitionRunning =
       bottomPanelTransition.currentState != bottomPanelTransition.targetState
+    val subPaneActive = subPaneState.activeKey != null
+    val editorToolbarVisible = screenState.sceneInForeground && !subPaneActive
     val toolbarInputEnvironment =
       ToolbarInputEnvironment(
-        visible = screenState.sceneInForeground,
+        visible = editorToolbarVisible,
         focused = uiState.focused,
         imeBottom = imeBottom,
         safeBottomInset = bottomSafeInset,
         keyboardState = keyboardState,
         panelTransitionRunning = panelTransitionRunning,
       )
+    fun performInputEffects(effects: List<EditorInputEffect>) {
+      effects.forEach { effect ->
+        when (effect) {
+          EditorInputEffect.ShowKeyboard -> keyboardController?.show()
+          EditorInputEffect.HideKeyboard -> keyboardController?.hide()
+          EditorInputEffect.RequestFocus -> requestEditorFocus()
+          EditorInputEffect.ClearFocus -> focusManager.clearFocus(force = true)
+        }
+      }
+    }
+
+    LaunchedEffect(subPaneActive) {
+      if (subPaneActive) {
+        performInputEffects(listOf(EditorInputEffect.HideKeyboard))
+      }
+    }
+    val trustedImeBottom =
+      trustedImeBottomInset(rawImeBottom = imeBottom, keyboardState = keyboardState)
     val toolbarEffectiveImeInset = effectiveImeInset(toolbarInputEnvironment)
     val imeVisible =
       isImeVisible(imeBottom = toolbarEffectiveImeInset, safeBottomInset = bottomSafeInset)
@@ -330,11 +365,15 @@ fun EditorScreen(entityId: String) {
     val devMode = Preference.devMode
     val displayZoom = zoomController.displayZoom
     val cursorLineHeight = (editorState.cursor?.line?.height ?: 0f) * displayZoom
+    val subPaneBottomOcclusion = resolveSubPaneBottomOcclusion(subPaneState.layoutInfo)
+    val editorInputBottomOcclusion =
+      if (subPaneActive) 0f else toolbarBottomOcclusion.value.value.coerceAtLeast(0f)
     val visibleArea =
       screenState.resolveVisibleArea(
         topInset = topInset.value,
         rawBottomSafeInset = bottomSafeInset.value,
-        rawImeInset = toolbarBottomOcclusion.value.value,
+        rawEditorInputBottomInset = editorInputBottomOcclusion,
+        rawSubPaneBottomInset = subPaneBottomOcclusion,
       )
     LaunchedEffect(imeVisible, bottomPanelOpen) { previousImeVisible.value = imeVisible }
     LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
@@ -455,6 +494,8 @@ fun EditorScreen(entityId: String) {
           suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
         )
       } ?: true
+    val editorTextInputSessionEnabled = toolbarTextInputSessionEnabled && !subPaneActive
+    val editorSuppressesSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard || subPaneActive
     val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
     val debugWheelZoomModifier =
       if (
@@ -578,8 +619,8 @@ fun EditorScreen(entityId: String) {
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,
               modifier = Modifier.then(debugWheelZoomModifier),
-              textInputSessionEnabled = toolbarTextInputSessionEnabled,
-              suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
+              textInputSessionEnabled = editorTextInputSessionEnabled,
+              suppressSoftwareKeyboard = editorSuppressesSoftwareKeyboard,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
             )
@@ -593,8 +634,30 @@ fun EditorScreen(entityId: String) {
             editorFocused = uiState.focused,
             inputState = toolbarInputState,
             environment = toolbarInputEnvironment,
-            onEditorFocusRequest = ::requestEditorFocus,
+            onInputEffects = ::performInputEffects,
+            onToolAction = { action ->
+              when (action) {
+                EditorToolbarToolAction.RelatedNotes -> {
+                  uiState.contextMenu.hide()
+                  subPaneState.open(EditorSubPaneKey.RelatedNotes)
+                }
+                EditorToolbarToolAction.Comment,
+                EditorToolbarToolAction.Spellcheck,
+                EditorToolbarToolAction.AiFeedback,
+                EditorToolbarToolAction.Timeline -> Unit
+              }
+            },
             modifier = Modifier,
+          )
+        },
+        subPane = {
+          EditorSubPaneHost(
+            state = subPaneState,
+            entityId = entityId,
+            maxTopInset = topInset,
+            safeBottomInset = bottomSafeInset,
+            trustedImeBottomInset = trustedImeBottom,
+            modifier = Modifier.fillMaxSize(),
           )
         },
         modifier = Modifier.padding(start = startInset, end = endInset),

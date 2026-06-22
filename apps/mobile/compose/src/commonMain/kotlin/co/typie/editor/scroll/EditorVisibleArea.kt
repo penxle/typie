@@ -1,7 +1,6 @@
 package co.typie.editor.scroll
 
 import androidx.compose.ui.geometry.Size
-import kotlin.math.max
 
 internal data class EditorVisibleArea(
   val viewport: Size = Size.Zero,
@@ -9,15 +8,16 @@ internal data class EditorVisibleArea(
   val topInset: Float = 0f,
   val safeBottomInset: Float = 0f,
   val imeInset: Float = 0f,
+  val bottomOcclusionInset: Float = 0f,
 ) {
   val topOcclusion: Float
     get() = topInset
 
-  private val effectiveBottomInset: Float
-    get() = max(safeBottomInset, imeInset)
+  private val effectiveBottomOcclusion: Float
+    get() = maxOf(safeBottomInset, imeInset, bottomOcclusionInset)
 
-  private val keyboardViewportBottom: Float
-    get() = (viewport.height - effectiveBottomInset).coerceAtLeast(0f)
+  private val bottomOccludedViewportBottom: Float
+    get() = (viewport.height - effectiveBottomOcclusion).coerceAtLeast(0f)
 
   val bottomOcclusion: Float
     get() = (viewport.height - visibleViewportBottom).coerceAtLeast(0f)
@@ -26,7 +26,7 @@ internal data class EditorVisibleArea(
     get() = topOcclusion
 
   val visibleViewportBottom: Float
-    get() = keyboardViewportBottom.coerceAtLeast(visibleViewportTop)
+    get() = bottomOccludedViewportBottom.coerceAtLeast(visibleViewportTop)
 
   val visibleBodySize: Size
     get() =

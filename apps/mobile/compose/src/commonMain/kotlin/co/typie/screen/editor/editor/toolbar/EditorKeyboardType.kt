@@ -42,6 +42,19 @@ internal data class EditorKeyboardState(
 
 internal fun isImeVisible(imeBottom: Dp, safeBottomInset: Dp): Boolean = imeBottom > safeBottomInset
 
+internal fun trustedImeBottomInset(rawImeBottom: Dp, keyboardState: EditorKeyboardState): Dp {
+  if (!keyboardState.usesImeInset) {
+    return 0.dp
+  }
+
+  val settledImeInset = keyboardState.settledImeBottom
+  return if (settledImeInset != null && rawImeBottom > settledImeInset) {
+    settledImeInset
+  } else {
+    rawImeBottom
+  }
+}
+
 internal fun resolveKeyboardPresentation(
   imeBottom: Dp,
   animationSourceBottom: Dp,

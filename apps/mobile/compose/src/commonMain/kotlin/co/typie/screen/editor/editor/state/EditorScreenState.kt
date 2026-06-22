@@ -13,6 +13,7 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.viewport.EditorViewportState
+import kotlin.math.max
 
 @Stable
 internal class EditorScreenState internal constructor(val viewportState: EditorViewportState) {
@@ -63,13 +64,19 @@ internal class EditorScreenState internal constructor(val viewportState: EditorV
   fun resolveVisibleArea(
     topInset: Float,
     rawBottomSafeInset: Float,
-    rawImeInset: Float,
+    rawEditorInputBottomInset: Float,
+    rawSubPaneBottomInset: Float = 0f,
   ): EditorVisibleArea =
     EditorVisibleArea(
       viewport = viewport,
       headerHeight = headerHeight,
       topInset = topInset,
       safeBottomInset = if (sceneInForeground) rawBottomSafeInset else 0f,
-      imeInset = if (sceneInForeground) rawImeInset else 0f,
+      bottomOcclusionInset =
+        if (sceneInForeground) {
+          max(rawEditorInputBottomInset, rawSubPaneBottomInset)
+        } else {
+          0f
+        },
     )
 }

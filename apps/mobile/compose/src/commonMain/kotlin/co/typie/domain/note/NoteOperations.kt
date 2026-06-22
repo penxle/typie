@@ -28,17 +28,24 @@ import co.typie.storage.Preference
 
 const val DEFAULT_NOTE_COLOR = "gray"
 
-suspend fun createNote(color: String = DEFAULT_NOTE_COLOR): Result<NoteCard_note, Nothing> =
-  result {
-    val siteId = Preference.siteId ?: error("missing siteId")
-    Apollo.executeMutation(
-        Note_Create_Mutation(
-          input = CreateNoteInput.Builder().siteId(siteId).content("").color(color).build()
-        )
-      )
-      .createNote
-      .noteCard_note
-  }
+suspend fun createNote(
+  color: String = DEFAULT_NOTE_COLOR,
+  entityId: String? = null,
+): Result<NoteCard_note, Nothing> = result {
+  val input =
+    CreateNoteInput.Builder()
+      .content("")
+      .color(color)
+      .apply {
+        if (entityId != null) {
+          entityId(entityId)
+        } else {
+          siteId(Preference.siteId ?: error("missing siteId"))
+        }
+      }
+      .build()
+  Apollo.executeMutation(Note_Create_Mutation(input = input)).createNote.noteCard_note
+}
 
 suspend fun updateNoteContent(noteId: String, content: String): Result<NoteCard_note, Nothing> =
   result {

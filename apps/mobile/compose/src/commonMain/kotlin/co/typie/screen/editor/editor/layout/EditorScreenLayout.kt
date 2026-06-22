@@ -56,6 +56,7 @@ private enum class EditorScreenLayoutSlot {
   ViewportOverlay,
   Overlay,
   Toolbar,
+  SubPane,
 }
 
 @Composable
@@ -74,6 +75,7 @@ internal fun EditorScreenLayout(
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
   overlay: @Composable () -> Unit = {},
   toolbar: @Composable () -> Unit,
+  subPane: @Composable BoxScope.() -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
@@ -235,12 +237,27 @@ internal fun EditorScreenLayout(
           )
         )
       }
+    val subPanePlaceables =
+      subcompose(EditorScreenLayoutSlot.SubPane) {
+          Box(modifier = Modifier.fillMaxSize(), content = subPane)
+        }
+        .map {
+          it.measure(
+            constraints.copy(
+              minWidth = constraints.maxWidth,
+              maxWidth = constraints.maxWidth,
+              minHeight = constraints.maxHeight,
+              maxHeight = constraints.maxHeight,
+            )
+          )
+        }
 
     layout(width = constraints.maxWidth, height = constraints.maxHeight) {
       viewportContentPlaceables.forEach { it.place(x = 0, y = 0) }
       viewportOverlayPlaceables.forEach { it.place(x = 0, y = 0) }
       overlayPlaceables.forEach { it.place(x = 0, y = 0) }
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
+      subPanePlaceables.forEach { it.place(x = 0, y = 0) }
     }
   }
 }

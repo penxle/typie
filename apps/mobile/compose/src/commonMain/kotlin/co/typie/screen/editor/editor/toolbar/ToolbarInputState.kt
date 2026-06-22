@@ -3,12 +3,12 @@ package co.typie.screen.editor.editor.toolbar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.screen.editor.editor.state.EditorInputEffect
 
 @Composable
 internal fun rememberEditorToolbarInputState(): EditorToolbarInputState = remember {
@@ -34,14 +34,9 @@ internal sealed interface ToolbarIntent {
 
   data object DismissInput : ToolbarIntent
 
-  data object Reset : ToolbarIntent
-}
+  data object HideInput : ToolbarIntent
 
-internal enum class ToolbarEffect {
-  ShowKeyboard,
-  HideKeyboard,
-  RequestFocus,
-  ClearFocus,
+  data object Reset : ToolbarIntent
 }
 
 internal enum class ToolbarFixedAction {
@@ -113,9 +108,6 @@ internal class EditorToolbarInputState {
 
   private var previousIme by mutableStateOf(ImeObservation())
   private var lastPanelSnapshot by mutableStateOf<PanelSnapshot?>(null)
-  private var queuedEffects by mutableStateOf(emptyList<ToolbarEffect>())
-  var effectVersion by mutableIntStateOf(0)
-    private set
 
   val activeBottomPanel: EditorToolbarBottomPanelKey?
     get() = panel?.key
@@ -133,11 +125,11 @@ internal class EditorToolbarInputState {
       panel?.keyboardSpace?.inset ?: 0.dp,
     )
 
-  fun onEnvironmentChanged(environment: ToolbarInputEnvironment) {
+  fun onEnvironmentChanged(environment: ToolbarInputEnvironment): List<EditorInputEffect> {
     if (!environment.visible) {
       reset()
       previousIme = ImeObservation(hideEventVersion = environment.keyboardState.imeHideEventVersion)
-      return
+      return emptyList()
     }
 
     val panelRetainsHiddenImeSpace = panel?.keyboardSpace?.retainsPanelSpaceWhenImeHidden == true
@@ -167,7 +159,7 @@ internal class EditorToolbarInputState {
         rememberedKeyboardInset =
           visibleImeInsetOrZero(effectiveImeInset, environment.safeBottomInset)
         previousIme = currentIme
-        return
+        return emptyList()
       }
 
     val retainedKeyboardInset = retainedKeyboardInset()
@@ -182,7 +174,7 @@ internal class EditorToolbarInputState {
       keyboardRestoreInset = null
       rememberedKeyboardInset = 0.dp
       previousIme = currentIme
-      return
+      return emptyList()
     }
 
     var currentPanel = panel
@@ -203,7 +195,8 @@ internal class EditorToolbarInputState {
           safeBottomInset = environment.safeBottomInset,
           preserveCurrentInset = true,
         )
-        emit(ToolbarEffect.HideKeyboard)
+        previousIme = currentIme
+        return listOf(EditorInputEffect.HideKeyboard)
       } else {
         lastPanelSnapshot = currentPanel.snapshot()
         keyboardRestoreInset = null
@@ -212,7 +205,7 @@ internal class EditorToolbarInputState {
         panel = null
       }
       previousIme = currentIme
-      return
+      return emptyList()
     }
 
     if (
@@ -236,36 +229,34 @@ internal class EditorToolbarInputState {
     }
 
     previousIme = currentIme
+    return emptyList()
   }
 
-  fun dispatch(intent: ToolbarIntent, environment: ToolbarInputEnvironment) {
+  fun dispatch(
+    intent: ToolbarIntent,
+    environment: ToolbarInputEnvironment,
+  ): List<EditorInputEffect> =
     when (intent) {
       is ToolbarIntent.OpenPanel -> openPanel(intent.panel, environment)
       ToolbarIntent.RestoreEditorInput -> restoreEditorInput(environment)
       ToolbarIntent.DismissInput -> dismissInput(environment)
+      ToolbarIntent.HideInput -> hideInput()
       ToolbarIntent.Reset -> reset()
     }
-  }
-
-  fun takeEffects(): List<ToolbarEffect> {
-    val effects = queuedEffects
-    queuedEffects = emptyList()
-    return effects
-  }
 
   private fun openPanel(
     panelKey: EditorToolbarBottomPanelKey,
     environment: ToolbarInputEnvironment,
-  ) {
+  ): List<EditorInputEffect> {
     val currentPanel = panel
     if (currentPanel != null) {
       if (currentPanel.key == panelKey) {
-        restoreEditorInput(environment)
+        return restoreEditorInput(environment)
       } else {
         panel = currentPanel.copy(key = panelKey)
         lastPanelSnapshot = PanelSnapshot(panelKey, currentPanel.height)
       }
-      return
+      return emptyList()
     }
 
     val currentRestoreInset = keyboardRestoreInset
@@ -300,16 +291,17 @@ internal class EditorToolbarInputState {
     panel = PanelSession(key = panelKey, height = panelHeight, keyboardSpace = keyboardSpace)
     lastPanelSnapshot = PanelSnapshot(panelKey, panelHeight)
 
-    if (imeVisible || currentRestoreInset != null) {
-      emit(ToolbarEffect.HideKeyboard)
+    return if (imeVisible || currentRestoreInset != null) {
+      listOf(EditorInputEffect.HideKeyboard)
+    } else {
+      emptyList()
     }
   }
 
-  private fun restoreEditorInput(environment: ToolbarInputEnvironment) {
+  private fun restoreEditorInput(environment: ToolbarInputEnvironment): List<EditorInputEffect> {
     val currentPanel = panel
     if (currentPanel == null) {
-      emit(ToolbarEffect.RequestFocus)
-      return
+      return listOf(EditorInputEffect.RequestFocus)
     }
 
     val keyboardSpace = currentPanel.keyboardSpace
@@ -324,16 +316,16 @@ internal class EditorToolbarInputState {
     }
     panel = null
 
-    emit(ToolbarEffect.RequestFocus)
-    if (restoreKeyboard) {
-      emit(ToolbarEffect.ShowKeyboard)
+    return if (restoreKeyboard) {
+      listOf(EditorInputEffect.RequestFocus, EditorInputEffect.ShowKeyboard)
+    } else {
+      listOf(EditorInputEffect.RequestFocus)
     }
   }
 
-  private fun dismissInput(environment: ToolbarInputEnvironment) {
+  private fun dismissInput(environment: ToolbarInputEnvironment): List<EditorInputEffect> {
     if (panel != null) {
-      restoreEditorInput(environment)
-      return
+      return restoreEditorInput(environment)
     }
 
     val effectiveImeInset = effectiveImeInset(environment)
@@ -344,21 +336,31 @@ internal class EditorToolbarInputState {
 
     keyboardRestoreInset = null
     rememberedKeyboardInset = 0.dp
+    val effects = mutableListOf<EditorInputEffect>()
     if (fixedAction == ToolbarFixedAction.DismissInput) {
-      emit(ToolbarEffect.HideKeyboard)
+      effects += EditorInputEffect.HideKeyboard
     }
     if (environment.focused) {
-      emit(ToolbarEffect.ClearFocus)
+      effects += EditorInputEffect.ClearFocus
     }
+    return effects
   }
 
-  private fun reset() {
+  private fun hideInput(): List<EditorInputEffect> {
     panel = null
     keyboardRestoreInset = null
     rememberedKeyboardInset = 0.dp
     lastPanelSnapshot = null
-    queuedEffects = emptyList()
+    return listOf(EditorInputEffect.HideKeyboard)
+  }
+
+  private fun reset(): List<EditorInputEffect> {
+    panel = null
+    keyboardRestoreInset = null
+    rememberedKeyboardInset = 0.dp
+    lastPanelSnapshot = null
     previousIme = ImeObservation()
+    return emptyList()
   }
 
   private fun syncKeyboardRestore(
@@ -395,28 +397,16 @@ internal class EditorToolbarInputState {
         nextInset
       }
   }
-
-  private fun emit(effect: ToolbarEffect) {
-    queuedEffects = queuedEffects + effect
-    effectVersion++
-  }
 }
 
 internal fun visibleImeInsetOrZero(effectiveImeInset: Dp, safeBottomInset: Dp): Dp =
   if (effectiveImeInset > safeBottomInset) effectiveImeInset else 0.dp
 
-internal fun effectiveImeInset(environment: ToolbarInputEnvironment): Dp {
-  if (!environment.keyboardState.usesImeInset) {
-    return 0.dp
-  }
-
-  val settledImeInset = environment.keyboardState.settledImeBottom
-  return if (settledImeInset != null && environment.imeBottom > settledImeInset) {
-    settledImeInset
-  } else {
-    environment.imeBottom
-  }
-}
+internal fun effectiveImeInset(environment: ToolbarInputEnvironment): Dp =
+  trustedImeBottomInset(
+    rawImeBottom = environment.imeBottom,
+    keyboardState = environment.keyboardState,
+  )
 
 private fun PanelKeyboardSpace.panelHeight(safeBottomInset: Dp): Dp =
   (maxOf(inset, safeBottomInset + ToolbarBottomPanelGap + ToolbarBottomPanelMinHeight) -

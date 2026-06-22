@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import co.typie.ext.EdgeAutoScrollController
+import co.typie.ext.LocalScrollGestureLockState
+import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.edgeAutoScroll
 import co.typie.ext.rememberEdgeAutoScrollController
 import kotlinx.coroutines.flow.drop
@@ -335,6 +337,7 @@ fun <K : Any> Modifier.reorderableDragHandle(
   onDragStopped: (drop: ReorderDrop<K>?) -> Unit = {},
 ): Modifier {
   val haptic = LocalHapticFeedback.current
+  val scrollGestureLockState = LocalScrollGestureLockState.current
   val onDragMovedUpdated by rememberUpdatedState(onDragMoved)
   var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
@@ -349,49 +352,61 @@ fun <K : Any> Modifier.reorderableDragHandle(
   }
 
   return this.onGloballyPositioned { coords -> handleCoordinates = coords }
-    .pointerInput(state, key, enabled) {
+    .pointerInput(state, key, enabled, scrollGestureLockState) {
       if (!enabled) return@pointerInput
 
       awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val pointerId = down.id
-        val originWindow =
-          handleCoordinates?.localToWindow(down.position) ?: return@awaitEachGesture
-        var currentWindow = originWindow
-        val started = state.beginDrag(key, originWindow)
+        var scrollLockHandle: ScrollGestureLockHandle? = null
 
-        if (started) {
-          down.consume()
-          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-          onDragStarted()
+        fun releaseScrollLock() {
+          scrollLockHandle?.release()
+          scrollLockHandle = null
         }
 
-        while (true) {
-          val event = awaitPointerEvent()
-          val change = event.changes.find { it.id == pointerId } ?: break
-          currentWindow = handleCoordinates?.localToWindow(change.position) ?: currentWindow
-
-          if (!change.pressed) {
-            if (started) {
-              val drop = state.endDrag()
-              haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-              onDragStopped(drop)
-            } else {
-              state.cancelDrag()
-            }
-            break
-          }
+        try {
+          val down = awaitFirstDown(requireUnconsumed = false)
+          val pointerId = down.id
+          val originWindow =
+            handleCoordinates?.localToWindow(down.position) ?: return@awaitEachGesture
+          var currentWindow = originWindow
+          val started = state.beginDrag(key, originWindow)
 
           if (started) {
-            change.consume()
-            state.updateDrag(currentWindow)
-            state.edgeAutoScrollController.pointer = currentWindow
+            scrollLockHandle = scrollGestureLockState.acquire()
+            down.consume()
+            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+            onDragStarted()
           }
-        }
 
-        if (started && state.isDragging(key)) {
-          state.cancelDrag()
-          onDragStopped(null)
+          while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.find { it.id == pointerId } ?: break
+            currentWindow = handleCoordinates?.localToWindow(change.position) ?: currentWindow
+
+            if (!change.pressed) {
+              if (started) {
+                val drop = state.endDrag()
+                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                onDragStopped(drop)
+              } else {
+                state.cancelDrag()
+              }
+              break
+            }
+
+            if (started) {
+              change.consume()
+              state.updateDrag(currentWindow)
+              state.edgeAutoScrollController.pointer = currentWindow
+            }
+          }
+
+          if (started && state.isDragging(key)) {
+            state.cancelDrag()
+            onDragStopped(null)
+          }
+        } finally {
+          releaseScrollLock()
         }
       }
     }

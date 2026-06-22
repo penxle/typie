@@ -31,6 +31,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
+import co.typie.screen.editor.editor.toolbar.EditorToolbarToolAction
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelRadius
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
@@ -40,7 +41,10 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
-internal fun BottomToolbarTools(modifier: Modifier = Modifier) {
+internal fun BottomToolbarTools(
+  onAction: (EditorToolbarToolAction) -> Unit,
+  modifier: Modifier = Modifier,
+) {
   val gridFogInsets = remember { PaddingValues(vertical = ToolPanelPadding) }
 
   LazyVerticalGrid(
@@ -54,7 +58,7 @@ internal fun BottomToolbarTools(modifier: Modifier = Modifier) {
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     items(ToolItems, key = { it.label }) { item ->
-      ToolTile(item = item, modifier = Modifier.fillMaxWidth(), onClick = {})
+      ToolTile(item = item, modifier = Modifier.fillMaxWidth(), onClick = { onAction(item.action) })
     }
   }
 }
@@ -109,15 +113,31 @@ private fun ToolTile(item: ToolItem, onClick: () -> Unit, modifier: Modifier = M
   }
 }
 
-private data class ToolItem(val icon: IconData, val label: String)
+private data class ToolItem(
+  val icon: IconData,
+  val label: String,
+  val action: EditorToolbarToolAction,
+)
 
 private val ToolItems =
   listOf(
-    ToolItem(icon = Lucide.StickyNote, label = "노트"),
-    ToolItem(icon = Lucide.MessageSquareText, label = "코멘트"),
-    ToolItem(icon = Lucide.SpellCheck, label = "맞춤법 검사"),
-    ToolItem(icon = Lucide.Lightbulb, label = "AI 피드백"),
-    ToolItem(icon = Lucide.History, label = "타임라인"),
+    ToolItem(icon = Lucide.StickyNote, label = "노트", action = EditorToolbarToolAction.RelatedNotes),
+    ToolItem(
+      icon = Lucide.MessageSquareText,
+      label = "코멘트",
+      action = EditorToolbarToolAction.Comment,
+    ),
+    ToolItem(
+      icon = Lucide.SpellCheck,
+      label = "맞춤법 검사",
+      action = EditorToolbarToolAction.Spellcheck,
+    ),
+    ToolItem(
+      icon = Lucide.Lightbulb,
+      label = "AI 피드백",
+      action = EditorToolbarToolAction.AiFeedback,
+    ),
+    ToolItem(icon = Lucide.History, label = "타임라인", action = EditorToolbarToolAction.Timeline),
   )
 
 private val ToolPanelPadding = 16.dp
