@@ -25,16 +25,15 @@ pub fn resolve_font_weight(
             .as_deref()
             .and_then(|f| resource.font_registry.weights(f))
         {
-            Some(available) => match match_weight(available, value) {
-                Some(matched) => {
+            Some(available) => {
+                if let Some(matched) = match_weight(available, value) {
                     if value >= 700 && matched < 700 {
                         out.push(Modifier::Bold);
                     } else {
                         out.push(Modifier::FontWeight { value: matched });
                     }
                 }
-                None => {}
-            },
+            }
             None => {
                 out.push(Modifier::FontWeight { value });
             }

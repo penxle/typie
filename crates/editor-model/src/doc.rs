@@ -503,15 +503,15 @@ impl Doc {
                 return;
             }
         };
-        if let Some(old) = self.flat_layout.0.take() {
-            if let Some(updated) = old.with_text_size(node_id, new_size) {
-                let _ = self.flat_layout.0.set(std::sync::Arc::new(updated));
-                #[cfg(debug_assertions)]
-                self.debug_assert_flat_layout_matches_rebuild(node_id);
-            }
-            // `None` (node not a text leaf in this layout) → leave empty for a
-            // lazy rebuild, which will be correct.
+        if let Some(old) = self.flat_layout.0.take()
+            && let Some(updated) = old.with_text_size(node_id, new_size)
+        {
+            let _ = self.flat_layout.0.set(std::sync::Arc::new(updated));
+            #[cfg(debug_assertions)]
+            self.debug_assert_flat_layout_matches_rebuild(node_id);
         }
+        // `None` (node not a text leaf in this layout) → leave empty for a
+        // lazy rebuild, which will be correct.
         // Not yet built → nothing to do; the lazy build reflects current content.
     }
 
@@ -630,13 +630,13 @@ impl Doc {
                 }
                 queue.push_back(child_id);
             }
-            if let Some(parent_id) = *entry.parent.get() {
-                if !listed_edges.contains(&(parent_id, id)) {
-                    return Err(ModelError::ParentChildDesync {
-                        parent: parent_id,
-                        child: id,
-                    });
-                }
+            if let Some(parent_id) = *entry.parent.get()
+                && !listed_edges.contains(&(parent_id, id))
+            {
+                return Err(ModelError::ParentChildDesync {
+                    parent: parent_id,
+                    child: id,
+                });
             }
         }
 

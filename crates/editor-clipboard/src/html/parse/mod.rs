@@ -440,7 +440,7 @@ mod tests {
     }
 
     fn find_text(root: &Fragment) -> Option<&Fragment> {
-        fn rec<'a>(f: &'a Fragment) -> Option<&'a Fragment> {
+        fn rec(f: &Fragment) -> Option<&Fragment> {
             if matches!(f.node, PlainNode::Text(_)) {
                 return Some(f);
             }
@@ -603,7 +603,7 @@ mod tests {
             r#"<div style="text-align:center"><p>x</p></div>"#,
             &Resource::new_test(),
         );
-        fn find_block<'a>(f: &'a Fragment) -> Option<&'a Fragment> {
+        fn find_block(f: &Fragment) -> Option<&Fragment> {
             if matches!(f.node, PlainNode::Paragraph(_)) {
                 return Some(f);
             }

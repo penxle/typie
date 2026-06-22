@@ -14,6 +14,12 @@ pub struct VectorSink {
     text_ops: Vec<TextOp>,
 }
 
+impl Default for VectorSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VectorSink {
     pub fn new() -> Self {
         Self {

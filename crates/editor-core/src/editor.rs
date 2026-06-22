@@ -343,7 +343,7 @@ impl Editor {
 
             let a = resolved.anchor().to_flat();
             let h = resolved.head().to_flat();
-            let chars = if a >= h { a - h } else { h - a };
+            let chars = a.abs_diff(h);
 
             let stripped: Vec<editor_view::PageRect> =
                 rects.into_iter().map(|pr| pr.without_meta()).collect();
@@ -765,20 +765,19 @@ impl Editor {
             }
             other => other,
         };
-        if let EditorEvent::RenderInvalidated { layers } = &event {
-            if let Some(EditorEvent::RenderInvalidated { layers: existing }) = self
+        if let EditorEvent::RenderInvalidated { layers } = &event
+            && let Some(EditorEvent::RenderInvalidated { layers: existing }) = self
                 .pending_events
                 .iter_mut()
                 .find(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
-            {
-                let mask =
-                    editor_common::layers_to_mask(existing) | editor_common::layers_to_mask(layers);
-                *existing = SurfaceLayer::ALL
-                    .into_iter()
-                    .filter(|l| mask & l.bit() != 0)
-                    .collect();
-                return;
-            }
+        {
+            let mask =
+                editor_common::layers_to_mask(existing) | editor_common::layers_to_mask(layers);
+            *existing = SurfaceLayer::ALL
+                .into_iter()
+                .filter(|l| mask & l.bit() != 0)
+                .collect();
+            return;
         }
         if !self.pending_events.contains(&event) {
             self.pending_events.push(event);
@@ -973,11 +972,11 @@ impl Editor {
             };
             return sel;
         }
-        let target = {
+
+        {
             let resource = self.resource.lock().unwrap();
             self.view.resolve_movement(pos, movement, &resource)
-        };
-        target
+        }
     }
 
     pub(crate) fn resolve_extend_movement(
@@ -3777,7 +3776,7 @@ mod tests {
         let probed = editor.can(Message::Insertion {
             op: InsertionOp::Text { text: "x".into() },
         });
-        assert_eq!(probed.unwrap(), true);
+        assert!(probed.unwrap());
     }
 
     #[test]
@@ -3790,7 +3789,7 @@ mod tests {
         let probed = editor.can(Message::History {
             op: HistoryOp::Undo,
         });
-        assert_eq!(probed.unwrap(), false);
+        assert!(!probed.unwrap());
     }
 
     #[test]
@@ -3804,7 +3803,7 @@ mod tests {
         let probed = editor.can(Message::Selection {
             op: SelectionOp::Set { selection: same },
         });
-        assert_eq!(probed.unwrap(), false);
+        assert!(!probed.unwrap());
     }
 
     #[test]
@@ -3988,7 +3987,7 @@ mod tests {
 
         // Extract slice
         let mut state = editor.state().clone();
-        state.selection = Some(sel.clone());
+        state.selection = Some(sel);
         let slice = Slice::extract(&state).expect("Slice::extract must succeed");
 
         // Print slice content for debugging
@@ -4025,9 +4024,8 @@ mod tests {
             &editor.state.doc,
         );
         let r1 = editor.transact(|tr| {
-            commands::set_selection(tr, sel.clone())
-                .map_err(|e| crate::error::EditorError::from(e))?;
-            commands::delete_selection(tr).map_err(|e| crate::error::EditorError::from(e))?;
+            commands::set_selection(tr, sel).map_err(crate::error::EditorError::from)?;
+            commands::delete_selection(tr).map_err(crate::error::EditorError::from)?;
             Ok(())
         });
         match r1 {
@@ -4043,7 +4041,7 @@ mod tests {
         );
         let r2 = editor.transact(|tr| {
             commands::insert_slice_at(tr, target, slice.clone())
-                .map_err(|e| crate::error::EditorError::from(e))?;
+                .map_err(crate::error::EditorError::from)?;
             Ok(())
         });
         match r2 {

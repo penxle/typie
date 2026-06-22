@@ -62,11 +62,11 @@ pub(crate) fn nth_table_cell(
     let row_ref = table
         .children()
         .nth(row)
-        .ok_or_else(|| CommandError::Corrupted(format!("row {row} missing").into()))?;
+        .ok_or_else(|| CommandError::Corrupted(format!("row {row} missing")))?;
     let cell = row_ref
         .children()
         .nth(col)
-        .ok_or_else(|| CommandError::Corrupted(format!("cell {row},{col} missing").into()))?;
+        .ok_or_else(|| CommandError::Corrupted(format!("cell {row},{col} missing")))?;
     Ok(cell.id())
 }
 

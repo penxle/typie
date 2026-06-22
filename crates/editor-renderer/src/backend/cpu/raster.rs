@@ -139,7 +139,7 @@ mod tests {
         };
         let p = premul_pixel(255, c);
         assert_eq!(p[3], 254);
-        assert_eq!(p[0], (254u32 * 200 >> 8) as u8);
+        assert_eq!(p[0], ((254u32 * 200) >> 8) as u8);
     }
 
     #[test]

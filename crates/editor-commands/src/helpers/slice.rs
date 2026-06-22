@@ -103,15 +103,9 @@ fn inline_content_fragments_for_textblock_insert<'a>(
     slice: &'a Slice,
 ) -> Option<Vec<&'a Fragment>> {
     let doc = tr.doc();
-    let Some(textblock_id) = find_ancestor_textblock(&doc, position.node_id) else {
-        return None;
-    };
-    let Some(textblock) = doc.node(textblock_id) else {
-        return None;
-    };
-    let Some(parent) = textblock.parent() else {
-        return None;
-    };
+    let textblock_id = find_ancestor_textblock(&doc, position.node_id)?;
+    let textblock = doc.node(textblock_id)?;
+    let parent = textblock.parent()?;
 
     let top_level = top_level_fragments(slice);
     if fragments_are_inline(&top_level) && fragments_fit_parent(textblock.as_type(), &top_level) {

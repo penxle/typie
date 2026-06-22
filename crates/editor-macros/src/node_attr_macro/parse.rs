@@ -5,6 +5,7 @@ use syn::{
     Type, punctuated::Punctuated,
 };
 
+#[allow(clippy::large_enum_variant)]
 pub enum FieldKind {
     LwwReg { inner: Type },
     OrMap { key: Type, value: Type },

@@ -191,17 +191,18 @@ fn snap_to_block_unit(doc: &Doc, selection: &Selection) -> Selection {
     let anchor = selection.anchor;
     if let Some(node) = doc.node(anchor.node_id) {
         let spec = Schema::node_spec(node.as_type());
-        if !spec.is_textblock() && !spec.inline {
-            if let Some(child) = node.children().nth(anchor.offset) {
-                let child_spec = Schema::node_spec(child.as_type());
-                if child_spec.isolating && child_spec.monolithic {
-                    let unit_end = Position::new(anchor.node_id, anchor.offset + 1);
-                    return Selection::new(anchor, unit_end);
-                }
+        if !spec.is_textblock()
+            && !spec.inline
+            && let Some(child) = node.children().nth(anchor.offset)
+        {
+            let child_spec = Schema::node_spec(child.as_type());
+            if child_spec.isolating && child_spec.monolithic {
+                let unit_end = Position::new(anchor.node_id, anchor.offset + 1);
+                return Selection::new(anchor, unit_end);
             }
         }
     }
-    selection.clone()
+    *selection
 }
 
 fn can_apply_drop(
@@ -336,18 +337,16 @@ fn drop_internal_selection_at(
     // Dropping at the source selection's own from/to boundary is a structural no-op:
     // the block would be deleted and re-inserted at the same position (with new NodeIds).
     // Detect and skip early so probe mode doesn't report a false "state changed".
-    if !copy {
-        if let Some(resolved) = source.resolve(&editor.state.doc) {
-            let from = Position::from(resolved.from());
-            let to = Position::from(resolved.to());
-            if position == from || position == to {
-                return Ok(());
-            }
+    if !copy && let Some(resolved) = source.resolve(&editor.state.doc) {
+        let from = Position::from(resolved.from());
+        let to = Position::from(resolved.to());
+        if position == from || position == to {
+            return Ok(());
         }
     }
 
     let mut state = editor.state().clone();
-    state.selection = Some(source.clone());
+    state.selection = Some(source);
     let Some(slice) = Slice::extract(&state) else {
         return Ok(());
     };

@@ -32,7 +32,7 @@ fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str
     let selection = tr
         .selection()
         .filter(|selection| current_selection_flat_range(*selection) == Some((start, end)))
-        .map_or_else(|| resolve_selection_from_flat(), Ok)?;
+        .map_or_else(resolve_selection_from_flat, Ok)?;
 
     commands::chain!(
         tr,

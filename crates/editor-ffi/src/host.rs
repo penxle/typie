@@ -194,6 +194,18 @@ impl EditorHost {
     }
 }
 
+fn doc_start_selection(doc: &editor_model::Doc) -> EditorResult<editor_state::Selection> {
+    use editor_state::NodeRefCursorExt;
+    let root = doc.root().ok_or(FfiError::NoInitialCursorPosition)?;
+    let pos = root
+        .first_cursor_position()
+        .ok_or(FfiError::NoInitialCursorPosition)?;
+    // Bypass entry point: first_cursor_position can yield (root,0) collapsed on a
+    // leading atom, so normalize upholds the invariant here.
+    let sel = editor_state::Selection::collapsed(pos);
+    Ok(sel.normalize(doc).unwrap_or(sel))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,16 +255,4 @@ mod tests {
         assert!(modifiers.contains(&editor_model::Modifier::FontSize { value: 1600 }));
         assert!(modifiers.contains(&editor_model::Modifier::BlockGap { value: 120 }));
     }
-}
-
-fn doc_start_selection(doc: &editor_model::Doc) -> EditorResult<editor_state::Selection> {
-    use editor_state::NodeRefCursorExt;
-    let root = doc.root().ok_or(FfiError::NoInitialCursorPosition)?;
-    let pos = root
-        .first_cursor_position()
-        .ok_or(FfiError::NoInitialCursorPosition)?;
-    // Bypass entry point: first_cursor_position can yield (root,0) collapsed on a
-    // leading atom, so normalize upholds the invariant here.
-    let sel = editor_state::Selection::collapsed(pos);
-    Ok(sel.normalize(doc).unwrap_or(sel))
 }

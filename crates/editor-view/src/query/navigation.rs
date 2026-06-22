@@ -509,7 +509,7 @@ fn first_position_in_line(line: &LayoutLine) -> Position {
     let leading_gap = line
         .tab_gaps
         .iter()
-        .filter(|g| run_first.map_or(true, |r| g.x < r.x))
+        .filter(|g| run_first.is_none_or(|r| g.x < r.x))
         .min_by(|a, b| a.x.total_cmp(&b.x));
     if let Some(gap) = leading_gap {
         return Position::new(line.node_id, gap.child_index);

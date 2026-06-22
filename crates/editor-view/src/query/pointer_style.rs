@@ -168,7 +168,6 @@ mod tests {
                     alignment: Alignment::Start,
                     decorations,
                     monolithic: false,
-                    ..Default::default()
                 },
                 attachment: None,
                 children,

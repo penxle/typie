@@ -174,7 +174,7 @@ fn range_end_lookup_position(doc: &Doc, from: Position, to: Position) -> Positio
         let Node::Text(text) = prev.node() else {
             break;
         };
-        if text.text.len() > 0 {
+        if !text.text.is_empty() {
             return Position {
                 node_id: prev.id(),
                 offset: text.text.len() - 1,

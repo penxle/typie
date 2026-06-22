@@ -1089,12 +1089,12 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                             _ => None,
                         })
                     });
-                    if let Some(ref color_value) = color_value {
-                        if color_value != "none" {
-                            let color = self.theme.color(&format!("bg.{color_value}"));
-                            let path = Path::rect(inner_rect);
-                            self.sink.fill_path(&path, color, t);
-                        }
+                    if let Some(ref color_value) = color_value
+                        && color_value != "none"
+                    {
+                        let color = self.theme.color(&format!("bg.{color_value}"));
+                        let path = Path::rect(inner_rect);
+                        self.sink.fill_path(&path, color, t);
                     }
                 }
                 _ => {}

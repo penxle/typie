@@ -501,6 +501,7 @@ fn visit_atom(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn visit_box(
     node: &LayoutNode,
     bx: &LayoutBox,
@@ -615,7 +616,7 @@ mod tests {
         view
     }
 
-    fn first_line<'a>(node: &'a LayoutNode) -> Option<(&'a LayoutNode, &'a LayoutLine)> {
+    fn first_line(node: &LayoutNode) -> Option<(&LayoutNode, &LayoutLine)> {
         match &node.content {
             LayoutContent::Line(line) => Some((node, line)),
             LayoutContent::Box(bx) => bx.children.iter().find_map(first_line),

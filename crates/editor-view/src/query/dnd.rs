@@ -174,10 +174,12 @@ fn drop_child(
                 rect: entry.rect,
             })
         }
-        LayoutContent::Atom(atom) => (atom.attachment.parent_id == parent_id).then(|| DropChild {
-            offset: atom.attachment.index,
-            rect: entry.rect,
-        }),
+        LayoutContent::Atom(atom) => {
+            (atom.attachment.parent_id == parent_id).then_some(DropChild {
+                offset: atom.attachment.index,
+                rect: entry.rect,
+            })
+        }
         LayoutContent::Line(_) | LayoutContent::Spacing(_) => None,
     }
 }

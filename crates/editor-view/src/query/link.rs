@@ -117,7 +117,6 @@ mod tests {
                     alignment: Alignment::Start,
                     decorations: vec![],
                     monolithic: false,
-                    ..Default::default()
                 },
                 children,
                 attachment: None,

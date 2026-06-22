@@ -3,8 +3,9 @@ use editor_view::DropTarget;
 
 use crate::message::ExternalDndPayloadKind;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) enum DndState {
+    #[default]
     Idle,
     InternalDnd {
         source: StableSelection,
@@ -14,12 +15,6 @@ pub(crate) enum DndState {
         payload: ExternalDndPayloadKind,
         drop_target: Option<DropTarget>,
     },
-}
-
-impl Default for DndState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 impl DndState {

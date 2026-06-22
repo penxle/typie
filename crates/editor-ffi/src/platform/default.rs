@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use editor_macros::ffi;
 use editor_renderer::RenderSink;
 

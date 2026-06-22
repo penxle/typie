@@ -264,7 +264,7 @@ mod tests {
             },
         };
 
-        h.push_at(&[step_record.clone()], Instant::now());
+        h.push_at(std::slice::from_ref(&step_record), Instant::now());
 
         assert_eq!(h.undos[0].steps, vec![step_record.clone()]);
         let playback = h.undo().unwrap();

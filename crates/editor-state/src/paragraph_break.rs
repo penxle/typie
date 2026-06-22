@@ -65,9 +65,7 @@ fn trailing_break_for_paragraph(paragraph: NodeRef<'_>) -> Option<Selection> {
         return None;
     }
 
-    let Some(next) = paragraph.next_sibling() else {
-        return None;
-    };
+    let next = paragraph.next_sibling()?;
 
     if matches!(next.node(), Node::Paragraph(_)) {
         return Some(Selection::new(

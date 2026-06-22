@@ -178,39 +178,36 @@ fn resolve_extend_to_selection(
     allow_collapse: bool,
 ) -> Option<Selection> {
     let doc = &editor.state().doc;
-    if let Some(anchor_cell) = drag_anchor_cell(editor, &anchor) {
-        if let Some(table_id) = enclosing_table(doc, anchor_cell) {
-            let head_inside_table = editor
+    if let Some(anchor_cell) = drag_anchor_cell(editor, &anchor)
+        && let Some(table_id) = enclosing_table(doc, anchor_cell)
+    {
+        let head_inside_table = editor
+            .view
+            .node_box_contains(head_page, head_x, head_y, table_id);
+        if head_inside_table {
+            let cells = table_cell_ids(doc, anchor_cell);
+            if let Some(head_cell) = editor
                 .view
-                .node_box_contains(head_page, head_x, head_y, table_id);
-            if head_inside_table {
-                let cells = table_cell_ids(doc, anchor_cell);
-                if let Some(head_cell) = editor
-                    .view
-                    .nearest_node_box(head_page, head_x, head_y, &cells)
+                .nearest_node_box(head_page, head_x, head_y, &cells)
+            {
+                let is_cell_mode = editor
+                    .state
+                    .selection
+                    .as_ref()
+                    .and_then(|selection| selection.resolve(doc))
+                    .is_some_and(|resolved| resolved.as_cell_rect().is_some());
+                let is_same_cell_exact_box_hit = head_cell == anchor_cell
+                    && editor
+                        .view
+                        .node_exact_box_hit_test(head_page, head_x, head_y, anchor_cell);
+                if (head_cell != anchor_cell || is_cell_mode || is_same_cell_exact_box_hit)
+                    && let Some(selection) = cell_rect_selection(doc, anchor_cell, head_cell)
                 {
-                    let is_cell_mode = editor
-                        .state
-                        .selection
-                        .as_ref()
-                        .and_then(|selection| selection.resolve(doc))
-                        .is_some_and(|resolved| resolved.as_cell_rect().is_some());
-                    let is_same_cell_exact_box_hit = head_cell == anchor_cell
-                        && editor.view.node_exact_box_hit_test(
-                            head_page,
-                            head_x,
-                            head_y,
-                            anchor_cell,
-                        );
-                    if (head_cell != anchor_cell || is_cell_mode || is_same_cell_exact_box_hit)
-                        && let Some(selection) = cell_rect_selection(doc, anchor_cell, head_cell)
-                    {
-                        return Some(selection);
-                    }
+                    return Some(selection);
                 }
             }
-            // head outside table: fall through; normalize promotes anchor to table boundary
         }
+        // head outside table: fall through; normalize promotes anchor to table boundary
     }
 
     let head_hit = editor

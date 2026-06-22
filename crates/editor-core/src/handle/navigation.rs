@@ -325,17 +325,16 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                             let stays_in_cell =
                                 enclosing_table_cell(doc, new_selection.head.node_id)
                                     == Some(current_cell);
-                            if !stays_in_cell {
-                                if let Some(cell_sel) =
+                            if !stays_in_cell
+                                && let Some(cell_sel) =
                                     cell_rect_selection(doc, current_cell, current_cell)
-                                {
-                                    editor.transact(|tr| {
-                                        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                                        tr.set_selection(Some(cell_sel))?;
-                                        Ok(())
-                                    })?;
-                                    return Ok(());
-                                }
+                            {
+                                editor.transact(|tr| {
+                                    tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                                    tr.set_selection(Some(cell_sel))?;
+                                    Ok(())
+                                })?;
+                                return Ok(());
                             }
                         }
                     }

@@ -48,12 +48,11 @@ impl EmitState {
             return;
         };
         let kind = entry.node.as_type();
-        if Schema::node_spec(kind).is_textblock() {
-            if let Some(emitted) = self.block_emitted_stack.pop() {
-                if emitted {
-                    self.pending_boundary = true;
-                }
-            }
+        if Schema::node_spec(kind).is_textblock()
+            && let Some(emitted) = self.block_emitted_stack.pop()
+            && emitted
+        {
+            self.pending_boundary = true;
         }
     }
 

@@ -10,6 +10,7 @@ cfg_if! {
         pub use wasm_browser::{PlatformHandle, SurfaceHandle};
     } else {
         mod default;
+        #[allow(unused_imports)]
         pub use default::{PlatformHandle, SurfaceHandle};
     }
 }

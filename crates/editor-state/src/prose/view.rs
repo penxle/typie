@@ -189,6 +189,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::reversed_empty_ranges)]
     fn to_flat_range_inverted_returns_none() {
         let (doc, ..) = doc! { root { paragraph { text("hi") } } };
         let prose = doc.prose();

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::text_index::CurrentTextLocation;
 use crate::{
     AnchorKind, Doc, ModelError, Modifier, ModifierType, Node, NodeAttr, NodeEntry, NodeId,
-    NodeType, StyleEntry,
+    NodeType,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
@@ -367,20 +367,14 @@ pub fn apply_doc_op(mut doc: Doc, op: &Op<DocOp>) -> Result<Doc, ModelError> {
                         .expect("local apply");
                 }
                 StyleOp::Name(lww_op) => {
-                    let entry = doc
-                        .style_entries
-                        .entry(style_id.clone())
-                        .or_insert_with(StyleEntry::new);
+                    let entry = doc.style_entries.entry(style_id.clone()).or_default();
                     entry.name = entry
                         .name
                         .apply(op.id, lww_op.clone())
                         .expect("local apply");
                 }
                 StyleOp::Modifiers(orset_op) => {
-                    let entry = doc
-                        .style_entries
-                        .entry(style_id.clone())
-                        .or_insert_with(StyleEntry::new);
+                    let entry = doc.style_entries.entry(style_id.clone()).or_default();
                     entry.modifiers = entry
                         .modifiers
                         .apply(op.id, orset_op.clone())
