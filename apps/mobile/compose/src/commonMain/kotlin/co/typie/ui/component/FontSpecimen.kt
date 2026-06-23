@@ -39,17 +39,18 @@ fun FontSpecimen(
   val color = if (style.color == Color.Unspecified) AppTheme.colors.textDefault else style.color
 
   val url =
-    remember(fontId, text, fallbackTexts, color) {
+    remember(fontId, text, fallbackTexts) {
       buildUrl(
         fontId = fontId,
         text = text,
         fallbacks = fallbackTexts,
-        color = color.toHexRgbString(),
+        color = Color.Black.toHexRgbString(),
       )
     }
 
   Img(
     url = url,
+    color = color,
     placeholder = fallback,
     modifier = Modifier.height(height).wrapContentWidth(),
     contentScale = ContentScale.Fit,

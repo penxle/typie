@@ -49,15 +49,19 @@ internal fun isEditorToolbarPresented(
   environment: ToolbarInputEnvironment,
   activeBottomPanel: EditorToolbarBottomPanelKey?,
   restoringEditorInput: Boolean = false,
+  retainingToolbarModal: Boolean = false,
 ): Boolean {
   val editorInputActive =
     environment.visible &&
-      (environment.focused || activeBottomPanel != null || restoringEditorInput)
+      (environment.focused ||
+        activeBottomPanel != null ||
+        restoringEditorInput ||
+        retainingToolbarModal)
   if (!editorInputActive) {
     return false
   }
 
-  if (activeBottomPanel != null || restoringEditorInput) {
+  if (activeBottomPanel != null || restoringEditorInput || retainingToolbarModal) {
     return true
   }
 

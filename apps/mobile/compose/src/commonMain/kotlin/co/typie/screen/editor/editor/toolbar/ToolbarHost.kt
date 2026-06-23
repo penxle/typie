@@ -23,6 +23,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -31,11 +33,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorState
+import co.typie.editor.ffi.Message
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.screen.editor.editor.state.EditorInputEffect
+import co.typie.screen.editor.editor.toolbar.contextual.TextOptionsToolbar
+import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.component.ResponsiveContainerDefaults
 import kotlinx.coroutines.launch
 
@@ -47,6 +53,8 @@ internal fun EditorToolbarHost(
   editorFocused: Boolean,
   inputState: EditorToolbarInputState,
   environment: ToolbarInputEnvironment,
+  fontFamilies: List<EditorSettingsFontFamily_family>,
+  sessionState: EditorToolbarSessionState,
   onInputEffects: (List<EditorInputEffect>) -> Unit,
   onToolAction: (EditorToolbarToolAction) -> Unit,
   modifier: Modifier = Modifier,
@@ -54,8 +62,19 @@ internal fun EditorToolbarHost(
   val commandScope = rememberCoroutineScope()
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val latestEnvironment = rememberUpdatedState(environment)
   val toolbarContext = remember(editorState.version) { resolveEditorToolbarContext(editorState) }
-  val pages = rememberEditorToolbarPages(toolbarContext)
+  val activeTextOptionMode = sessionState.activeTextOptionMode
+  var displayedTextOptionMode by remember { mutableStateOf(activeTextOptionMode) }
+  val textToolbarPage =
+    rememberTextToolbarPage(
+      modifierState = editorState.modifierState,
+      fontFamilies = fontFamilies,
+      activeTextOptionMode = activeTextOptionMode,
+      onTextOptionModeChange = { sessionState.activeTextOptionMode = it },
+    )
+  val pages =
+    rememberEditorToolbarPages(toolbarContext = toolbarContext, textToolbarPage = textToolbarPage)
   val panel = inputState.panel
   val activeBottomPanel = panel?.key
   val effectiveImeInset = effectiveImeInset(environment)
@@ -88,7 +107,13 @@ internal fun EditorToolbarHost(
       environment = environment,
       activeBottomPanel = activeBottomPanel,
       restoringEditorInput = restoringKeyboard,
+      retainingToolbarModal = sessionState.modalActive,
     )
+  val textPageActive =
+    toolbarPresented &&
+      pagerState.settledPageKey == EditorToolbarPageKey.Text &&
+      EditorToolbarPageKey.Text in toolbarContext.pageKeys
+  val textOptionsToolbarVisible = textPageActive && activeTextOptionMode != null
   val fixedAction =
     fixedActionFor(
       activePanel = activeBottomPanel,
@@ -103,6 +128,16 @@ internal fun EditorToolbarHost(
     }
 
   LaunchedEffect(environment) { onInputEffects(inputState.onEnvironmentChanged(environment)) }
+  LaunchedEffect(toolbarPresented, textPageActive) {
+    if ((!toolbarPresented || !textPageActive) && activeTextOptionMode != null) {
+      sessionState.activeTextOptionMode = null
+    }
+  }
+  LaunchedEffect(activeTextOptionMode) {
+    if (activeTextOptionMode != null) {
+      displayedTextOptionMode = activeTextOptionMode
+    }
+  }
 
   val previousImeVisible = remember { mutableStateOf(imeVisible) }
   val imeAppearing = !previousImeVisible.value && imeVisible
@@ -156,6 +191,36 @@ internal fun EditorToolbarHost(
 
   SideEffect { previousImeVisible.value = imeVisible }
 
+  fun sendEditorMessages(messages: List<Message>) {
+    if (messages.isEmpty()) {
+      return
+    }
+    val editor = runtime.editor ?: return
+    val bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead
+
+    commandScope.launch {
+      editor.awaitWithBringIntoView(bringIntoViewRequests) {
+        messages.forEach { enqueue(it) }
+        beforeCommit { bringIntoView(bringIntoViewTarget) }
+      }
+    }
+  }
+
+  fun runToolbarModal(block: suspend () -> Unit) {
+    sessionState.modalActive = true
+    commandScope.launch {
+      try {
+        block()
+      } finally {
+        val environment = latestEnvironment.value
+        if (environment.visible) {
+          onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
+        }
+        sessionState.modalActive = false
+      }
+    }
+  }
+
   AnimatedVisibility(
     visible = toolbarPresented,
     enter = fadeIn(animationSpec = tween(ToolbarVisibilityEnterMillis)),
@@ -188,20 +253,31 @@ internal fun EditorToolbarHost(
             onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
           },
           onKeyboardDismissRequest = {
+            sessionState.activeTextOptionMode = null
             onInputEffects(inputState.dispatch(ToolbarIntent.DismissInput, environment))
           },
           onBottomPanelToggle = { panel ->
             onInputEffects(inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment))
           },
-          onEditorMessage = { message ->
-            val editor = runtime.editor ?: return@EditorToolbarPages
-            val bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead
-
-            commandScope.launch {
-              editor.awaitWithBringIntoView(bringIntoViewRequests) {
-                enqueue(message)
-                beforeCommit { bringIntoView(bringIntoViewTarget) }
-              }
+          onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
+          onCurrentPageKeyChange = { pageKey ->
+            if (pageKey != EditorToolbarPageKey.Text && sessionState.activeTextOptionMode != null) {
+              sessionState.activeTextOptionMode = null
+            }
+          },
+          secondaryToolbarVisible = textOptionsToolbarVisible,
+          onSecondaryToolbarInLayoutChange = { sessionState.secondaryToolbarInLayout = it },
+          secondaryToolbar = {
+            (activeTextOptionMode ?: displayedTextOptionMode)?.let { mode ->
+              TextOptionsToolbar(
+                mode = mode,
+                editorState = editorState,
+                fontFamilies = fontFamilies,
+                onModeChange = { sessionState.activeTextOptionMode = it },
+                sendMessages = ::sendEditorMessages,
+                runToolbarModal = ::runToolbarModal,
+                modifier = Modifier.fillMaxWidth(),
+              )
             }
           },
           modifier = Modifier.fillMaxWidth(),

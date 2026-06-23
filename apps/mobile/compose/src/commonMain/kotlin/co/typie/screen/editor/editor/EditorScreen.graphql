@@ -46,6 +46,9 @@ query EditorScreen_Query($entityId: ID!) {
             html
           }
         }
+        toolbarFontFamilies: fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
+          ...EditorSettingsFontFamily_family
+        }
         ...FontLoader_Document
       }
     }

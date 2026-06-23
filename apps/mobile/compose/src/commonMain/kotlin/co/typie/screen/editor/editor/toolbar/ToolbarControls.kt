@@ -10,15 +10,19 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,8 +32,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import co.typie.ext.LocalInteractionSource
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
@@ -44,6 +55,9 @@ internal val ToolbarFixedActionShape = AppShapes.circle
 internal val ToolbarIndicatorShape = AppShapes.circle
 internal val ToolbarBottomPanelRadius = AppShapes.xl
 internal val ToolbarBottomPanelShape = AppShapes.rounded(ToolbarBottomPanelRadius)
+
+internal val ToolbarLabelTextStyle: TextStyle
+  @Composable get() = AppTheme.typography.body.copy(lineHeight = 20.sp)
 
 @Composable
 internal fun EditorToolbarSurfaceBackground(shape: Shape, modifier: Modifier = Modifier) {
@@ -84,27 +98,71 @@ internal fun EditorToolbarLabelButton(
   contentDescription: String,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  selected: Boolean = false,
+  suffixIcon: IconData? = null,
+  autoBringIntoView: Boolean = false,
+  subtle: Boolean = false,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
+  val bringIntoViewRequester = remember { BringIntoViewRequester() }
+  val contentColor =
+    when {
+      selected -> AppTheme.colors.textDefault
+      subtle -> AppTheme.colors.textHint
+      else -> AppTheme.colors.textDefault
+    }
+
+  LaunchedEffect(autoBringIntoView, selected) {
+    if (autoBringIntoView && selected) {
+      bringIntoViewRequester.bringIntoView()
+    }
+  }
 
   Box(
     modifier =
       modifier
         .height(ToolbarButtonSize)
-        .widthIn(min = ToolbarLabelMinWidth)
+        .then(
+          if (autoBringIntoView) Modifier.bringIntoViewRequester(bringIntoViewRequester)
+          else Modifier
+        )
         .focusProperties { canFocus = false }
+        .semantics {
+          this.contentDescription = contentDescription
+          role = Role.Button
+        }
         .clip(ToolbarButtonShape)
+        .then(
+          if (selected) {
+            Modifier.background(AppTheme.colors.surfaceInset, ToolbarButtonShape)
+          } else {
+            Modifier
+          }
+        )
         .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
         .padding(horizontal = ToolbarLabelHorizontalPadding),
     contentAlignment = Alignment.Center,
   ) {
-    Text(
-      text = text,
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textDefault,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = text,
+        style = ToolbarLabelTextStyle,
+        color = contentColor,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      if (suffixIcon != null) {
+        Icon(
+          icon = suffixIcon,
+          contentDescription = null,
+          modifier = Modifier.size(14.dp),
+          tint = contentColor,
+        )
+      }
+    }
   }
 }
 
@@ -131,14 +189,25 @@ internal fun EditorToolbarIconButton(
     } else {
       localInteractionSource
     }
+  val resolvedTint =
+    tint
+      ?: if (fixedActionSurface || selected || surface) {
+        AppTheme.colors.textDefault
+      } else {
+        AppTheme.colors.textHint
+      }
   val surfaceModifier =
-    when {
-      fixedActionSurface ->
-        Modifier.background(AppTheme.colors.surfaceInset, shape)
-          .border(ToolbarBorderWidth, AppTheme.colors.borderDefault, shape)
-      selected -> Modifier.background(AppTheme.colors.surfaceInset, shape)
-      surface -> Modifier.background(AppTheme.colors.surfaceInset, shape)
-      else -> Modifier
+    if (fixedActionSurface || selected || surface) {
+      Modifier.background(AppTheme.colors.surfaceInset, shape)
+        .then(
+          if (fixedActionSurface) {
+            Modifier.border(ToolbarBorderWidth, AppTheme.colors.borderDefault, shape)
+          } else {
+            Modifier
+          }
+        )
+    } else {
+      Modifier
     }
 
   Box(
@@ -150,7 +219,6 @@ internal fun EditorToolbarIconButton(
         .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
     contentAlignment = Alignment.Center,
   ) {
-    val resolvedTint = tint ?: AppTheme.colors.textDefault
     if (crossfadeIcon) {
       Crossfade(
         targetState = icon,

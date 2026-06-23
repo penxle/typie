@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -73,6 +74,12 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     ) {
       EditorScreen_Query(entityId = entityId)
     }
+
+  val toolbarFontFamilies by derivedStateOf {
+    query.data.entity.node.onDocument?.toolbarFontFamilies.orEmpty().map {
+      it.editorSettingsFontFamily_family
+    }
+  }
 
   val graph: ByteArray?
     get() =

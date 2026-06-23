@@ -1,7 +1,12 @@
 package co.typie.screen.editor.editor.toolbar
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.FlingBehavior
@@ -21,7 +26,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +41,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PlainNode
 import co.typie.ext.InteractionScope
@@ -50,7 +58,6 @@ import co.typie.screen.editor.editor.toolbar.contextual.editorHorizontalRuleTool
 import co.typie.screen.editor.editor.toolbar.contextual.editorImageToolbarPage
 import co.typie.screen.editor.editor.toolbar.contextual.editorListToolbarPage
 import co.typie.screen.editor.editor.toolbar.contextual.editorTableToolbarPage
-import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
@@ -66,9 +73,9 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun rememberEditorToolbarPages(
-  toolbarContext: EditorToolbarContext
+  toolbarContext: EditorToolbarContext,
+  textToolbarPage: EditorToolbarPage,
 ): List<EditorToolbarPage> {
-  val textToolbarPage = rememberTextToolbarPage()
   return remember(toolbarContext, textToolbarPage) {
     toolbarContext.pageKeys.map { key ->
       when (key) {
@@ -116,13 +123,29 @@ internal fun EditorToolbarPages(
   onKeyboardDismissRequest: () -> Unit,
   onBottomPanelToggle: (EditorToolbarBottomPanelKey) -> Unit,
   onEditorMessage: (Message) -> Unit = {},
+  onCurrentPageKeyChange: (EditorToolbarPageKey?) -> Unit = {},
+  secondaryToolbarVisible: Boolean = false,
+  onSecondaryToolbarInLayoutChange: (Boolean) -> Unit = {},
+  secondaryToolbar: @Composable () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
   val hazeState = LocalHazeState.current
+  val secondaryToolbarTransition = remember { MutableTransitionState(false) }
+  secondaryToolbarTransition.targetState = secondaryToolbarVisible
+  val secondaryToolbarInLayout = secondaryToolbarVisible || !secondaryToolbarTransition.isIdle
+  val toolbarStackHeight by
+    animateDpAsState(
+      targetValue =
+        ToolbarStackHeight + if (secondaryToolbarInLayout) ToolbarSecondaryStackHeight else 0.dp,
+      animationSpec = tween(ToolbarSecondaryVisibilityMillis),
+      label = "EditorToolbarStackHeight",
+    )
+  SideEffect { onSecondaryToolbarInLayoutChange(secondaryToolbarInLayout) }
+  DisposableEffect(Unit) { onDispose { onSecondaryToolbarInLayoutChange(false) } }
 
-  BoxWithConstraints(modifier = modifier.height(ToolbarStackHeight)) {
+  BoxWithConstraints(modifier = modifier.height(toolbarStackHeight)) {
     val pageKeys = pages.map { it.key }
     val pageCount = pages.size.coerceAtLeast(1)
     val lastPageIndex = pageCount - 1
@@ -139,12 +162,12 @@ internal fun EditorToolbarPages(
     val pageKeysChangedInFrame =
       pagerState.previousPageKeys?.let { previousPageKeys -> previousPageKeys != pageKeys } == true
     val retainedPageIndex = pages.indexOfFirst { page -> page.key == pagerState.settledPageKey }
+    val autoTargetAllowsRetainedPage =
+      validAutoTargetPageKey == null || validAutoTargetPageKey == pagerState.settledPageKey
+    val canRetainSettledPagePosition =
+      pageKeysChangedInFrame && retainedPageIndex >= 0 && autoTargetAllowsRetainedPage
     val retainedPagePosition =
-      if (
-        pageKeysChangedInFrame &&
-          retainedPageIndex >= 0 &&
-          (validAutoTargetPageKey == null || validAutoTargetPageKey == pagerState.settledPageKey)
-      ) {
+      if (canRetainSettledPagePosition) {
         val retainedScrollState = pages[retainedPageIndex].scrollState
         val retainedInternalScroll =
           retainedScrollState?.value?.coerceIn(0, retainedScrollState.maxValue) ?: 0
@@ -156,6 +179,7 @@ internal fun EditorToolbarPages(
     val pageProgress = pageMetrics.progressFor(visualScrollPosition)
     val indicatorProgress = pagerState.indicatorDragProgress ?: pageProgress
     val currentPageIndex = pageMetrics.pageIndexForPosition(visualScrollPosition)
+    val currentPageKey = pages.getOrNull(currentPageIndex)?.key
     val scrollableState = rememberScrollableState { delta ->
       val currentPosition = pagerState.scrollPosition
       val gestureStartPosition =
@@ -228,6 +252,8 @@ internal fun EditorToolbarPages(
     }
 
     LaunchedEffect(Unit) { pagerState.indicatorPulse++ }
+
+    LaunchedEffect(currentPageKey) { onCurrentPageKeyChange(currentPageKey) }
 
     LaunchedEffect(scrollableState) {
       snapshotFlow { scrollableState.isScrollInProgress }
@@ -523,6 +549,25 @@ internal fun EditorToolbarPages(
               }
             ),
       )
+    }
+
+    AnimatedVisibility(
+      visibleState = secondaryToolbarTransition,
+      enter =
+        fadeIn(
+          animationSpec =
+            tween(
+              durationMillis = ToolbarSecondaryVisibilityMillis,
+              delayMillis = ToolbarSecondaryVisibilityMillis,
+            )
+        ),
+      exit = fadeOut(animationSpec = tween(ToolbarSecondaryVisibilityMillis)),
+      modifier =
+        Modifier.align(Alignment.BottomCenter)
+          .padding(bottom = ToolbarHeight + ToolbarSecondaryGap)
+          .fillMaxWidth(),
+    ) {
+      secondaryToolbar()
     }
 
     InteractionScope {

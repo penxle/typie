@@ -93,11 +93,14 @@ import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMi
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarHeight
 import co.typie.screen.editor.editor.toolbar.ToolbarInputEnvironment
+import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryStackHeight
+import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryVisibilityMillis
 import co.typie.screen.editor.editor.toolbar.effectiveImeInset
 import co.typie.screen.editor.editor.toolbar.isEditorToolbarPresented
 import co.typie.screen.editor.editor.toolbar.isImeVisible
 import co.typie.screen.editor.editor.toolbar.rememberEditorKeyboardState
 import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarInputState
+import co.typie.screen.editor.editor.toolbar.rememberEditorToolbarSessionState
 import co.typie.screen.editor.editor.toolbar.rememberToolbarPagerState
 import co.typie.screen.editor.editor.toolbar.suppressSoftwareKeyboard
 import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPanel
@@ -276,6 +279,7 @@ fun EditorScreen(entityId: String) {
     val toolbarBackdropHazeState = remember { HazeState() }
     val keyboardState = rememberEditorKeyboardState()
     val toolbarPagerState = rememberToolbarPagerState(key = entityId)
+    val toolbarSessionState = rememberEditorToolbarSessionState(key = entityId)
     val toolbarPanel = toolbarInputState.panel
     val bottomPanelOpen = toolbarPanel != null
     val bottomPanelTransition = remember { MutableTransitionState(bottomPanelOpen) }
@@ -323,10 +327,22 @@ fun EditorScreen(entityId: String) {
         environment = toolbarInputEnvironment,
         activeBottomPanel = toolbarPanel?.key,
         restoringEditorInput = toolbarRestoreInset != null,
+        retainingToolbarModal = toolbarSessionState.modalActive,
+      )
+    val textOptionsToolbarOcclusion =
+      animateDpAsState(
+        targetValue =
+          if (toolbarPresented && toolbarSessionState.secondaryToolbarInLayout) {
+            ToolbarSecondaryStackHeight
+          } else {
+            0.dp
+          },
+        animationSpec = tween(ToolbarSecondaryVisibilityMillis),
+        label = "EditorToolbarTextOptionsOcclusion",
       )
     val toolbarControlsOcclusion =
       if (toolbarPresented) {
-        ToolbarHeight + ToolbarBottomPadding
+        ToolbarHeight + ToolbarBottomPadding + textOptionsToolbarOcclusion.value
       } else {
         0.dp
       }
@@ -634,6 +650,8 @@ fun EditorScreen(entityId: String) {
             editorFocused = uiState.focused,
             inputState = toolbarInputState,
             environment = toolbarInputEnvironment,
+            fontFamilies = model.toolbarFontFamilies,
+            sessionState = toolbarSessionState,
             onInputEffects = ::performInputEffects,
             onToolAction = { action ->
               when (action) {
