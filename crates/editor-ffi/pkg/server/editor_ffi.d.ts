@@ -827,6 +827,7 @@ declare class Editor {
     receive_remote_changeset(payload: Uint8Array): void;
     render_page_to_buffer(page: number, width: number, height: number): Uint8Array;
     root_attrs(): PlainRootNode;
+    root_modifiers(): Modifier[];
     selection(): Selection | undefined;
     selection_endpoints(): SelectionEndpoints | undefined;
     selection_hit_test(page: number, x: number, y: number): boolean;
@@ -850,6 +851,7 @@ declare class EditorHost {
     create_editor_from_graph(changesets: Uint8Array, viewport: Viewport): Editor;
     extract_text_from_graph(changesets: Uint8Array): string;
     root_attrs_from_graph(changesets: Uint8Array): PlainRootNode;
+    root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
     set_auto_surround_enabled(enabled: boolean): void;
     set_fonts(families: FontFamily[]): void;
     set_text_replacement_rules(rules: RawTextReplacementRule[]): void;

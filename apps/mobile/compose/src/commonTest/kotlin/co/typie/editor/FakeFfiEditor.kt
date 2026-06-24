@@ -7,6 +7,7 @@ import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElement
+import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.InspectStateOptions
@@ -16,6 +17,9 @@ import co.typie.editor.ffi.LinkRect
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
+import co.typie.editor.ffi.ModifierType
+import co.typie.editor.ffi.PlaceholderMetrics
+import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.PointerStyle
 import co.typie.editor.ffi.Position
@@ -25,6 +29,8 @@ import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StablePosition
 import co.typie.editor.ffi.StableSelection
+import co.typie.editor.ffi.StyleInfo
+import co.typie.editor.ffi.StyleRefValue
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeHit
@@ -61,12 +67,16 @@ internal class FakeFfiEditor(
 
   override fun can(message: Message): Boolean = canProvider(message)
 
+  override fun lastHistoryTag(): HistoryTag? = null
+
   override fun tick(): List<EditorEvent> {
     tickCount += 1
     return onTick()
   }
 
   override fun cursor(): CursorMetrics? = cursorProvider()
+
+  override fun placeholder(): PlaceholderMetrics? = null
 
   override fun selection(): Selection = selectionProvider()
 
@@ -76,7 +86,15 @@ internal class FakeFfiEditor(
 
   override fun modifierState(): ModifierState = modifierStateProvider()
 
+  override fun modifierSpanSelection(pos: Position, modifierType: ModifierType): Selection? = null
+
   override fun blockState(): BlockState = blockStateProvider()
+
+  override fun styleEntries(): List<StyleInfo> = emptyList()
+
+  override fun appliedStyle(): Tri<StyleRefValue> = Tri.Absent
+
+  override fun styleDivergence(): Boolean = false
 
   override fun characterCounts(): CharacterCounts = characterCountsProvider()
 
@@ -104,7 +122,11 @@ internal class FakeFfiEditor(
 
   override fun externalElements(): List<ExternalElement> = externalElementsProvider()
 
+  override fun pageExternalElements(page: Int): List<ExternalElement> = emptyList()
+
   override fun tableOverlays(): List<TableOverlay> = emptyList()
+
+  override fun pageTableOverlays(page: Int): List<TableOverlay> = emptyList()
 
   override fun ime(beforeLimit: Int, afterLimit: Int): Ime = imeProvider(beforeLimit, afterLimit)
 
@@ -139,6 +161,12 @@ internal class FakeFfiEditor(
 
   override fun currentHeads(): ByteArray = ByteArray(0)
 
+  override fun setDoc(plain: PlainDoc) = Unit
+
+  override fun insertTemplateFragment(changesets: ByteArray) = Unit
+
+  override fun materializeAt(heads: ByteArray): PlainDoc = EmptyPlainDoc
+
   override fun freezeSelection(selection: Selection): StableSelection =
     StableSelection(anchor = EmptyStablePosition, head = EmptyStablePosition)
 
@@ -164,6 +192,7 @@ internal class FakeFfiEditor(
     val EmptyStablePosition = StablePosition.ContainerStart(emptyList(), Affinity.Downstream)
     val EmptySelection = Selection(anchor = EmptyPosition, head = EmptyPosition)
     val EmptyRootAttrs = PlainRootNode(layoutMode = LayoutMode.Continuous(maxWidth = 0))
+    val EmptyPlainDoc = PlainDoc(nodes = emptyMap())
     val EmptyIme = Ime(text = "", windowStart = 0, selection = ImeRange(0, 0), composing = null)
     val EmptyCharacterCounts =
       CharacterCounts(
@@ -192,6 +221,7 @@ internal class FakeFfiEditor(
         blockGap = Tri.Absent,
         paragraphIndent = Tri.Absent,
         alignment = Tri.Absent,
+        effectiveBold = Tri.Absent,
       )
   }
 }

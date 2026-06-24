@@ -26,6 +26,8 @@ import kotlinx.coroutines.test.setMain
 
 private val sampleMessage: Message = Message.System(SystemEvent.Initialize)
 
+private fun renderInvalidated(): EditorEvent = EditorEvent.RenderInvalidated(emptyList())
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorAwaitTest {
   private val dispatcher = StandardTestDispatcher()
@@ -233,7 +235,7 @@ class EditorAwaitTest {
   @Test
   fun listener_receives_event_on_main_dispatcher() =
     runTest(dispatcher) {
-      val fake = FakeFfiEditor(onTick = { listOf(EditorEvent.RenderInvalidated) })
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
       val editor = Editor(fake, this, dispatcher)
 
       val received = mutableListOf<EditorEvent>()
@@ -265,7 +267,7 @@ class EditorAwaitTest {
   @Test
   fun unregister_closure_prevents_future_calls() =
     runTest(dispatcher) {
-      val fake = FakeFfiEditor(onTick = { listOf(EditorEvent.RenderInvalidated) })
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
       val editor = Editor(fake, this, dispatcher)
 
       var count = 0
@@ -283,7 +285,7 @@ class EditorAwaitTest {
   @Test
   fun listener_exception_does_not_block_other_listeners() =
     runTest(dispatcher) {
-      val fake = FakeFfiEditor(onTick = { listOf(EditorEvent.RenderInvalidated) })
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
       val editor = Editor(fake, this, dispatcher)
 
       var second = 0
@@ -304,10 +306,7 @@ class EditorAwaitTest {
       val fake =
         FakeFfiEditor(
           onTick = {
-            listOf(
-              EditorEvent.StateChanged(listOf(StateField.Cursor)),
-              EditorEvent.RenderInvalidated,
-            )
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor)), renderInvalidated())
           },
           cursorProvider = { fakeCursor },
         )
@@ -339,10 +338,7 @@ class EditorAwaitTest {
       val fakeCursor =
         CursorMetrics(pageIdx = 0, caret = Rect(0f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
-        FakeFfiEditor(
-          onTick = { listOf(EditorEvent.RenderInvalidated) },
-          cursorProvider = { fakeCursor },
-        )
+        FakeFfiEditor(onTick = { listOf(renderInvalidated()) }, cursorProvider = { fakeCursor })
       val editor = Editor(fake, this, dispatcher)
 
       editor.await { enqueue(sampleMessage) }
@@ -356,10 +352,7 @@ class EditorAwaitTest {
       val fakeCursor =
         CursorMetrics(pageIdx = 0, caret = Rect(0f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
-        FakeFfiEditor(
-          onTick = { listOf(EditorEvent.RenderInvalidated) },
-          cursorProvider = { fakeCursor },
-        )
+        FakeFfiEditor(onTick = { listOf(renderInvalidated()) }, cursorProvider = { fakeCursor })
       val editor = Editor(fake, this, dispatcher)
       editor.attachSurface(0, 0L, 0.0, 0.0, 1.0)
 
@@ -387,10 +380,7 @@ class EditorAwaitTest {
       val fakeCursor =
         CursorMetrics(pageIdx = 0, caret = Rect(0f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
-        FakeFfiEditor(
-          onTick = { listOf(EditorEvent.RenderInvalidated) },
-          cursorProvider = { fakeCursor },
-        )
+        FakeFfiEditor(onTick = { listOf(renderInvalidated()) }, cursorProvider = { fakeCursor })
       val editor = Editor(fake, this, dispatcher)
       editor.attachSurface(0, 0L, 0.0, 0.0, 1.0)
       editor.attachSurface(1, 0L, 0.0, 0.0, 1.0)
@@ -446,10 +436,7 @@ class EditorAwaitTest {
       val cursorB =
         CursorMetrics(pageIdx = 0, caret = Rect(5f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
-        FakeFfiEditor(
-          onTick = { listOf(EditorEvent.RenderInvalidated) },
-          cursorProvider = { cursorA },
-        )
+        FakeFfiEditor(onTick = { listOf(renderInvalidated()) }, cursorProvider = { cursorA })
       val editor = Editor(fake, this, dispatcher)
       editor.attachSurface(0, 0L, 0.0, 0.0, 1.0)
 
@@ -574,10 +561,7 @@ class EditorAwaitTest {
       val fakeCursor =
         CursorMetrics(pageIdx = 0, caret = Rect(1f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
-        FakeFfiEditor(
-          onTick = { listOf(EditorEvent.RenderInvalidated) },
-          cursorProvider = { fakeCursor },
-        )
+        FakeFfiEditor(onTick = { listOf(renderInvalidated()) }, cursorProvider = { fakeCursor })
       val editor = Editor(fake, this, dispatcher)
       editor.attachSurface(0, 0L, 0.0, 0.0, 1.0)
 

@@ -225,5 +225,6 @@ class ToolbarContextTest {
       blockGap = Tri.Absent,
       paragraphIndent = Tri.Absent,
       alignment = if (alignmentOnly) Tri.Mixed else Tri.Absent,
+      effectiveBold = Tri.Absent,
     )
 }
