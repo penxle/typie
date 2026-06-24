@@ -40,6 +40,7 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.screen.editor.editor.state.EditorInputEffect
+import co.typie.screen.editor.editor.toolbar.contextual.TextOptionMode
 import co.typie.screen.editor.editor.toolbar.contextual.TextOptionsToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -79,6 +80,13 @@ internal fun EditorToolbarHost(
     }
   }
 
+  val onTextOptionModeChange: (TextOptionMode?) -> Unit =
+    remember(sessionState) { { mode -> sessionState.activeTextOptionMode = mode } }
+  val latestRunToolbarModal = rememberUpdatedState<(suspend () -> Unit) -> Unit>(::runToolbarModal)
+  val runToolbarModalAction: (suspend () -> Unit) -> Unit = remember {
+    { block -> latestRunToolbarModal.value(block) }
+  }
+
   val toolbarContext = remember(editorState.version) { resolveEditorToolbarContext(editorState) }
   val activeTextOptionMode = sessionState.activeTextOptionMode
   var displayedTextOptionMode by remember { mutableStateOf(activeTextOptionMode) }
@@ -88,8 +96,8 @@ internal fun EditorToolbarHost(
       selection = editorState.selection,
       fontFamilies = fontFamilies,
       activeTextOptionMode = activeTextOptionMode,
-      onTextOptionModeChange = { sessionState.activeTextOptionMode = it },
-      runToolbarModal = ::runToolbarModal,
+      onTextOptionModeChange = onTextOptionModeChange,
+      runToolbarModal = runToolbarModalAction,
     )
   val pages =
     rememberEditorToolbarPages(toolbarContext = toolbarContext, textToolbarPage = textToolbarPage)
@@ -276,9 +284,9 @@ internal fun EditorToolbarHost(
                 mode = mode,
                 editorState = editorState,
                 fontFamilies = fontFamilies,
-                onModeChange = { sessionState.activeTextOptionMode = it },
+                onModeChange = onTextOptionModeChange,
                 sendMessages = ::sendEditorMessages,
-                runToolbarModal = ::runToolbarModal,
+                runToolbarModal = runToolbarModalAction,
                 modifier = Modifier.fillMaxWidth(),
               )
             }
