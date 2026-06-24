@@ -63,15 +63,33 @@ internal fun EditorToolbarHost(
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val latestEnvironment = rememberUpdatedState(environment)
+
+  fun runToolbarModal(block: suspend () -> Unit) {
+    sessionState.modalActive = true
+    commandScope.launch {
+      try {
+        block()
+      } finally {
+        val environment = latestEnvironment.value
+        if (environment.visible) {
+          onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
+        }
+        sessionState.modalActive = false
+      }
+    }
+  }
+
   val toolbarContext = remember(editorState.version) { resolveEditorToolbarContext(editorState) }
   val activeTextOptionMode = sessionState.activeTextOptionMode
   var displayedTextOptionMode by remember { mutableStateOf(activeTextOptionMode) }
   val textToolbarPage =
     rememberTextToolbarPage(
       modifierState = editorState.modifierState,
+      selection = editorState.selection,
       fontFamilies = fontFamilies,
       activeTextOptionMode = activeTextOptionMode,
       onTextOptionModeChange = { sessionState.activeTextOptionMode = it },
+      runToolbarModal = ::runToolbarModal,
     )
   val pages =
     rememberEditorToolbarPages(toolbarContext = toolbarContext, textToolbarPage = textToolbarPage)
@@ -202,21 +220,6 @@ internal fun EditorToolbarHost(
       editor.awaitWithBringIntoView(bringIntoViewRequests) {
         messages.forEach { enqueue(it) }
         beforeCommit { bringIntoView(bringIntoViewTarget) }
-      }
-    }
-  }
-
-  fun runToolbarModal(block: suspend () -> Unit) {
-    sessionState.modalActive = true
-    commandScope.launch {
-      try {
-        block()
-      } finally {
-        val environment = latestEnvironment.value
-        if (environment.visible) {
-          onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
-        }
-        sessionState.modalActive = false
       }
     }
   }

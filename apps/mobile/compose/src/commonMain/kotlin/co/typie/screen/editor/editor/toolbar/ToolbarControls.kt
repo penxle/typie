@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
@@ -80,6 +81,7 @@ internal fun EditorToolbarButton(
   modifier: Modifier = Modifier,
   selected: Boolean = false,
   tint: Color? = null,
+  enabled: Boolean = true,
 ) {
   EditorToolbarIconButton(
     icon = icon,
@@ -88,6 +90,7 @@ internal fun EditorToolbarButton(
     shape = ToolbarButtonShape,
     selected = selected,
     tint = tint,
+    enabled = enabled,
     modifier = modifier.size(ToolbarButtonSize),
   )
 }
@@ -178,6 +181,7 @@ internal fun EditorToolbarIconButton(
   selected: Boolean = false,
   iconSize: Dp = ToolbarIconSize,
   tint: Color? = null,
+  enabled: Boolean = true,
   inheritInteractionSource: Boolean = false,
   crossfadeIcon: Boolean = false,
 ) {
@@ -216,7 +220,13 @@ internal fun EditorToolbarIconButton(
         .focusProperties { canFocus = false }
         .clip(shape)
         .then(surfaceModifier)
-        .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        .alpha(if (enabled) 1f else ToolbarDisabledOpacity)
+        .clickable(
+          enabled = enabled,
+          interactionSource = interactionSource,
+          indication = null,
+          onClick = onClick,
+        ),
     contentAlignment = Alignment.Center,
   ) {
     if (crossfadeIcon) {

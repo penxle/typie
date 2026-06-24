@@ -61,6 +61,7 @@ internal const val ToolbarIndicatorVisibleMillis = 1200L
 internal const val ToolbarScrollGestureIdleResetMillis = 180L
 internal const val ToolbarIndicatorFollowMovementThresholdPx = 1f
 internal const val ToolbarSurfaceOpacity = 0.86f
+internal const val ToolbarDisabledOpacity = 0.5f
 
 internal enum class EditorToolbarPageKey {
   Main,
