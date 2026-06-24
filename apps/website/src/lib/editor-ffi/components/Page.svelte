@@ -152,18 +152,20 @@
       };
     }}
   >
-    {#each [0, 1, 2, 3] as layer (layer)}
-      <canvas
-        style:z-index={layer}
-        class={css({ position: 'absolute', inset: '0', height: 'full', width: 'full', imageRendering: 'pixelated' })}
-        {@attach (canvas) => {
-          canvases[layer] = canvas;
-          return () => {
-            canvases[layer] = undefined;
-          };
-        }}
-      ></canvas>
-    {/each}
+    <div class={css({ position: 'absolute', inset: '0', isolation: 'isolate' })}>
+      {#each [0, 1, 2, 3] as layer (layer)}
+        <canvas
+          style:z-index={layer}
+          class={css({ position: 'absolute', inset: '0', height: 'full', width: 'full', imageRendering: 'pixelated' })}
+          {@attach (canvas) => {
+            canvases[layer] = canvas;
+            return () => {
+              canvases[layer] = undefined;
+            };
+          }}
+        ></canvas>
+      {/each}
+    </div>
 
     {#each externalElements as element (element.node_id)}
       <ExternalElement {element} />
