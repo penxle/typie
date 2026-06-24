@@ -40,7 +40,7 @@ internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
   var canProvider: (Message) -> Boolean = { false },
   var cursorProvider: () -> CursorMetrics? = { null },
-  var selectionProvider: () -> Selection = { EmptySelection },
+  var selectionProvider: () -> Selection? = { EmptySelection },
   var rootAttrsProvider: () -> PlainRootNode = { EmptyRootAttrs },
   var rootModifiersProvider: () -> List<EditorModifier> = { emptyList() },
   var modifierStateProvider: () -> ModifierState = { EmptyModifierState },
@@ -78,7 +78,7 @@ internal class FakeFfiEditor(
 
   override fun placeholder(): PlaceholderMetrics? = null
 
-  override fun selection(): Selection = selectionProvider()
+  override fun selection(): Selection? = selectionProvider()
 
   override fun rootAttrs(): PlainRootNode = rootAttrsProvider()
 

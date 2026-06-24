@@ -385,19 +385,21 @@ internal constructor(
     attachedPages.store(persistentSetOf())
   }
 
-  private fun readSnapshot(version: Long): EditorState =
-    EditorState(
+  private fun readSnapshot(version: Long): EditorState {
+    val selection = inner.selection()
+    return EditorState(
       version = version,
       cursor = inner.cursor(),
-      selection = inner.selection(),
+      selection = selection,
       pageSizes = inner.pageSizes(),
       externalElements = inner.externalElements(),
       rootAttrs = inner.rootAttrs(),
       rootModifiers = inner.rootModifiers(),
       modifierState = inner.modifierState(),
       blockState = inner.blockState(),
-      ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE),
+      ime = selection?.let { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) },
     )
+  }
 
   private fun notifyFailure(error: Throwable) {
     if (error is CancellationException) {

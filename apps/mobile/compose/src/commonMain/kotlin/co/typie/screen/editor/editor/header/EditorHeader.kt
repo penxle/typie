@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +57,7 @@ internal fun EditorHeader(
   trackWidth: Float,
   loading: Boolean,
   topInset: Dp,
+  subtitleFocusRequestVersion: Int = 0,
   modifier: Modifier = Modifier,
   onTitleChange: (String) -> Unit,
   onSubtitleChange: (String) -> Unit,
@@ -76,6 +78,11 @@ internal fun EditorHeader(
       onValueChange = onSubtitleChange,
       onDismiss = onEnterDocument,
     )
+  LaunchedEffect(subtitleFocusRequestVersion) {
+    if (subtitleFocusRequestVersion > 0) {
+      subtitleInputState.requestFocus()
+    }
+  }
   val resolveHeight: (Int) -> Float = remember(density) { { height -> height / density.density } }
 
   Box(

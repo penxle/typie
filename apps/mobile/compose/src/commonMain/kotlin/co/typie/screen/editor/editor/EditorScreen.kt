@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.editor.Editor
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
 import co.typie.editor.LocalEditorZoomController
@@ -50,7 +51,11 @@ import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.EditorFileAsset
 import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.ffi.Direction
+import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Movement
+import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.LocalEditorInteractionScope
@@ -118,6 +123,7 @@ import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -239,6 +245,14 @@ fun EditorScreen(entityId: String) {
   )
 
   val editor = runtime.editor
+  val subtitleFocusRequestVersion = remember(entityId) { mutableStateOf(0) }
+  DisposableEffect(editor) {
+    val off =
+      editor?.on<EditorEvent.CursorExitedDocumentStart> { _, _ ->
+        subtitleFocusRequestVersion.value += 1
+      }
+    onDispose { off?.invoke() }
+  }
   LaunchedEffect(entityId, editor) {
     val activeEditor = editor ?: return@LaunchedEffect
     model.markBodySynced(activeEditor)
@@ -598,12 +612,17 @@ fun EditorScreen(entityId: String) {
             trackWidth = headerTrackWidth,
             loading = loading,
             topInset = topInset,
+            subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
             onTitleChange = model::updateTitleDraft,
             onSubtitleChange = model::updateSubtitleDraft,
             onHeightChanged = screenState::updateHeaderHeight,
             onEnterDocument = {
               model.flushDraftsAsync()
-              requestEditorFocus()
+              enterDocumentStartFromHeader(
+                editor = runtime.editor,
+                scope = scope,
+                requestEditorFocus = ::requestEditorFocus,
+              )
             },
           )
         },
@@ -679,6 +698,22 @@ fun EditorScreen(entityId: String) {
           )
         },
         modifier = Modifier.padding(start = startInset, end = endInset),
+      )
+    }
+  }
+}
+
+internal fun enterDocumentStartFromHeader(
+  editor: Editor?,
+  scope: CoroutineScope,
+  requestEditorFocus: () -> Unit,
+) {
+  requestEditorFocus()
+  val activeEditor = editor ?: return
+  scope.launch {
+    activeEditor.await {
+      enqueue(
+        Message.Navigation(NavigationOp.Move(Movement.Document(Direction.Backward), extend = false))
       )
     }
   }
