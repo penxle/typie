@@ -36,7 +36,6 @@ import type {
   StableSelection,
   StyleInfo,
   StyleRefValue,
-  SurfaceLayer,
   TableOverlay,
   ThemeVariant,
   TrackedRange,
@@ -110,19 +109,6 @@ export function browserScaleFactor(): number {
 
 function samePosition(a: Position, b: Position): boolean {
   return a.node_id === b.node_id && a.offset === b.offset && a.affinity === b.affinity;
-}
-
-const SURFACE_LAYER_BIT: Record<SurfaceLayer, number> = {
-  background: 1,
-  below_marks: 2,
-  content: 4,
-  above_marks: 8,
-};
-export const ALL_LAYERS = 0b1111;
-export function layersToMask(layers: SurfaceLayer[]): number {
-  let mask = 0;
-  for (const l of layers) mask |= SURFACE_LAYER_BIT[l];
-  return mask;
 }
 
 export class EditorContext {
@@ -1152,9 +1138,9 @@ export class Editor {
     this.tickRevision += 1;
   }
 
-  attachSurface(page: number, canvases: HTMLCanvasElement[], width: number, height: number): void {
+  attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number): void {
     if (this.#destroyed) return;
-    this.#wasm.attach_surface(page, canvases, width, height, this.surfaceScaleFactor);
+    this.#wasm.attach_surface(page, canvas, width, height, this.surfaceScaleFactor);
   }
 
   detachSurface(page: number): void {
@@ -1162,9 +1148,9 @@ export class Editor {
     this.#wasm.detach_surface(page);
   }
 
-  renderSurface(page: number, layers: number): void {
+  renderSurface(page: number): void {
     if (this.#destroyed) return;
-    this.#wasm.render_surface(page, layers);
+    this.#wasm.render_surface(page);
   }
 
   resizeSurface(page: number, width: number, height: number): void {

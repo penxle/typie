@@ -5,10 +5,8 @@ use std::sync::Mutex;
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-#[cfg(any(feature = "uniffi", feature = "wasm-browser"))]
-use crate::platform::PlatformHandle;
 #[cfg(not(feature = "wasm-server"))]
-use crate::platform::SurfaceHandle;
+use crate::platform::{PlatformHandle, SurfaceHandle};
 use crate::prelude::*;
 
 struct EditorInner {
@@ -563,6 +561,21 @@ impl Editor {
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
 #[cfg_attr(feature = "wasm-browser", editor_macros::ffi_export(wasm))]
 impl Editor {
+    pub fn attach_surface(
+        &self,
+        page: u32,
+        handle: PlatformHandle,
+        width: f64,
+        height: f64,
+        scale_factor: f64,
+    ) -> EditorResult<()> {
+        let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
+        self.with_inner(|inner| {
+            inner.surfaces.insert(page, surface);
+            Ok(())
+        })
+    }
+
     pub fn detach_surface(&self, page: u32) -> EditorResult<()> {
         self.with_inner(|inner| {
             inner.surfaces.remove(&page);
@@ -584,80 +597,13 @@ impl Editor {
             Ok(())
         })
     }
-}
-
-#[cfg(feature = "uniffi")]
-#[editor_macros::ffi_export(uniffi)]
-impl Editor {
-    pub fn attach_surface(
-        &self,
-        page: u32,
-        handle: PlatformHandle,
-        width: f64,
-        height: f64,
-        scale_factor: f64,
-    ) -> EditorResult<()> {
-        let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
-        self.with_inner(|inner| {
-            inner.surfaces.insert(page, surface);
-            Ok(())
-        })
-    }
 
     pub fn render_surface(&self, page: u32) -> EditorResult<()> {
         self.with_inner(|inner| {
             if let Some(surface) = inner.surfaces.get_mut(&page) {
                 let scale_factor = surface.scale_factor() as f32;
-                inner
-                    .editor
-                    .render_page(page, surface.sink(), scale_factor, 0b1111);
+                inner.editor.render_page(page, surface.sink(), scale_factor);
                 surface.present();
-            }
-            Ok(())
-        })
-    }
-}
-
-#[cfg(feature = "wasm-browser")]
-#[editor_macros::ffi_export(wasm)]
-impl Editor {
-    pub fn attach_surface(
-        &self,
-        page: u32,
-        canvases: PlatformHandle,
-        width: f64,
-        height: f64,
-        scale_factor: f64,
-    ) -> EditorResult<()> {
-        let surface = SurfaceHandle::new(canvases, width, height, scale_factor)?;
-        self.with_inner(|inner| {
-            inner.surfaces.insert(page, surface);
-            Ok(())
-        })
-    }
-
-    pub fn render_surface(&self, page: u32, layers: u8) -> EditorResult<()> {
-        use editor_common::SurfaceLayer;
-        self.with_inner(|inner| {
-            if let Some(surface) = inner.surfaces.get_mut(&page) {
-                let scale_factor = surface.scale_factor() as f32;
-                for (i, layer) in SurfaceLayer::ALL.iter().enumerate() {
-                    if layers & layer.bit() == 0 {
-                        continue;
-                    }
-                    inner.editor.render_page(
-                        page,
-                        surface.scratch_sink(),
-                        scale_factor,
-                        layer.bit(),
-                    );
-                    if surface.take_touched() {
-                        surface.ensure_canvas(i);
-                        surface.present_layer(i);
-                    } else {
-                        surface.release_canvas(i);
-                    }
-                }
             }
             Ok(())
         })
@@ -675,7 +621,7 @@ impl Editor {
     ) -> EditorResult<Vec<u8>> {
         self.with_inner(|inner| {
             let mut backend = editor_renderer::RenderBackend::new_cpu(width as u16, height as u16);
-            inner.editor.render_page(page, backend.sink(), 1.0, 0b1111);
+            inner.editor.render_page(page, backend.sink(), 1.0);
 
             let mut buf = vec![0u8; (width * height * 4) as usize];
             match &mut backend {
@@ -1338,7 +1284,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. })),
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
             "immediate dnd over must return render invalidation events",
         );
     }

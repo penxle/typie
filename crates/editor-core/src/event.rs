@@ -1,4 +1,3 @@
-use editor_common::SurfaceLayer;
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
@@ -30,9 +29,7 @@ pub enum EditorEvent {
     StateChanged {
         fields: Vec<StateField>,
     },
-    RenderInvalidated {
-        layers: Vec<SurfaceLayer>,
-    },
+    RenderInvalidated,
     FontDataMissing {
         family: String,
         weight: u16,

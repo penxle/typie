@@ -1,5 +1,4 @@
 use editor_commands::{self as commands};
-use editor_common::SurfaceLayer;
 use editor_view::GroupDecoration;
 
 use crate::editor::Editor;
@@ -203,9 +202,7 @@ where
         editor.push_event(EditorEvent::StateChanged {
             fields: vec![StateField::TrackedRanges],
         });
-        editor.push_event(EditorEvent::RenderInvalidated {
-            layers: vec![SurfaceLayer::BelowMarks, SurfaceLayer::AboveMarks],
-        });
+        editor.push_event(EditorEvent::RenderInvalidated);
     }
 }
 
@@ -222,9 +219,7 @@ where
         editor.push_event(EditorEvent::StateChanged {
             fields: vec![StateField::TrackedRanges],
         });
-        editor.push_event(EditorEvent::RenderInvalidated {
-            layers: vec![SurfaceLayer::BelowMarks, SurfaceLayer::AboveMarks],
-        });
+        editor.push_event(EditorEvent::RenderInvalidated);
     }
 }
 
@@ -433,7 +428,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. })),
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
             "AddFrozen must also emit RenderInvalidated (spec §5.3)"
         );
     }

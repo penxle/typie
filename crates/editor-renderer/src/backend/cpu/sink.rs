@@ -9,7 +9,6 @@ pub struct CpuSink {
     width: u16,
     height: u16,
     scratch: RasterScratch,
-    touched: bool,
 }
 
 impl CpuSink {
@@ -19,7 +18,6 @@ impl CpuSink {
             width,
             height,
             scratch: RasterScratch::new(),
-            touched: false,
         }
     }
 
@@ -29,12 +27,6 @@ impl CpuSink {
             self.height = height;
             self.buf = vec![0u8; width as usize * height as usize * 4];
         }
-    }
-
-    pub fn take_touched(&mut self) -> bool {
-        let t = self.touched;
-        self.touched = false;
-        t
     }
 
     fn blit_premul_at(&mut self, src: &[u8], iw: i32, ih: i32, dst_x: i32, dst_y: i32) {
@@ -82,8 +74,6 @@ impl CpuSink {
                 }
             }
         }
-
-        self.touched = true;
     }
 
     fn blit_mask_at(&mut self, mask: &[u8], placement: zeno::Placement, color: Color) {
@@ -135,8 +125,6 @@ impl CpuSink {
                 }
             }
         }
-
-        self.touched = true;
     }
 
     pub fn flush_to(&mut self, dst: &mut [u8]) {
@@ -164,7 +152,6 @@ impl CpuSink {
             s[2] = 0;
             s[3] = 0;
         }
-        self.touched = false;
     }
 }
 

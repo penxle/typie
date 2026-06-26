@@ -586,56 +586,46 @@ impl Renderer {
         page_idx: usize,
         scale_factor: f32,
         marks: &[Mark],
-        layers: u8,
     ) {
-        use editor_common::SurfaceLayer;
         let theme = self.resource.lock().unwrap().theme;
 
-        if layers & SurfaceLayer::Background.bit() != 0 {
-            view.visit_page(
-                page_idx,
-                &mut self.page_visitor(
-                    sink,
-                    doc,
-                    scale_factor,
-                    LayerSet::of(&[RenderLayer::Background]),
-                ),
-            );
-        }
-
-        if layers & SurfaceLayer::BelowMarks.bit() != 0 {
-            self.draw_marks(
+        view.visit_page(
+            page_idx,
+            &mut self.page_visitor(
                 sink,
-                marks,
-                MarkLayer::BelowContent,
-                page_idx,
+                doc,
                 scale_factor,
-                &theme,
-            );
-        }
+                LayerSet::of(&[RenderLayer::Background]),
+            ),
+        );
 
-        if layers & SurfaceLayer::Content.bit() != 0 {
-            view.visit_page(
-                page_idx,
-                &mut self.page_visitor(
-                    sink,
-                    doc,
-                    scale_factor,
-                    LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
-                ),
-            );
-        }
+        self.draw_marks(
+            sink,
+            marks,
+            MarkLayer::BelowContent,
+            page_idx,
+            scale_factor,
+            &theme,
+        );
 
-        if layers & SurfaceLayer::AboveMarks.bit() != 0 {
-            self.draw_marks(
+        view.visit_page(
+            page_idx,
+            &mut self.page_visitor(
                 sink,
-                marks,
-                MarkLayer::AboveContent,
-                page_idx,
+                doc,
                 scale_factor,
-                &theme,
-            );
-        }
+                LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
+            ),
+        );
+
+        self.draw_marks(
+            sink,
+            marks,
+            MarkLayer::AboveContent,
+            page_idx,
+            scale_factor,
+            &theme,
+        );
     }
 
     pub fn export_page_vector(

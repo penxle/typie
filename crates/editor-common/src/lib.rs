@@ -7,7 +7,6 @@ mod movement;
 mod str;
 mod style;
 mod sum_tree;
-mod surface_layer;
 pub mod time;
 mod tri;
 
@@ -18,5 +17,4 @@ pub use movement::*;
 pub use str::*;
 pub use style::*;
 pub use sum_tree::*;
-pub use surface_layer::*;
 pub use tri::*;

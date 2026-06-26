@@ -1,4 +1,3 @@
-use editor_common::SurfaceLayer;
 use editor_crdt::{Op, OrMapOp, RgaOp, TextOp};
 use editor_model::{Doc, DocOp, Modifier, ModifierType, Node, NodeId, NodeRef};
 use editor_resource::{FontRegistry, Resolution};
@@ -246,9 +245,7 @@ pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
                 StateField::Placeholder,
             ],
         });
-        editor.push_event(EditorEvent::RenderInvalidated {
-            layers: SurfaceLayer::ALL.to_vec(),
-        });
+        editor.push_event(EditorEvent::RenderInvalidated);
     }
 }
 

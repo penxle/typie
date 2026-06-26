@@ -1,5 +1,3 @@
-use editor_common::SurfaceLayer;
-
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
@@ -24,9 +22,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
         }
 
         SystemEvent::ThemeVariantChanged => {
-            editor.push_event(EditorEvent::RenderInvalidated {
-                layers: SurfaceLayer::ALL.to_vec(),
-            });
+            editor.push_event(EditorEvent::RenderInvalidated);
             Ok(())
         }
 
@@ -162,12 +158,7 @@ mod tests {
             event: SystemEvent::ThemeVariantChanged,
         });
 
-        assert_eq!(
-            events,
-            vec![EditorEvent::RenderInvalidated {
-                layers: SurfaceLayer::ALL.to_vec(),
-            }]
-        );
+        assert_eq!(events, vec![EditorEvent::RenderInvalidated]);
     }
 
     #[test]
@@ -187,12 +178,7 @@ mod tests {
         });
 
         assert!(editor.is_focused());
-        assert_eq!(
-            events,
-            vec![EditorEvent::RenderInvalidated {
-                layers: SurfaceLayer::ALL.to_vec(),
-            }]
-        );
+        assert_eq!(events, vec![EditorEvent::RenderInvalidated]);
     }
 
     #[test]
@@ -359,7 +345,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
     }
 
@@ -416,7 +402,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
     }
 
@@ -522,7 +508,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
         assert!(
             events.iter().any(|e| {
@@ -620,7 +606,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
     }
 
@@ -735,7 +721,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
 
         let key = ("Primary".to_string(), 400u16);
@@ -763,7 +749,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
         assert!(!editor.pending_fonts.contains_key(&key));
     }
@@ -1001,7 +987,7 @@ mod tests {
         assert!(
             events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. })),
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
             "chunk load must invalidate render"
         );
     }
@@ -1032,7 +1018,7 @@ mod tests {
         assert!(
             !events
                 .iter()
-                .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }))
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
     }
 
@@ -1171,7 +1157,7 @@ mod tests {
 
         let has_render_invalidated = events
             .iter()
-            .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }));
+            .any(|e| matches!(e, EditorEvent::RenderInvalidated));
         assert!(
             !has_render_invalidated,
             "paginated mode must not emit RenderInvalidated on resize"
@@ -1212,7 +1198,7 @@ mod tests {
 
         let has_render_invalidated = events
             .iter()
-            .any(|e| matches!(e, EditorEvent::RenderInvalidated { .. }));
+            .any(|e| matches!(e, EditorEvent::RenderInvalidated));
         assert!(
             has_render_invalidated,
             "continuous mode must emit RenderInvalidated when effective width shrinks"
