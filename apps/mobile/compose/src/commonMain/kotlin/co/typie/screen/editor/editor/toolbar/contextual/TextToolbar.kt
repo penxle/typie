@@ -66,6 +66,8 @@ internal fun rememberTextToolbarPage(
   activeTextOptionMode: TextOptionMode?,
   onTextOptionModeChange: (TextOptionMode?) -> Unit,
   runToolbarModal: (suspend () -> Unit) -> Unit,
+  commentEnabled: Boolean,
+  onCommentRequest: () -> Unit,
 ): EditorToolbarPage {
   val scrollState = rememberScrollState()
   return remember(
@@ -76,6 +78,8 @@ internal fun rememberTextToolbarPage(
     activeTextOptionMode,
     onTextOptionModeChange,
     runToolbarModal,
+    commentEnabled,
+    onCommentRequest,
   ) {
     EditorToolbarPage(
       key = EditorToolbarPageKey.Text,
@@ -92,6 +96,8 @@ internal fun rememberTextToolbarPage(
           activeTextOptionMode = activeTextOptionMode,
           onTextOptionModeChange = onTextOptionModeChange,
           runToolbarModal = runToolbarModal,
+          commentEnabled = commentEnabled,
+          onCommentRequest = onCommentRequest,
         )
       },
     )
@@ -108,6 +114,8 @@ private fun EditorTextToolbar(
   activeTextOptionMode: TextOptionMode?,
   onTextOptionModeChange: (TextOptionMode?) -> Unit,
   runToolbarModal: (suspend () -> Unit) -> Unit,
+  commentEnabled: Boolean,
+  onCommentRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val dialog = LocalDialog.current
@@ -234,6 +242,12 @@ private fun EditorTextToolbar(
       onClick = ::openRubyInput,
       selected = rubyActive,
       enabled = rubyEnabled,
+    )
+    EditorToolbarButton(
+      icon = Lucide.MessageSquarePlus,
+      contentDescription = "코멘트 추가",
+      onClick = onCommentRequest,
+      enabled = commentEnabled,
     )
     EditorToolbarDivider()
     EditorToolbarButton(

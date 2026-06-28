@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 
 internal enum class EditorSubPaneKey {
   RelatedNotes,
+  Comments,
   Spellcheck,
   AiFeedback,
 }

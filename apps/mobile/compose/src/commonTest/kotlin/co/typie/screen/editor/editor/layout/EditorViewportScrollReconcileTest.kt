@@ -19,18 +19,19 @@ import kotlin.test.assertTrue
 
 class EditorViewportScrollReconcileTest {
   @Test
-  fun `visible area shrink reconciles cursor with keep-visible guard`() {
+  fun `visible area shrink preserves the center document anchor`() {
     val reconcileState = EditorViewportScrollReconcileState()
     val viewportState = viewportState(scrollY = 200f)
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
     val occludedVisibleArea =
-      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), imeInset = 100f)
+      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), bottomOcclusionInset = 100f)
 
     val firstReconcile =
       reconcileState.reconcile(
-        enabled = true,
+        mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
         viewportState = viewportState,
         scrollFrame = frame(visibleArea = visibleArea),
+        visibleArea = visibleArea,
       )
 
     assertFalse(firstReconcile)
@@ -38,13 +39,14 @@ class EditorViewportScrollReconcileTest {
 
     val secondReconcile =
       reconcileState.reconcile(
-        enabled = true,
+        mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
         viewportState = viewportState,
         scrollFrame = frame(visibleArea = occludedVisibleArea),
+        visibleArea = occludedVisibleArea,
       )
 
     assertTrue(secondReconcile)
-    assertEquals(Offset(x = 0f, y = 240f), viewportState.scrollOffset)
+    assertEquals(Offset(x = 0f, y = 250f), viewportState.scrollOffset)
     assertTrue(viewportState.lastScrollWasAuto)
   }
 
@@ -54,20 +56,22 @@ class EditorViewportScrollReconcileTest {
     val viewportState = viewportState(scrollY = 200f)
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
     val occludedVisibleArea =
-      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), imeInset = 100f)
+      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), bottomOcclusionInset = 100f)
 
     reconcileState.reconcile(
-      enabled = true,
+      mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
       viewportState = viewportState,
       scrollFrame = frame(visibleArea = visibleArea),
+      visibleArea = visibleArea,
     )
     viewportState.updateScrollableInteractionInProgress(true)
 
     val blockedReconcile =
       reconcileState.reconcile(
-        enabled = true,
+        mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
         viewportState = viewportState,
         scrollFrame = frame(visibleArea = occludedVisibleArea),
+        visibleArea = occludedVisibleArea,
       )
 
     assertFalse(blockedReconcile)
@@ -76,13 +80,56 @@ class EditorViewportScrollReconcileTest {
     viewportState.updateScrollableInteractionInProgress(false)
     val resumedReconcile =
       reconcileState.reconcile(
-        enabled = true,
+        mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
         viewportState = viewportState,
         scrollFrame = frame(visibleArea = occludedVisibleArea),
+        visibleArea = occludedVisibleArea,
       )
 
     assertTrue(resumedReconcile)
-    assertEquals(Offset(x = 0f, y = 240f), viewportState.scrollOffset)
+    assertEquals(Offset(x = 0f, y = 250f), viewportState.scrollOffset)
+  }
+
+  @Test
+  fun `selection reveal mode scrolls only when visible area shrink covers cursor`() {
+    val reconcileState = EditorViewportScrollReconcileState()
+    val viewportState = viewportState(scrollY = 200f)
+    val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
+    val occludedVisibleArea =
+      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), bottomOcclusionInset = 100f)
+
+    val firstReconcile =
+      reconcileState.reconcile(
+        mode = EditorViewportScrollReconcileMode.RevealSelectionHead,
+        viewportState = viewportState,
+        scrollFrame = frame(visibleArea = visibleArea, cursorY = 450f),
+        visibleArea = visibleArea,
+      )
+
+    assertFalse(firstReconcile)
+    assertEquals(Offset(x = 0f, y = 200f), viewportState.scrollOffset)
+
+    val secondReconcile =
+      reconcileState.reconcile(
+        mode = EditorViewportScrollReconcileMode.RevealSelectionHead,
+        viewportState = viewportState,
+        scrollFrame = frame(visibleArea = occludedVisibleArea, cursorY = 450f),
+        visibleArea = occludedVisibleArea,
+      )
+
+    assertTrue(secondReconcile)
+    assertEquals(Offset(x = 0f, y = 330f), viewportState.scrollOffset)
+
+    val repeatedReconcile =
+      reconcileState.reconcile(
+        mode = EditorViewportScrollReconcileMode.RevealSelectionHead,
+        viewportState = viewportState,
+        scrollFrame = frame(visibleArea = occludedVisibleArea, cursorY = 450f),
+        visibleArea = occludedVisibleArea,
+      )
+
+    assertFalse(repeatedReconcile)
+    assertEquals(Offset(x = 0f, y = 330f), viewportState.scrollOffset)
   }
 
   private fun viewportState(scrollY: Float): EditorViewportState =
@@ -94,7 +141,7 @@ class EditorViewportScrollReconcileTest {
       scrollToY(scrollY)
     }
 
-  private fun frame(visibleArea: EditorVisibleArea): EditorScrollFrame =
+  private fun frame(visibleArea: EditorVisibleArea, cursorY: Float = 0f): EditorScrollFrame =
     EditorScrollFrame(
       state =
         EditorState(
@@ -102,8 +149,8 @@ class EditorViewportScrollReconcileTest {
           cursor =
             CursorMetrics(
               pageIdx = 0,
-              caret = Rect(x = 0f, y = 360f, width = 0f, height = 20f),
-              line = Rect(x = 0f, y = 360f, width = 0f, height = 20f),
+              caret = Rect(x = 0f, y = cursorY, width = 0f, height = 20f),
+              line = Rect(x = 0f, y = cursorY, width = 0f, height = 20f),
             ),
           selection = null,
           pageSizes = listOf(PageSize(width = 300f, height = 900f)),

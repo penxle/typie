@@ -49,7 +49,7 @@ import co.typie.route.Route
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
 import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
 import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
-import co.typie.screen.editor.editor.subpane.resolveRelatedNotesVisibleAreaMode
+import co.typie.screen.editor.editor.subpane.resolveResizableSubPaneVisibleAreaMode
 import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
@@ -153,7 +153,7 @@ internal fun RelatedNotesSheet(
           key = EditorSubPaneKey.RelatedNotes,
           visibleHeight = geometry.visibleHeight,
           visibleAreaMode =
-            resolveRelatedNotesVisibleAreaMode(
+            resolveResizableSubPaneVisibleAreaMode(
               sheetHeight = geometry.sheetHeight,
               expandedHeight = geometry.expandedHeight,
             ),

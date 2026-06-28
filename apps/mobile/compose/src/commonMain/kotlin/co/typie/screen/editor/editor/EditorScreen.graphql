@@ -1,6 +1,19 @@
 query EditorScreen_Query($entityId: ID!) {
+  me @catch(to: THROW) {
+    id
+    role
+    name
+    avatar {
+      ...Img_image
+    }
+  }
+
   entity(entityId: $entityId) @catch(to: THROW) {
     id
+
+    user {
+      id
+    }
 
     site {
       id
@@ -13,6 +26,7 @@ query EditorScreen_Query($entityId: ID!) {
 
       ... on Document {
         id
+        locked
         nullableTitle
         subtitle
         state {

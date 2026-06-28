@@ -7,7 +7,7 @@ internal fun resolveSubPaneBottomOcclusion(layoutInfo: EditorSubPaneLayoutInfo?)
     null -> 0f
   }
 
-internal fun resolveRelatedNotesVisibleAreaMode(
+internal fun resolveResizableSubPaneVisibleAreaMode(
   sheetHeight: Float,
   expandedHeight: Float,
   tolerance: Float = 0.5f,

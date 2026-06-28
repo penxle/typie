@@ -28,7 +28,7 @@ class EditorAwaitWithBringIntoViewTest {
 
       assertNull(requests.activateForVersion(version = 0L))
       assertEquals(
-        EditorBringIntoViewTarget.CurrentCursorLine,
+        request(EditorBringIntoViewTarget.CurrentCursorLine),
         requests.activateForVersion(version = 1L),
       )
     }
@@ -46,8 +46,14 @@ class EditorAwaitWithBringIntoViewTest {
 
       assertNull(requests.activateForVersion(version = 0L))
       assertEquals(
-        EditorBringIntoViewTarget.CurrentCursorLine,
+        request(EditorBringIntoViewTarget.CurrentCursorLine),
         requests.activateForVersion(version = 1L),
       )
     }
+
+  private fun request(
+    target: EditorBringIntoViewTarget,
+    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+  ): EditorBringIntoViewRequests.Request =
+    EditorBringIntoViewRequests.Request(target = target, behavior = behavior)
 }

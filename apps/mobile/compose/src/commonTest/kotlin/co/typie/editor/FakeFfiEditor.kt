@@ -33,6 +33,7 @@ import co.typie.editor.ffi.StyleInfo
 import co.typie.editor.ffi.StyleRefValue
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TrackedRange
+import co.typie.editor.ffi.TrackedRangeEndpoints
 import co.typie.editor.ffi.TrackedRangeHit
 import co.typie.editor.ffi.Tri
 
@@ -54,11 +55,18 @@ internal class FakeFfiEditor(
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var cursorHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
+  var trackedRangesProvider: (String?) -> List<TrackedRange> = { emptyList() },
+  var trackedRangesContainingPositionProvider: (Position, String?) -> List<TrackedRangeEndpoints> =
+    { _, _ ->
+      emptyList()
+    },
 ) : co.typie.editor.ffi.Editor {
   val enqueued = mutableListOf<Message>()
   var tickCount: Int = 0
   var renderCount: Int = 0
   var lastRenderedPage: Int? = null
+  var trackedRangesCallCount: Int = 0
+  var trackedRangesContainingPositionCallCount: Int = 0
   val attached = mutableSetOf<Int>()
 
   override fun enqueue(message: Message) {
@@ -167,12 +175,23 @@ internal class FakeFfiEditor(
 
   override fun materializeAt(heads: ByteArray): PlainDoc = EmptyPlainDoc
 
-  override fun freezeSelection(selection: Selection): StableSelection =
+  override fun freezeSelection(selection: Selection): StableSelection? =
     StableSelection(anchor = EmptyStablePosition, head = EmptyStablePosition)
 
   override fun findMatches(query: String, options: SearchOptions?): List<Selection> = emptyList()
 
-  override fun trackedRanges(group: String?): List<TrackedRange> = emptyList()
+  override fun trackedRanges(group: String?): List<TrackedRange> {
+    trackedRangesCallCount += 1
+    return trackedRangesProvider(group)
+  }
+
+  override fun trackedRangesContainingPosition(
+    position: Position,
+    group: String?,
+  ): List<TrackedRangeEndpoints> {
+    trackedRangesContainingPositionCallCount += 1
+    return trackedRangesContainingPositionProvider(position, group)
+  }
 
   override fun exportPageVector(page: Int, scaleFactor: Double): ByteArray = ByteArray(0)
 

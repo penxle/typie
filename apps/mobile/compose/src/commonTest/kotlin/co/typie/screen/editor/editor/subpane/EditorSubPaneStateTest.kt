@@ -23,14 +23,14 @@ class EditorSubPaneStateTest {
   }
 
   @Test
-  fun `related notes resizes editor until it reaches expanded height`() {
+  fun `resizable sub pane resizes editor until it reaches expanded height`() {
     assertEquals(
       EditorSubPaneVisibleAreaMode.ResizeEditor,
-      resolveRelatedNotesVisibleAreaMode(sheetHeight = 360f, expandedHeight = 720f),
+      resolveResizableSubPaneVisibleAreaMode(sheetHeight = 360f, expandedHeight = 720f),
     )
     assertEquals(
       EditorSubPaneVisibleAreaMode.OverlayEditor,
-      resolveRelatedNotesVisibleAreaMode(sheetHeight = 719.7f, expandedHeight = 720f),
+      resolveResizableSubPaneVisibleAreaMode(sheetHeight = 719.7f, expandedHeight = 720f),
     )
   }
 

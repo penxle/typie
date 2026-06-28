@@ -8,16 +8,18 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 internal class EditorBringIntoViewRequests {
-  private data class PendingBringIntoViewTarget(
+  data class Request(
     val target: EditorBringIntoViewTarget,
+    val behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+  )
+
+  private data class PendingBringIntoViewTarget(
+    val request: Request,
     val targetVersion: Long,
     val order: Long,
   )
 
-  private data class ActiveBringIntoViewTarget(
-    val target: EditorBringIntoViewTarget,
-    val version: Long,
-  )
+  private data class ActiveBringIntoViewTarget(val request: Request, val version: Long)
 
   private data class State(
     val pendingBringIntoViewTargets: List<PendingBringIntoViewTarget> = emptyList(),
@@ -43,19 +45,23 @@ internal class EditorBringIntoViewRequests {
         pendingBringIntoViewTargets =
           pendingBringIntoViewTargets.filter { it.targetVersion > pending.targetVersion },
         activeBringIntoViewTarget =
-          ActiveBringIntoViewTarget(target = pending.target, version = version),
+          ActiveBringIntoViewTarget(request = pending.request, version = version),
       )
   }
 
   private val state = AtomicReference(State())
 
-  fun requestForVersion(target: EditorBringIntoViewTarget, version: Long) {
+  fun requestForVersion(
+    target: EditorBringIntoViewTarget,
+    version: Long,
+    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+  ) {
     update { current ->
       current.copy(
         pendingBringIntoViewTargets =
           current.pendingBringIntoViewTargets +
             PendingBringIntoViewTarget(
-              target = target,
+              request = Request(target = target, behavior = behavior),
               targetVersion = version,
               order = current.nextRequestOrder,
             ),
@@ -76,12 +82,12 @@ internal class EditorBringIntoViewRequests {
     }
   }
 
-  fun activateForVersion(version: Long): EditorBringIntoViewTarget? {
+  fun activateForVersion(version: Long): Request? {
     while (true) {
       val current = state.load()
       current.activeBringIntoViewTarget?.let { active ->
         if (active.version == version) {
-          return active.target
+          return active.request
         }
       }
 
@@ -89,16 +95,16 @@ internal class EditorBringIntoViewRequests {
       val pending = base.latestEligiblePending(version)
       val next = pending?.let { base.withActive(it, version) } ?: base
       if (next === current || state.compareAndSet(current, next)) {
-        return pending?.target
+        return pending?.request
       }
     }
   }
 
-  fun markApplied(version: Long, target: EditorBringIntoViewTarget): Boolean {
+  fun markApplied(version: Long, request: Request): Boolean {
     while (true) {
       val current = state.load()
       val activeTarget = current.activeBringIntoViewTarget ?: return false
-      if (activeTarget.version != version || activeTarget.target != target) {
+      if (activeTarget.version != version || activeTarget.request != request) {
         return false
       }
       val next = current.copy(activeBringIntoViewTarget = null)
@@ -115,6 +121,11 @@ internal class EditorBringIntoViewRequests {
       if (state.compareAndSet(current, next)) return
     }
   }
+}
+
+internal enum class EditorBringIntoViewBehavior {
+  Instant,
+  Smooth,
 }
 
 internal val LocalEditorBringIntoViewRequests =

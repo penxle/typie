@@ -49,10 +49,58 @@ pub struct TrackedRange {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub struct TrackedRangeEndpoints {
+    pub id: String,
+    pub group: String,
+    pub anchor: editor_state::Position,
+    pub head: editor_state::Position,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct TrackedRangeHit {
     pub id: String,
     pub group: String,
     pub rects: Vec<editor_view::PageRect>,
+}
+
+fn public_tracked_range(
+    editor: &editor_core::Editor,
+    range: &editor_core::TrackedRange,
+) -> Option<TrackedRange> {
+    let doc = &editor.state().doc;
+    let sel = range.locate(doc)?;
+    let resolved = sel.resolve(doc)?;
+    let rects = editor
+        .view()
+        .selection_rects(&resolved)
+        .into_iter()
+        .map(|sr| sr.without_meta())
+        .collect();
+    let text = resolved.collect_text();
+    Some(TrackedRange {
+        id: range.id.clone(),
+        group: range.group.clone(),
+        anchor: sel.anchor,
+        head: sel.head,
+        metadata: range.metadata.clone(),
+        rects,
+        text,
+    })
+}
+
+fn public_tracked_range_endpoints(
+    doc: &editor_model::Doc,
+    range: &editor_core::TrackedRange,
+) -> Option<TrackedRangeEndpoints> {
+    let sel = range.locate(doc)?;
+    Some(TrackedRangeEndpoints {
+        id: range.id.clone(),
+        group: range.group.clone(),
+        anchor: sel.anchor,
+        head: sel.head,
+    })
 }
 
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
@@ -414,18 +462,18 @@ impl Editor {
     pub fn freeze_selection(
         &self,
         selection: Complex<editor_state::Selection>,
-    ) -> EditorResult<Complex<editor_state::StableSelection>> {
+    ) -> EditorResult<Option<Complex<editor_state::StableSelection>>> {
         self.with_inner(|inner| {
             let sel: editor_state::Selection = selection.from_ffi()?;
             let doc = &inner.editor.state().doc;
             if !position_is_addressable(&sel.anchor, doc)
                 || !position_is_addressable(&sel.head, doc)
             {
-                return Err(EditorError::General {
-                    msg: "freeze_selection: anchor or head not addressable in current doc".into(),
-                });
+                return Ok(None);
             }
-            Ok(editor_state::StableSelection::capture(&sel, doc).into_ffi()?)
+            Ok(Some(
+                editor_state::StableSelection::capture(&sel, doc).into_ffi()?,
+            ))
         })
     }
 
@@ -448,33 +496,32 @@ impl Editor {
         group: Option<String>,
     ) -> EditorResult<Vec<Complex<TrackedRange>>> {
         self.with_inner(|inner| {
-            let doc = &inner.editor.state().doc;
             let registry = inner.editor.tracked_ranges();
             let ranges: Box<dyn Iterator<Item = &editor_core::TrackedRange>> = match &group {
                 Some(g) => Box::new(registry.iter_group(g)),
                 None => Box::new(registry.iter()),
             };
-            let view = inner.editor.view();
             let result: Vec<TrackedRange> = ranges
-                .filter_map(|r| {
-                    let sel = r.locate(doc)?;
-                    let resolved = sel.resolve(doc)?;
-                    let rects = view
-                        .selection_rects(&resolved)
-                        .into_iter()
-                        .map(|sr| sr.without_meta())
-                        .collect();
-                    let text = resolved.collect_text();
-                    Some(TrackedRange {
-                        id: r.id.clone(),
-                        group: r.group.clone(),
-                        anchor: sel.anchor,
-                        head: sel.head,
-                        metadata: r.metadata.clone(),
-                        rects,
-                        text,
-                    })
-                })
+                .filter_map(|r| public_tracked_range(&inner.editor, r))
+                .collect();
+            Ok(result.into_ffi()?)
+        })
+    }
+
+    pub fn tracked_ranges_containing_position(
+        &self,
+        position: Complex<editor_state::Position>,
+        group: Option<String>,
+    ) -> EditorResult<Vec<Complex<TrackedRangeEndpoints>>> {
+        self.with_inner(|inner| {
+            let position = position.from_ffi()?;
+            let doc = &inner.editor.state().doc;
+            let ranges = inner
+                .editor
+                .tracked_ranges_containing_position(position, group.as_deref());
+            let result: Vec<TrackedRangeEndpoints> = ranges
+                .iter()
+                .filter_map(|r| public_tracked_range_endpoints(doc, r))
                 .collect();
             Ok(result.into_ffi()?)
         })
@@ -1074,7 +1121,9 @@ mod tests {
             "freeze_selection must Ok for valid selection"
         );
 
-        let stable = result.unwrap();
+        let stable = result
+            .expect("freeze_selection must Ok for valid selection")
+            .expect("freeze_selection must return Some for valid selection");
         editor
             .enqueue(editor_core::Message::TrackedRange {
                 op: editor_core::TrackedRangeOp::AddFrozen {
@@ -1102,7 +1151,8 @@ mod tests {
         let editor = make_ffi_editor(initial.clone());
         let stable = editor
             .freeze_selection(initial.selection.unwrap())
-            .expect("freeze");
+            .expect("freeze")
+            .expect("valid selection");
 
         editor
             .enqueue(
@@ -1200,7 +1250,8 @@ mod tests {
         let editor_a = make_ffi_editor(state_a.clone());
         let stable = editor_a
             .freeze_selection(state_a.selection.unwrap())
-            .expect("freeze");
+            .expect("freeze")
+            .expect("valid selection");
 
         let (state_b, ..) = state! {
             doc { root { paragraph { t2: text("world") } } }
@@ -1228,7 +1279,7 @@ mod tests {
     }
 
     #[test]
-    fn ffi_freeze_selection_returns_err_for_unresolvable() {
+    fn ffi_freeze_selection_returns_none_for_unresolvable() {
         let (initial, _t1) = state! {
             doc { root { paragraph { t1: text("hello") } } }
             selection: (t1, 0)
@@ -1243,8 +1294,10 @@ mod tests {
 
         let result = editor.freeze_selection(bogus_sel);
         assert!(
-            result.is_err(),
-            "freeze_selection must Err for unresolvable selection"
+            result
+                .expect("freeze_selection must Ok for unresolvable selection")
+                .is_none(),
+            "freeze_selection must return None for unresolvable selection"
         );
     }
 

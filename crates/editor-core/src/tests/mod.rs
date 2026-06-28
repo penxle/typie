@@ -4,4 +4,5 @@ mod state_changed_tracked_ranges;
 mod tracked_decoration_integration;
 mod tracked_range_hit_test;
 mod tracked_range_integration;
+mod tracked_range_position_lookup;
 mod tracked_range_replace_integration;

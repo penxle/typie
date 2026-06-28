@@ -4,7 +4,9 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberScrollable2DState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -82,13 +84,16 @@ import co.typie.platform.PlatformModule
 import co.typie.route.Route
 import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
+import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
+import co.typie.screen.editor.editor.subpane.CommentsSubPaneEnvironment
 import co.typie.screen.editor.editor.subpane.EditorSubPaneHost
 import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
 import co.typie.screen.editor.editor.subpane.EditorSubPaneState
+import co.typie.screen.editor.editor.subpane.comments.rememberEditorCommentsSession
 import co.typie.screen.editor.editor.subpane.resolveSubPaneBottomOcclusion
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
 import co.typie.screen.editor.editor.toolbar.EditorToolbarToolAction
@@ -277,6 +282,19 @@ fun EditorScreen(entityId: String) {
   Screen(loadable = model.query, background = background, contentPadding = PaddingValues()) {
     contentPadding ->
     val editorState = editor?.state ?: EditorState.Initial
+    val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+    val comments =
+      rememberEditorCommentsSession(
+        entityId = entityId,
+        documentId = document?.id,
+        documentLocked = document?.locked == true,
+        editor = editor,
+        editorState = editorState,
+        sheetActive = subPaneState.activeKey == EditorSubPaneKey.Comments,
+        bringIntoViewRequests = bringIntoViewRequests,
+        hideContextMenu = { uiState.contextMenu.hide() },
+        openSheet = { subPaneState.open(EditorSubPaneKey.Comments) },
+      )
     val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
     val focusManager = LocalFocusManager.current
@@ -395,9 +413,14 @@ fun EditorScreen(entityId: String) {
     val devMode = Preference.devMode
     val displayZoom = zoomController.displayZoom
     val cursorLineHeight = (editorState.cursor?.line?.height ?: 0f) * displayZoom
-    val subPaneBottomOcclusion = resolveSubPaneBottomOcclusion(subPaneState.layoutInfo)
+    val subPaneLayoutInfo = subPaneState.layoutInfo
+    val subPaneBottomOcclusion = resolveSubPaneBottomOcclusion(subPaneLayoutInfo)
     val editorInputBottomOcclusion =
-      if (subPaneActive) 0f else toolbarBottomOcclusion.value.value.coerceAtLeast(0f)
+      if (subPaneActive && subPaneLayoutInfo != null) {
+        0f
+      } else {
+        toolbarBottomOcclusion.value.value.coerceAtLeast(0f)
+      }
     val visibleArea =
       screenState.resolveVisibleArea(
         topInset = topInset.value,
@@ -479,13 +502,27 @@ fun EditorScreen(entityId: String) {
         density = density,
         editorBounds = uiState.editorBoundsInContainer,
       )
+    val viewportScrollReconcileMode =
+      if (
+        uiState.focused &&
+          screenState.sceneInForeground &&
+          editor != null &&
+          interactionScope.controller.interactionMode.allowsViewportScrollReconcile
+      ) {
+        if (subPaneLayoutInfo != null) {
+          EditorViewportScrollReconcileMode.KeepVisibleAnchor
+        } else {
+          EditorViewportScrollReconcileMode.RevealSelectionHead
+        }
+      } else {
+        EditorViewportScrollReconcileMode.Disabled
+      }
     val magnifierFocalPositionInRoot =
       interactionScope.controller.magnifierPosition?.let { position ->
         uiState.editorRectInRoot()?.let { editorRect ->
           Offset(x = editorRect.left + position.x, y = editorRect.top + position.y)
         }
       }
-    val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
     SideEffect {
       val viewportZoomConfig =
         (layoutSpec as? EditorDocumentLayoutSpec.Paginated)?.let { paginatedLayoutSpec ->
@@ -580,11 +617,7 @@ fun EditorScreen(entityId: String) {
         magnifierFocalPositionInRoot = magnifierFocalPositionInRoot,
         viewportScrollableState = viewportScrollableState,
         viewportContentWidth = bodyTrackWidth,
-        viewportScrollReconcileEnabled =
-          uiState.focused &&
-            screenState.sceneInForeground &&
-            editor != null &&
-            interactionScope.controller.interactionMode.allowsViewportScrollReconcile,
+        viewportScrollReconcileMode = viewportScrollReconcileMode,
         onViewportWheelScroll = { uiState.contextMenu.hide() },
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
@@ -658,6 +691,20 @@ fun EditorScreen(entityId: String) {
               suppressSoftwareKeyboard = editorSuppressesSoftwareKeyboard,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
+              overlay = {
+                if (comments.virtualThreadGuardVisible) {
+                  val guardInteractionSource = remember { MutableInteractionSource() }
+                  Box(
+                    modifier =
+                      Modifier.fillMaxSize().clickable(
+                        interactionSource = guardInteractionSource,
+                        indication = null,
+                      ) {
+                        comments.requestDiscardVirtualThread()
+                      }
+                  )
+                }
+              },
             )
           }
         },
@@ -671,6 +718,8 @@ fun EditorScreen(entityId: String) {
             environment = toolbarInputEnvironment,
             fontFamilies = model.toolbarFontFamilies,
             sessionState = toolbarSessionState,
+            commentEnabled = comments.toolbarEnabled,
+            onCommentRequest = comments.requestFromTextToolbar,
             onInputEffects = ::performInputEffects,
             onToolAction = { action ->
               when (action) {
@@ -678,7 +727,7 @@ fun EditorScreen(entityId: String) {
                   uiState.contextMenu.hide()
                   subPaneState.open(EditorSubPaneKey.RelatedNotes)
                 }
-                EditorToolbarToolAction.Comment,
+                EditorToolbarToolAction.Comment -> comments.openFromToolPanel()
                 EditorToolbarToolAction.Spellcheck,
                 EditorToolbarToolAction.AiFeedback,
                 EditorToolbarToolAction.Timeline -> Unit
@@ -691,6 +740,13 @@ fun EditorScreen(entityId: String) {
           EditorSubPaneHost(
             state = subPaneState,
             entityId = entityId,
+            comments =
+              CommentsSubPaneEnvironment(
+                session = comments,
+                myId = model.query.data.me.id,
+                myRole = model.query.data.me.role,
+                isOwner = entity.user.id == model.query.data.me.id,
+              ),
             maxTopInset = topInset,
             safeBottomInset = bottomSafeInset,
             trustedImeBottomInset = trustedImeBottom,

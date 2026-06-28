@@ -580,6 +580,13 @@ export interface TrackedRange {
     text: string;
 }
 
+export interface TrackedRangeEndpoints {
+    id: string;
+    group: string;
+    anchor: Position;
+    head: Position;
+}
+
 export interface TrackedRangeHit {
     id: string;
     group: string;
@@ -771,7 +778,7 @@ declare class Editor {
     export_page_vector(page: number, scale_factor: number): Uint8Array;
     external_elements(): ExternalElement[];
     find_matches(query: string, options?: SearchOptions | null): Selection[];
-    freeze_selection(selection: Selection): StableSelection;
+    freeze_selection(selection: Selection): StableSelection | undefined;
     ime(before_limit: number, after_limit: number): Ime;
     insert_template_fragment(changesets: Uint8Array): void;
     inspect_state(options?: InspectStateOptions | null): string;
@@ -807,6 +814,7 @@ declare class Editor {
     tick(): EditorEvent[];
     tracked_ranges(group?: string | null): TrackedRange[];
     tracked_ranges_at(page: number, x: number, y: number, group?: string | null): TrackedRangeHit[];
+    tracked_ranges_containing_position(position: Position, group?: string | null): TrackedRangeEndpoints[];
 }
 
 declare class EditorHost {

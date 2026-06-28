@@ -362,6 +362,51 @@ impl Editor {
         scored.into_iter().map(|(_, _, hit)| hit).collect()
     }
 
+    /// Returns located tracked ranges containing `position`, sorted by shortest range first.
+    ///
+    /// Containment is start-inclusive and end-exclusive. This lets a cursor at the
+    /// start of a range continue that range while keeping the cursor immediately
+    /// after the range outside it.
+    pub fn tracked_ranges_containing_position(
+        &self,
+        position: editor_state::Position,
+        group: Option<&str>,
+    ) -> Vec<crate::tracked_range::TrackedRange> {
+        use crate::tracked_range::TrackedRange;
+        use editor_state::ResolvedPositionFlatExt;
+
+        let Some(pos) = position.resolve(&self.state.doc) else {
+            return Vec::new();
+        };
+        let pos = pos.to_flat();
+
+        let iter: Box<dyn Iterator<Item = &TrackedRange>> = match group {
+            Some(g) => Box::new(self.tracked_ranges.iter_group(g)),
+            None => Box::new(self.tracked_ranges.iter()),
+        };
+
+        let mut scored: Vec<(usize, String, TrackedRange)> = Vec::new();
+        for range in iter {
+            let Some(sel) = range.locate(&self.state.doc) else {
+                continue;
+            };
+            let Some(resolved) = sel.resolve(&self.state.doc) else {
+                continue;
+            };
+
+            let anchor = resolved.anchor().to_flat();
+            let head = resolved.head().to_flat();
+            let start = anchor.min(head);
+            let end = anchor.max(head);
+            if start <= pos && pos < end {
+                scored.push((end - start, range.id.clone(), range.clone()));
+            }
+        }
+
+        scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+        scored.into_iter().map(|(_, _, range)| range).collect()
+    }
+
     pub fn cursor_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
         let Some(selection) = self.state.selection else {
             return false;

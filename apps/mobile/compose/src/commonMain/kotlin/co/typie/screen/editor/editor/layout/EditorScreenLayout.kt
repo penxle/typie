@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -30,10 +32,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ext.unclippedBoundsInRoot
-import co.typie.editor.runtime.EditorBoundsInContainer
-import co.typie.editor.scroll.EditorAutoScrollPolicy
+import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorScrollIntentResult
@@ -48,8 +48,12 @@ import co.typie.screen.editor.editor.overlay.resolveEditorMagnifierPlacement
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlin.coroutines.coroutineContext
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 private enum class EditorScreenLayoutSlot {
   ViewportContent,
@@ -57,6 +61,14 @@ private enum class EditorScreenLayoutSlot {
   Overlay,
   Toolbar,
   SubPane,
+}
+
+private const val EditorViewportScrollAnchorTolerance = 1f
+
+internal enum class EditorViewportScrollReconcileMode {
+  Disabled,
+  KeepVisibleAnchor,
+  RevealSelectionHead,
 }
 
 @Composable
@@ -67,7 +79,7 @@ internal fun EditorScreenLayout(
   magnifierFocalPositionInRoot: Offset? = null,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
-  viewportScrollReconcileEnabled: Boolean,
+  viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
   onViewportWheelScroll: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
@@ -82,7 +94,18 @@ internal fun EditorScreenLayout(
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val toolbarBackdropHazeState = LocalHazeState.current
   val scrollReconcileState = remember { EditorViewportScrollReconcileState() }
+  val coroutineScope = rememberCoroutineScope()
+  var smoothScrollJob by remember { mutableStateOf<Job?>(null) }
   var layoutBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+  LaunchedEffect(
+    state.viewportState.isTransforming,
+    state.viewportState.isDirectManipulationInProgress,
+  ) {
+    if (state.viewportState.isTransforming || state.viewportState.isDirectManipulationInProgress) {
+      smoothScrollJob?.cancel()
+      smoothScrollJob = null
+    }
+  }
   val magnifierPlacement = layoutBoundsInRoot?.let { bounds ->
     val focalPositionInRoot = magnifierFocalPositionInRoot ?: return@let null
     resolveEditorMagnifierPlacement(
@@ -167,9 +190,10 @@ internal fun EditorScreenLayout(
               onMeasuredViewportSizeChange(measuredViewportSize)
             }
             val scrollFrameVersion = scrollFrame.state.version
-            val bringIntoViewTarget =
+            val bringIntoViewRequest =
               bringIntoViewRequests.activateForVersion(version = scrollFrameVersion)
-            if (bringIntoViewTarget != null) {
+            if (bringIntoViewRequest != null) {
+              val bringIntoViewTarget = bringIntoViewRequest.target
               if (
                 state.viewportState.isTransforming ||
                   state.viewportState.isDirectManipulationInProgress
@@ -188,29 +212,51 @@ internal fun EditorScreenLayout(
                   EditorScrollIntentResult.ConsumedWithoutScroll -> {
                     bringIntoViewRequests.markApplied(
                       version = scrollFrameVersion,
-                      target = bringIntoViewTarget,
+                      request = bringIntoViewRequest,
                     )
                   }
                   is EditorScrollIntentResult.ScrollTo -> {
                     if (
                       bringIntoViewRequests.markApplied(
                         version = scrollFrameVersion,
-                        target = bringIntoViewTarget,
+                        request = bringIntoViewRequest,
                       )
                     ) {
-                      state.viewportState.scrollToY(
-                        targetY = scrollIntentResult.y,
-                        isAutoScroll = true,
-                      )
+                      smoothScrollJob?.cancel()
+                      smoothScrollJob =
+                        when (bringIntoViewRequest.behavior) {
+                          EditorBringIntoViewBehavior.Instant -> {
+                            state.viewportState.scrollToY(
+                              targetY = scrollIntentResult.y,
+                              isAutoScroll = true,
+                            )
+                            null
+                          }
+
+                          EditorBringIntoViewBehavior.Smooth ->
+                            coroutineScope.launch {
+                              try {
+                                state.viewportState.animateScrollToY(
+                                  targetY = scrollIntentResult.y,
+                                  isAutoScroll = true,
+                                )
+                              } finally {
+                                if (smoothScrollJob == coroutineContext[Job]) {
+                                  smoothScrollJob = null
+                                }
+                              }
+                            }
+                        }
                     }
                   }
                 }
               }
             } else {
               scrollReconcileState.reconcile(
-                enabled = viewportScrollReconcileEnabled && scrollFrame.state.cursor != null,
+                mode = viewportScrollReconcileMode,
                 viewportState = state.viewportState,
                 scrollFrame = scrollFrame,
+                visibleArea = visibleArea,
               )
             }
 
@@ -270,11 +316,12 @@ internal class EditorViewportScrollReconcileState {
   }
 
   fun reconcile(
-    enabled: Boolean,
+    mode: EditorViewportScrollReconcileMode,
     viewportState: EditorViewportState,
     scrollFrame: EditorScrollFrame,
+    visibleArea: EditorVisibleArea,
   ): Boolean {
-    if (!enabled) {
+    if (mode == EditorViewportScrollReconcileMode.Disabled) {
       reset()
       return false
     }
@@ -282,16 +329,58 @@ internal class EditorViewportScrollReconcileState {
       return false
     }
 
-    val frame = EditorViewportScrollReconcileFrame(scrollFrame)
+    val frame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
     val previousFrame = lastObservedFrame
     if (previousFrame == null) {
       lastObservedFrame = frame
       return false
     }
-    if (previousFrame == frame) {
+    if (previousFrame.hasSameVisibleViewport(frame)) {
+      lastObservedFrame = frame
       return false
     }
 
+    return when (mode) {
+      EditorViewportScrollReconcileMode.Disabled -> false
+      EditorViewportScrollReconcileMode.KeepVisibleAnchor ->
+        reconcileKeepVisibleAnchor(
+          previousFrame = previousFrame,
+          frame = frame,
+          viewportState = viewportState,
+          visibleArea = visibleArea,
+        )
+      EditorViewportScrollReconcileMode.RevealSelectionHead ->
+        reconcileSelectionHeadReveal(
+          scrollFrame = scrollFrame,
+          viewportState = viewportState,
+          visibleArea = visibleArea,
+        )
+    }
+  }
+
+  private fun reconcileKeepVisibleAnchor(
+    previousFrame: EditorViewportScrollReconcileFrame,
+    frame: EditorViewportScrollReconcileFrame,
+    viewportState: EditorViewportState,
+    visibleArea: EditorVisibleArea,
+  ): Boolean {
+    val anchor = previousFrame.anchor
+    val targetY = previousFrame.documentY(anchor) - frame.viewportY(anchor)
+    if (abs(targetY - viewportState.scrollOffset.y) <= EditorViewportScrollAnchorTolerance) {
+      lastObservedFrame = frame
+      return false
+    }
+
+    viewportState.scrollToY(targetY = targetY, isAutoScroll = true)
+    lastObservedFrame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
+    return true
+  }
+
+  private fun reconcileSelectionHeadReveal(
+    scrollFrame: EditorScrollFrame,
+    viewportState: EditorViewportState,
+    visibleArea: EditorVisibleArea,
+  ): Boolean {
     return when (
       val scrollIntentResult =
         resolveEditorScrollIntent(
@@ -300,42 +389,63 @@ internal class EditorViewportScrollReconcileState {
           currentScroll = viewportState.scrollOffset.y,
         )
     ) {
-      EditorScrollIntentResult.Unresolved -> false
+      EditorScrollIntentResult.Unresolved,
       EditorScrollIntentResult.ConsumedWithoutScroll -> {
-        lastObservedFrame = frame
+        lastObservedFrame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
         false
       }
       is EditorScrollIntentResult.ScrollTo -> {
-        lastObservedFrame = frame
         viewportState.scrollToY(targetY = scrollIntentResult.y, isAutoScroll = true)
+        lastObservedFrame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
         true
       }
     }
   }
 }
 
+private enum class EditorViewportScrollAnchor {
+  Top,
+  Center,
+  Bottom,
+}
+
 private data class EditorViewportScrollReconcileFrame(
-  val version: Long,
-  val layoutSpec: EditorDocumentLayoutSpec,
-  val displayZoom: Float,
-  val visibleArea: EditorVisibleArea,
-  val autoScrollPolicy: EditorAutoScrollPolicy,
-  val headerHeight: Float,
-  val density: Float,
-  val editorBounds: EditorBoundsInContainer,
+  val scrollY: Float,
+  val maxScrollY: Float,
+  val visibleViewportTop: Float,
+  val visibleViewportBottom: Float,
 ) {
   constructor(
-    frame: EditorScrollFrame
+    viewportState: EditorViewportState,
+    visibleArea: EditorVisibleArea,
   ) : this(
-    version = frame.state.version,
-    layoutSpec = frame.layoutSpec,
-    displayZoom = frame.displayZoom,
-    visibleArea = frame.visibleArea,
-    autoScrollPolicy = frame.autoScrollPolicy,
-    headerHeight = frame.headerHeight,
-    density = frame.density,
-    editorBounds = frame.editorBounds,
+    scrollY = viewportState.scrollOffset.y,
+    maxScrollY = viewportState.maxScrollY,
+    visibleViewportTop = visibleArea.visibleViewportTop,
+    visibleViewportBottom = visibleArea.visibleViewportBottom,
   )
+
+  val anchor: EditorViewportScrollAnchor
+    get() =
+      when {
+        scrollY <= EditorViewportScrollAnchorTolerance -> EditorViewportScrollAnchor.Top
+        maxScrollY - scrollY <= EditorViewportScrollAnchorTolerance ->
+          EditorViewportScrollAnchor.Bottom
+        else -> EditorViewportScrollAnchor.Center
+      }
+
+  fun hasSameVisibleViewport(other: EditorViewportScrollReconcileFrame): Boolean =
+    visibleViewportTop == other.visibleViewportTop &&
+      visibleViewportBottom == other.visibleViewportBottom
+
+  fun documentY(anchor: EditorViewportScrollAnchor): Float = scrollY + viewportY(anchor)
+
+  fun viewportY(anchor: EditorViewportScrollAnchor): Float =
+    when (anchor) {
+      EditorViewportScrollAnchor.Top -> visibleViewportTop
+      EditorViewportScrollAnchor.Center -> (visibleViewportTop + visibleViewportBottom) / 2f
+      EditorViewportScrollAnchor.Bottom -> visibleViewportBottom
+    }
 }
 
 internal fun resolveEditorViewportContentWidth(

@@ -3,11 +3,14 @@ package co.typie.editor
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.ffi.TrackedRange
+import co.typie.editor.ffi.TrackedRangeEndpoints
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -152,6 +155,56 @@ class EditorAwaitTest {
       assertEquals(fakeCursor, beforeCommitSnapshot?.cursor)
       assertEquals(0L, stateVersionSeenBeforeCommit)
       assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun snapshot_reads_tracked_ranges_only_when_state_field_changes() =
+    runTest(dispatcher) {
+      val range =
+        TrackedRange(
+          id = "comment-1",
+          group = "comment",
+          anchor = Position(nodeId = "text", offset = 0),
+          head = Position(nodeId = "text", offset = 4),
+          metadata = "",
+          rects = emptyList(),
+          text = "test",
+        )
+      val rangeEndpoints =
+        TrackedRangeEndpoints(
+          id = range.id,
+          group = range.group,
+          anchor = range.anchor,
+          head = range.head,
+        )
+      val events =
+        ArrayDeque(
+          listOf(
+            listOf(EditorEvent.StateChanged(listOf(StateField.TrackedRanges))),
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))),
+          )
+        )
+      val fake =
+        FakeFfiEditor(
+          onTick = { events.removeFirst() },
+          trackedRangesProvider = { listOf(range) },
+          trackedRangesContainingPositionProvider = { _, _ -> listOf(rangeEndpoints) },
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.await { enqueue(sampleMessage) }
+
+      assertEquals(1, fake.trackedRangesCallCount)
+      assertEquals(1, fake.trackedRangesContainingPositionCallCount)
+      assertEquals(listOf(range), editor.state.trackedRanges)
+      assertEquals(listOf(rangeEndpoints), editor.state.trackedRangesContainingSelectionHead)
+
+      editor.await { enqueue(sampleMessage) }
+
+      assertEquals(1, fake.trackedRangesCallCount)
+      assertEquals(1, fake.trackedRangesContainingPositionCallCount)
+      assertEquals(listOf(range), editor.state.trackedRanges)
+      assertEquals(listOf(rangeEndpoints), editor.state.trackedRangesContainingSelectionHead)
     }
 
   @Test

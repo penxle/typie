@@ -15,19 +15,25 @@ class EditorBringIntoViewRequestsTest {
 
     assertNull(requests.activateForVersion(version = 10L))
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 11L),
     )
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 11L),
     )
 
     assertTrue(
-      requests.markApplied(version = 11L, target = EditorBringIntoViewTarget.CurrentCursorLine)
+      requests.markApplied(
+        version = 11L,
+        request = request(EditorBringIntoViewTarget.CurrentCursorLine),
+      )
     )
     assertFalse(
-      requests.markApplied(version = 11L, target = EditorBringIntoViewTarget.CurrentCursorLine)
+      requests.markApplied(
+        version = 11L,
+        request = request(EditorBringIntoViewTarget.CurrentCursorLine),
+      )
     )
     assertNull(requests.activateForVersion(version = 11L))
   }
@@ -38,7 +44,7 @@ class EditorBringIntoViewRequestsTest {
 
     requests.requestForVersion(target = EditorBringIntoViewTarget.CurrentCursorLine, version = 2L)
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 2L),
     )
 
@@ -48,15 +54,18 @@ class EditorBringIntoViewRequestsTest {
     )
 
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 2L),
     )
     assertTrue(
-      requests.markApplied(version = 2L, target = EditorBringIntoViewTarget.CurrentCursorLine)
+      requests.markApplied(
+        version = 2L,
+        request = request(EditorBringIntoViewTarget.CurrentCursorLine),
+      )
     )
     assertNull(requests.activateForVersion(version = 2L))
     assertEquals(
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+      request(EditorBringIntoViewTarget.CurrentSelectionHead),
       requests.activateForVersion(version = 3L),
     )
   }
@@ -74,15 +83,18 @@ class EditorBringIntoViewRequestsTest {
     )
 
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 259L),
     )
     assertTrue(
-      requests.markApplied(version = 259L, target = EditorBringIntoViewTarget.CurrentCursorLine)
+      requests.markApplied(
+        version = 259L,
+        request = request(EditorBringIntoViewTarget.CurrentCursorLine),
+      )
     )
 
     assertEquals(
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+      request(EditorBringIntoViewTarget.CurrentSelectionHead),
       requests.activateForVersion(version = 260L),
     )
   }
@@ -98,15 +110,18 @@ class EditorBringIntoViewRequestsTest {
     )
 
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 291L),
     )
     assertTrue(
-      requests.markApplied(version = 291L, target = EditorBringIntoViewTarget.CurrentCursorLine)
+      requests.markApplied(
+        version = 291L,
+        request = request(EditorBringIntoViewTarget.CurrentCursorLine),
+      )
     )
 
     assertEquals(
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+      request(EditorBringIntoViewTarget.CurrentSelectionHead),
       requests.activateForVersion(version = 292L),
     )
   }
@@ -122,7 +137,7 @@ class EditorBringIntoViewRequestsTest {
     )
 
     assertEquals(
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+      request(EditorBringIntoViewTarget.CurrentSelectionHead),
       requests.activateForVersion(version = 292L),
     )
   }
@@ -133,7 +148,7 @@ class EditorBringIntoViewRequestsTest {
 
     requests.requestForVersion(target = EditorBringIntoViewTarget.CurrentCursorLine, version = 1L)
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 1L),
     )
 
@@ -144,7 +159,10 @@ class EditorBringIntoViewRequestsTest {
     requests.cancel()
 
     assertFalse(
-      requests.markApplied(version = 1L, target = EditorBringIntoViewTarget.CurrentCursorLine)
+      requests.markApplied(
+        version = 1L,
+        request = request(EditorBringIntoViewTarget.CurrentCursorLine),
+      )
     )
     assertNull(requests.activateForVersion(version = 1L))
     assertNull(requests.activateForVersion(version = 2L))
@@ -160,8 +178,14 @@ class EditorBringIntoViewRequestsTest {
     requests.activateForVersion(version = 1L)
 
     assertEquals(
-      EditorBringIntoViewTarget.CurrentCursorLine,
+      request(EditorBringIntoViewTarget.CurrentCursorLine),
       requests.activateForVersion(version = 1L),
     )
   }
+
+  private fun request(
+    target: EditorBringIntoViewTarget,
+    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+  ): EditorBringIntoViewRequests.Request =
+    EditorBringIntoViewRequests.Request(target = target, behavior = behavior)
 }

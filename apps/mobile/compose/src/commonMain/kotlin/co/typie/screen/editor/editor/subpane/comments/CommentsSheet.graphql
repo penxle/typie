@@ -1,0 +1,115 @@
+fragment CommentsSheetUser_user on User {
+  id
+  name
+  role
+  avatar {
+    ...Img_image
+  }
+}
+
+fragment CommentsSheetComment_comment on DocumentComment {
+  id
+  content
+  createdAt
+  updatedAt
+  user {
+    ...CommentsSheetUser_user
+  }
+}
+
+fragment CommentsSheetThread_thread on DocumentCommentThread {
+  id
+  selection
+  state
+  resolved
+  resolvedAt
+  createdAt
+  updatedAt
+  user {
+    id
+  }
+  resolvedBy {
+    ...CommentsSheetUser_user
+  }
+  comments {
+    ...CommentsSheetComment_comment
+  }
+}
+
+query CommentsSheet_Open_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+    node {
+      __typename
+      ... on Document {
+        id
+        commentThreads(resolved: false) {
+          ...CommentsSheetThread_thread
+        }
+      }
+    }
+  }
+}
+
+query CommentsSheet_Resolved_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+    node {
+      __typename
+      ... on Document {
+        id
+        commentThreads(resolved: true) {
+          ...CommentsSheetThread_thread
+        }
+      }
+    }
+  }
+}
+
+subscription CommentsSheet_Stream_Subscription($documentId: ID!, $clientId: String!) {
+  documentCommentStream(documentId: $documentId, clientId: $clientId) {
+    ...CommentsSheetThread_thread
+  }
+}
+
+mutation CommentsSheet_CreateThread_Mutation($input: CreateDocumentCommentThreadInput!) {
+  createDocumentCommentThread(input: $input) {
+    ...CommentsSheetThread_thread
+  }
+}
+
+mutation CommentsSheet_CreateComment_Mutation($input: CreateDocumentCommentInput!) {
+  createDocumentComment(input: $input) {
+    ...CommentsSheetThread_thread
+  }
+}
+
+mutation CommentsSheet_UpdateComment_Mutation($input: UpdateDocumentCommentInput!) {
+  updateDocumentComment(input: $input) {
+    ...CommentsSheetThread_thread
+  }
+}
+
+mutation CommentsSheet_DeleteComment_Mutation($input: DeleteDocumentCommentInput!) {
+  deleteDocumentComment(input: $input) {
+    ...CommentsSheetThread_thread
+  }
+}
+
+mutation CommentsSheet_DeleteThread_Mutation($input: DeleteDocumentCommentThreadInput!) {
+  deleteDocumentCommentThread(input: $input) {
+    ...CommentsSheetThread_thread
+  }
+}
+
+mutation CommentsSheet_ResolveThread_Mutation($input: ResolveDocumentCommentThreadInput!) {
+  resolveDocumentCommentThread(input: $input) {
+    ...CommentsSheetThread_thread
+  }
+}
+
+mutation CommentsSheet_UnresolveThread_Mutation($input: UnresolveDocumentCommentThreadInput!) {
+  unresolveDocumentCommentThread(input: $input) {
+    ...CommentsSheetThread_thread
+  }
+}

@@ -63,7 +63,7 @@ pub fn generate_all(metas: &[FfiMeta], output_dir: &Path) {
                 {
                     generate_enum_class(meta, variants, &ctx)
                 } else {
-                    generate_sealed_class(meta, variants, &ctx)
+                    generate_sealed_class(meta, variants, serde_tag.as_deref(), &ctx)
                 }
             }
             FfiKind::Custom { .. } => unreachable!(),
@@ -451,13 +451,28 @@ fn generate_enum_class(meta: &FfiMeta, variants: &[FfiVariant], _ctx: &CodegenCo
     w.finish()
 }
 
-fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenContext) -> String {
+fn generate_sealed_class(
+    meta: &FfiMeta,
+    variants: &[FfiVariant],
+    serde_tag: Option<&str>,
+    ctx: &CodegenContext,
+) -> String {
     let mut w = CodeWriter::new();
     w.line(&format!("package {}", PACKAGE));
     w.line("");
+    if matches!(serde_tag, Some(tag) if tag != "type") {
+        w.line("import kotlinx.serialization.ExperimentalSerializationApi");
+    }
     w.line("import kotlinx.serialization.SerialName");
     w.line("import kotlinx.serialization.Serializable");
+    if matches!(serde_tag, Some(tag) if tag != "type") {
+        w.line("import kotlinx.serialization.json.JsonClassDiscriminator");
+    }
     w.line("");
+    if let Some(tag) = serde_tag.filter(|tag| *tag != "type") {
+        w.line("@OptIn(ExperimentalSerializationApi::class)");
+        w.line(&format!("@JsonClassDiscriminator(\"{}\")", tag));
+    }
     w.line("@Serializable");
     let parent_decl = format_generic_decl(&meta.generics);
     let parent_with_self = format_parent_with_self_generics(&meta.name, &meta.generics);
@@ -925,9 +940,11 @@ mod tests {
                 FfiKind::Enum { variants, .. } => variants,
                 _ => unreachable!(),
             },
+            Some("type"),
             &ctx,
         );
         assert!(output.contains("@Serializable"));
+        assert!(!output.contains("@JsonClassDiscriminator"));
         assert!(output.contains("sealed class EditorEvent {"));
         assert!(output.contains("@Serializable @SerialName(\"state_changed\")"));
         assert!(output.contains(
@@ -935,6 +952,48 @@ mod tests {
         ));
         assert!(output.contains("@Serializable @SerialName(\"render_invalidated\")"));
         assert!(output.contains("data object RenderInvalidated : EditorEvent()"));
+    }
+
+    #[test]
+    fn generate_non_default_tagged_enum_sets_json_class_discriminator() {
+        let meta = FfiMeta {
+            name: "StablePosition".into(),
+            serde_rename_all: Some("snake_case".into()),
+            kind: FfiKind::Enum {
+                variants: vec![FfiVariant::Struct {
+                    name: "Char".into(),
+                    fields: vec![FfiField {
+                        name: "offset".into(),
+                        serde_rename: None,
+                        ty: "usize".into(),
+                        has_serde_default: false,
+                        ffi_default_override: None,
+                    }],
+                    serde_rename_all: None,
+                }],
+                serde_tag: Some("kind".into()),
+                default_variant: None,
+            },
+            generics: Vec::new(),
+        };
+        let ctx = test_context(&[]);
+        let output = generate_sealed_class(
+            &meta,
+            match &meta.kind {
+                FfiKind::Enum { variants, .. } => variants,
+                _ => unreachable!(),
+            },
+            Some("kind"),
+            &ctx,
+        );
+        assert!(output.contains("import kotlinx.serialization.ExperimentalSerializationApi"));
+        assert!(output.contains("import kotlinx.serialization.json.JsonClassDiscriminator"));
+        assert!(output.contains("@OptIn(ExperimentalSerializationApi::class)"));
+        assert!(output.contains("@JsonClassDiscriminator(\"kind\")"));
+        assert!(output.contains("sealed class StablePosition {"));
+        assert!(output.contains(
+            "data class Char(@SerialName(\"offset\") val offset: Int) : StablePosition()"
+        ));
     }
 
     #[test]
@@ -966,6 +1025,7 @@ mod tests {
                 FfiKind::Enum { variants, .. } => variants,
                 _ => unreachable!(),
             },
+            Some("type"),
             &ctx,
         );
         assert!(output.contains("@SerialName(\"transaction_committed\")"));
@@ -1047,6 +1107,7 @@ mod tests {
                 FfiKind::Enum { variants, .. } => variants,
                 _ => unreachable!(),
             },
+            Some("type"),
             &ctx,
         );
         assert!(output.contains("sealed class Modifier {"));
@@ -1079,6 +1140,7 @@ mod tests {
                 FfiKind::Enum { variants, .. } => variants,
                 _ => unreachable!(),
             },
+            Some("type"),
             &ctx,
         );
         assert!(output.contains("data class Range(val value0: Int, val value1: Int) : TestEnum()"));
@@ -1229,6 +1291,7 @@ mod tests {
                 FfiKind::Enum { variants, .. } => variants,
                 _ => unreachable!(),
             },
+            Some("type"),
             &ctx,
         );
         assert!(output.contains("sealed class EditorEvent {"));
@@ -1320,6 +1383,7 @@ mod tests {
                 FfiKind::Enum { variants, .. } => variants,
                 _ => unreachable!(),
             },
+            Some("type"),
             &ctx,
         );
         assert!(output.contains("sealed class Tri<out T> {"));
@@ -1357,6 +1421,7 @@ mod tests {
                 FfiKind::Enum { variants, .. } => variants,
                 _ => unreachable!(),
             },
+            Some("type"),
             &ctx,
         );
         assert!(output.contains("sealed class Affinity {"));

@@ -56,6 +56,8 @@ internal fun EditorToolbarHost(
   environment: ToolbarInputEnvironment,
   fontFamilies: List<EditorSettingsFontFamily_family>,
   sessionState: EditorToolbarSessionState,
+  commentEnabled: Boolean,
+  onCommentRequest: () -> Unit,
   onInputEffects: (List<EditorInputEffect>) -> Unit,
   onToolAction: (EditorToolbarToolAction) -> Unit,
   modifier: Modifier = Modifier,
@@ -98,6 +100,8 @@ internal fun EditorToolbarHost(
       activeTextOptionMode = activeTextOptionMode,
       onTextOptionModeChange = onTextOptionModeChange,
       runToolbarModal = runToolbarModalAction,
+      commentEnabled = commentEnabled,
+      onCommentRequest = onCommentRequest,
     )
   val pages =
     rememberEditorToolbarPages(toolbarContext = toolbarContext, textToolbarPage = textToolbarPage)

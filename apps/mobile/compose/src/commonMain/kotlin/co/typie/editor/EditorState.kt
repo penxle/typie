@@ -9,6 +9,8 @@ import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.TrackedRange
+import co.typie.editor.ffi.TrackedRangeEndpoints
 
 data class EditorState(
   val version: Long,
@@ -21,6 +23,8 @@ data class EditorState(
   val modifierState: ModifierState? = null,
   val blockState: BlockState? = null,
   val ime: Ime?,
+  val trackedRanges: List<TrackedRange> = emptyList(),
+  val trackedRangesContainingSelectionHead: List<TrackedRangeEndpoints> = emptyList(),
 ) {
   companion object {
     val Initial: EditorState =

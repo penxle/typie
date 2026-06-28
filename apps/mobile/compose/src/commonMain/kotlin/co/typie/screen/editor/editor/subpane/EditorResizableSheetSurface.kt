@@ -83,6 +83,7 @@ internal fun EditorResizableSheetSurface(
   maxTopInset: Dp,
   keyboardOcclusion: Dp,
   minKeyboardVisibleHeight: Dp,
+  canDismiss: suspend () -> Boolean = { true },
   onDismissed: () -> Unit,
   onGeometryChanged: (EditorResizableSheetGeometry) -> Unit,
   modifier: Modifier = Modifier,
@@ -92,10 +93,12 @@ internal fun EditorResizableSheetSurface(
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
     val scrollGestureLockState = LocalScrollGestureLockState.current
+    val canDismissState = rememberUpdatedState(canDismiss)
     val onDismissedState = rememberUpdatedState(onDismissed)
     val onGeometryChangedState = rememberUpdatedState(onGeometryChanged)
     val presentationProgress = remember { Animatable(1f) }
     val heightAnimation = remember { Animatable(0f) }
+    var dismissRequestInProgress by remember { mutableStateOf(false) }
     var dismissing by remember { mutableStateOf(false) }
     var sheetDragScrollLock by remember { mutableStateOf<ScrollGestureLockHandle?>(null) }
 
@@ -180,15 +183,27 @@ internal fun EditorResizableSheetSurface(
     }
 
     fun requestDismiss() {
-      if (dismissing) {
+      if (dismissing || dismissRequestInProgress) {
         return
       }
 
-      dismissing = true
+      dismissRequestInProgress = true
       coroutineScope.launch {
-        heightAnimation.stop()
-        presentationProgress.animateTo(1f, SheetAnimationSpec)
-        onDismissedState.value()
+        try {
+          if (!canDismissState.value()) {
+            if (resolvedSheetHeightPx() < effectiveMinHeightPx) {
+              animateSheetHeightTo(effectiveMinHeightPx)
+            }
+            return@launch
+          }
+
+          dismissing = true
+          heightAnimation.stop()
+          presentationProgress.animateTo(1f, SheetAnimationSpec)
+          onDismissedState.value()
+        } finally {
+          dismissRequestInProgress = false
+        }
       }
     }
 
@@ -207,7 +222,7 @@ internal fun EditorResizableSheetSurface(
           draggable(
             state = dragState,
             orientation = Orientation.Vertical,
-            enabled = !dismissing,
+            enabled = !dismissing && !dismissRequestInProgress,
             onDragStarted = {
               heightAnimation.stop()
               releaseSheetDragScrollLock()

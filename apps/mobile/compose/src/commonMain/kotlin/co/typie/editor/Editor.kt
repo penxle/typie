@@ -22,6 +22,8 @@ import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.StableSelection
+import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
@@ -130,7 +132,7 @@ internal constructor(
           for (m in messages) inner.enqueue(m)
           val e = inner.tick()
           val version = versionCounter.addAndFetch(1L)
-          val s = readSnapshot(version)
+          val s = readSnapshot(version = version, events = e)
           e to s
         }
       }
@@ -183,7 +185,7 @@ internal constructor(
             block(collector)
             events = inner.tick()
             val version = versionCounter.addAndFetch(1L)
-            val snapshot = readSnapshot(version)
+            val snapshot = readSnapshot(version = version, events = events)
             beforeCommit?.invoke(snapshot)
             commit(snapshot)
           }
@@ -214,6 +216,9 @@ internal constructor(
       }
     }
 
+  fun freezeSelection(selection: Selection): StableSelection? =
+    readInner(defaultValue = { null }) { it.freezeSelection(selection) }
+
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
     scope.launch(dispatcher) {
@@ -225,7 +230,7 @@ internal constructor(
               if (disposed.load()) return@withLock emptyList()
               val e = inner.tick()
               val version = versionCounter.addAndFetch(1L)
-              commit(readSnapshot(version))
+              commit(readSnapshot(version = version, events = e))
               e
             }
           }
@@ -353,7 +358,7 @@ internal constructor(
             inner.receiveRemoteChangeset(payload)
             val e = inner.tick()
             val version = versionCounter.addAndFetch(1L)
-            commit(readSnapshot(version))
+            commit(readSnapshot(version = version, events = e))
             e
           }
         }
@@ -385,8 +390,16 @@ internal constructor(
     attachedPages.store(persistentSetOf())
   }
 
-  private fun readSnapshot(version: Long): EditorState {
+  private fun readSnapshot(version: Long, events: List<EditorEvent>): EditorState {
     val selection = inner.selection()
+    val trackedRangesChanged = events.hasStateChangedField(StateField.TrackedRanges)
+    val trackedRanges =
+      if (trackedRangesChanged) {
+        inner.trackedRanges(null)
+      } else {
+        state.trackedRanges
+      }
+    val selectionChanged = state.selection != selection
     return EditorState(
       version = version,
       cursor = inner.cursor(),
@@ -398,7 +411,22 @@ internal constructor(
       modifierState = inner.modifierState(),
       blockState = inner.blockState(),
       ime = selection?.let { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) },
+      trackedRanges = trackedRanges,
+      trackedRangesContainingSelectionHead =
+        if (selection != null && selection.anchor == selection.head) {
+          if (selectionChanged || trackedRangesChanged) {
+            inner.trackedRangesContainingPosition(selection.head, null)
+          } else {
+            state.trackedRangesContainingSelectionHead
+          }
+        } else {
+          emptyList()
+        },
     )
+  }
+
+  private fun List<EditorEvent>.hasStateChangedField(field: StateField): Boolean = any { event ->
+    event is EditorEvent.StateChanged && field in event.fields
   }
 
   private fun notifyFailure(error: Throwable) {
@@ -415,6 +443,24 @@ internal constructor(
       notifyFailure(e)
     }
   }
+
+  private fun <T> withFailureNotification(defaultValue: () -> T, block: () -> T): T =
+    try {
+      block()
+    } catch (e: Throwable) {
+      notifyFailure(e)
+      defaultValue()
+    }
+
+  private fun <T> readInner(defaultValue: () -> T, block: (co.typie.editor.ffi.Editor) -> T): T =
+    withFailureNotification(defaultValue) {
+      runBlocking {
+        mutex.withLock {
+          if (disposed.load()) error("Editor disposed")
+          block(inner)
+        }
+      }
+    }
 
   private suspend fun withSuspendFailureNotification(block: suspend () -> Unit) {
     try {
