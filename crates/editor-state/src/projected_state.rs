@@ -148,11 +148,23 @@ impl ProjectedState {
             .map(|b| b.position)
     }
 
-    /// `(position, len)` of the elements deleted by deletion op `del`, resolved
-    /// against the current tree (used to invert an `Undel` for redo).
-    pub fn del_target_span(&self, del: editor_crdt::Dot) -> Option<(usize, usize)> {
+    /// `seq_flat_pos`, but `None` when `dot` is currently a tombstone (already
+    /// deleted, e.g. by a concurrent op). Used to invert an `Ins`: re-deleting a
+    /// char that is no longer visible would target a non-existent element and
+    /// overrun the sequence, so undoing such an insertion must be a no-op.
+    pub fn seq_visible_pos(&self, dot: editor_crdt::Dot) -> Option<usize> {
         let (_, resolver) = editor_crdt::sequence::checkout_with_resolver(&self.logs.seq);
-        resolver.del_target_span(del)
+        let boundary = resolver.resolve_boundary(dot, editor_crdt::sequence::Bias::Before)?;
+        boundary.visible.then_some(boundary.position)
+    }
+
+    /// Descending current visible positions of the still-visible elements that
+    /// deletion op `del` removed (used to invert an `Undel` for redo). Concurrently
+    /// re-deleted targets are excluded, so each position can be re-deleted with a
+    /// single-element `Del` applied in order.
+    pub fn del_target_positions(&self, del: editor_crdt::Dot) -> Vec<usize> {
+        let (_, resolver) = editor_crdt::sequence::checkout_with_resolver(&self.logs.seq);
+        resolver.del_target_positions(del)
     }
 }
 

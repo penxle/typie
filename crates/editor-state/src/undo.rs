@@ -180,19 +180,18 @@ impl UndoHistory {
         let restore_transient = entry.transient.clone();
         let mut redo_ops: Vec<RecordedOp> = Vec::new();
         let mut applied: Vec<Op<EditOp>> = Vec::new();
-        for ro in entry.ops.into_iter().rev() {
-            let Some(inv_payload) = invert(state, &ro) else {
-                continue;
-            };
-            let prior_for_redo = capture_prior(state, &inv_payload);
-            let Ok(inv_op) = state.apply(inv_payload) else {
-                break;
-            };
-            applied.push(inv_op.clone());
-            redo_ops.push(RecordedOp {
-                op: inv_op,
-                prior: prior_for_redo,
-            });
+        'entry: for ro in entry.ops.into_iter().rev() {
+            for inv_payload in invert(state, &ro) {
+                let prior_for_redo = capture_prior(state, &inv_payload);
+                let Ok(inv_op) = state.apply(inv_payload) else {
+                    break 'entry;
+                };
+                applied.push(inv_op.clone());
+                redo_ops.push(RecordedOp {
+                    op: inv_op,
+                    prior: prior_for_redo,
+                });
+            }
         }
         redo_ops.reverse();
         self.redos.push(UndoEntry {
@@ -214,19 +213,18 @@ impl UndoHistory {
         let restore_transient = entry.transient.clone();
         let mut undo_ops: Vec<RecordedOp> = Vec::new();
         let mut applied: Vec<Op<EditOp>> = Vec::new();
-        for ro in entry.ops.into_iter().rev() {
-            let Some(inv_payload) = invert(state, &ro) else {
-                continue;
-            };
-            let prior_for_undo = capture_prior(state, &inv_payload);
-            let Ok(inv_op) = state.apply(inv_payload) else {
-                break;
-            };
-            applied.push(inv_op.clone());
-            undo_ops.push(RecordedOp {
-                op: inv_op,
-                prior: prior_for_undo,
-            });
+        'entry: for ro in entry.ops.into_iter().rev() {
+            for inv_payload in invert(state, &ro) {
+                let prior_for_undo = capture_prior(state, &inv_payload);
+                let Ok(inv_op) = state.apply(inv_payload) else {
+                    break 'entry;
+                };
+                applied.push(inv_op.clone());
+                undo_ops.push(RecordedOp {
+                    op: inv_op,
+                    prior: prior_for_undo,
+                });
+            }
         }
         undo_ops.reverse();
         self.undos.push(UndoEntry {
@@ -363,149 +361,150 @@ fn node_type_of_attr(attr: &NodeAttr) -> NodeType {
     }
 }
 
-pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Option<EditOp> {
+/// The inverse op(s) of a recorded op. Most ops invert 1:1, but redoing a
+/// deletion (inverting its `Undel`) expands into one single-element `Del` per
+/// still-visible target. An empty result means the op has no inverse to apply
+/// (e.g. a missing prior value, or a deletion whose targets are all gone).
+pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
     let dot = ro.op.id;
     match &ro.op.payload {
-        EditOp::Seq(ListOp::Ins { .. }) => {
-            let pos = state.seq_flat_pos(dot)?;
-            Some(EditOp::Seq(ListOp::Del { pos, len: 1 }))
-        }
-        EditOp::Seq(ListOp::Del { .. }) => Some(EditOp::Seq(ListOp::Undel { del: dot })),
-        EditOp::Seq(ListOp::Undel { del }) => {
-            let (pos, len) = state.del_target_span(*del)?;
-            Some(EditOp::Seq(ListOp::Del { pos, len }))
-        }
+        // Undo of an insertion deletes the inserted char — but only if it is
+        // still visible. If a concurrent op already deleted it, there is nothing
+        // to remove (and a positional `Del` would overrun the sequence).
+        EditOp::Seq(ListOp::Ins { .. }) => match state.seq_visible_pos(dot) {
+            Some(pos) => vec![EditOp::Seq(ListOp::Del { pos, len: 1 })],
+            None => Vec::new(),
+        },
+        EditOp::Seq(ListOp::Del { .. }) => vec![EditOp::Seq(ListOp::Undel { del: dot })],
+        // Redo of a deletion: re-delete each still-visible target individually,
+        // in descending position order so an earlier removal never shifts a
+        // later one. Targets a concurrent op already deleted are skipped, which
+        // prevents the out-of-bounds `Del` that previously panicked.
+        EditOp::Seq(ListOp::Undel { del }) => state
+            .del_target_positions(*del)
+            .into_iter()
+            .map(|pos| EditOp::Seq(ListOp::Del { pos, len: 1 }))
+            .collect(),
         EditOp::Span(SpanOp::AddSpan {
             start,
             end,
             modifier,
-        }) => Some(EditOp::Span(SpanOp::RemoveSpan {
+        }) => vec![EditOp::Span(SpanOp::RemoveSpan {
             start: *start,
             end: *end,
             modifier_type: modifier.as_type(),
-        })),
-        EditOp::Span(SpanOp::RemoveSpan { start, end, .. }) => {
-            let modifier = match &ro.prior {
-                Some(PriorValue::SpanModifier(m)) => m.clone(),
-                _ => return None,
-            };
-            Some(EditOp::Span(SpanOp::AddSpan {
+        })],
+        EditOp::Span(SpanOp::RemoveSpan { start, end, .. }) => match &ro.prior {
+            Some(PriorValue::SpanModifier(modifier)) => vec![EditOp::Span(SpanOp::AddSpan {
                 start: *start,
                 end: *end,
-                modifier,
-            }))
-        }
+                modifier: modifier.clone(),
+            })],
+            _ => Vec::new(),
+        },
         EditOp::BlockModifier(ModifierAttrOp::SetModifier { target, modifier }) => {
             match &ro.prior {
                 Some(PriorValue::BlockModifier(Some(prior_m))) => {
-                    Some(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                    vec![EditOp::BlockModifier(ModifierAttrOp::SetModifier {
                         target: *target,
                         modifier: prior_m.clone(),
-                    }))
+                    })]
                 }
                 Some(PriorValue::BlockModifier(None)) => {
-                    Some(EditOp::BlockModifier(ModifierAttrOp::ClearModifier {
+                    vec![EditOp::BlockModifier(ModifierAttrOp::ClearModifier {
                         target: *target,
                         key: modifier.as_type(),
-                    }))
+                    })]
                 }
-                _ => None,
+                _ => Vec::new(),
             }
         }
         EditOp::BlockModifier(ModifierAttrOp::ClearModifier { target, key: _ }) => {
             match &ro.prior {
                 Some(PriorValue::BlockModifier(Some(prior_m))) => {
-                    Some(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                    vec![EditOp::BlockModifier(ModifierAttrOp::SetModifier {
                         target: *target,
                         modifier: prior_m.clone(),
-                    }))
+                    })]
                 }
-                Some(PriorValue::BlockModifier(None)) => None,
-                _ => None,
+                _ => Vec::new(),
             }
         }
-        EditOp::NodeStyle(NodeLwwOp { target, .. }) => {
-            let prior = match &ro.prior {
-                Some(PriorValue::NodeStyle(v)) => v.clone(),
-                _ => return None,
-            };
-            Some(EditOp::NodeStyle(NodeLwwOp {
+        EditOp::NodeStyle(NodeLwwOp { target, .. }) => match &ro.prior {
+            Some(PriorValue::NodeStyle(prior)) => vec![EditOp::NodeStyle(NodeLwwOp {
                 target: *target,
-                op: LwwRegOp::Set { value: prior },
-            }))
-        }
-        EditOp::NodeMarker(NodeLwwOp { target, .. }) => {
-            let prior = match &ro.prior {
-                Some(PriorValue::NodeMarker(v)) => v.clone(),
-                _ => return None,
-            };
-            Some(EditOp::NodeMarker(NodeLwwOp {
+                op: LwwRegOp::Set {
+                    value: prior.clone(),
+                },
+            })],
+            _ => Vec::new(),
+        },
+        EditOp::NodeMarker(NodeLwwOp { target, .. }) => match &ro.prior {
+            Some(PriorValue::NodeMarker(prior)) => vec![EditOp::NodeMarker(NodeLwwOp {
                 target: *target,
-                op: LwwRegOp::Set { value: prior },
-            }))
-        }
-        EditOp::NodeAttr(NodeAttrOp { target, .. }) => {
-            let prior_attr = match &ro.prior {
-                Some(PriorValue::NodeAttr(a)) => a.clone(),
-                _ => return None,
-            };
-            Some(EditOp::NodeAttr(NodeAttrOp {
+                op: LwwRegOp::Set {
+                    value: prior.clone(),
+                },
+            })],
+            _ => Vec::new(),
+        },
+        EditOp::NodeAttr(NodeAttrOp { target, .. }) => match &ro.prior {
+            Some(PriorValue::NodeAttr(prior_attr)) => vec![EditOp::NodeAttr(NodeAttrOp {
                 target: *target,
-                attr: prior_attr,
-            }))
-        }
+                attr: prior_attr.clone(),
+            })],
+            _ => Vec::new(),
+        },
         EditOp::Style(StyleRegOp {
             style_id,
             op: StyleOp::Name(_),
-        }) => {
-            let prior_name = match &ro.prior {
-                Some(PriorValue::StyleName(n)) => n.clone(),
-                _ => return None,
-            };
-            Some(EditOp::Style(StyleRegOp {
+        }) => match &ro.prior {
+            Some(PriorValue::StyleName(prior_name)) => vec![EditOp::Style(StyleRegOp {
                 style_id: style_id.clone(),
-                op: StyleOp::Name(LwwRegOp::Set { value: prior_name }),
-            }))
-        }
+                op: StyleOp::Name(LwwRegOp::Set {
+                    value: prior_name.clone(),
+                }),
+            })],
+            _ => Vec::new(),
+        },
         EditOp::Style(StyleRegOp {
             style_id,
             op: StyleOp::Modifiers(OrSetOp::Add { .. }),
-        }) => Some(EditOp::Style(StyleRegOp {
+        }) => vec![EditOp::Style(StyleRegOp {
             style_id: style_id.clone(),
             op: StyleOp::Modifiers(OrSetOp::Remove { observed: dot }),
-        })),
+        })],
         EditOp::Style(StyleRegOp {
             style_id,
             op: StyleOp::Modifiers(OrSetOp::Remove { .. }),
-        }) => {
-            let prior_mod = match &ro.prior {
-                Some(PriorValue::StyleModifier(m)) => m.clone(),
-                _ => return None,
-            };
-            Some(EditOp::Style(StyleRegOp {
+        }) => match &ro.prior {
+            Some(PriorValue::StyleModifier(prior_mod)) => vec![EditOp::Style(StyleRegOp {
                 style_id: style_id.clone(),
-                op: StyleOp::Modifiers(OrSetOp::Add { elem: prior_mod }),
-            }))
-        }
+                op: StyleOp::Modifiers(OrSetOp::Add {
+                    elem: prior_mod.clone(),
+                }),
+            })],
+            _ => Vec::new(),
+        },
         EditOp::Style(StyleRegOp {
             style_id,
             op: StyleOp::Presence(OrMapOp::Set { key: _, .. }),
-        }) => Some(EditOp::Style(StyleRegOp {
+        }) => vec![EditOp::Style(StyleRegOp {
             style_id: style_id.clone(),
             op: StyleOp::Presence(OrMapOp::Unset {
                 observed: vec![dot],
             }),
-        })),
+        })],
         EditOp::Style(StyleRegOp {
             style_id,
             op: StyleOp::Presence(OrMapOp::Unset { .. }),
-        }) => Some(EditOp::Style(StyleRegOp {
+        }) => vec![EditOp::Style(StyleRegOp {
             style_id: style_id.clone(),
             op: StyleOp::Presence(OrMapOp::Set {
                 key: style_id.clone(),
                 value: (),
             }),
-        })),
+        })],
     }
 }
 
@@ -1262,5 +1261,386 @@ mod tests {
             "",
             "second undo reverts the tagged 'a' entry"
         );
+    }
+
+    // Regression: redoing a range deletion after a CONCURRENT op independently
+    // deleted one element inside that range. The original deletion removed three
+    // elements, but after undo only two are visible (the third stays deleted by
+    // the concurrent op). Redo must re-delete exactly the still-visible targets,
+    // not blindly re-delete the original count (which overruns the sequence and
+    // panics with "del target exists" / "range delete out of bounds").
+    #[test]
+    fn redo_deletion_after_concurrent_inner_delete_redeletes_only_visible_targets() {
+        use editor_crdt::{Changeset, Dot, Op, OpGraph};
+
+        fn seed_block() -> EditOp {
+            EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            })
+        }
+        fn ins(pos: usize, c: char) -> EditOp {
+            EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Char(c),
+            })
+        }
+
+        // Actor 1 authors the shared base "abc" (seq flat: [P, a, b, c]).
+        let mut ga = OpGraph::<EditOp>::with_actor(1);
+        ga.add_mut(seed_block()).unwrap();
+        ga.add_mut(ins(1, 'a')).unwrap();
+        ga.add_mut(ins(2, 'b')).unwrap();
+        ga.add_mut(ins(3, 'c')).unwrap();
+        ga.commit_mut();
+        let base: Vec<Changeset<EditOp>> = ga.changesets_as_vec();
+
+        // Actor 2 shares the base, then concurrently deletes just 'b' (flat 2).
+        let mut gb = OpGraph::<EditOp>::with_actor(2);
+        for cs in &base {
+            gb = gb.receive_changeset(cs.clone()).unwrap();
+        }
+        gb.add_mut(EditOp::Seq(ListOp::Del { pos: 2, len: 1 }))
+            .unwrap();
+        gb.commit_mut();
+        let del_b_cs = gb.changesets_as_vec().last().unwrap().clone();
+
+        // Actor 1 concurrently deletes the whole range "abc" (flat 1, len 3).
+        let del_a = ga
+            .add_mut(EditOp::Seq(ListOp::Del { pos: 1, len: 3 }))
+            .unwrap()
+            .id;
+        ga.commit_mut();
+
+        // Merge actor 2's concurrent deletion into actor 1's graph.
+        ga = ga.receive_changeset(del_b_cs).unwrap();
+
+        let mut state = ProjectedState::from_graph(ga).unwrap();
+        let para = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "");
+
+        // History holds actor 1's range deletion (Seq ops carry no prior).
+        let mut history = UndoHistory::new(Duration::from_secs(0));
+        let del_a_ro = RecordedOp {
+            op: Op {
+                id: del_a,
+                parents: vec![],
+                payload: EditOp::Seq(ListOp::Del { pos: 1, len: 3 }),
+            },
+            prior: None,
+        };
+        history.record(single_entry(del_a_ro), Instant::now());
+
+        // Undo restores a and c; b stays deleted by the concurrent op.
+        history
+            .undo(&mut state, TransientState::default())
+            .expect("undo applies");
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "ac");
+
+        // Redo must re-delete the still-visible targets without panicking.
+        history
+            .redo(&mut state, TransientState::default())
+            .expect("redo applies");
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "");
+    }
+
+    // Regression: undoing an insertion whose character was already deleted by a
+    // *remote* op. The char is a tombstone, so `seq_flat_pos` still reports its
+    // boundary position (== visible length when it was the last element). Emitting
+    // `Del { pos, len: 1 }` there overruns the sequence ("del target exists").
+    // Undoing an insertion of an already-gone char must be a no-op.
+    #[test]
+    fn undo_insert_of_remotely_deleted_trailing_char_is_noop() {
+        use editor_crdt::{Changeset, Dot, OpGraph};
+
+        fn seed_block() -> EditOp {
+            EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            })
+        }
+
+        // Actor 1 seeds an empty paragraph and types a trailing 'x' (flat pos 1).
+        let mut ga = OpGraph::<EditOp>::with_actor(1);
+        ga.add_mut(seed_block()).unwrap();
+        let ins_x = ga
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('x'),
+            }))
+            .unwrap();
+        ga.commit_mut();
+        let base: Vec<Changeset<EditOp>> = ga.changesets_as_vec();
+
+        // Actor 2 receives that, then deletes 'x'. (A remote deletion that actor 1
+        // cannot undo from its own history.)
+        let mut gb = OpGraph::<EditOp>::with_actor(2);
+        for cs in &base {
+            gb = gb.receive_changeset(cs.clone()).unwrap();
+        }
+        gb.add_mut(EditOp::Seq(ListOp::Del { pos: 1, len: 1 }))
+            .unwrap();
+        gb.commit_mut();
+        let del_x_cs = gb.changesets_as_vec().last().unwrap().clone();
+
+        // Actor 1 receives the remote deletion: 'x' is now a tombstone.
+        ga = ga.receive_changeset(del_x_cs).unwrap();
+        let mut state = ProjectedState::from_graph(ga).unwrap();
+        let para = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "");
+
+        // Actor 1's history still holds its insertion of 'x'.
+        let mut history = UndoHistory::new(Duration::from_secs(0));
+        history.record(
+            single_entry(RecordedOp {
+                op: ins_x,
+                prior: None,
+            }),
+            Instant::now(),
+        );
+
+        // Undoing the insertion of an already-removed char must not panic.
+        history
+            .undo(&mut state, TransientState::default())
+            .expect("undo applies");
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "");
+    }
+}
+
+/// Faithful end-to-end fuzz of the REAL `UndoHistory`/`invert`/`undo`/`redo`
+/// under two-actor concurrency. Unlike a hand-modelled redo, this drives the
+/// production code paths, so it guards every `invert` arm (Ins-undo, Undel-redo,
+/// …) against out-of-bounds `Del`s and other panics. The property: no schedule
+/// of edits + undo/redo + sync ever panics, and both actors converge once they
+/// hold every changeset.
+#[cfg(test)]
+mod concurrency_proptest {
+    use editor_common::time::Instant;
+    use editor_crdt::sequence::checkout;
+    use editor_crdt::{Changeset, Dot, ListOp, OpGraph};
+    use editor_model::{EditOp, NodeType, SeqItem};
+    use proptest::prelude::*;
+    use std::time::Duration;
+
+    use crate::projected_state::ProjectedState;
+    use crate::undo::{RecordedOp, TransientState, UndoEntry, UndoHistory};
+
+    #[derive(Clone, Debug)]
+    enum Cmd {
+        Type { on_a: bool, pos: u16, ch: u8 },
+        Del { on_a: bool, pos: u16, len: u16 },
+        Undo { on_a: bool },
+        Redo { on_a: bool },
+        Sync { into_a: bool },
+    }
+
+    fn mk_client(actor: u64, base: &[Changeset<EditOp>]) -> ProjectedState {
+        let mut g = OpGraph::<EditOp>::with_actor(actor);
+        for cs in base {
+            g = g.receive_changeset(cs.clone()).expect("base applies");
+        }
+        ProjectedState::from_graph(g).expect("base projects")
+    }
+
+    fn seq_len(state: &ProjectedState) -> usize {
+        checkout(state.seq()).len()
+    }
+
+    fn para_text(state: &ProjectedState, para: Dot) -> String {
+        state
+            .view()
+            .node(para)
+            .map(|n| n.inline_text())
+            .unwrap_or_default()
+    }
+
+    fn record_single(hist: &mut UndoHistory, op: editor_crdt::Op<EditOp>) {
+        hist.record(
+            UndoEntry {
+                ops: vec![RecordedOp { op, prior: None }],
+                tag: None,
+                transient: TransientState::default(),
+            },
+            Instant::now(),
+        );
+    }
+
+    fn collect_new(
+        registry: &mut Vec<Changeset<EditOp>>,
+        seen: &mut std::collections::HashSet<Dot>,
+        state: &ProjectedState,
+    ) {
+        for cs in state.graph().changesets_as_vec() {
+            let key = cs.ops[0].id;
+            if seen.insert(key) {
+                registry.push(cs);
+            }
+        }
+    }
+
+    // Registry is in commit order (a valid topological order), so a changeset's
+    // parents always precede it and are delivered first.
+    fn deliver(registry: &[Changeset<EditOp>], state: &mut ProjectedState) {
+        for cs in registry {
+            if !state.graph().contains(&cs.ops[0].id) {
+                if let Ok(next) = state.receive_changeset(cs.clone()) {
+                    *state = next;
+                }
+            }
+        }
+    }
+
+    fn run(cmds: &[Cmd]) {
+        // Shared base: a third actor seeds the paragraph both clients build on.
+        let mut base_graph = OpGraph::<EditOp>::with_actor(0);
+        base_graph
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            }))
+            .unwrap();
+        base_graph.commit_mut();
+        let base = base_graph.changesets_as_vec();
+
+        let mut a = mk_client(1, &base);
+        let mut b = mk_client(2, &base);
+        let mut ha = UndoHistory::new(Duration::from_secs(0));
+        let mut hb = UndoHistory::new(Duration::from_secs(0));
+        let para = a
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+
+        let mut registry: Vec<Changeset<EditOp>> = base.clone();
+        let mut seen: std::collections::HashSet<Dot> = base.iter().map(|c| c.ops[0].id).collect();
+
+        for cmd in cmds {
+            match *cmd {
+                Cmd::Type { on_a, pos, ch } => {
+                    let (st, hist) = if on_a {
+                        (&mut a, &mut ha)
+                    } else {
+                        (&mut b, &mut hb)
+                    };
+                    let pos = 1 + (pos as usize) % seq_len(st); // after the block marker
+                    let ch = (b'a' + (ch % 26)) as char;
+                    if let Ok(op) = st.apply(EditOp::Seq(ListOp::Ins {
+                        pos,
+                        item: SeqItem::Char(ch),
+                    })) {
+                        record_single(hist, op);
+                        st.commit();
+                    }
+                }
+                Cmd::Del { on_a, pos, len } => {
+                    let (st, hist) = if on_a {
+                        (&mut a, &mut ha)
+                    } else {
+                        (&mut b, &mut hb)
+                    };
+                    let slen = seq_len(st);
+                    if slen < 2 {
+                        continue; // only the block — no chars to delete
+                    }
+                    let pos = 1 + (pos as usize) % (slen - 1);
+                    let len = 1 + (len as usize) % (slen - pos);
+                    if let Ok(op) = st.apply(EditOp::Seq(ListOp::Del { pos, len })) {
+                        record_single(hist, op);
+                        st.commit();
+                    }
+                }
+                Cmd::Undo { on_a } => {
+                    let (st, hist) = if on_a {
+                        (&mut a, &mut ha)
+                    } else {
+                        (&mut b, &mut hb)
+                    };
+                    hist.undo(st, TransientState::default());
+                    st.commit();
+                }
+                Cmd::Redo { on_a } => {
+                    let (st, hist) = if on_a {
+                        (&mut a, &mut ha)
+                    } else {
+                        (&mut b, &mut hb)
+                    };
+                    hist.redo(st, TransientState::default());
+                    st.commit();
+                }
+                Cmd::Sync { into_a } => {
+                    collect_new(&mut registry, &mut seen, &a);
+                    collect_new(&mut registry, &mut seen, &b);
+                    if into_a {
+                        deliver(&registry, &mut a);
+                    } else {
+                        deliver(&registry, &mut b);
+                    }
+                }
+            }
+        }
+
+        // Full mutual sync, then both actors must converge.
+        collect_new(&mut registry, &mut seen, &a);
+        collect_new(&mut registry, &mut seen, &b);
+        deliver(&registry, &mut a);
+        deliver(&registry, &mut b);
+        assert_eq!(
+            para_text(&a, para),
+            para_text(&b, para),
+            "actors must converge after holding every changeset"
+        );
+    }
+
+    fn arb_cmd() -> impl Strategy<Value = Cmd> {
+        prop_oneof![
+            5 => (any::<bool>(), any::<u16>(), any::<u8>())
+                .prop_map(|(on_a, pos, ch)| Cmd::Type { on_a, pos, ch }),
+            3 => (any::<bool>(), any::<u16>(), any::<u16>())
+                .prop_map(|(on_a, pos, len)| Cmd::Del { on_a, pos, len }),
+            3 => any::<bool>().prop_map(|on_a| Cmd::Undo { on_a }),
+            3 => any::<bool>().prop_map(|on_a| Cmd::Redo { on_a }),
+            4 => any::<bool>().prop_map(|into_a| Cmd::Sync { into_a }),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 3000, ..ProptestConfig::default() })]
+
+        #[test]
+        fn real_undo_redo_under_concurrency_never_panics_and_converges(
+            cmds in proptest::collection::vec(arb_cmd(), 0..40)
+        ) {
+            run(&cmds);
+        }
     }
 }

@@ -460,15 +460,32 @@ impl ResolveIndex {
         self.tree.end_rank_at_doc_index(doc_idx)
     }
 
-    /// For a deletion op `del`, the visible position (`Before` bias) of the first
-    /// element it deleted and the number of elements it deleted. Used to invert
-    /// an `Undel` (i.e. redo a deletion): re-delete the now-restored elements.
-    fn del_target_span(&self, del: Dot) -> Option<(usize, usize)> {
-        let del_lv = self.lv_of(del)?;
-        let targets = self.del_targets.get(del_lv)?;
-        let first = *targets.first()?;
-        let (doc_idx, _end) = self.locate(first);
-        Some((self.end_rank_at(doc_idx), targets.len()))
+    /// Current visible positions (`Before` bias) of `del`'s target elements that
+    /// are still visible, sorted DESCENDING. Used to invert an `Undel` (i.e. redo
+    /// a deletion): re-delete each restored element with a `Del { pos, len: 1 }`
+    /// applied in this order, so an earlier removal never shifts a later position.
+    ///
+    /// Targets that a *concurrent* op independently deleted are skipped — they are
+    /// no longer visible after the undel, so a positional re-delete spanning them
+    /// would overrun the sequence (the "del target exists" panic). Because each
+    /// surviving target is addressed individually, this is also correct when a
+    /// concurrent insert split the original run into non-contiguous pieces.
+    fn del_target_positions(&self, del: Dot) -> Vec<usize> {
+        let Some(del_lv) = self.lv_of(del) else {
+            return Vec::new();
+        };
+        let Some(targets) = self.del_targets.get(del_lv) else {
+            return Vec::new();
+        };
+        let mut positions: Vec<usize> = Vec::new();
+        for &t in targets {
+            let (doc_idx, end) = self.locate(t);
+            if end == 0 {
+                positions.push(self.end_rank_at(doc_idx));
+            }
+        }
+        positions.sort_unstable_by(|a, b| b.cmp(a));
+        positions
     }
 }
 
@@ -495,10 +512,10 @@ impl BoundaryResolver {
         Some(Boundary { position, visible })
     }
 
-    /// `(position, len)` of the elements deleted by deletion op `del`, resolved
-    /// against the current (post-undel) tree. See [`ResolveIndex::del_target_span`].
-    pub fn del_target_span(&self, del: Dot) -> Option<(usize, usize)> {
-        self.index.del_target_span(del)
+    /// Descending current visible positions of `del`'s still-visible targets,
+    /// for redoing a deletion. See [`ResolveIndex::del_target_positions`].
+    pub fn del_target_positions(&self, del: Dot) -> Vec<usize> {
+        self.index.del_target_positions(del)
     }
 }
 
