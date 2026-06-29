@@ -131,7 +131,7 @@ class EditorSubPaneStateTest {
 
     state.updateLayoutInfo(
       EditorSubPaneLayoutInfo(
-        key = EditorSubPaneKey.Spellcheck,
+        key = EditorSubPaneKey.AiFeedback,
         visibleHeight = 240f,
         visibleAreaMode = EditorSubPaneVisibleAreaMode.ResizeEditor,
       )
@@ -152,7 +152,7 @@ class EditorSubPaneStateTest {
     state.open(EditorSubPaneKey.RelatedNotes)
     state.updateLayoutInfo(layoutInfo)
 
-    state.clearLayoutInfo(EditorSubPaneKey.Spellcheck)
+    state.clearLayoutInfo(EditorSubPaneKey.AiFeedback)
 
     assertEquals(layoutInfo, state.layoutInfo)
   }
@@ -162,12 +162,12 @@ class EditorSubPaneStateTest {
     val state = EditorSubPaneState()
     val layoutInfo =
       EditorSubPaneLayoutInfo(
-        key = EditorSubPaneKey.Spellcheck,
+        key = EditorSubPaneKey.AiFeedback,
         visibleHeight = 180f,
         visibleAreaMode = EditorSubPaneVisibleAreaMode.ResizeEditor,
       )
     state.open(EditorSubPaneKey.RelatedNotes)
-    state.open(EditorSubPaneKey.Spellcheck)
+    state.open(EditorSubPaneKey.AiFeedback)
     state.updateLayoutInfo(layoutInfo)
 
     state.clearLayoutInfo(EditorSubPaneKey.RelatedNotes)

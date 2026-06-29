@@ -39,6 +39,7 @@ import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorScrollIntentResult
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.isEditorScrollTargetVisible
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportWheelPan
@@ -347,6 +348,7 @@ internal class EditorViewportScrollReconcileState {
           previousFrame = previousFrame,
           frame = frame,
           viewportState = viewportState,
+          scrollFrame = scrollFrame,
           visibleArea = visibleArea,
         )
       EditorViewportScrollReconcileMode.RevealSelectionHead ->
@@ -362,8 +364,26 @@ internal class EditorViewportScrollReconcileState {
     previousFrame: EditorViewportScrollReconcileFrame,
     frame: EditorViewportScrollReconcileFrame,
     viewportState: EditorViewportState,
+    scrollFrame: EditorScrollFrame,
     visibleArea: EditorVisibleArea,
   ): Boolean {
+    // visible area가 바뀌기 전 selection head가 이미 보이던 상태라면, 화면 중앙을 보존하지
+    // 않고 selection head가 새 keep-visible 범위 안에 남도록만 보정한다.
+    val wasSelectionVisible =
+      isEditorScrollTargetVisible(
+        frame = scrollFrame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        currentScroll = previousFrame.scrollY,
+        visibleArea = previousFrame.visibleArea,
+      )
+    if (wasSelectionVisible == true) {
+      return reconcileSelectionHeadReveal(
+        scrollFrame = scrollFrame,
+        viewportState = viewportState,
+        visibleArea = visibleArea,
+      )
+    }
+
     val anchor = previousFrame.anchor
     val targetY = previousFrame.documentY(anchor) - frame.viewportY(anchor)
     if (abs(targetY - viewportState.scrollOffset.y) <= EditorViewportScrollAnchorTolerance) {
@@ -412,6 +432,7 @@ private enum class EditorViewportScrollAnchor {
 private data class EditorViewportScrollReconcileFrame(
   val scrollY: Float,
   val maxScrollY: Float,
+  val visibleArea: EditorVisibleArea,
   val visibleViewportTop: Float,
   val visibleViewportBottom: Float,
 ) {
@@ -421,6 +442,7 @@ private data class EditorViewportScrollReconcileFrame(
   ) : this(
     scrollY = viewportState.scrollOffset.y,
     maxScrollY = viewportState.maxScrollY,
+    visibleArea = visibleArea,
     visibleViewportTop = visibleArea.visibleViewportTop,
     visibleViewportBottom = visibleArea.visibleViewportBottom,
   )

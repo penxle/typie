@@ -51,6 +51,88 @@ class EditorViewportScrollReconcileTest {
   }
 
   @Test
+  fun `visible area shrink does not scroll when current selection remains inside keep-visible range`() {
+    val reconcileState = EditorViewportScrollReconcileState()
+    val viewportState = viewportState(scrollY = 100f)
+    val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
+    val occludedVisibleArea =
+      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), bottomOcclusionInset = 100f)
+
+    reconcileState.reconcile(
+      mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
+      viewportState = viewportState,
+      scrollFrame = frame(visibleArea = visibleArea, cursorY = 200f),
+      visibleArea = visibleArea,
+    )
+
+    val secondReconcile =
+      reconcileState.reconcile(
+        mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
+        viewportState = viewportState,
+        scrollFrame = frame(visibleArea = occludedVisibleArea, cursorY = 200f),
+        visibleArea = occludedVisibleArea,
+      )
+
+    assertFalse(secondReconcile)
+    assertEquals(Offset(x = 0f, y = 100f), viewportState.scrollOffset)
+  }
+
+  @Test
+  fun `visible area shrink keeps current selection visible instead of preserving center anchor`() {
+    val reconcileState = EditorViewportScrollReconcileState()
+    val viewportState = viewportState(scrollY = 100f)
+    val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
+    val occludedVisibleArea =
+      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), bottomOcclusionInset = 100f)
+
+    reconcileState.reconcile(
+      mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
+      viewportState = viewportState,
+      scrollFrame = frame(visibleArea = visibleArea, cursorY = 250f),
+      visibleArea = visibleArea,
+    )
+
+    val secondReconcile =
+      reconcileState.reconcile(
+        mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
+        viewportState = viewportState,
+        scrollFrame = frame(visibleArea = occludedVisibleArea, cursorY = 250f),
+        visibleArea = occludedVisibleArea,
+      )
+
+    assertTrue(secondReconcile)
+    assertEquals(Offset(x = 0f, y = 130f), viewportState.scrollOffset)
+    assertTrue(viewportState.lastScrollWasAuto)
+  }
+
+  @Test
+  fun `visible area expansion at document bottom does not preserve bottom anchor when selection touches viewport edge`() {
+    val reconcileState = EditorViewportScrollReconcileState()
+    val viewportState = viewportState(scrollY = 600f)
+    val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
+    val occludedVisibleArea =
+      EditorVisibleArea(viewport = Size(width = 300f, height = 300f), bottomOcclusionInset = 100f)
+
+    reconcileState.reconcile(
+      mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
+      viewportState = viewportState,
+      scrollFrame = frame(visibleArea = occludedVisibleArea, cursorY = 790f),
+      visibleArea = occludedVisibleArea,
+    )
+
+    val secondReconcile =
+      reconcileState.reconcile(
+        mode = EditorViewportScrollReconcileMode.KeepVisibleAnchor,
+        viewportState = viewportState,
+        scrollFrame = frame(visibleArea = visibleArea, cursorY = 790f),
+        visibleArea = visibleArea,
+      )
+
+    assertFalse(secondReconcile)
+    assertEquals(Offset(x = 0f, y = 600f), viewportState.scrollOffset)
+  }
+
+  @Test
   fun `viewport scroll reconcile waits while direct manipulation is active`() {
     val reconcileState = EditorViewportScrollReconcileState()
     val viewportState = viewportState(scrollY = 200f)

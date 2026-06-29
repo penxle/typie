@@ -26,6 +26,7 @@ internal data class EditorAutoScrollPolicy(
 
 internal fun resolveEditorAutoScrollPolicy(
   visibleArea: EditorVisibleArea,
+  bottomSpacerVisibleArea: EditorVisibleArea = visibleArea,
   baseBottomSpace: Float = 0f,
   distanceToPagesBottom: Float? = null,
   pageBottomRevealSpacerHeight: Float = 0f,
@@ -44,13 +45,13 @@ internal fun resolveEditorAutoScrollPolicy(
     )
   val keepVisibleBottomSpacerHeight =
     resolveKeepVisibleBottomSpacerHeight(
-      visibleArea = visibleArea,
+      visibleArea = bottomSpacerVisibleArea,
       baseBottomSpace = baseBottomSpace,
     )
   val autoScrollPolicyBottomSpacerHeight =
     if (typewriterEnabled) {
       resolveTypewriterBottomSpacerHeight(
-        visibleArea = visibleArea,
+        visibleArea = bottomSpacerVisibleArea,
         baseBottomSpace = baseBottomSpace,
         distanceToPagesBottom = distanceToPagesBottom,
         position = resolvedTypewriterPosition,
@@ -99,12 +100,48 @@ internal fun resolveKeepVisibleScrollOffset(
   targetBottomInContent: Float,
   visibleArea: EditorVisibleArea,
 ): Float? {
+  val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
+  if (!keepVisibleRange.isValid) {
+    return resolveCenteredVisibleScrollOffset(
+      currentScroll = currentScroll,
+      targetTopInContent = targetTopInContent,
+      targetBottomInContent = targetBottomInContent,
+      visibleArea = visibleArea,
+    )
+  }
+
   return resolveEditorScrollOffset(
     currentScroll = currentScroll,
     targetTopInContent = targetTopInContent,
     targetBottomInContent = targetBottomInContent,
-    range = resolveKeepVisibleRange(visibleArea),
+    range = keepVisibleRange,
   )
+}
+
+private fun resolveCenteredVisibleScrollOffset(
+  currentScroll: Float,
+  targetTopInContent: Float,
+  targetBottomInContent: Float,
+  visibleArea: EditorVisibleArea,
+): Float? {
+  val visibleTop = visibleArea.visibleViewportTop
+  val visibleBottom = visibleArea.visibleViewportBottom
+  if (visibleBottom <= visibleTop) return null
+
+  val targetTopInViewport = targetTopInContent - currentScroll
+  val targetBottomInViewport = targetBottomInContent - currentScroll
+  if (targetTopInViewport >= visibleTop && targetBottomInViewport <= visibleBottom) {
+    return null
+  }
+
+  val targetCenter = targetTopInContent + (targetBottomInContent - targetTopInContent) / 2f
+  val visibleCenter = visibleTop + (visibleBottom - visibleTop) / 2f
+  val targetScroll = targetCenter - visibleCenter
+  return if (abs(targetScroll - currentScroll) <= 1f) {
+    null
+  } else {
+    targetScroll
+  }
 }
 
 internal fun resolveTypewriterScrollOffset(

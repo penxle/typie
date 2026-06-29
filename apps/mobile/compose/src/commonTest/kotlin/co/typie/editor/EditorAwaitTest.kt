@@ -29,7 +29,7 @@ import kotlinx.coroutines.test.setMain
 
 private val sampleMessage: Message = Message.System(SystemEvent.Initialize)
 
-private fun renderInvalidated(): EditorEvent = EditorEvent.RenderInvalidated
+private fun renderInvalidated(): EditorEvent = EditorEvent.RenderInvalidated(emptyList())
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorAwaitTest {

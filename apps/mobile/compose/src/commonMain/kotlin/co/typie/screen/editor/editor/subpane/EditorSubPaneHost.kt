@@ -77,7 +77,6 @@ internal fun EditorSubPaneHost(
           modifier = modifier,
         )
       }
-    EditorSubPaneKey.Spellcheck,
     EditorSubPaneKey.AiFeedback,
     null -> Unit
   }

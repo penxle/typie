@@ -1,0 +1,10 @@
+mutation Spellcheck_CheckSpelling_Mutation($input: CheckSpellingDocumentV2Input!) {
+  checkSpellingDocumentV2(input: $input) {
+    id
+    start
+    end
+    context
+    corrections
+    explanation
+  }
+}

@@ -22,9 +22,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -38,6 +40,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.subscription.PlanUpgradeBenefit
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.editor.Editor
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
@@ -87,8 +92,11 @@ import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
+import co.typie.screen.editor.editor.spellcheck.SpellcheckOverlay
+import co.typie.screen.editor.editor.spellcheck.rememberEditorSpellcheckSession
 import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
+import co.typie.screen.editor.editor.state.resolveEditorVisibleAreas
 import co.typie.screen.editor.editor.subpane.CommentsSubPaneEnvironment
 import co.typie.screen.editor.editor.subpane.EditorSubPaneHost
 import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
@@ -103,6 +111,7 @@ import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMi
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarHeight
 import co.typie.screen.editor.editor.toolbar.ToolbarInputEnvironment
+import co.typie.screen.editor.editor.toolbar.ToolbarIntent
 import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryStackHeight
 import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryVisibilityMillis
 import co.typie.screen.editor.editor.toolbar.effectiveImeInset
@@ -123,6 +132,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.PopoverMenu
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.theme.AppTheme
@@ -137,6 +147,7 @@ import kotlinx.coroutines.launch
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
   val dialog = LocalDialog.current
+  val sheet = LocalSheet.current
   val model = viewModel { EditorViewModel(entityId) }
   val scope = rememberCoroutineScope()
   val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
@@ -339,9 +350,29 @@ fun EditorScreen(entityId: String) {
         }
       }
     }
+    suspend fun ensureSpellcheckSubscription(): Boolean {
+      return SubscriptionService.gate(
+        sheet = sheet,
+        nav = nav,
+        title = "맞춤법 검사로\n글을 더 자연스럽게 다듬어요.",
+        benefits = listOf(PlanUpgradeBenefit.SpellCheck),
+      )
+    }
+    val spellcheck =
+      rememberEditorSpellcheckSession(
+        documentId = document?.id,
+        documentLocked = document?.locked == true,
+        editor = editor,
+        editorState = editorState,
+        bringIntoViewRequests = bringIntoViewRequests,
+        hideContextMenu = { uiState.contextMenu.hide() },
+        closeSubPane = subPaneState::dismiss,
+        ensureSubscription = ::ensureSpellcheckSubscription,
+      )
 
     LaunchedEffect(subPaneActive) {
       if (subPaneActive) {
+        spellcheck.close()
         performInputEffects(listOf(EditorInputEffect.HideKeyboard))
       }
     }
@@ -421,13 +452,15 @@ fun EditorScreen(entityId: String) {
       } else {
         toolbarBottomOcclusion.value.value.coerceAtLeast(0f)
       }
-    val visibleArea =
-      screenState.resolveVisibleArea(
+    val visibleAreas =
+      screenState.resolveEditorVisibleAreas(
         topInset = topInset.value,
         rawBottomSafeInset = bottomSafeInset.value,
         rawEditorInputBottomInset = editorInputBottomOcclusion,
         rawSubPaneBottomInset = subPaneBottomOcclusion,
+        overlayOcclusion = spellcheck.occlusion,
       )
+    val visibleArea = visibleAreas.editor
     LaunchedEffect(imeVisible, bottomPanelOpen) { previousImeVisible.value = imeVisible }
     LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
       zoomController.syncLayout(
@@ -467,6 +500,7 @@ fun EditorScreen(entityId: String) {
     val autoScrollPolicy =
       resolveEditorAutoScrollPolicy(
         visibleArea = visibleArea,
+        bottomSpacerVisibleArea = visibleAreas.bottomSpacer,
         baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom),
         distanceToPagesBottom = distanceToPagesBottom,
         pageBottomRevealSpacerHeight = pageBottomRevealSpacerHeight,
@@ -511,8 +545,10 @@ fun EditorScreen(entityId: String) {
       ) {
         if (subPaneLayoutInfo != null) {
           EditorViewportScrollReconcileMode.KeepVisibleAnchor
-        } else {
+        } else if (imeAppearing) {
           EditorViewportScrollReconcileMode.RevealSelectionHead
+        } else {
+          EditorViewportScrollReconcileMode.KeepVisibleAnchor
         }
       } else {
         EditorViewportScrollReconcileMode.Disabled
@@ -667,16 +703,23 @@ fun EditorScreen(entityId: String) {
           )
         },
         overlay = {
-          EditorScreenOverlayHost(
-            viewportState = screenState.viewportState,
-            visibleArea = visibleArea,
-            autoScrollPolicy = autoScrollPolicy,
-            layoutSpec = layoutSpec,
-            pageSizes = pageSizes,
-            displayZoom = displayZoom,
-            showDebugOverlay = devMode && model.debugViewportOverlayVisible,
-            modifier = Modifier.fillMaxSize(),
-          )
+          Box(modifier = Modifier.fillMaxSize()) {
+            EditorScreenOverlayHost(
+              viewportState = screenState.viewportState,
+              visibleArea = visibleArea,
+              autoScrollPolicy = autoScrollPolicy,
+              layoutSpec = layoutSpec,
+              pageSizes = pageSizes,
+              displayZoom = displayZoom,
+              showDebugOverlay = devMode && model.debugViewportOverlayVisible,
+              modifier = Modifier.fillMaxSize(),
+            )
+            SpellcheckOverlay(
+              session = spellcheck,
+              visibleArea = visibleAreas.base,
+              modifier = Modifier.fillMaxSize(),
+            )
+          }
         },
         body = {
           val graph = model.graph
@@ -724,11 +767,23 @@ fun EditorScreen(entityId: String) {
             onToolAction = { action ->
               when (action) {
                 EditorToolbarToolAction.RelatedNotes -> {
+                  spellcheck.close()
                   uiState.contextMenu.hide()
                   subPaneState.open(EditorSubPaneKey.RelatedNotes)
                 }
-                EditorToolbarToolAction.Comment -> comments.openFromToolPanel()
-                EditorToolbarToolAction.Spellcheck,
+                EditorToolbarToolAction.Comment -> {
+                  spellcheck.close()
+                  comments.openFromToolPanel()
+                }
+                EditorToolbarToolAction.Spellcheck -> {
+                  spellcheck.openFromToolPanel()
+                  performInputEffects(
+                    toolbarInputState.dispatch(
+                      ToolbarIntent.RestoreEditorInput,
+                      toolbarInputEnvironment,
+                    )
+                  )
+                }
                 EditorToolbarToolAction.AiFeedback,
                 EditorToolbarToolAction.Timeline -> Unit
               }

@@ -219,6 +219,11 @@ internal constructor(
   fun freezeSelection(selection: Selection): StableSelection? =
     readInner(defaultValue = { null }) { it.freezeSelection(selection) }
 
+  fun proseText(): String = readInner(defaultValue = { "" }) { it.proseText() }
+
+  fun proseToSelection(start: Int, end: Int): Selection? =
+    readInner(defaultValue = { null }) { it.proseToSelection(start, end) }
+
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
     scope.launch(dispatcher) {

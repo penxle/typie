@@ -48,6 +48,24 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
+  fun `keep-visible policy centers target when visible area is too narrow for guard margins`() {
+    val offset =
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 500f,
+        targetBottomInContent = 520f,
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 720f, height = 300f),
+            topInset = 140f,
+            bottomOcclusionInset = 110f,
+          ),
+      )
+
+    assertEquals(345f, offset)
+  }
+
+  @Test
   fun `resolved policy keeps keep-visible mode active when typewriter is disabled`() {
     val policy =
       resolveEditorAutoScrollPolicy(
@@ -143,6 +161,29 @@ class EditorAutoScrollPolicyTest {
 
     assertEquals(EditorAutoScrollMode.KeepCursorVisible, policy.mode)
     assertEquals(100f, policy.bottomSpacerHeight, FloatTolerance)
+  }
+
+  @Test
+  fun `bottom spacer can reserve more space than the currently visible editor area`() {
+    val policy =
+      resolveEditorAutoScrollPolicy(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 720f, height = 900f),
+            topInset = 80f,
+            bottomOcclusionInset = 180f,
+          ),
+        bottomSpacerVisibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 720f, height = 900f),
+            topInset = 80f,
+            bottomOcclusionInset = 260f,
+          ),
+        baseBottomSpace = 20f,
+      )
+
+    assertEquals(VerticalSpan(top = 140f, bottom = 660f), policy.keepVisibleRange)
+    assertEquals(300f, policy.bottomSpacerHeight, FloatTolerance)
   }
 
   private fun testVisibleArea(): EditorVisibleArea =

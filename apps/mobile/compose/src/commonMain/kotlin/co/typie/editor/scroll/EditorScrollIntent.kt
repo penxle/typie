@@ -60,7 +60,10 @@ internal fun resolveEditorScrollIntent(
       displayZoom = frame.displayZoom,
       density = frame.density,
       target = target,
-    ) ?: return EditorScrollIntentResult.ConsumedWithoutScroll
+    )
+  if (rect == null) {
+    return EditorScrollIntentResult.ConsumedWithoutScroll
+  }
 
   val targetScroll =
     resolveBringIntoViewTargetOffset(
@@ -69,7 +72,10 @@ internal fun resolveEditorScrollIntent(
       rect = rect,
       visibleArea = frame.visibleArea,
       autoScrollPolicy = frame.autoScrollPolicy,
-    ) ?: return EditorScrollIntentResult.ConsumedWithoutScroll
+    )
+  if (targetScroll == null) {
+    return EditorScrollIntentResult.ConsumedWithoutScroll
+  }
 
   return EditorScrollIntentResult.ScrollTo(targetScroll.coerceAtLeast(0f))
 }
@@ -99,6 +105,32 @@ internal fun resolveDistanceToPagesBottom(
     ) ?: return null
   val contentBottomInContent = headerHeight + editorBounds.y + pagesContentHeight
   return (contentBottomInContent - rect.top).coerceAtLeast(0f)
+}
+
+internal fun isEditorScrollTargetVisible(
+  frame: EditorScrollFrame,
+  target: EditorBringIntoViewTarget,
+  currentScroll: Float,
+  visibleArea: EditorVisibleArea,
+): Boolean? {
+  val editorBounds = frame.editorBounds
+  if (!editorBounds.isValid) return null
+  val rect =
+    resolveBringIntoViewTargetRect(
+      state = frame.state,
+      layoutSpec = frame.layoutSpec,
+      headerHeight = frame.headerHeight,
+      editorTopInContainer = editorBounds.y,
+      displayZoom = frame.displayZoom,
+      density = frame.density,
+      target = target,
+    ) ?: return null
+  val visibleTopInContent = currentScroll + visibleArea.visibleViewportTop
+  val visibleBottomInContent = currentScroll + visibleArea.visibleViewportBottom
+  if (visibleBottomInContent <= visibleTopInContent) {
+    return false
+  }
+  return rect.bottom >= visibleTopInContent && rect.top <= visibleBottomInContent
 }
 
 private fun resolveBringIntoViewTargetRect(
