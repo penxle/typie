@@ -12,9 +12,11 @@
     thread$key: DocumentPanelV2CommentItem_thread$key;
     active: boolean;
     locatable?: boolean;
+    resolved?: boolean;
+    onUnresolve?: () => void;
     onclick?: () => void;
   };
-  let { thread$key, active, locatable = true, onclick }: Props = $props();
+  let { thread$key, active, locatable = true, resolved = false, onUnresolve, onclick }: Props = $props();
 
   const thread = createFragment(
     graphql(`
@@ -41,27 +43,25 @@
   );
 
   const root = $derived(thread.data.comments[0]);
+  const rootClass = $derived(
+    flex({
+      width: 'full',
+      gap: '8px',
+      paddingX: '16px',
+      paddingY: '10px',
+      borderBottomWidth: '1px',
+      borderColor: 'border.subtle',
+      cursor: onclick ? 'pointer' : 'default',
+      textAlign: 'left',
+      backgroundColor: active ? 'surface.subtle' : 'transparent',
+      transition: 'common',
+      _hover: onclick ? { backgroundColor: 'surface.subtle' } : undefined,
+    }),
+  );
 </script>
 
-<button
-  class={flex({
-    width: 'full',
-    gap: '8px',
-    paddingX: '16px',
-    paddingY: '10px',
-    borderBottomWidth: '1px',
-    borderColor: 'border.subtle',
-    cursor: 'pointer',
-    textAlign: 'left',
-    backgroundColor: active ? 'surface.subtle' : 'transparent',
-    transition: 'common',
-    _hover: { backgroundColor: 'surface.subtle' },
-  })}
-  data-comment-panel-item
-  {onclick}
-  type="button"
->
-  {#if root?.user.avatar}
+{#snippet content()}
+  {#if onclick}
     <Img
       style={css.raw({ size: '20px', borderRadius: 'full', flexShrink: '0', marginTop: '1px' })}
       alt={root.user.name}
@@ -89,9 +89,30 @@
         >
           <Icon icon={MapPinOffIcon} size={12} />위치 없음
         </span>
-      {:else if thread.data.comments.length > 1}
-        <span class={css({ marginLeft: 'auto', fontSize: '11px', color: 'text.faint', flexShrink: '0' })}>
-          {thread.data.comments.length}
+      {:else if resolved || thread.data.comments.length > 1}
+        <span class={flex({ alignItems: 'center', gap: '8px', marginLeft: 'auto', flexShrink: '0' })}>
+          {#if thread.data.comments.length > 1}
+            <span class={css({ fontSize: '11px', color: 'text.faint' })}>
+              {thread.data.comments.length}
+            </span>
+          {/if}
+          {#if resolved}
+            <button
+              class={css({
+                fontSize: '11px',
+                lineHeight: '[1.2]',
+                color: 'accent.brand.default',
+                _hover: { textDecoration: 'underline' },
+              })}
+              onclick={(e) => {
+                e.stopPropagation();
+                onUnresolve?.();
+              }}
+              type="button"
+            >
+              다시 열기
+            </button>
+          {/if}
         </span>
       {/if}
     </div>
@@ -109,4 +130,14 @@
       {root?.content ?? ''}
     </p>
   </div>
-</button>
+{/snippet}
+
+{#if onclick}
+  <button class={rootClass} data-comment-panel-item {onclick} type="button">
+    {@render content()}
+  </button>
+{:else}
+  <div class={rootClass} data-comment-panel-item>
+    {@render content()}
+  </div>
+{/if}

@@ -69,26 +69,12 @@
     <div class={flex({ flexDirection: 'column', overflowY: 'auto' })}>
       {#each list as thread (thread.id)}
         {#if comments.showResolved}
-          <div class={css({ position: 'relative' })}>
-            <DocumentPanelCommentItem active={false} thread$key={thread} />
-            <button
-              class={css({
-                position: 'absolute',
-                right: '12px',
-                top: '10px',
-                fontSize: '11px',
-                color: 'accent.brand.default',
-                _hover: { textDecoration: 'underline' },
-              })}
-              onclick={(e) => {
-                e.stopPropagation();
-                void comments.unresolveThread(thread.id);
-              }}
-              type="button"
-            >
-              다시 열기
-            </button>
-          </div>
+          <DocumentPanelCommentItem
+            active={false}
+            onUnresolve={() => void comments.unresolveThread(thread.id)}
+            resolved
+            thread$key={thread}
+          />
         {:else}
           <DocumentPanelCommentItem
             active={comments.activeThreadId === thread.id}
