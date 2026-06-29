@@ -163,7 +163,7 @@ impl EditorServer {
         let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
 
         let g = editor_crdt::OpGraph::from_changesets(cs)?;
-        let missing = g.missing_changesets_for(&heads_set)?;
+        let missing = g.missing_changesets_tolerant(&heads_set);
 
         let bytes = editor_crdt::wire::encode(&missing)
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
@@ -756,6 +756,46 @@ mod tests {
             revert_cs.is_empty(),
             "revert to current heads must be empty (no-op)"
         );
+    }
+
+    #[test]
+    fn apply_is_idempotent_for_verbatim_duplicate_changeset() {
+        use editor_crdt::OpGraph;
+
+        let base_graph = {
+            let mut g = OpGraph::<EditOp>::with_actor(1);
+            g.add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: editor_model::NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            }))
+            .unwrap();
+            g.commit_mut();
+            editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap()
+        };
+
+        let new_cs_bytes = {
+            let css: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&base_graph).unwrap();
+            let mut g = OpGraph::<EditOp>::from_changesets(css).unwrap();
+            g.add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('a'),
+            }))
+            .unwrap();
+            g.commit_mut();
+            let all = g.changesets_as_vec();
+            editor_crdt::wire::encode(&all[all.len() - 1..]).unwrap()
+        };
+
+        let server = EditorServer;
+        let once = server
+            .apply(base_graph.clone(), new_cs_bytes.clone())
+            .unwrap();
+        let twice = server.apply(once.clone(), new_cs_bytes.clone()).unwrap();
+
+        assert_eq!(once, twice, "verbatim duplicate must be deduped, not error");
     }
 
     #[test]

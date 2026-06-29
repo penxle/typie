@@ -72,6 +72,7 @@ hashbrown.workspace = true
 log.workspace = true
 serde = { workspace = true }
 serde-wasm-bindgen = { workspace = true, optional = true }
+serde_bytes.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tsify = { workspace = true, optional = true }

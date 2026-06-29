@@ -110,6 +110,24 @@ impl EditorHost {
         Ok(into_owned(crate::editor::Editor::new(core)))
     }
 
+    pub fn create_editor_from_graph_with_pending(
+        &self,
+        server: Vec<u8>,
+        pending_encoded: Vec<u8>,
+        viewport: Complex<editor_view::Viewport>,
+    ) -> EditorResult<Owned<crate::editor::Editor>> {
+        let pending = crate::graph::decode_length_prefixed(&pending_encoded)?;
+        let mut state = crate::graph::state_from_changesets_with_pending(server, pending)?;
+        let selection = {
+            let view = state.view();
+            editor_state::doc_start_selection(&view)
+        };
+        state.selection = selection;
+        let viewport = viewport.from_ffi()?;
+        let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
+        Ok(into_owned(crate::editor::Editor::new(core)))
+    }
+
     pub fn extract_text_from_graph(&self, changesets: Vec<u8>) -> EditorResult<String> {
         let state = crate::graph::state_from_changesets(changesets)?;
         let view = state.view();
@@ -182,6 +200,18 @@ impl EditorHost {
             resource.set_auto_surround_enabled(enabled);
             Ok(())
         })
+    }
+
+    pub fn graph_heads(&self, changesets: Vec<u8>) -> EditorResult<Vec<u8>> {
+        let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_crdt::wire::decode(&changesets[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let (g, _dropped) =
+            editor_crdt::OpGraph::<editor_model::EditOp>::new().receive_changesets_ordered(css);
+        let heads: Vec<editor_crdt::Dot> = g.current_heads().copied().collect();
+        let bytes = editor_crdt::wire::encode_dots(&heads)
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        Ok(bytes)
     }
 
     pub fn set_theme_variant(

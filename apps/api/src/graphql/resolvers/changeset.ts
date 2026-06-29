@@ -21,6 +21,10 @@ DocumentState.implement({
       type: 'Binary',
       resolve: (self) => readMergedGraph(self.documentId),
     }),
+    durableHeads: t.field({
+      type: 'Binary',
+      resolve: (self) => wasm.use((host) => host.heads(self.graph)),
+    }),
     json: t.expose('json', { type: 'JSON' }),
     text: t.exposeString('text'),
     characterCount: t.exposeInt('characterCount'),
@@ -46,6 +50,7 @@ builder.mutationFields((t) => ({
     type: builder.simpleObject('PushDocumentChangesetsPayload', {
       fields: (t) => ({
         heads: t.field({ type: 'Binary' }),
+        durableHeads: t.field({ type: 'Binary' }),
       }),
     }),
     input: {
@@ -83,20 +88,29 @@ builder.mutationFields((t) => ({
 
       // Compute heads after lpush so the merged graph reflects this push.
       // Receivers of the broadcast see heads that include the just-pushed bundle.
-      const graph = await readMergedGraph(input.documentId);
-      const heads = await wasm.use((host) => host.heads(graph));
+      const persistedState = await db
+        .select({ graph: DocumentStates.graph })
+        .from(DocumentStates)
+        .where(eq(DocumentStates.documentId, input.documentId))
+        .then(firstOrThrow);
+      const graph = await readMergedGraph(input.documentId, persistedState.graph);
+      const { heads, durableHeads } = await wasm.use((host) => ({
+        heads: host.heads(graph),
+        durableHeads: host.heads(persistedState.graph),
+      }));
 
       if (opsCount > 0) {
         pubsub.publish('document:changesets', input.documentId, {
           target: `!${input.clientId}`,
           changesets: input.changesets.toBase64(),
           heads: heads.toBase64(),
+          durableHeads: durableHeads.toBase64(),
         });
 
         await enqueueJob('document:changesets:collect', input.documentId);
       }
 
-      return { heads };
+      return { heads, durableHeads };
     },
   }),
 
@@ -105,6 +119,7 @@ builder.mutationFields((t) => ({
       fields: (t) => ({
         changesets: t.field({ type: 'Binary' }),
         heads: t.field({ type: 'Binary' }),
+        durableHeads: t.field({ type: 'Binary' }),
       }),
     }),
     input: {
@@ -121,14 +136,20 @@ builder.mutationFields((t) => ({
 
       await assertSitePermission({ userId: ctx.session.userId, siteId: docEntity.siteId });
 
-      const graph = await readMergedGraph(input.documentId);
+      const persistedState = await db
+        .select({ graph: DocumentStates.graph })
+        .from(DocumentStates)
+        .where(eq(DocumentStates.documentId, input.documentId))
+        .then(firstOrThrow);
+      const graph = await readMergedGraph(input.documentId, persistedState.graph);
 
-      const { changesets, heads } = await wasm.use((host) => ({
+      const { changesets, heads, durableHeads } = await wasm.use((host) => ({
         changesets: host.missing_for(graph, input.heads),
         heads: host.heads(graph),
+        durableHeads: host.heads(persistedState.graph),
       }));
 
-      return { changesets, heads };
+      return { changesets, heads, durableHeads };
     },
   }),
 }));
@@ -143,6 +164,7 @@ builder.subscriptionFields((t) => ({
       fields: (t) => ({
         changesets: t.field({ type: 'Binary' }),
         heads: t.field({ type: 'Binary' }),
+        durableHeads: t.field({ type: 'Binary' }),
       }),
     }),
     args: {
@@ -169,7 +191,7 @@ builder.subscriptionFields((t) => ({
         throw new TypieError({ code: 'document_state_not_found' });
       }
 
-      type Event = { target: string; changesets: Uint8Array; heads: Uint8Array };
+      type Event = { target: string; changesets: Uint8Array; heads: Uint8Array; durableHeads: Uint8Array };
 
       const repeater = new Repeater<Event>(async (push, stop) => {
         const liveBuffer: Event[] = [];
@@ -183,6 +205,7 @@ builder.subscriptionFields((t) => ({
               target: event.target,
               changesets: Uint8Array.fromBase64(event.changesets),
               heads: Uint8Array.fromBase64(event.heads),
+              durableHeads: Uint8Array.fromBase64(event.durableHeads),
             };
             if (catchupComplete) {
               await push(decoded);
@@ -192,12 +215,18 @@ builder.subscriptionFields((t) => ({
           }
         })();
 
-        const graph = await readMergedGraph(args.documentId);
-        const { changesets, heads } = await wasm.use((host) => ({
+        const persistedState = await db
+          .select({ graph: DocumentStates.graph })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, args.documentId))
+          .then(firstOrThrow);
+        const graph = await readMergedGraph(args.documentId, persistedState.graph);
+        const { changesets, heads, durableHeads } = await wasm.use((host) => ({
           changesets: host.missing_for(graph, args.heads),
           heads: host.heads(graph),
+          durableHeads: host.heads(persistedState.graph),
         }));
-        await push({ target: '*', changesets, heads });
+        await push({ target: '*', changesets, heads, durableHeads });
 
         catchupComplete = true;
         for (const event of liveBuffer) {
@@ -217,6 +246,6 @@ builder.subscriptionFields((t) => ({
         }),
       );
     },
-    resolve: ({ changesets, heads }) => ({ changesets, heads }),
+    resolve: ({ changesets, heads, durableHeads }) => ({ changesets, heads, durableHeads }),
   }),
 }));

@@ -244,6 +244,7 @@ enum DocumentAvailableAction {
 
 type DocumentChangesetsUpdatedEvent {
   changesets: Binary!
+  durableHeads: Binary!
   heads: Binary!
 }
 
@@ -387,6 +388,7 @@ type DocumentSpellingErrorV2 {
 type DocumentState {
   blobSize: BigInt!
   characterCount: Int!
+  durableHeads: Binary!
   graph: Binary!
   json: JSON!
   text: String!
@@ -1153,6 +1155,7 @@ input PullDocumentChangesetsInput {
 
 type PullDocumentChangesetsPayload {
   changesets: Binary!
+  durableHeads: Binary!
   heads: Binary!
 }
 
@@ -1172,6 +1175,7 @@ input PushDocumentChangesetsInput {
 }
 
 type PushDocumentChangesetsPayload {
+  durableHeads: Binary!
   heads: Binary!
 }
 

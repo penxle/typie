@@ -109,6 +109,11 @@ export interface BlockState {
     nodes: Block[];
 }
 
+export interface ChangesetEntry {
+    id: string;
+    bytes: Uint8Array;
+}
+
 export interface CharacterCounts {
     doc_with_whitespace: number;
     doc_without_whitespace: number;
@@ -247,6 +252,11 @@ export interface PageRect {
 
 export interface ParagraphIndentValue {
     value: number;
+}
+
+export interface PartitionedChangesets {
+    ready: Uint8Array;
+    blocked: Uint8Array;
 }
 
 export interface PlaceholderMetrics {
@@ -663,12 +673,14 @@ declare class Editor {
     link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
     materialize_at(heads: Uint8Array): PlainDoc;
+    missing_changesets_tolerant(remote_heads_payload: Uint8Array): Uint8Array;
     modifier_span_selection(pos: Position, modifier_type: ModifierType): Selection | undefined;
     modifier_state(): ModifierState | undefined;
     page_external_elements(page: number): ExternalElement[];
     page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];
     page_table_overlays(page: number): TableOverlay[];
+    partition_remote_changesets(payload: Uint8Array): PartitionedChangesets;
     placeholder(): PlaceholderMetrics | undefined;
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
     prose_text(): string;
@@ -682,6 +694,7 @@ declare class Editor {
     selection_endpoints(): SelectionEndpoints | undefined;
     selection_hit_test(page: number, x: number, y: number): boolean;
     set_doc(plain: PlainDoc): void;
+    split_changesets(payload: Uint8Array): ChangesetEntry[];
     style_divergence(): boolean;
     style_entries(): StyleInfo[];
     table_overlays(): TableOverlay[];
@@ -700,7 +713,9 @@ declare class EditorHost {
     static create(icu_data: Uint8Array): EditorHost;
     create_editor_from_doc(doc: PlainDoc, viewport: Viewport): Editor;
     create_editor_from_graph(changesets: Uint8Array, viewport: Viewport): Editor;
+    create_editor_from_graph_with_pending(server: Uint8Array, pending_encoded: Uint8Array, viewport: Viewport): Editor;
     extract_text_from_graph(changesets: Uint8Array): string;
+    graph_heads(changesets: Uint8Array): Uint8Array;
     root_attrs_from_graph(changesets: Uint8Array): PlainRootNode;
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
     set_auto_surround_enabled(enabled: boolean): void;

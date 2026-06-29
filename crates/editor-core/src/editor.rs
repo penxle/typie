@@ -225,6 +225,20 @@ impl Editor {
         self.state.local_changesets_since(remote_heads)
     }
 
+    pub fn missing_changesets_tolerant(
+        &self,
+        remote_heads: &HashSet<Dot>,
+    ) -> Vec<Changeset<EditOp>> {
+        self.state.missing_changesets_tolerant(remote_heads)
+    }
+
+    pub fn partition_ready(
+        &self,
+        css: Vec<Changeset<EditOp>>,
+    ) -> (Vec<Changeset<EditOp>>, Vec<Changeset<EditOp>>) {
+        self.state.partition_ready(css)
+    }
+
     pub fn current_heads(&self) -> Vec<Dot> {
         self.state.graph().current_heads().copied().collect()
     }

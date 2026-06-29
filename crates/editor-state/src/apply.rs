@@ -94,6 +94,34 @@ impl State {
         self.projected.graph().local_changesets_since(remote_heads)
     }
 
+    pub fn missing_changesets_tolerant(
+        &self,
+        remote_heads: &HashSet<Dot>,
+    ) -> Vec<Changeset<EditOp>> {
+        self.projected
+            .graph()
+            .missing_changesets_tolerant(remote_heads)
+    }
+
+    pub fn receive_changesets_ordered(
+        &self,
+        css: Vec<Changeset<EditOp>>,
+    ) -> (Self, Vec<Changeset<EditOp>>) {
+        let (graph, dropped) = self.projected.graph().receive_changesets_ordered(css);
+        let projected = crate::projected_state::ProjectedState::from_graph(graph)
+            .expect("merged graph projects");
+        let mut next = self.clone();
+        next.projected = projected;
+        (next, dropped)
+    }
+
+    pub fn partition_ready(
+        &self,
+        css: Vec<Changeset<EditOp>>,
+    ) -> (Vec<Changeset<EditOp>>, Vec<Changeset<EditOp>>) {
+        self.projected.graph().partition_ready(css)
+    }
+
     pub fn batch_with_ops<F, E>(&self, f: F) -> Result<(Self, Vec<Op<EditOp>>), E>
     where
         F: FnOnce(&mut BatchedState) -> Result<(), E>,
@@ -196,6 +224,42 @@ mod tests {
             })
             .unwrap();
         assert_eq!(state.view().node(para).unwrap().inline_text(), "");
+    }
+
+    #[test]
+    fn missing_changesets_tolerant_returns_all_unconfirmed_without_actor_filter() {
+        let mut authored = State::empty();
+        authored.projected.apply(seq_char(1, 'z')).unwrap();
+        authored.projected.commit();
+        let empty: HashSet<Dot> = HashSet::new();
+        let css = authored.missing_changesets_tolerant(&empty);
+        assert!(!css.is_empty(), "unconfirmed local changes are returned");
+    }
+
+    #[test]
+    fn receive_changesets_ordered_merges_pending_into_state() {
+        let mut src = State::empty();
+        src.projected.commit();
+        let para = src
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+        src.projected.apply(seq_char(1, 'h')).unwrap();
+        src.projected.apply(seq_char(2, 'i')).unwrap();
+        src.projected.commit();
+
+        let base = State::empty();
+        let base_heads: HashSet<Dot> = base.projected.graph().current_heads().copied().collect();
+        let pending = src.missing_changesets_tolerant(&base_heads);
+
+        let (merged, dropped) = base.receive_changesets_ordered(pending);
+        assert!(dropped.is_empty(), "all pending applies onto matching base");
+        assert_eq!(merged.view().node(para).unwrap().inline_text(), "hi");
     }
 
     #[test]

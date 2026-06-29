@@ -1480,13 +1480,22 @@ builder.mutationFields((t) => ({
         }),
       );
 
-      const mergedGraph = await readMergedGraph(input.documentId);
-      const heads = await wasmFfi.use((host) => host.heads(mergedGraph));
+      const persistedRow = await db
+        .select({ graph: DocumentStates.graph })
+        .from(DocumentStates)
+        .where(eq(DocumentStates.documentId, input.documentId))
+        .then(firstOrThrow);
+      const mergedGraph = await readMergedGraph(input.documentId, persistedRow.graph);
+      const { heads, durableHeads } = await wasmFfi.use((host) => ({
+        heads: host.heads(mergedGraph),
+        durableHeads: host.heads(persistedRow.graph),
+      }));
 
       pubsub.publish('document:changesets', input.documentId, {
         target: '*',
         changesets: revert.toBase64(),
         heads: heads.toBase64(),
+        durableHeads: durableHeads.toBase64(),
       });
 
       await enqueueJob('document:changesets:collect', input.documentId);

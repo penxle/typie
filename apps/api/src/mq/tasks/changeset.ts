@@ -34,6 +34,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
   }
 
   let updated = false;
+  let persistedHeads: Uint8Array | null = null;
 
   try {
     const updates = await redis.lrange(`document:changesets:pending:${documentId}`, -5, -1);
@@ -110,6 +111,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
             .where(eq(DocumentStates.documentId, documentId));
           await tx.update(Documents).set({ updatedAt }).where(eq(Documents.id, documentId));
           updated = true;
+          persistedHeads = result.heads;
 
           for (const [userId, net] of perUserDelta) {
             if (net === 0) {
@@ -198,6 +200,14 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       .where(eq(Documents.id, documentId))
       .then(firstOrThrow);
 
+    pubsub.publish('document:changesets', documentId, {
+      target: '*',
+      changesets: new Uint8Array(0).toBase64(),
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      heads: persistedHeads!.toBase64(),
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      durableHeads: persistedHeads!.toBase64(),
+    });
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     pubsub.publish('user:usage:update', userId, null);
 

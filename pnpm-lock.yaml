@@ -487,6 +487,9 @@ importers:
       es-hangul:
         specifier: ^2.3.8
         version: 2.3.8
+      fake-indexeddb:
+        specifier: ^6.2.5
+        version: 6.2.5
       fast-json-stable-stringify:
         specifier: ^2.1.0
         version: 2.1.0
@@ -5754,6 +5757,10 @@ packages:
 
   extend@3.0.2:
     resolution: {integrity: sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==}
+
+  fake-indexeddb@6.2.5:
+    resolution: {integrity: sha512-CGnyrvbhPlWYMngksqrSSUT1BAVP49dZocrHuK0SvtR0D5TMs5wP0o3j7jexDJW01KSadjBp1M/71o/KR3nD1w==}
+    engines: {node: '>=18'}
 
   fantasticon@4.1.0:
     resolution: {integrity: sha512-Clnp+ic3eH33fEKfJOf7eDOUAjv/+cD7lqPQVMwDk+5jYVzNoBrQi1JVSSsSL+j1+S04bQDHH35RkpnsvBQILA==}
@@ -13893,6 +13900,8 @@ snapshots:
       type: 2.7.3
 
   extend@3.0.2: {}
+
+  fake-indexeddb@6.2.5: {}
 
   fantasticon@4.1.0:
     dependencies:

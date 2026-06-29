@@ -7,6 +7,7 @@ import { IS_MAC } from './constants';
 import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
+import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
 import { register, snapshot, unregister } from './registry';
 import { zoomDiffers } from './zoom';
@@ -193,6 +194,57 @@ export class Editor {
     wasm.set_theme_variant(themeVariant);
     self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
     self.enqueue({ type: 'system', event: { type: 'initialize' } });
+
+    return self;
+  }
+
+  static async createWithPending(
+    server: Uint8Array,
+    pending: Uint8Array[],
+    viewport: Viewport,
+    themeVariant: ThemeVariant = 'light-white',
+  ): Promise<Editor> {
+    await ensureWasmInitialized();
+
+    const self = new this();
+
+    self.#wasm = wasm.create_editor_from_graph_with_pending(server, encodeLengthPrefixedBlobs(pending), viewport);
+    self.#initInstance(viewport);
+
+    wasm.set_theme_variant(themeVariant);
+    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
+    self.enqueue({ type: 'system', event: { type: 'initialize' } });
+
+    self.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'search-match',
+        style: {
+          background: 'ui.search-match',
+          background_radius: 2,
+          background_inset: 2,
+          underline: undefined,
+        },
+        enabled: true,
+        z_index: 0,
+      },
+    });
+    self.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'search-match-active',
+        style: {
+          background: 'ui.search-match-active',
+          background_radius: 2,
+          background_inset: 2,
+          underline: undefined,
+        },
+        enabled: true,
+        z_index: 1,
+      },
+    });
 
     return self;
   }
@@ -1172,6 +1224,19 @@ export class Editor {
 
   localChangesetsSince(remoteHeads: Uint8Array): Uint8Array {
     return this.#wasm.local_changesets_since(remoteHeads);
+  }
+
+  missingChangesetsFor(confirmedHeads: Uint8Array): Uint8Array {
+    return this.#wasm.missing_changesets_tolerant(confirmedHeads);
+  }
+
+  partitionRemoteChangesets(payload: Uint8Array): { ready: Uint8Array; blocked: Uint8Array } {
+    const result = this.#wasm.partition_remote_changesets(payload);
+    return { ready: new Uint8Array(result.ready), blocked: new Uint8Array(result.blocked) };
+  }
+
+  splitChangesets(payload: Uint8Array): { id: string; bytes: Uint8Array }[] {
+    return this.#wasm.split_changesets(payload).map((e) => ({ id: e.id, bytes: new Uint8Array(e.bytes) }));
   }
 
   receiveRemoteChangeset(payload: Uint8Array): void {

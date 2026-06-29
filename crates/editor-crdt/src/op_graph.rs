@@ -552,6 +552,173 @@ impl<P: Clone + Eq> OpGraph<P> {
         }
         Ok(g)
     }
+
+    pub fn receive_changesets_ordered(
+        &self,
+        css: Vec<crate::Changeset<P>>,
+    ) -> (Self, Vec<crate::Changeset<P>>) {
+        use hashbrown::HashMap;
+        let n = css.len();
+        // 각 도입 dot -> 그 dot을 만드는 css 인덱스.
+        let mut producer: HashMap<Dot, usize> = HashMap::new();
+        for (i, cs) in css.iter().enumerate() {
+            for op in &cs.ops {
+                producer.insert(op.id, i);
+            }
+        }
+        // unmet[i] = i가 아직 못 받은 부모 의존 수(그래프에도 없고 같은 css 내 선행도 아닌 부모).
+        // dependents[j] = j가 적용되면 unmet 감소할 css들.
+        let mut unmet: Vec<usize> = vec![0; n];
+        let mut dependents: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (i, cs) in css.iter().enumerate() {
+            let mut intra: HashSet<Dot> = HashSet::new();
+            for op in &cs.ops {
+                for p in &op.parents {
+                    if intra.contains(p) || self.ops.contains_key(p) {
+                        continue;
+                    }
+                    match producer.get(p) {
+                        Some(&j) if j != i => {
+                            unmet[i] += 1;
+                            dependents.entry(j).or_default().push(i);
+                        }
+                        Some(_) => {}
+                        None => unmet[i] += 1, // 그래프에도 pending에도 없는 부모 → 영영 미충족(고아)
+                    }
+                }
+                intra.insert(op.id);
+            }
+        }
+        let mut graph = self.clone();
+        let mut queue: std::collections::VecDeque<usize> =
+            (0..n).filter(|&i| unmet[i] == 0).collect();
+        let mut applied: Vec<bool> = vec![false; n];
+        while let Some(i) = queue.pop_front() {
+            if applied[i] {
+                continue;
+            }
+            // receive_changeset는 verbatim 중복에 Ok(self.clone)을 돌려주므로 진전으로 처리됨.
+            match graph.receive_changeset(css[i].clone()) {
+                Ok(next) => {
+                    graph = next;
+                    applied[i] = true;
+                    if let Some(deps) = dependents.get(&i) {
+                        for &d in deps {
+                            unmet[d] = unmet[d].saturating_sub(1);
+                            if unmet[d] == 0 {
+                                queue.push_back(d);
+                            }
+                        }
+                    }
+                }
+                Err(_) => { /* PartialDuplicate 등: 적용 안 함 → 아래에서 dropped 처리 */
+                }
+            }
+        }
+        let dropped: Vec<crate::Changeset<P>> = css
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| !applied[*i])
+            .map(|(_, cs)| cs)
+            .collect();
+        (graph, dropped)
+    }
+
+    pub fn partition_ready(
+        &self,
+        css: Vec<crate::Changeset<P>>,
+    ) -> (Vec<crate::Changeset<P>>, Vec<crate::Changeset<P>>) {
+        // Kahn O(n+refs) (round-2 MED: naive 반복 스캔 금지). ready는 의존성 순서, blocked는 원래 순서.
+        use hashbrown::HashMap;
+        let n = css.len();
+        let mut producer: HashMap<Dot, usize> = HashMap::new();
+        for (i, cs) in css.iter().enumerate() {
+            for op in &cs.ops {
+                producer.insert(op.id, i);
+            }
+        }
+        let mut unmet: Vec<usize> = vec![0; n];
+        let mut dependents: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (i, cs) in css.iter().enumerate() {
+            let mut intra: HashSet<Dot> = HashSet::new();
+            for op in &cs.ops {
+                for p in &op.parents {
+                    if intra.contains(p) || self.ops.contains_key(p) {
+                        continue;
+                    }
+                    match producer.get(p) {
+                        Some(&j) if j != i => {
+                            unmet[i] += 1;
+                            dependents.entry(j).or_default().push(i);
+                        }
+                        Some(_) => {}
+                        None => unmet[i] += 1, // 부모가 그래프에도 pending에도 없음 → blocked
+                    }
+                }
+                intra.insert(op.id);
+            }
+        }
+        let mut queue: std::collections::VecDeque<usize> =
+            (0..n).filter(|&i| unmet[i] == 0).collect();
+        let mut ready_flag: Vec<bool> = vec![false; n];
+        let mut ready_order: Vec<usize> = Vec::new();
+        while let Some(i) = queue.pop_front() {
+            if ready_flag[i] {
+                continue;
+            }
+            ready_flag[i] = true;
+            ready_order.push(i);
+            if let Some(deps) = dependents.get(&i) {
+                for &d in deps {
+                    unmet[d] = unmet[d].saturating_sub(1);
+                    if unmet[d] == 0 {
+                        queue.push_back(d);
+                    }
+                }
+            }
+        }
+        let mut slots: Vec<Option<crate::Changeset<P>>> = css.into_iter().map(Some).collect();
+        let mut ready: Vec<crate::Changeset<P>> = Vec::with_capacity(ready_order.len());
+        for &i in &ready_order {
+            ready.push(slots[i].take().expect("ready slot present"));
+        }
+        let blocked: Vec<crate::Changeset<P>> = slots.into_iter().flatten().collect();
+        (ready, blocked)
+    }
+
+    pub fn missing_changesets_tolerant(
+        &self,
+        remote_heads: &HashSet<Dot>,
+    ) -> Vec<crate::Changeset<P>> {
+        // missing_changesets_for의 total 변종: 모르는 head는 skip(에러 아님), 부분 포함 changeset은 보낸다.
+        let mut known: HashSet<Dot> = HashSet::new();
+        let mut walk: Vec<Dot> = remote_heads.iter().copied().collect();
+        while let Some(dot) = walk.pop() {
+            if !self.ops.contains_key(&dot) {
+                continue; // 모르는 head: skip
+            }
+            if known.insert(dot)
+                && let Some(op) = self.ops.get(&dot)
+            {
+                walk.extend(op.parents.iter().copied());
+            }
+        }
+        let mut out: Vec<crate::Changeset<P>> = Vec::new();
+        for cs in &self.changesets {
+            if cs
+                .ops
+                .iter()
+                .any(|op| !self.self_contained.contains(&op.id))
+            {
+                continue;
+            }
+            if cs.ops.iter().all(|op| known.contains(&op.id)) {
+                continue; // 완전 known → peer가 이미 가짐
+            }
+            out.push(cs.as_ref().clone());
+        }
+        out
+    }
 }
 
 impl<P> OpGraph<P> {
@@ -1572,6 +1739,167 @@ mod tests {
         let g = g.commit();
         let result = g.missing_changesets_for(&[a.id].into_iter().collect());
         assert!(matches!(result, Err(CrdtError::PartialDuplicate { .. })));
+    }
+
+    #[test]
+    fn receive_changesets_ordered_applies_shuffled_and_drops_orphans() {
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
+        let root = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 0,
+        };
+        let a = Op {
+            id: Dot::new(99, 1),
+            parents: vec![root.id],
+            payload: 1,
+        };
+        let b = Op {
+            id: Dot::new(99, 2),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let orphan = Op {
+            id: Dot::new(99, 3),
+            parents: vec![Dot::new(77, 7)],
+            payload: 3,
+        };
+
+        let css = vec![
+            crate::Changeset {
+                ops: vec![b.clone()],
+            },
+            crate::Changeset {
+                ops: vec![root.clone()],
+            },
+            crate::Changeset {
+                ops: vec![a.clone()],
+            },
+            crate::Changeset {
+                ops: vec![orphan.clone()],
+            },
+        ];
+
+        let (next, dropped) = g.receive_changesets_ordered(css);
+        assert!(next.contains(&root.id));
+        assert!(next.contains(&a.id));
+        assert!(next.contains(&b.id));
+        assert!(!next.contains(&orphan.id), "orphan must not be applied");
+        assert_eq!(dropped.len(), 1, "exactly the orphan changeset is dropped");
+        assert_eq!(dropped[0].ops[0].id, orphan.id);
+    }
+
+    #[test]
+    fn partition_ready_splits_by_parent_presence() {
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
+        let root = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 0,
+        };
+        let a = Op {
+            id: Dot::new(99, 1),
+            parents: vec![root.id],
+            payload: 1,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![root.clone()],
+            })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+
+        let b = Op {
+            id: Dot::new(99, 2),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let c = Op {
+            id: Dot::new(99, 3),
+            parents: vec![b.id],
+            payload: 3,
+        };
+        let blocked = Op {
+            id: Dot::new(99, 9),
+            parents: vec![Dot::new(55, 5)],
+            payload: 9,
+        };
+
+        let css = vec![
+            crate::Changeset {
+                ops: vec![c.clone()],
+            },
+            crate::Changeset {
+                ops: vec![b.clone()],
+            },
+            crate::Changeset {
+                ops: vec![blocked.clone()],
+            },
+        ];
+
+        let (ready, still_blocked) = g.partition_ready(css);
+        let ready_ids: Vec<Dot> = ready.iter().map(|cs| cs.ops[0].id).collect();
+        assert_eq!(
+            ready_ids,
+            vec![b.id, c.id],
+            "ready in dependency order: b then c"
+        );
+        assert_eq!(still_blocked.len(), 1);
+        assert_eq!(still_blocked[0].ops[0].id, blocked.id);
+        assert!(!g.contains(&b.id));
+        assert!(!g.contains(&c.id));
+    }
+
+    #[test]
+    fn partition_ready_classifies_verbatim_duplicate_as_ready() {
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
+        let a = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+        let (ready, blocked) = g.partition_ready(vec![crate::Changeset {
+            ops: vec![a.clone()],
+        }]);
+        assert_eq!(
+            ready.len(),
+            1,
+            "verbatim duplicate is ready (applies as no-op)"
+        );
+        assert!(blocked.is_empty());
+    }
+
+    #[test]
+    fn missing_changesets_tolerant_skips_unknown_heads_without_error() {
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
+        let a = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 1,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+        let heads: HashSet<Dot> = [Dot::new(99, 0), Dot::new(123, 456)].into_iter().collect();
+        let out = g.missing_changesets_tolerant(&heads);
+        assert!(
+            out.is_empty(),
+            "known head excludes a; unknown head skipped, no UnknownHeads"
+        );
+
+        let all = g.missing_changesets_tolerant(&HashSet::new());
+        assert_eq!(all.len(), 1);
     }
 }
 

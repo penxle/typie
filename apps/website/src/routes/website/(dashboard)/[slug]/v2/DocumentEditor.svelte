@@ -23,6 +23,7 @@
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
+  import { wasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
@@ -38,7 +39,10 @@
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
+  import { GapBuffer } from './sync/gap-buffer';
+  import { PeerChannel } from './sync/peer-channel';
   import { Pusher } from './sync/pusher.svelte';
+  import { IndexeddbDeltaStore } from './sync/store';
   import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_query$key } from '$mearie';
 
@@ -127,6 +131,7 @@
 
               state {
                 graph
+                durableHeads
               }
 
               assets {
@@ -249,6 +254,9 @@
 
   let liveEditorCreated = false;
   let destroyed = false;
+  let editorStore: IndexeddbDeltaStore | null = null;
+  let editorServerHeads: Uint8Array = new Uint8Array();
+  let editorServerDurableHeads: Uint8Array = new Uint8Array();
 
   $effect(() => {
     const doc = document;
@@ -256,20 +264,32 @@
 
     liveEditorCreated = true;
     const graph = doc.state ? Uint8Array.fromBase64(doc.state.graph) : new Uint8Array();
+    const currentDocumentId = documentId;
 
     untrack(async () => {
       try {
-        const liveEditor = await Editor.create(
+        const store = new IndexeddbDeltaStore();
+        const pendingRecords = currentDocumentId ? await store.load(currentDocumentId) : [];
+        const pending = pendingRecords.map((r) => r.changeset);
+        const serverDurableHeads = doc.state?.durableHeads ? Uint8Array.fromBase64(doc.state.durableHeads) : new Uint8Array();
+
+        editorStore = store;
+        editorServerDurableHeads = serverDurableHeads;
+
+        const liveEditor = await Editor.createWithPending(
           graph,
+          pending,
           { width: 1, height: 1, scale_factor: browserScaleFactor() },
           theme.currentThemeVariant,
         );
 
         if (destroyed) {
           liveEditor.destroy();
+          store.destroy();
           return;
         }
 
+        editorServerHeads = graph.length > 0 ? wasm.graph_heads(graph) : new Uint8Array();
         ctx.editor = liveEditor;
         ctx.liveEditor = liveEditor;
       } catch (err) {
@@ -332,6 +352,7 @@
       mutation DocumentEditorV2_PushChangesets($input: PushDocumentChangesetsInput!) {
         pushDocumentChangesets(input: $input) {
           heads
+          durableHeads
         }
       }
     `),
@@ -343,6 +364,7 @@
         pullDocumentChangesets(input: $input) {
           changesets
           heads
+          durableHeads
         }
       }
     `),
@@ -354,6 +376,7 @@
         documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, heads: $heads) {
           changesets
           heads
+          durableHeads
         }
       }
     `),
@@ -370,8 +393,12 @@
         const payload = Uint8Array.fromBase64(data.documentChangesetsUpdated.changesets);
         if (payload.length > 0) {
           editor.receiveRemoteChangeset(payload);
+          editor.flush();
         }
-        lastConfirmedHeads = Uint8Array.fromBase64(data.documentChangesetsUpdated.heads);
+        const merged = Uint8Array.fromBase64(data.documentChangesetsUpdated.heads);
+        lastConfirmedHeads = merged;
+        pusher?.setConfirmedHeads(merged);
+        pusher?.setDurableHeads(Uint8Array.fromBase64(data.documentChangesetsUpdated.durableHeads));
       },
     }),
   );
@@ -380,17 +407,54 @@
     const editor = ctx.liveEditor;
     if (!editor) return;
 
-    const initialHeads = editor.currentHeads();
-    lastConfirmedHeads = initialHeads;
+    const store = editorStore;
+    if (!store) return;
+
+    const serverHeads = editorServerHeads;
+    const serverDurableHeads = editorServerDurableHeads;
+
+    lastConfirmedHeads = serverHeads;
 
     const currentDocumentId = documentId;
     if (!currentDocumentId) return;
 
+    const refetchFromServer = async () => {
+      const ed = ctx.liveEditor;
+      const heads = lastConfirmedHeads;
+      if (!ed || heads === null) return;
+      const result = await pullDocumentChangesets({
+        input: { documentId: currentDocumentId, heads: heads.toBase64() },
+      });
+      const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.changesets);
+      if (missing.length > 0) {
+        ed.receiveRemoteChangeset(missing);
+        ed.flush();
+      }
+      const merged = Uint8Array.fromBase64(result.pullDocumentChangesets.heads);
+      lastConfirmedHeads = merged;
+      pusher?.setConfirmedHeads(merged);
+      pusher?.setDurableHeads(Uint8Array.fromBase64(result.pullDocumentChangesets.durableHeads));
+    };
+
+    const gap = new GapBuffer({
+      partition: (p) => editor.partitionRemoteChangesets(p),
+      apply: (ready) => {
+        editor.receiveRemoteChangeset(ready);
+        editor.flush();
+      },
+      onStuck: () => {
+        void refetchFromServer();
+      },
+    });
+
+    const peer = new PeerChannel(currentDocumentId, (cs) => gap.ingest(cs));
+
     const ps = new Pusher({
       editor,
       documentId: currentDocumentId,
-      clientId,
-      initialServerHeads: initialHeads,
+      initialServerHeads: serverHeads,
+      initialDurableHeads: serverDurableHeads,
+      store,
       pushFn: async (changesets) => {
         const result = await pushDocumentChangesets({
           input: {
@@ -399,8 +463,11 @@
             changesets: changesets.toBase64(),
           },
         });
-        lastConfirmedHeads = Uint8Array.fromBase64(result.pushDocumentChangesets.heads);
+        const heads = Uint8Array.fromBase64(result.pushDocumentChangesets.heads);
+        lastConfirmedHeads = heads;
+        return { heads, durableHeads: Uint8Array.fromBase64(result.pushDocumentChangesets.durableHeads) };
       },
+      broadcast: (cs) => peer.post(cs),
     });
     pusher = ps;
 
@@ -412,24 +479,15 @@
       subtitleEl?.focus();
     });
 
-    const pollIntervalId = setInterval(async () => {
-      const ed = ctx.liveEditor;
-      const heads = lastConfirmedHeads;
-      if (!ed || heads === null) return;
-      const result = await pullDocumentChangesets({
-        input: { documentId: currentDocumentId, heads: heads.toBase64() },
-      });
-      const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.changesets);
-      if (missing.length > 0) {
-        ed.receiveRemoteChangeset(missing);
-      }
-      lastConfirmedHeads = Uint8Array.fromBase64(result.pullDocumentChangesets.heads);
+    const pollIntervalId = setInterval(() => {
+      void refetchFromServer();
     }, 10_000);
 
     return () => {
       clearInterval(pollIntervalId);
       offStateChanged();
       offExitedDocStart();
+      peer.close();
       ps.stop();
       pusher = null;
     };
@@ -680,6 +738,7 @@
     flushTitleUpdate();
     flushSubtitleUpdate();
     ctx.liveEditor?.destroy();
+    editorStore?.destroy();
     ctx.editor = undefined;
     ctx.liveEditor = undefined;
   });

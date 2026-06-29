@@ -47,6 +47,7 @@
     "@typie/ui": "workspace:*",
     "dayjs": "^1.11.21",
     "es-hangul": "^2.3.8",
+    "fake-indexeddb": "^6.2.5",
     "fast-json-stable-stringify": "^2.1.0",
     "graphql": "^16.14.2",
     "graphql-request": "^7.4.0",
