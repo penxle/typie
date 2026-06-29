@@ -200,7 +200,6 @@ impl UndoHistory {
                 });
             }
         }
-        redo_ops.reverse();
         self.redos.push(UndoEntry {
             ops: redo_ops,
             tag,
@@ -233,7 +232,6 @@ impl UndoHistory {
                 });
             }
         }
-        undo_ops.reverse();
         self.undos.push(UndoEntry {
             ops: undo_ops,
             tag,
@@ -769,6 +767,112 @@ mod tests {
             state.view().node(para).unwrap().inline_text(),
             "xy",
             "undo of Del must restore the deleted char via Undel"
+        );
+    }
+
+    // Regression: an IME composition step replaces the composing char in place,
+    // emitting Del(old)+Ins(new) grouped with the original Ins(old) into one undo
+    // unit (e.g. typing 'a' then composing it into 'b' yields Ins a, Del a, Ins b).
+    // Undo must clear to "" and redo must reproduce "b" — NOT resurrect the
+    // intermediate 'a' that the replace deleted. Redo previously re-applied the
+    // unit's ops in reverse order, re-inserting 'a' after its re-deletion ran, so
+    // the replaced intermediates came back (the "안녕하세요" → garbage bug).
+    #[test]
+    fn redo_after_ime_replace_does_not_resurrect_intermediate_char() {
+        let mut state = ProjectedState::empty();
+        let para = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+
+        let ro_ins_a = record_op(&mut state, seq_char(1, 'a'));
+        let ro_del_a = record_op(&mut state, EditOp::Seq(ListOp::Del { pos: 1, len: 1 }));
+        let ro_ins_b = record_op(&mut state, seq_char(1, 'b'));
+
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "b");
+
+        let entry = UndoEntry {
+            ops: vec![ro_ins_a, ro_del_a, ro_ins_b],
+            tag: None,
+            transient: TransientState::default(),
+        };
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(entry, Instant::now());
+
+        history.undo(&mut state, TransientState::default());
+        assert_eq!(
+            state.view().node(para).unwrap().inline_text(),
+            "",
+            "undo of the replace unit must clear the paragraph"
+        );
+
+        history.redo(&mut state, TransientState::default());
+        assert_eq!(
+            state.view().node(para).unwrap().inline_text(),
+            "b",
+            "redo must reproduce 'b' without resurrecting the replaced 'a'"
+        );
+    }
+
+    // The "안녕하세요" bug in miniature: composing a single syllable through
+    // several jamo replaces each previous form in place (ㅎ → 하 → 한), emitting
+    // Ins ㅎ, Del ㅎ, Ins 하, Del 하, Ins 한 in one undo unit. Redo must reproduce
+    // only the final "한"; reverse-order re-application resurrected every replaced
+    // intermediate.
+    #[test]
+    fn redo_after_chained_ime_replaces_keeps_only_final_form() {
+        let mut state = ProjectedState::empty();
+        let para = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+
+        let ops = vec![
+            record_op(&mut state, seq_char(1, 'ㅎ')),
+            record_op(&mut state, EditOp::Seq(ListOp::Del { pos: 1, len: 1 })),
+            record_op(&mut state, seq_char(1, '하')),
+            record_op(&mut state, EditOp::Seq(ListOp::Del { pos: 1, len: 1 })),
+            record_op(&mut state, seq_char(1, '한')),
+        ];
+
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "한");
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(
+            UndoEntry {
+                ops,
+                tag: None,
+                transient: TransientState::default(),
+            },
+            Instant::now(),
+        );
+
+        history.undo(&mut state, TransientState::default());
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "");
+
+        history.redo(&mut state, TransientState::default());
+        assert_eq!(
+            state.view().node(para).unwrap().inline_text(),
+            "한",
+            "redo must keep only the final composed form, not the replaced jamo"
+        );
+
+        history.undo(&mut state, TransientState::default());
+        assert_eq!(
+            state.view().node(para).unwrap().inline_text(),
+            "",
+            "a second undo after redo must clear again (round-trip stays stable)"
         );
     }
 
