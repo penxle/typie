@@ -556,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn structural_malformation_errors() {
+    fn structural_malformation_drops_and_repairs() {
         let elems = vec![(
             Dot::new(1, 1),
             SeqItem::Block {
@@ -564,10 +564,83 @@ mod tests {
                 parents: vec![Dot::new(9, 9)],
             },
         )];
-        assert!(matches!(
-            project_document(&logs_of(&elems)),
-            Err(ProjectionError::Project(_))
-        ));
+        let pd = project_document(&logs_of(&elems)).unwrap();
+        let ids = collect_real_ids(&pd.tree);
+        assert!(!ids.contains_key(&Dot::new(1, 1)));
+        assert!(validate_block_tree(&pd.tree).is_ok());
+    }
+
+    #[test]
+    fn concurrent_container_delete_drops_subtree_no_crash() {
+        let c = Dot::new(1, 0);
+        let p1 = Dot::new(1, 1);
+        let a = Dot::new(1, 2);
+        let p2 = Dot::new(2, 0);
+        let b = Dot::new(2, 1);
+        let ev = vec![
+            InputEvent {
+                id: c,
+                parents: vec![],
+                op: ListOp::Ins {
+                    pos: 0,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Callout,
+                        parents: vec![Dot::ROOT],
+                    },
+                },
+            },
+            InputEvent {
+                id: p1,
+                parents: vec![c],
+                op: ListOp::Ins {
+                    pos: 1,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT, c],
+                    },
+                },
+            },
+            InputEvent {
+                id: a,
+                parents: vec![p1],
+                op: ListOp::Ins {
+                    pos: 2,
+                    item: SeqItem::Char('a'),
+                },
+            },
+            InputEvent {
+                id: Dot::new(1, 3),
+                parents: vec![a],
+                op: ListOp::Del { pos: 0, len: 3 },
+            },
+            InputEvent {
+                id: p2,
+                parents: vec![a],
+                op: ListOp::Ins {
+                    pos: 3,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT, c],
+                    },
+                },
+            },
+            InputEvent {
+                id: b,
+                parents: vec![p2],
+                op: ListOp::Ins {
+                    pos: 4,
+                    item: SeqItem::Char('b'),
+                },
+            },
+        ];
+        let mut l = logs_of(&[]);
+        l.seq = build_oplog(&ev);
+        let pd = project_document(&l).unwrap();
+        let ids = collect_real_ids(&pd.tree);
+        assert!(!ids.contains_key(&c));
+        assert!(!ids.contains_key(&p2));
+        assert!(!ids.contains_key(&b));
+        assert!(validate_block_tree(&pd.tree).is_ok());
     }
 
     #[test]
@@ -588,6 +661,62 @@ mod tests {
                 "leaf-typed block {leaf_ty:?} must fail-loud"
             );
         }
+    }
+
+    #[test]
+    fn concurrent_block_delete_drops_orphan_no_crash() {
+        let p = Dot::new(1, 0);
+        let a = Dot::new(1, 1);
+        let b = Dot::new(1, 2);
+        let ev = vec![
+            InputEvent {
+                id: p,
+                parents: vec![],
+                op: ListOp::Ins {
+                    pos: 0,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT],
+                    },
+                },
+            },
+            InputEvent {
+                id: a,
+                parents: vec![p],
+                op: ListOp::Ins {
+                    pos: 1,
+                    item: SeqItem::Char('a'),
+                },
+            },
+            InputEvent {
+                id: b,
+                parents: vec![a],
+                op: ListOp::Ins {
+                    pos: 2,
+                    item: SeqItem::Char('b'),
+                },
+            },
+            InputEvent {
+                id: Dot::new(1, 3),
+                parents: vec![b],
+                op: ListOp::Del { pos: 0, len: 3 },
+            },
+            InputEvent {
+                id: Dot::new(2, 0),
+                parents: vec![a],
+                op: ListOp::Ins {
+                    pos: 2,
+                    item: SeqItem::Char('X'),
+                },
+            },
+        ];
+        let mut l = logs_of(&[]);
+        l.seq = build_oplog(&ev);
+        let pd = project_document(&l).unwrap();
+        let ids = collect_real_ids(&pd.tree);
+        assert!(!ids.contains_key(&Dot::new(2, 0)));
+        assert!(validate_block_tree(&pd.tree).is_ok());
+        assert!(pd.runs.is_empty());
     }
 
     #[test]

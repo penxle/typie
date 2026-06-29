@@ -57,7 +57,6 @@ pub enum Child {
 
 #[derive(Debug, PartialEq)]
 pub enum ProjectError {
-    UnknownParent { block: Dot, parent: Dot },
     OrphanLeaf { id: Dot },
     AtomClassMismatch { id: Dot, leaf_type: NodeType },
 }
@@ -94,26 +93,28 @@ struct BuildNode {
     children: Vec<ChildRef>,
 }
 
-fn chain_mismatch(stack: &[(Dot, usize)], parents: &[Dot]) -> Option<Dot> {
+fn chain_mismatch(stack: &[(Dot, usize)], parents: &[Dot]) -> Option<usize> {
     for (i, pid) in parents.iter().enumerate() {
         match stack.get(i) {
             Some((sid, _)) if sid == pid => continue,
-            _ => return Some(*pid),
+            _ => return Some(i),
         }
     }
     None
 }
 
-fn descend_stack(stack: &mut Vec<(Dot, usize)>, parents: &[Dot]) -> Result<(), Dot> {
+fn descend_stack(stack: &mut Vec<(Dot, usize)>, parents: &[Dot]) -> bool {
     // The implicit root always occupies `stack[0]`, so never truncate below it.
-    let keep = parents.len().max(1);
+    // On mismatch, keep only the matched valid-ancestor prefix so following inline
+    // content attaches to the deepest still-live ancestor (or drops at the root).
+    let (keep, descended) = match chain_mismatch(stack, parents) {
+        Some(matched) => (matched.max(1), false),
+        None => (parents.len().max(1), true),
+    };
     if stack.len() > keep {
         stack.truncate(keep);
     }
-    if let Some(p) = chain_mismatch(stack, parents) {
-        return Err(p);
-    }
-    Ok(())
+    descended
 }
 
 pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<BlockTree, ProjectError> {
@@ -127,8 +128,8 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<BlockTree, ProjectErro
     for (id, item) in items {
         match item {
             SeqItem::Block { node_type, parents } => {
-                if let Err(parent) = descend_stack(&mut stack, parents) {
-                    return Err(ProjectError::UnknownParent { block: *id, parent });
+                if !descend_stack(&mut stack, parents) {
+                    continue;
                 }
                 let idx = nodes.len();
                 nodes.push(BuildNode {
@@ -147,7 +148,7 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<BlockTree, ProjectErro
                         item: item.clone(),
                     });
                 }
-                _ => return Err(ProjectError::OrphanLeaf { id: *id }),
+                _ => {}
             },
             SeqItem::Atom(leaf) => {
                 if leaf.is_block_level() {
@@ -163,7 +164,7 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<BlockTree, ProjectErro
                             item: item.clone(),
                         });
                     }
-                    _ => return Err(ProjectError::OrphanLeaf { id: *id }),
+                    _ => {}
                 }
             }
             SeqItem::BlockAtom { leaf, parents } => {
@@ -176,8 +177,8 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<BlockTree, ProjectErro
                 if parents.is_empty() {
                     return Err(ProjectError::OrphanLeaf { id: *id });
                 }
-                if let Err(parent) = descend_stack(&mut stack, parents) {
-                    return Err(ProjectError::UnknownParent { block: *id, parent });
+                if !descend_stack(&mut stack, parents) {
+                    continue;
                 }
                 let parent_idx = stack.last().expect("root is always present").1;
                 nodes[parent_idx].children.push(ChildRef::Leaf {
@@ -386,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_parent_is_err() {
+    fn malformed_parent_is_dropped() {
         let ghost = Dot::new(9, 9);
         let seq = vec![(
             Dot::new(1, 1),
@@ -395,18 +396,12 @@ mod tests {
                 parents: vec![ghost],
             },
         )];
-        let err = project_blocks(&seq).unwrap_err();
-        assert_eq!(
-            err,
-            ProjectError::UnknownParent {
-                block: Dot::new(1, 1),
-                parent: ghost,
-            }
-        );
+        let tree = project_blocks(&seq).unwrap();
+        assert!(tree.roots[0].children.is_empty());
     }
 
     #[test]
-    fn corrupted_prefix_parent_chain_is_err() {
+    fn corrupted_prefix_parent_chain_drops_block() {
         let bq = Dot::new(1, 4);
         let ghost = Dot::new(9, 9);
         let seq = vec![
@@ -425,21 +420,142 @@ mod tests {
                 },
             ),
         ];
-        let err = project_blocks(&seq).unwrap_err();
-        assert_eq!(
-            err,
-            ProjectError::UnknownParent {
-                block: Dot::new(1, 5),
-                parent: ghost,
+        let tree = project_blocks(&seq).unwrap();
+        assert_eq!(tree.roots[0].children.len(), 1);
+        match &tree.roots[0].children[0] {
+            Child::Block(b) => {
+                assert_eq!(b.id, bq);
+                assert!(b.children.is_empty());
             }
-        );
+            _ => panic!("expected blockquote block"),
+        }
     }
 
     #[test]
-    fn orphan_leaf_is_err() {
+    fn dropped_block_drops_following_inline_not_prior_block() {
+        let a = Dot::new(1, 1);
+        let ax = Dot::new(1, 2);
+        let b = Dot::new(1, 3);
+        let by = Dot::new(1, 4);
+        let ghost = Dot::new(9, 9);
+        let seq = vec![
+            (
+                a,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (ax, SeqItem::Char('x')),
+            (
+                b,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, ghost],
+                },
+            ),
+            (by, SeqItem::Char('y')),
+        ];
+        let tree = project_blocks(&seq).unwrap();
+        assert_eq!(tree.roots[0].children.len(), 1);
+        match &tree.roots[0].children[0] {
+            Child::Block(blk) => {
+                assert_eq!(blk.id, a);
+                assert_eq!(blk.children.len(), 1, "'y' must drop, not adopt into A");
+                assert!(matches!(&blk.children[0], Child::Leaf { id, .. } if *id == ax));
+            }
+            _ => panic!("expected paragraph A"),
+        }
+    }
+
+    #[test]
+    fn dropped_nested_block_promotes_following_inline_to_valid_ancestor() {
+        let fold = Dot::new(1, 1);
+        let title = Dot::new(1, 2);
+        let b = Dot::new(1, 3);
+        let by = Dot::new(1, 4);
+        let ghost = Dot::new(9, 9);
+        let seq = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (title, SeqItem::Char('t')),
+            (
+                b,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, fold, ghost],
+                },
+            ),
+            (by, SeqItem::Char('y')),
+        ];
+        let tree = project_blocks(&seq).unwrap();
+        // B dropped; matched prefix [ROOT, fold] keeps fold open, so 'y' attaches to fold
+        // (deepest still-valid ancestor), not dropped at root.
+        assert_eq!(tree.roots[0].children.len(), 1);
+        match &tree.roots[0].children[0] {
+            Child::Block(blk) => {
+                assert_eq!(blk.id, fold);
+                let leaves: Vec<Dot> = blk
+                    .children
+                    .iter()
+                    .filter_map(|c| match c {
+                        Child::Leaf { id, .. } => Some(*id),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(leaves, vec![title, by]);
+            }
+            _ => panic!("expected fold-title block"),
+        }
+    }
+
+    #[test]
+    fn orphan_leaf_is_dropped() {
         let seq = vec![(Dot::new(1, 0), SeqItem::Char('x'))];
-        let err = project_blocks(&seq).unwrap_err();
-        assert_eq!(err, ProjectError::OrphanLeaf { id: Dot::new(1, 0) });
+        let tree = project_blocks(&seq).unwrap();
+        assert!(tree.roots[0].children.is_empty());
+    }
+
+    #[test]
+    fn orphan_inline_atom_is_dropped() {
+        use crate::seq::AtomLeaf;
+        let seq = vec![(Dot::new(1, 0), SeqItem::Atom(AtomLeaf::HardBreak))];
+        let tree = project_blocks(&seq).unwrap();
+        assert!(tree.roots[0].children.is_empty());
+    }
+
+    #[test]
+    fn orphan_leaf_before_block_dropped_rest_kept() {
+        let para = Dot::new(1, 1);
+        let seq = vec![
+            (Dot::new(1, 0), SeqItem::Char('x')),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('y')),
+        ];
+        let tree = project_blocks(&seq).unwrap();
+        assert_eq!(tree.roots[0].children.len(), 1);
+        match &tree.roots[0].children[0] {
+            Child::Block(b) => {
+                assert_eq!(b.id, para);
+                assert_eq!(b.children.len(), 1);
+                assert!(matches!(
+                    &b.children[0],
+                    Child::Leaf { id, .. } if *id == Dot::new(1, 2)
+                ));
+            }
+            _ => panic!("expected paragraph block"),
+        }
     }
 
     #[test]
@@ -827,7 +943,7 @@ mod tests {
     }
 
     #[test]
-    fn block_atom_unknown_parent_errors() {
+    fn block_atom_unknown_parent_is_dropped() {
         use crate::nodes::HorizontalRuleVariant;
         use crate::seq::AtomLeaf;
         let ghost = Dot::new(9, 9);
@@ -840,13 +956,8 @@ mod tests {
                 parents: vec![ghost],
             },
         )];
-        assert_eq!(
-            project_blocks(&seq).unwrap_err(),
-            ProjectError::UnknownParent {
-                block: Dot::new(1, 1),
-                parent: ghost
-            }
-        );
+        let tree = project_blocks(&seq).unwrap();
+        assert!(tree.roots[0].children.is_empty());
     }
 
     #[test]
