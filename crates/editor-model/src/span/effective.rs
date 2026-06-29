@@ -142,10 +142,10 @@ pub fn resolve_effective(
         let spec = Schema::modifier_spec(ty);
         let is_target_self = spec.target.matches(&self_path);
         let val = if spec.inheritable {
-            match (is_target_self, self_own.get(&ty)) {
-                (true, Some(OwnEffect::Set(m))) => Some(m.clone()),
-                (true, Some(OwnEffect::Clear)) => None,
-                _ => inherited(ty, true),
+            match self_own.get(&ty) {
+                Some(OwnEffect::Set(m)) => Some(m.clone()),
+                Some(OwnEffect::Clear) => None,
+                None => inherited(ty, true),
             }
         } else if is_target_self {
             match self_own.get(&ty) {

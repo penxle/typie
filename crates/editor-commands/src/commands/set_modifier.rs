@@ -1,5 +1,5 @@
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, Modifier, ModifierType};
+use editor_model::{ChildView, DocView, Modifier, ModifierType, NodeView};
 use editor_state::ResolvedSelection;
 use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
@@ -33,6 +33,16 @@ pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
     }
 }
 
+fn last_leaf_dot(block: &NodeView) -> Option<Dot> {
+    block
+        .descendants()
+        .filter_map(|c| match c {
+            ChildView::Leaf(l) => Some(l.dot()),
+            ChildView::Block(_) => None,
+        })
+        .last()
+}
+
 fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
     let from = rs.from();
     let to = rs.to();
@@ -47,7 +57,10 @@ fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
     let to_child = view.node(to.node())?.child_at(to_off)?;
     let last = match to_child {
         ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
+        // The block token precedes its content in the flat sequence, so an
+        // `After` anchor on it stops short of the block's text; anchor the
+        // block's last leaf so the span covers the whole block.
+        ChildView::Block(b) => last_leaf_dot(&b).or_else(|| b.dot())?,
     };
 
     Some((first, last))
@@ -422,6 +435,29 @@ mod tests {
                 }
             }
             selection: (p, 2) -> (p, 7)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_set_font_size_across_two_paragraphs_at_block_level() {
+        let (initial, ..) = state! {
+            doc { r: root {
+                paragraph { text("hello") }
+                paragraph { text("world") }
+            } }
+            selection: (r, 0, >) -> (r, 2, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        let (expected, ..) = state! {
+            doc { r: root {
+                paragraph { text("hello") [font_size(2400)] }
+                paragraph { text("world") [font_size(2400)] }
+            } }
+            selection: (r, 0, >) -> (r, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }

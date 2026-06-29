@@ -762,4 +762,31 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn block_level_selection_with_root_style_does_not_corrupt() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                styles {
+                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(100), paragraph_indent(100)]
+                }
+                r1: root @base {
+                    paragraph {
+                        text("hello")
+                    }
+                    paragraph {
+                        text("world")
+                    }
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 2, <)
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        let result = toggle_bold(&mut tr, &resource);
+        assert!(
+            matches!(result, Ok(true)),
+            "block-level selection over a root carrying its weight via a style must not report corruption, got {result:?}"
+        );
+    }
 }
