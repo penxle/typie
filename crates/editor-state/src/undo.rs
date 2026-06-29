@@ -9,16 +9,23 @@ use editor_model::{
     StyleOp, StyleRegOp,
 };
 
-use crate::Selection;
 use crate::projected_state::ProjectedState;
-use crate::{Composition, PendingModifiers, PendingStyle};
+use crate::{Composition, PendingModifiers, PendingStyle, StableSelection};
 
 /// Editor state restored alongside a doc undo/redo: the caret/selection and the
 /// transient IME/pending overlays that the op-level history does not encode as
 /// document ops. Recorded as the pre-transaction state; restored on undo.
+///
+/// The selection is stored as a [`StableSelection`] (path + boundary binding),
+/// not a raw `(node, offset)` `Position`. Concurrent remote ops can restructure
+/// the document between the time an entry is recorded and the time it is restored
+/// (e.g. a remote paragraph split re-parents this node's children), which would
+/// leave a raw position dangling. Re-resolving the stable form on restore keeps
+/// the invariant "`state.selection` always resolves" — the same guarantee the
+/// remote-changeset path already relies on.
 #[derive(Clone, Default, PartialEq)]
 pub struct TransientState {
-    pub selection: Option<Selection>,
+    pub selection: Option<StableSelection>,
     pub composition: Option<Composition>,
     pub pending_modifiers: PendingModifiers,
     pub pending_style: Option<PendingStyle>,

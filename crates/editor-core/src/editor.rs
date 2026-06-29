@@ -99,13 +99,38 @@ fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
 
 /// Snapshot of the transient (non-document) editor state recorded with each undo
 /// entry so undo/redo restore the caret/IME/pending overlays.
-fn transient_of(state: &State) -> TransientState {
+///
+/// The caret is captured as a [`StableSelection`] (path + boundary binding) so it
+/// survives document restructuring by concurrent remote ops between record and
+/// restore; on restore it is re-resolved against the current doc. The selection
+/// must be live (resolvable) at capture time — a non-resolving caret is dropped
+/// rather than captured, since `StableSelection::capture` requires a live host.
+///
+/// This walks the host node's children, so it is O(host children). It runs once
+/// per recorded entry and once per undo/redo — never on the per-keystroke
+/// `undoable` comparison, which uses [`transient_fields_changed`] instead.
+fn capture_transient(state: &State) -> TransientState {
+    let view = state.view();
+    let selection = state
+        .selection
+        .filter(|s| s.resolve(&view).is_some())
+        .map(|s| StableSelection::capture(&s, &view));
     TransientState {
-        selection: state.selection,
+        selection,
         composition: state.composition,
         pending_modifiers: state.pending_modifiers.clone(),
         pending_style: state.pending_style.clone(),
     }
+}
+
+/// Whether the transient (non-document) state differs between two states. Used to
+/// decide if a selection/IME/pending-only transaction is undoable, without paying
+/// for a `StableSelection` capture on the per-keystroke path.
+fn transient_fields_changed(before: &State, after: &State) -> bool {
+    before.selection != after.selection
+        || before.composition != after.composition
+        || before.pending_modifiers != after.pending_modifiers
+        || before.pending_style != after.pending_style
 }
 
 pub struct Editor {
@@ -788,7 +813,6 @@ impl Editor {
         &mut self,
         f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
     ) -> Result<(), EditorError> {
-        let pre_transient = transient_of(&self.state);
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
 
@@ -801,8 +825,11 @@ impl Editor {
         let ops: Vec<Op<EditOp>> = recorded.iter().map(|r| r.op.clone()).collect();
         // A Record/Tagged transaction is undoable when it changes the document
         // OR the transient state (caret/IME/pending), matching the old
-        // step-history's SetSelection/SetComposition entries.
-        let undoable = !recorded.is_empty() || pre_transient != transient_of(&state);
+        // step-history's SetSelection/SetComposition entries. `self.state` is
+        // still the pre-transaction state here (reassigned below), so this
+        // compares pre vs post; the entry's transient is the *pre* state,
+        // captured stably against the pre-transaction view.
+        let undoable = !recorded.is_empty() || transient_fields_changed(&self.state, &state);
 
         match meta.history {
             HistoryMeta::Skip => self.undo_history.clear_last_tag(),
@@ -810,7 +837,7 @@ impl Editor {
                 UndoEntry {
                     ops: recorded,
                     tag: None,
-                    transient: pre_transient,
+                    transient: capture_transient(&self.state),
                 },
                 Instant::now(),
             ),
@@ -818,7 +845,7 @@ impl Editor {
                 UndoEntry {
                     ops: recorded,
                     tag: Some(tag),
-                    transient: pre_transient,
+                    transient: capture_transient(&self.state),
                 },
                 Instant::now(),
             ),
@@ -1068,7 +1095,19 @@ impl Editor {
     fn apply_undo_result(&mut self, result: Option<(Vec<Op<EditOp>>, TransientState)>) -> bool {
         match result {
             Some((ops, transient)) => {
-                self.state.selection = transient.selection;
+                // The inverse ops have already been applied to `self.state.projected`,
+                // so this re-resolves the recorded `StableSelection` against the
+                // post-undo doc. Concurrent remote ops may have restructured the doc
+                // since the entry was recorded; re-resolving (rather than restoring a
+                // raw position) keeps `state.selection` resolvable. Mirrors the
+                // remote-changeset path.
+                self.state.selection = transient.selection.and_then(|ss| {
+                    let view = self.state.view();
+                    let ctx =
+                        editor_state::StableResolveCtx::new(&view, self.state.projected.seq());
+                    let restored = ss.resolve(&ctx)?;
+                    Some(restored.normalize(&view).unwrap_or(restored))
+                });
                 self.state.composition = transient.composition;
                 self.state.pending_modifiers = transient.pending_modifiers;
                 self.state.pending_style = transient.pending_style;
@@ -1084,7 +1123,7 @@ impl Editor {
             *changed |= self.undo_history.can_undo();
             return false;
         }
-        let current = transient_of(&self.state);
+        let current = capture_transient(&self.state);
         let result = self.undo_history.undo(&mut self.state.projected, current);
         self.apply_undo_result(result)
     }
@@ -1094,7 +1133,7 @@ impl Editor {
             *changed |= self.undo_history.can_redo();
             return false;
         }
-        let current = transient_of(&self.state);
+        let current = capture_transient(&self.state);
         let result = self.undo_history.redo(&mut self.state.projected, current);
         self.apply_undo_result(result)
     }

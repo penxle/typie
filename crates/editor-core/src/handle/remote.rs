@@ -239,4 +239,68 @@ mod tests {
             }
         );
     }
+
+    /// Regression: a remote op that shrinks the node a local undo entry's caret
+    /// was recorded in must not leave the caret dangling after undo.
+    ///
+    /// Replica B records an undo entry while its caret sits at offset 2 of `p1`
+    /// ("xy"). A concurrent remote op deletes both base chars, so after the merge
+    /// `p1` holds only B's own insert. Undoing that insert empties `p1` — the
+    /// recorded offset 2 no longer exists. Restoring the caret as a raw position
+    /// would dangle (the selection stops resolving, which freezes further editing
+    /// — the reported "selection goes weird, then undo/redo stop working"). The
+    /// StableSelection round-trip must instead land on a valid position.
+    #[test]
+    fn undo_after_remote_shrinks_caret_host_keeps_selection_resolvable() {
+        use crate::message::{HistoryOp, InsertionOp, Message};
+
+        let (replica_a, _p1) = state! {
+            doc { root { p1: paragraph { text("xy") } } }
+            selection: (p1, 2)
+        };
+        let css_a = replica_a.graph().changesets_as_vec();
+        // Distinct actor for B (from_changesets), so its local insert cannot
+        // collide with the actor-1 remote op.
+        let replica_b = State::from_changesets(css_a, replica_a.selection).unwrap();
+        let mut editor = Editor::new_test(replica_b);
+
+        // B types 'z' at the end of p1 → one undo entry whose recorded caret is (p1, 2).
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "z".into() },
+        });
+
+        // Remote deletes the two base chars "xy" (seq flat: [block, 'x', 'y']).
+        let cs = remote_change(
+            &replica_a,
+            vec![EditOp::Seq(ListOp::Del { pos: 1, len: 2 })],
+        );
+        editor.receive_remote_changeset(cs);
+        let _ = editor.tick().unwrap();
+
+        // Undo B's insert: p1 becomes empty, so the recorded offset 2 is gone.
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        let sel = editor
+            .state()
+            .selection
+            .expect("selection present after undo");
+        assert!(
+            sel.resolve(&editor.state().view()).is_some(),
+            "undo must re-resolve the recorded caret against the restructured doc, got {sel:?}",
+        );
+
+        // The editor must not be frozen: a subsequent edit still applies (this
+        // would panic via `tick().unwrap()` if the caret were dangling).
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "w".into() },
+        });
+        let after = editor.state();
+        let view = after.view();
+        assert!(
+            after.selection.and_then(|s| s.resolve(&view)).is_some(),
+            "editor must remain editable after undo",
+        );
+    }
 }
