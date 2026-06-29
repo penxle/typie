@@ -72,14 +72,18 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     Some(GapCursor::LeadingUnit { .. }) => true,
                     Some(_) => false,
                     None => {
+                        let resource = editor.resource.lock().unwrap();
                         gap_cursor_selection_leading(&editor.state.doc).is_none()
                             && editor
-                                .resolve_movement(
+                                .view
+                                .would_resolve_movement(
                                     &selection.head,
                                     &Movement::Document {
                                         direction: Direction::Backward,
                                     },
+                                    &resource,
                                 )
+                                .and_then(|(sel, _)| sel)
                                 .is_some_and(|sel| sel.head == selection.head)
                     }
                 };
@@ -1486,6 +1490,44 @@ mod tests {
         assert!(s.is_collapsed());
         assert_eq!(s.head.node_id, next);
         assert_eq!(s.head.offset, 6);
+    }
+
+    #[test]
+    fn arrow_up_preserves_preferred_x_across_short_line() {
+        let (state, first, short, _third) = state! {
+            doc {
+                root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 400 }) {
+                    paragraph { first: text("aaaaaaaaaaaa") }
+                    paragraph { short: text("aaa") }
+                    paragraph { third: text("aaaaaaaaaaaa") }
+                }
+            }
+            selection: (third, 8)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state.doc);
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let first_up = editor.state().selection.expect("selection exists in test");
+        assert_eq!(first_up.head.node_id, short);
+        assert_eq!(first_up.head.offset, 3);
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let second_up = editor.state().selection.expect("selection exists in test");
+        assert_eq!(second_up.head.node_id, first);
+        assert_eq!(second_up.head.offset, 8);
     }
 
     #[test]
